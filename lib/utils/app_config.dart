@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kReleaseMode;
+import 'package:flutter/foundation.dart' show kReleaseMode, kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -38,12 +38,14 @@ class AppConfig {
   // ── Public API ────────────────────────────────────────────────────────────
 
   static Future<String> get baseUrl async {
-    if (kReleaseMode) return _prodUrl;
+    // Web (and any release build) always talks to the production server on the
+    // same origin — there is no LAN to scan in a browser.
+    if (kIsWeb || kReleaseMode) return _prodUrl;
     return 'http://${await _resolveIp()}:$port';
   }
 
   static Future<String> get wsBaseUrl async {
-    if (kReleaseMode) {
+    if (kIsWeb || kReleaseMode) {
       // Derive the WebSocket URL from the production URL so there is a single
       // source of truth: https:// -> wss://, http:// -> ws://
       return _prodUrl
@@ -51,6 +53,28 @@ class AppConfig {
           .replaceFirst('http://', 'ws://');
     }
     return 'ws://${await _resolveIp()}:$port';
+  }
+
+  /// Reachability check that works on every platform (web included): it probes
+  /// the *actual* base URL's /health endpoint rather than an IP:port guess.
+  static Future<bool> probeServer() async {
+    try {
+      final base = await baseUrl;
+      final res = await http
+          .get(Uri.parse('$base/health'))
+          .timeout(const Duration(seconds: 4));
+      return res.statusCode == 200 && res.body.contains('aluta');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Host label to show in connection UIs (no port on web/release prod).
+  static String get displayHost {
+    if (kIsWeb || kReleaseMode) {
+      return _prodUrl.replaceFirst('https://', '').replaceFirst('http://', '');
+    }
+    return '${_cachedIp ?? 'unknown'}:$port';
   }
 
   static String? get cachedIp => _cachedIp;

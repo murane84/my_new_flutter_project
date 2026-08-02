@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -132,7 +133,15 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
       }
     } catch (e) {
       _snack('Could not start session: $e');
-      if (mounted) Navigator.of(context).maybePop();
+      _dismiss();
+    }
+  }
+
+  // Closes the popup. Uses pop() (not maybePop) because the PopScope below sets
+  // canPop:false, which deliberately blocks maybePop.
+  void _dismiss() {
+    if (mounted && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
     }
   }
 
@@ -164,7 +173,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
         ? '${widget.peerName} ended the session'
         : 'Session ended';
     _snack(msg);
-    Navigator.of(context).maybePop();
+    _dismiss();
   }
 
   void _snack(String m) {
@@ -173,12 +182,13 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   }
 
   Future<void> _leaveOrEnd() async {
+    // Close immediately so a slow network call can never trap the user in the
+    // popup. Teardown of the controller happens in this State's dispose();
+    // for the host we also best-effort tell the server the session is over.
+    _dismiss();
     if (_isHost) {
-      await _c.endSession(widget.token);
-    } else {
-      await _c.dispose();
+      unawaited(_c.endSession(widget.token));
     }
-    if (mounted) Navigator.of(context).maybePop();
   }
 
   @override
@@ -228,9 +238,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
                     IconButton(
                       tooltip: _isHost ? 'End session' : 'Leave',
                       icon: const Icon(Icons.close_rounded),
-                      onPressed: _ready
-                          ? _leaveOrEnd
-                          : () => Navigator.of(context).maybePop(),
+                      onPressed: _leaveOrEnd,
                     ),
                   ],
                 ),

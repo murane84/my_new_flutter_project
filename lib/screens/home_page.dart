@@ -130,7 +130,12 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _autoReconnect();      // go online + refresh data
       } else {
         // Lost network — mark offline, cached data stays visible
-        if (mounted) setState(() => _isCurrentUserOnline = false);
+        if (mounted) {
+          setState(() {
+            _isCurrentUserOnline = false;
+            _serverReachable = false;
+          });
+        }
       }
     });
 
@@ -160,22 +165,34 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  // Sends a presence heartbeat; flips the UI back to "online" on success.
+  // Sends a presence heartbeat to the server and makes it the single source of
+  // truth for BOTH the header badge and the footer dot — so they always agree.
   Future<void> _sendHeartbeat() async {
     if (!mounted) return;
     try {
       final ok = await ApiService().setOnlineStatus(true);
-      if (ok && mounted && !_isCurrentUserOnline) {
-        setState(() => _isCurrentUserOnline = true);
+      if (!mounted) return;
+      if (_serverReachable != ok || _isCurrentUserOnline != ok) {
+        setState(() {
+          _serverReachable = ok;
+          _isCurrentUserOnline = ok;
+        });
       }
-    } catch (_) {}
+    } catch (_) {
+      if (mounted && (_serverReachable || _isCurrentUserOnline)) {
+        setState(() {
+          _serverReachable = false;
+          _isCurrentUserOnline = false;
+        });
+      }
+    }
   }
 
   // Called on ANY touch/pointer down anywhere in the app. Immediately recovers
   // the session if we're offline, and keeps presence fresh (throttled to 30s)
   // so the user never has to log out / back in just to reconnect.
   void _onUserActivity() {
-    if (!_isCurrentUserOnline) {
+    if (!_serverReachable || !_isCurrentUserOnline) {
       _autoReconnect();
       return;
     }
@@ -543,6 +560,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _onlineFriendsCount =
             friends.where((f) => f['is_online'] == true).length;
         _isCurrentUserOnline = true;
+        _serverReachable = true;
         _isLoadingFriends = false;
       });
     } catch (_) {
@@ -555,6 +573,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_allFriends.isEmpty) await _loadCachedFriends();
         setState(() {
           _isCurrentUserOnline = false;
+          _serverReachable = false;
           _isLoadingFriends = false;
         });
       }
@@ -573,7 +592,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (!mounted) return;
       if (ok) {
         final wasOffline = !_isCurrentUserOnline;
-        setState(() => _isCurrentUserOnline = true);
+        setState(() {
+          _isCurrentUserOnline = true;
+          _serverReachable = true;
+        });
         await _fetchFriends(quiet: true);
         if (wasOffline && mounted) {
           showToast(context, 'Back online',
@@ -593,7 +615,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (!mounted) return;
     setState(() => _isGoingOnline = false);
     if (ok) {
-      setState(() => _isCurrentUserOnline = true);
+      setState(() {
+        _isCurrentUserOnline = true;
+        _serverReachable = true;
+      });
       _fetchFriends(quiet: true);
       showToast(context, 'You are online', type: ToastType.success);
     } else {
@@ -838,8 +863,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
         ),
         const Spacer(),
-        // Online/offline status indicator with reconnect button
-        if (!_isCurrentUserOnline)
+        // Online/offline badge — reads the SAME server-side signal as the
+        // footer status dot (_serverReachable), so the two never disagree.
+        if (!_serverReachable)
           Tooltip(
             message: 'You are offline — tap to go online',
             child: GestureDetector(

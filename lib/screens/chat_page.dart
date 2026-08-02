@@ -1283,6 +1283,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   },
                   visualDensity: VisualDensity.compact,
                 ),
+                // Listen together — play a local song live with this friend.
+                // Lives in the composer so it's always visible, including when
+                // the chat is embedded in a panel (showAppBar == false).
+                IconButton(
+                  tooltip: 'Listen together — share a local song live',
+                  icon: const Icon(Icons.headphones_rounded),
+                  color: scheme.primary,
+                  onPressed: _startListenTogether,
+                  visualDensity: VisualDensity.compact,
+                ),
                 // Text field
                 // On desktop: Enter (no Shift) = send; Shift+Enter = newline.
                 // On mobile:  send button / keyboard action sends.

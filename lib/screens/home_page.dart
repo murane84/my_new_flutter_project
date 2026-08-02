@@ -1004,7 +1004,7 @@ class HomePageState extends State<HomePage> {
 
         return Container(
           height: 44,
-          color: scheme.inverseSurface,
+          color: scheme.surfaceContainerHighest,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
@@ -1016,7 +1016,7 @@ class HomePageState extends State<HomePage> {
                 size: 16,
                 color: hasTrack && np.playing
                     ? scheme.primary
-                    : scheme.onInverseSurface.withAlpha(120),
+                    : scheme.onSurface.withAlpha(120),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -1028,7 +1028,7 @@ class HomePageState extends State<HomePage> {
                           Text(
                             np.track,
                             style: TextStyle(
-                              color: scheme.onInverseSurface,
+                              color: scheme.onSurface,
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
@@ -1039,7 +1039,7 @@ class HomePageState extends State<HomePage> {
                               np.artist,
                               style: TextStyle(
                                 color:
-                                    scheme.onInverseSurface.withAlpha(160),
+                                    scheme.onSurface.withAlpha(160),
                                 fontSize: 10,
                               ),
                               overflow: TextOverflow.ellipsis,
@@ -1049,7 +1049,7 @@ class HomePageState extends State<HomePage> {
                     : Text(
                         'No track playing',
                         style: TextStyle(
-                          color: scheme.onInverseSurface.withAlpha(120),
+                          color: scheme.onSurface.withAlpha(120),
                           fontSize: 12,
                         ),
                       ),
@@ -1072,7 +1072,7 @@ class HomePageState extends State<HomePage> {
                         horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
                       color: _isDiscovering
-                          ? scheme.onInverseSurface.withAlpha(30)
+                          ? scheme.onSurface.withAlpha(30)
                           : _serverReachable
                               ? Colors.green.withAlpha(50)
                               : Colors.red.withAlpha(50),
@@ -1095,7 +1095,7 @@ class HomePageState extends State<HomePage> {
                                 height: 8,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 1.5,
-                                  color: scheme.onInverseSurface
+                                  color: scheme.onSurface
                                       .withAlpha(180),
                                 ),
                               )
@@ -1116,7 +1116,7 @@ class HomePageState extends State<HomePage> {
                               : _serverIp,
                           style: TextStyle(
                             fontSize: 10,
-                            color: scheme.onInverseSurface.withAlpha(200),
+                            color: scheme.onSurface.withAlpha(200),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -1140,7 +1140,7 @@ class HomePageState extends State<HomePage> {
                 Text(
                   '$_onlineFriendsCount',
                   style: TextStyle(
-                    color: scheme.onInverseSurface.withAlpha(180),
+                    color: scheme.onSurface.withAlpha(180),
                     fontSize: 11,
                   ),
                 ),
@@ -1148,12 +1148,12 @@ class HomePageState extends State<HomePage> {
               ],
               Icon(Icons.person_rounded,
                   size: 14,
-                  color: scheme.onInverseSurface.withAlpha(160)),
+                  color: scheme.onSurface.withAlpha(160)),
               const SizedBox(width: 4),
               Text(
                 _username,
                 style: TextStyle(
-                  color: scheme.onInverseSurface,
+                  color: scheme.onSurface,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1175,14 +1175,14 @@ class HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor: scheme.inverseSurface,
+        backgroundColor: scheme.surfaceContainerHighest,
         titleSpacing: 14,
         title: Row(
           children: [
             Text(
               'Aluta',
               style: TextStyle(
-                color: scheme.onInverseSurface,
+                color: scheme.onSurface,
                 fontWeight: FontWeight.bold,
                 fontSize: 18,
                 letterSpacing: 1,
@@ -1196,14 +1196,14 @@ class HomePageState extends State<HomePage> {
               themeProvider.isDarkMode
                   ? Icons.light_mode_rounded
                   : Icons.dark_mode_rounded,
-              color: scheme.onInverseSurface,
+              color: scheme.onSurface,
             ),
             onPressed: () =>
                 themeProvider.toggleTheme(!themeProvider.isDarkMode),
           ),
           IconButton(
             icon: Icon(Icons.logout_rounded,
-                color: scheme.onInverseSurface),
+                color: scheme.onSurface),
             onPressed: _logout,
             tooltip: 'Sign out',
           ),

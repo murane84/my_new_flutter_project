@@ -487,15 +487,21 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final token = await getToken();
     final myUserId = int.tryParse(_myId ?? '');
     if (token == null || myUserId == null) {
-      showToast(context, 'Please wait — still signing you in…', type: ToastType.error);
+      if (mounted) {
+        showToast(context, 'Please wait — still signing you in…',
+            type: ToastType.error);
+      }
       return;
     }
 
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.audio,
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'],
       withData: true, // load bytes into memory (works on mobile + web)
     );
-    if (result == null || result.files.isEmpty) return;
+    if (result == null || result.files.isEmpty) {
+      return;
+    }
 
     final picked = result.files.single;
     final Uint8List? bytes = picked.bytes;

@@ -105,24 +105,38 @@ class RegisterPageState extends State<RegisterPage> {
       ),
       body: Stack(
         children: [
+          // Branded gradient backdrop
           Positioned.fill(
-            child: Image.asset(
-              'assets/images/auth_background.jpg',
-              fit: BoxFit.cover,
-              errorBuilder: (ctx, anim, sanim) =>
-                  Container(color: scheme.inverseSurface),
-            ),
-          ),
-          Positioned.fill(
-            child: Container(
+            child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                   colors: [
-                    Colors.black.withAlpha(120),
-                    Colors.black.withAlpha(210),
+                    Color.lerp(scheme.primary, Colors.black, 0.25)!,
+                    Color.lerp(scheme.primary, Colors.black, 0.62)!,
+                    const Color(0xFF0B0505),
                   ],
+                  stops: const [0.0, 0.55, 1.0],
+                ),
+              ),
+            ),
+          ),
+          // Faint, fully-contained logo watermark (never cropped)
+          Positioned.fill(
+            child: Center(
+              child: FractionallySizedBox(
+                widthFactor: 0.9,
+                heightFactor: 0.9,
+                child: Opacity(
+                  opacity: 0.06,
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    fit: BoxFit.contain,
+                    color: Colors.white,
+                    colorBlendMode: BlendMode.srcIn,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
                 ),
               ),
             ),

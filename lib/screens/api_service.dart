@@ -67,6 +67,10 @@ class ApiService {
         if (token.isNotEmpty) {
           await saveToken(token);
         }
+        final String refresh = data['refresh_token'] ?? '';
+        if (refresh.isNotEmpty) {
+          await saveRefreshToken(refresh);
+        }
         return {
           'success': true,
           'username': data['username'] ?? '',
@@ -107,27 +111,63 @@ class ApiService {
       );
 
       await removeToken();
+      await removeRefreshToken();
     } catch (e) {
       _logger.e('Logout exception: $e');
       await removeToken();
+      await removeRefreshToken();
+    }
+  }
+
+  // ── Silent token refresh ────────────────────────────────────────────────
+  // Exchanges the long-lived refresh token for a fresh access token so an
+  // expired access token is invisible to the user. Returns true on success.
+  Future<bool> refreshAccessToken() async {
+    try {
+      final refresh = await getRefreshToken();
+      if (refresh == null || refresh.isEmpty) return false;
+      final res = await http.post(
+        Uri.parse('${await _baseUrl}/auth/refresh'),
+        headers: _authHeaders(refresh),
+      );
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final data = jsonDecode(res.body);
+        final newToken = data is Map ? data['access_token'] as String? : null;
+        if (newToken != null && newToken.isNotEmpty) {
+          await saveToken(newToken);
+          return true;
+        }
+      }
+      return false;
+    } catch (_) {
+      return false;
     }
   }
 
   // SET ONLINE STATUS (keepalive / reconnect / logout)
   Future<bool> setOnlineStatus(bool isOnline) async {
     try {
-      final token = await _getToken();
-      if (token == null) return false;
-      final res = await http.post(
-        Uri.parse(
-            '${await _baseUrl}/users/me/online?is_online=$isOnline'),
-        headers: _authHeaders(token),
-      );
-      // A real 401/403 here means the token has genuinely expired — signal the
-      // app to sign the user out cleanly (this runs every ~30s as a heartbeat).
+      Future<http.Response?> post(String? tok) async {
+        if (tok == null) return null;
+        return http.post(
+          Uri.parse('${await _baseUrl}/users/me/online?is_online=$isOnline'),
+          headers: _authHeaders(tok),
+        );
+      }
+
+      var res = await post(await _getToken());
+      if (res == null) return false;
+
+      // Access token expired? Silently refresh and retry once. Only if the
+      // refresh itself fails do we treat the session as truly expired.
       if (res.statusCode == 401 || res.statusCode == 403) {
-        SessionEvents.instance.markExpired();
-        return false;
+        if (await refreshAccessToken()) {
+          res = await post(await _getToken());
+        }
+        if (res == null || res.statusCode == 401 || res.statusCode == 403) {
+          SessionEvents.instance.markExpired();
+          return false;
+        }
       }
       return res.statusCode >= 200 && res.statusCode < 300;
     } catch (_) {
@@ -141,10 +181,25 @@ class ApiService {
       final token = await _getToken();
       if (token == null) throw Exception('No access token found');
 
-      final response = await http.get(
+      var activeToken = token;
+      var response = await http.get(
         Uri.parse('${await _baseUrl}/users/me'),
-        headers: _authHeaders(token),
+        headers: _authHeaders(activeToken),
       );
+
+      // Access token expired? Silently refresh and retry once.
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        if (await refreshAccessToken()) {
+          final fresh = await _getToken();
+          if (fresh != null) {
+            activeToken = fresh;
+            response = await http.get(
+              Uri.parse('${await _baseUrl}/users/me'),
+              headers: _authHeaders(activeToken),
+            );
+          }
+        }
+      }
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = jsonDecode(response.body);

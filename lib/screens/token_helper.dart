@@ -44,3 +44,42 @@ Future<void> removeToken() async {
     }
   } catch (_) {/* best-effort */}
 }
+
+// ── Refresh token ───────────────────────────────────────────────────────────
+// Long-lived (30 days). Used to silently mint a new access token so an expired
+// access token never bounces the user to the login screen.
+const String _refreshKey = 'refresh_token';
+
+Future<void> saveRefreshToken(String token) async {
+  try {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_refreshKey, token);
+    } else {
+      await _storage.write(key: _refreshKey, value: token);
+    }
+  } catch (_) {/* best-effort */}
+}
+
+Future<String?> getRefreshToken() async {
+  try {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_refreshKey);
+    }
+    return await _storage.read(key: _refreshKey);
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<void> removeRefreshToken() async {
+  try {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_refreshKey);
+    } else {
+      await _storage.delete(key: _refreshKey);
+    }
+  } catch (_) {/* best-effort */}
+}

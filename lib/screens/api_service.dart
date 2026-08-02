@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart';
 import 'token_helper.dart';
@@ -9,7 +8,6 @@ import 'user.dart';
 import '../utils/app_config.dart';
 
 final _logger = Logger();
-final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 
 class ApiService {
   Future<String> get _baseUrl => AppConfig.baseUrl;
@@ -19,9 +17,8 @@ class ApiService {
     'Content-Type': 'application/json',
   };
 
-  Future<String?> _getToken() async {
-    return await _secureStorage.read(key: AppConfig.tokenKey);
-  }
+  // Delegates to the platform-aware token store (web-safe).
+  Future<String?> _getToken() async => getToken();
 
   // REGISTER
   Future<Map<String, dynamic>> register(
@@ -67,7 +64,7 @@ class ApiService {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final String token = data['access_token'] ?? '';
         if (token.isNotEmpty) {
-          await _secureStorage.write(key: AppConfig.tokenKey, value: token);
+          await saveToken(token);
         }
         return {
           'success': true,
@@ -108,10 +105,10 @@ class ApiService {
         headers: _authHeaders(token),
       );
 
-      await _secureStorage.delete(key: AppConfig.tokenKey);
+      await removeToken();
     } catch (e) {
       _logger.e('Logout exception: $e');
-      await _secureStorage.delete(key: AppConfig.tokenKey);
+      await removeToken();
     }
   }
 

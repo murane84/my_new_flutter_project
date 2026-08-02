@@ -91,6 +91,7 @@ def api_root():
 # END of this file so that all API routes take precedence over the static app.
 mimetypes.add_type("application/wasm", ".wasm")
 mimetypes.add_type("application/manifest+json", ".webmanifest")
+mimetypes.add_type("application/vnd.android.package-archive", ".apk")
 WEBAPP_DIR = "webapp"
 _HAS_WEBAPP = os.path.isfile(os.path.join(WEBAPP_DIR, "index.html"))
 

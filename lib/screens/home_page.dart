@@ -11,6 +11,7 @@ import '../utils/toast_helper.dart';
 import 'auth_page.dart';
 import 'theme_provider.dart';
 import 'music_controls.dart';
+import 'web_music_panel.dart';
 import 'chat_page.dart';
 import 'api_service.dart';
 import '../utils/avatar_widget.dart';
@@ -607,7 +608,11 @@ class HomePageState extends State<HomePage> {
         children: [
           _buildMusicHeader(context),
           const SizedBox(height: 10),
-          Expanded(child: MusicControls(textColor: scheme.onSurface)),
+          Expanded(
+            child: kIsWeb
+                ? WebMusicPanel(textColor: scheme.onSurface)
+                : MusicControls(textColor: scheme.onSurface),
+          ),
         ],
       ),
       isMusicPanel: true,

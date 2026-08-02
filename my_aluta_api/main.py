@@ -8,7 +8,7 @@ import socket
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 import config
@@ -144,6 +144,69 @@ async def upload_build(
     with open(dest, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     return {"ok": True, "saved": name, "bytes": os.path.getsize(dest)}
+
+
+_UPLOADER_HTML = """<!doctype html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aluta — Upload builds</title>
+<style>
+ body{font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:640px;margin:32px auto;padding:0 16px;background:#faf7f7;color:#222}
+ h1{font-size:20px} code{background:#f0e8e8;padding:1px 5px;border-radius:5px;font-size:12px}
+ .card{border:1px solid #e2d9d9;border-radius:12px;padding:16px;margin:16px 0;background:#fff}
+ label{display:block;font-weight:600;margin-bottom:6px}
+ input[type=password]{width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;box-sizing:border-box}
+ .drop{border:2px dashed #c9a;border-radius:10px;padding:22px;text-align:center;color:#999;margin:10px 0;cursor:pointer}
+ .drop.hover{background:#f3e9e9;color:#a44;border-color:#a44}
+ .status{margin-top:6px;font-size:14px;min-height:18px} .ok{color:#199a5b}.err{color:#c33}
+</style></head><body>
+<h1>🎵 Aluta — upload app builds</h1>
+<p>Each upload <b>replaces</b> the previous version on the server (no pile-up). Enter your upload key, then drop each file.</p>
+<label>Upload key</label>
+<input id="key" type="password" placeholder="UPLOAD_KEY" autocomplete="off">
+<div class="card">
+  <label>Android APK &rarr; <code>/downloads/aluta.apk</code></label>
+  <div class="drop" data-name="aluta.apk">Drop the .apk here, or click to choose</div>
+  <input type="file" accept=".apk" style="display:none">
+  <div class="status"></div>
+</div>
+<div class="card">
+  <label>Windows ZIP &rarr; <code>/downloads/aluta-windows.zip</code></label>
+  <div class="drop" data-name="aluta-windows.zip">Drop the .zip here, or click to choose</div>
+  <input type="file" accept=".zip" style="display:none">
+  <div class="status"></div>
+</div>
+<script>
+document.querySelectorAll('.card').forEach(function(card){
+  var drop=card.querySelector('.drop'), input=card.querySelector('input[type=file]'),
+      status=card.querySelector('.status'), name=drop.dataset.name;
+  drop.onclick=function(){input.click()};
+  drop.ondragover=function(e){e.preventDefault();drop.classList.add('hover')};
+  drop.ondragleave=function(){drop.classList.remove('hover')};
+  drop.ondrop=function(e){e.preventDefault();drop.classList.remove('hover');
+    if(e.dataTransfer.files[0])send(e.dataTransfer.files[0])};
+  input.onchange=function(){if(input.files[0])send(input.files[0])};
+  function send(file){
+    var key=document.getElementById('key').value.trim();
+    if(!key){status.className='status err';status.textContent='Enter the upload key first.';return;}
+    status.className='status';status.textContent='Uploading '+file.name+'…';
+    var fd=new FormData();fd.append('key',key);fd.append('name',name);fd.append('file',file);
+    fetch('/admin/upload',{method:'POST',body:fd})
+      .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})})
+      .then(function(res){
+        if(res.ok){status.className='status ok';
+          status.textContent='✓ Uploaded ('+((res.j.bytes/1048576)||0).toFixed(1)+' MB). It is live now.';}
+        else{status.className='status err';status.textContent='✗ '+(res.j.detail||'Upload failed');}
+      }).catch(function(e){status.className='status err';status.textContent='✗ '+e});
+  }
+});
+</script></body></html>"""
+
+
+@app.get("/admin/uploader", response_class=HTMLResponse)
+def uploader_page():
+    """Simple drag-and-drop page for uploading new app builds (key-protected upload)."""
+    return HTMLResponse(_UPLOADER_HTML)
 
 
 # ✅ Swagger Authorize Button

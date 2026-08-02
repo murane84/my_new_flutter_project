@@ -1179,9 +1179,6 @@ class HomePageState extends State<HomePage> {
         titleSpacing: 14,
         title: Row(
           children: [
-            Icon(Icons.music_note_rounded,
-                color: scheme.primary, size: 20),
-            const SizedBox(width: 6),
             Text(
               'Aluta',
               style: TextStyle(

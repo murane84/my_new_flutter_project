@@ -70,7 +70,7 @@ def create_tokens(email: str):
     )
     refresh_token = create_token(
         {"sub": email},
-        timedelta(days=7)
+        timedelta(days=30)  # long-lived refresh token; app silently refreshes
     )
     return access_token, refresh_token
 
@@ -125,18 +125,20 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     if not user:
         raise credentials_exception
 
-    # Check for inactivity timeout and update user status
-    set_user_status_based_on_inactivity(user, db)
-
-    # If the user is inactive, raise session expired
-    if not user.is_online:
-        raise HTTPException(status_code=401, detail="Session expired due to inactivity")
+    # Standard consumer-app auth: a valid, unexpired JWT keeps the session alive.
+    # We do NOT log the user out on inactivity — session length is governed by
+    # the access-token expiry plus the long-lived refresh token (the app refreshes
+    # silently). Presence (is_online) is a separate concern, driven by the
+    # WebSocket connection; here we simply mark the user online and touch last_seen.
+    user.is_online = True
+    user.last_seen = datetime.now(timezone.utc)
+    db.commit()
 
     return user
 
 def get_active_user(current_user: User = Depends(get_current_user)):
-    if not current_user.is_online:
-        raise HTTPException(status_code=403, detail="User is not active")
+    # Kept for backwards-compatibility with existing routes. Authentication alone
+    # now implies an active session, so this just returns the current user.
     return current_user
 
 # ------------------------------

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'token_helper.dart';
 import 'user.dart';
 import '../utils/app_config.dart';
+import '../utils/session_events.dart';
 
 final _logger = Logger();
 
@@ -122,6 +123,12 @@ class ApiService {
             '${await _baseUrl}/users/me/online?is_online=$isOnline'),
         headers: _authHeaders(token),
       );
+      // A real 401/403 here means the token has genuinely expired — signal the
+      // app to sign the user out cleanly (this runs every ~30s as a heartbeat).
+      if (res.statusCode == 401 || res.statusCode == 403) {
+        SessionEvents.instance.markExpired();
+        return false;
+      }
       return res.statusCode >= 200 && res.statusCode < 300;
     } catch (_) {
       return false;
@@ -143,7 +150,8 @@ class ApiService {
         final data = jsonDecode(response.body);
         if (data is Map<String, dynamic>) return data;
         throw Exception('Invalid user data format');
-      } else if (response.statusCode == 401) {
+      } else if (response.statusCode == 401 || response.statusCode == 403) {
+        SessionEvents.instance.markExpired();
         throw Exception('Session expired. Please log in again.');
       }
       throw Exception('Failed to fetch user data');

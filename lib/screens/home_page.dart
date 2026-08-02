@@ -10,6 +10,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../utils/toast_helper.dart';
 import '../utils/app_reload.dart';
 import '../utils/connection_status.dart';
+import '../utils/session_events.dart';
 import 'auth_page.dart';
 import 'theme_provider.dart';
 import 'music_controls.dart';
@@ -118,6 +119,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // React to the shared connection status so the footer dot / header badge
     // update even when the change originates elsewhere (e.g. the chat page).
     ConnectionStatus.instance.online.addListener(_onGlobalConnChanged);
+    // When the token genuinely expires (server returns 401/403), sign out to a
+    // fresh login instead of leaving the user stuck offline.
+    SessionEvents.instance.expired.addListener(_onSessionExpired);
     _loadUserData();
     _loadCachedFriends();    // show cached list instantly (no spinner flash)
     _fetchFriends();          // then refresh from network
@@ -161,11 +165,45 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     ConnectionStatus.instance.online.removeListener(_onGlobalConnChanged);
+    SessionEvents.instance.expired.removeListener(_onSessionExpired);
     _refreshTimer?.cancel();
     _heartbeatTimer?.cancel();
     _connectivitySub?.cancel();
     _notifyWs?.close();
     super.dispose();
+  }
+
+  // ── Session expiry → clean auto sign-out ──────────────────────────────────
+  bool _handlingExpiry = false;
+  Future<void> _onSessionExpired() async {
+    if (!SessionEvents.instance.expired.value) return;
+    if (_handlingExpiry || !mounted) return;
+    _handlingExpiry = true;
+    SessionEvents.instance.reset();
+
+    // Stop all background chatter first.
+    _heartbeatTimer?.cancel();
+    _refreshTimer?.cancel();
+    _notifyWs?.close();
+
+    // Best-effort tell the user why they're back at login.
+    if (mounted) {
+      showToast(context, 'Your session expired — please sign in again',
+          type: ToastType.info, duration: const Duration(seconds: 3));
+    }
+
+    await ApiService().logoutUser();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('access_token');
+    } catch (_) {}
+
+    if (!mounted) return;
+    // Clear the whole stack so any open chat/live popup is dismissed too.
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const AuthPage()),
+      (route) => false,
+    );
   }
 
   // Mirrors the shared connection status into the local flags the UI reads.

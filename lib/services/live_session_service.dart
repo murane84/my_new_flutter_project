@@ -55,6 +55,11 @@ class LiveSessionController {
   String _incomingMime = 'audio/mpeg';
   bool _listenerStarted = false;
 
+  // Host-side: kept so we can (re)stream the song the moment a listener joins,
+  // so join timing no longer matters (a late joiner still gets the full audio).
+  Uint8List? _hostBytes;
+  Map<String, dynamic>? _hostMeta;
+
   bool get isConnected => _channel != null;
 
   // ---------------------------------------------------------------------------
@@ -104,8 +109,10 @@ class LiveSessionController {
     await player.setAudioSource(BytesAudioSource(audioBytes, contentType: mime));
     _broadcastHostPlayback(); // mirror play/pause/seek/position to the listener
 
-    // 4) Announce metadata, then stream the bytes, then signal end-of-stream.
-    _sendControl({
+    // 4) Announce metadata. The actual audio is streamed only once a listener
+    //    joins (see the `peer_joined` handling below), so a late-accepting
+    //    receiver still gets the full song.
+    final meta = {
       'type': 'meta',
       'track': {
         'title': title,
@@ -113,12 +120,12 @@ class LiveSessionController {
         'duration_ms': durationMs,
         'mime': mime,
       },
-    });
+    };
+    _hostMeta = meta;
+    _hostBytes = audioBytes;
+    _sendControl(meta);
     await player.play();
     _sendControl({'type': 'play', 'position_ms': 0});
-
-    // Stream the audio in chunks without blocking the UI thread.
-    unawaited(_streamBytesToListener(audioBytes));
 
     return sessionId!;
   }
@@ -223,7 +230,19 @@ class LiveSessionController {
     final type = msg['type'] as String?;
     onEvent?.call(msg);
 
-    if (role != LiveRole.listener) return; // host doesn't react to its own echoes
+    // Host: the one inbound event it acts on is a listener joining — that's when
+    // it (re)sends metadata and streams the song, so join timing doesn't matter.
+    if (role == LiveRole.host) {
+      if (type == 'peer_joined') {
+        final meta = _hostMeta;
+        if (meta != null) _sendControl(meta);
+        final bytes = _hostBytes;
+        if (bytes != null) {
+          unawaited(_streamBytesToListener(bytes));
+        }
+      }
+      return;
+    }
 
     switch (type) {
       case 'session_state':
@@ -239,12 +258,15 @@ class LiveSessionController {
         await _startListenerPlayback(autoplay: true);
         break;
       case 'play':
-        await _startListenerPlayback(autoplay: false);
+        // Ignore until the full song is buffered (started via 'eos'); otherwise
+        // playback would begin from a partial in-memory buffer.
+        if (!_listenerStarted) break;
         final pos = msg['position_ms'];
         if (pos is int) await player.seek(Duration(milliseconds: pos));
         await player.play();
         break;
       case 'pause':
+        if (!_listenerStarted) break;
         final pos = msg['position_ms'];
         if (pos is int) await player.seek(Duration(milliseconds: pos));
         await player.pause();

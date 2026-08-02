@@ -6,10 +6,13 @@ import 'package:intl/intl.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'api_service.dart';
 import 'token_helper.dart';
 import 'websocket_manager.dart';
 import '../utils/toast_helper.dart';
+import 'live_session_screen.dart';
 
 // ─── Timestamp helpers ───────────────────────────────────────────────────────
 
@@ -472,7 +475,98 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           if (mounted) setState(() => _friendTyping = false);
         });
       }
+    } else if (type == 'live_invite') {
+      _handleLiveInvite(event);
     }
+  }
+
+  // ── Listen Together ─────────────────────────────────────────────────────────
+
+  /// HOST: pick a local song and start a live session with this friend.
+  Future<void> _startListenTogether() async {
+    final token = await getToken();
+    final myUserId = int.tryParse(_myId ?? '');
+    if (token == null || myUserId == null) {
+      showToast(context, 'Please wait — still signing you in…', type: ToastType.error);
+      return;
+    }
+
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.audio,
+      withData: true, // load bytes into memory (works on mobile + web)
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    final picked = result.files.single;
+    final Uint8List? bytes = picked.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      if (mounted) showToast(context, 'Could not read that audio file.', type: ToastType.error);
+      return;
+    }
+
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LiveSessionScreen.host(
+          token: token,
+          myUserId: myUserId,
+          receiverId: widget.friendId,
+          audioBytes: bytes,
+          title: picked.name,
+          peerName: widget.friendName,
+        ),
+      ),
+    );
+  }
+
+  /// LISTENER: a `live_invite` arrived over the notification socket.
+  Future<void> _handleLiveInvite(Map<String, dynamic> event) async {
+    final data = (event['data'] as Map?)?.cast<String, dynamic>();
+    if (data == null) return;
+    final sessionId = data['session_id']?.toString();
+    if (sessionId == null) return;
+    final track = (data['track'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+    final hostName = data['host_username']?.toString() ?? widget.friendName;
+
+    final accept = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Listen together?'),
+        content: Text(
+          '$hostName wants to play "${track['title'] ?? 'a song'}" with you, live.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Decline'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Join'),
+          ),
+        ],
+      ),
+    );
+    if (accept != true) return;
+
+    final token = await getToken();
+    final myUserId = int.tryParse(_myId ?? '');
+    if (token == null || myUserId == null) return;
+    if (!mounted) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LiveSessionScreen.listener(
+          token: token,
+          myUserId: myUserId,
+          sessionId: sessionId,
+          track: track,
+          peerName: hostName,
+        ),
+      ),
+    );
   }
 
   // ── Status ────────────────────────────────────────────────────────────────
@@ -1451,6 +1545,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Listen together',
+            icon: const Icon(Icons.headphones_rounded),
+            onPressed: _startListenTogether,
+          ),
+        ],
       ),
       body: body,
     );

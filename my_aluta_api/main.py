@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+import mimetypes
 import os
 import socket
 
@@ -16,6 +17,7 @@ from auth import router as auth_router
 from routers import messages as messages_router
 from routers import users as users_router
 from routers import upload
+from routers import live as live_router
 from websocket_routes import router as websocket_router
 import websocket_manager
 
@@ -56,6 +58,7 @@ app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(users_router.router)
 app.include_router(messages_router.router)
 app.include_router(upload.router)
+app.include_router(live_router.router)
 app.include_router(websocket_router)
 
 
@@ -74,13 +77,31 @@ def health_check():
     }
 
 
-# ✅ Root endpoint (never leaks the database URL)
-@app.get("/")
-def read_root():
+# ✅ API welcome (kept under /api so "/" can serve the web app when built)
+@app.get("/api")
+def api_root():
     return {
         "message": "Welcome to My Aluta API",
         "environment": config.ENVIRONMENT,
     }
+
+
+# ✅ Flutter web PWA. If a built copy exists in ./webapp it is served at "/";
+# otherwise "/" returns a small JSON hint. The actual mount is added at the very
+# END of this file so that all API routes take precedence over the static app.
+mimetypes.add_type("application/wasm", ".wasm")
+mimetypes.add_type("application/manifest+json", ".webmanifest")
+WEBAPP_DIR = "webapp"
+_HAS_WEBAPP = os.path.isfile(os.path.join(WEBAPP_DIR, "index.html"))
+
+if not _HAS_WEBAPP:
+    @app.get("/")
+    def read_root():
+        return {
+            "message": "Welcome to My Aluta API",
+            "environment": config.ENVIRONMENT,
+            "webapp": "not_built",
+        }
 
 
 # ✅ Swagger Authorize Button
@@ -112,6 +133,13 @@ def custom_openapi():
 
 
 app.openapi = custom_openapi
+
+
+# ✅ Mount the built Flutter web app LAST, so every API route above wins first.
+# html=True serves index.html at "/", which is all a Flutter web PWA needs.
+# Drop your `flutter build web` output into my_aluta_api/webapp/ to enable this.
+if _HAS_WEBAPP:
+    app.mount("/", StaticFiles(directory=WEBAPP_DIR, html=True), name="webapp")
 
 
 # ✅ Run server (local dev only — Railway uses the Procfile start command).

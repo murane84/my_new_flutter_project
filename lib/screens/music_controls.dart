@@ -956,56 +956,76 @@ class _MusicControlsState extends State<MusicControls>
                   ),
                 ),
                 const SizedBox(width: 6),
-                // Volume slider — ~43% of panel width via flex
-                Flexible(
-                  flex: 9,
-                  child: SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 3,
-                      thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 5),
-                      overlayShape: const RoundSliderOverlayShape(
-                          overlayRadius: 11),
-                      // Grey palette — visually distinct from accent position bar
-                      activeTrackColor: _muted
-                          ? scheme.outlineVariant
-                          : onSurface.withAlpha(155),
-                      inactiveTrackColor: onSurface.withAlpha(28),
-                      thumbColor: _muted
-                          ? scheme.outlineVariant
-                          : onSurface.withAlpha(200),
-                      overlayColor: onSurface.withAlpha(18),
+                // Volume slider + % chip — grouped and WIDTH-CAPPED so the
+                // volume control never stretches full-width and visually
+                // collides with the accent seek bar above it. Left-aligned;
+                // the empty space it leaves pushes the speed button right.
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 210),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Expanded(
+                            child: SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                trackHeight: 3,
+                                thumbShape: const RoundSliderThumbShape(
+                                    enabledThumbRadius: 5),
+                                overlayShape: const RoundSliderOverlayShape(
+                                    overlayRadius: 11),
+                                // Grey palette — distinct from accent seek bar
+                                activeTrackColor: _muted
+                                    ? scheme.outlineVariant
+                                    : onSurface.withAlpha(155),
+                                inactiveTrackColor:
+                                    onSurface.withAlpha(28),
+                                thumbColor: _muted
+                                    ? scheme.outlineVariant
+                                    : onSurface.withAlpha(200),
+                                overlayColor: onSurface.withAlpha(18),
+                              ),
+                              child: Slider(
+                                value: _muted ? 0 : _volume,
+                                onChanged: (v) {
+                                  if (_muted) {
+                                    setState(() => _muted = false);
+                                  }
+                                  _setVolume(v);
+                                },
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          // Volume percentage chip
+                          Container(
+                            width: 40,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: scheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                            child: Text(
+                              _muted
+                                  ? 'mut'
+                                  : '${(_volume * 100).round()}%',
+                              style: TextStyle(
+                                  color: onSurface.withAlpha(150),
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w600),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    child: Slider(
-                      value: _muted ? 0 : _volume,
-                      onChanged: (v) {
-                        if (_muted) setState(() => _muted = false);
-                        _setVolume(v);
-                      },
-                    ),
-                  ),
-                ),
-                // Volume percentage chip
-                Container(
-                  width: 40,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 4, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: scheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(7),
-                  ),
-                  child: Text(
-                    _muted ? 'mut' : '${(_volume * 100).round()}%',
-                    style: TextStyle(
-                        color: onSurface.withAlpha(150),
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w600),
-                    textAlign: TextAlign.center,
                   ),
                 ),
 
-                // Fixed gap pushes speed button firmly to the right
-                const Spacer(),
+                const SizedBox(width: 10),
 
                 // Sleep remaining (compact, inline)
                 if (_sleepRemaining != null) ...[

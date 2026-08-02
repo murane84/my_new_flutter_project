@@ -2,11 +2,13 @@ import asyncio
 from contextlib import asynccontextmanager
 import mimetypes
 import os
+import shutil
 import socket
 
-from fastapi import FastAPI
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 import config
@@ -103,6 +105,45 @@ if not _HAS_WEBAPP:
             "environment": config.ENVIRONMENT,
             "webapp": "not_built",
         }
+
+
+# ✅ App downloads (APK / Windows zip) — stored on a Railway VOLUME, never in Git.
+# Railway sets RAILWAY_VOLUME_MOUNT_PATH when a volume is attached; we keep the
+# binaries under <volume>/downloads. Locally it falls back to ./volume_data.
+VOLUME_DIR = os.getenv("RAILWAY_VOLUME_MOUNT_PATH") or os.path.join(os.getcwd(), "volume_data")
+DOWNLOADS_DIR = os.path.join(VOLUME_DIR, "downloads")
+os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+
+# Only these filenames are allowed (blocks path traversal / arbitrary hosting).
+ALLOWED_DOWNLOADS = {"aluta.apk", "aluta-windows.zip"}
+
+
+@app.get("/downloads/{filename}")
+def get_download(filename: str):
+    if filename not in ALLOWED_DOWNLOADS:
+        raise HTTPException(status_code=404, detail="Not found")
+    path = os.path.join(DOWNLOADS_DIR, filename)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="This build hasn't been uploaded yet")
+    return FileResponse(path, filename=filename)
+
+
+@app.post("/admin/upload")
+async def upload_build(
+    key: str = Form(...),
+    name: str = Form(...),
+    file: UploadFile = File(...),
+):
+    """Push a new build to the volume. Protected by the UPLOAD_KEY env var."""
+    expected = os.getenv("UPLOAD_KEY")
+    if not expected or key != expected:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if name not in ALLOWED_DOWNLOADS:
+        raise HTTPException(status_code=400, detail=f"name must be one of {sorted(ALLOWED_DOWNLOADS)}")
+    dest = os.path.join(DOWNLOADS_DIR, name)
+    with open(dest, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    return {"ok": True, "saved": name, "bytes": os.path.getsize(dest)}
 
 
 # ✅ Swagger Authorize Button

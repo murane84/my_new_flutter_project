@@ -55,9 +55,9 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     }
   }
 
-  Future<void> _downloadApk() async {
+  Future<void> _download(String fileName) async {
     final base = await AppConfig.baseUrl;
-    final uri = Uri.parse('$base/downloads/aluta.apk');
+    final uri = Uri.parse('$base/downloads/$fileName');
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
       showToast(context, 'Could not start the download', type: ToastType.error);
@@ -76,8 +76,9 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
             Icon(Icons.library_music_outlined, size: 56, color: theme.hintColor),
             const SizedBox(height: 12),
             Text(
-              'Your device music library isn’t available in a browser.\n'
-              'Play a local file here, or get the Android app for full music features.',
+              'The browser version is the lite one — your device music library '
+              'and background playback need the full app.\n'
+              'Play a local file here, or get the full app for your device:',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(color: widget.textColor),
             ),
@@ -87,11 +88,27 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
               icon: const Icon(Icons.folder_open),
               label: Text(_loading ? 'Loading…' : 'Open a file to play'),
             ),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: _downloadApk,
-              icon: const Icon(Icons.android),
-              label: const Text('Download the Android app'),
+            const SizedBox(height: 14),
+            Text('Get the full app',
+                style: theme.textTheme.labelLarge
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => _download('aluta.apk'),
+                  icon: const Icon(Icons.android),
+                  label: const Text('Android'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _download('aluta-windows.zip'),
+                  icon: const Icon(Icons.desktop_windows),
+                  label: const Text('Windows'),
+                ),
+              ],
             ),
             if (_title != null) ...[
               const SizedBox(height: 24),

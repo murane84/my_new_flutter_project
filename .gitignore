@@ -103,3 +103,4 @@ build/
 _to_delete/
 .vs/
 android/app/build/
+my_aluta_api/webapp/downloads/ 

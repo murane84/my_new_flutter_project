@@ -49,7 +49,6 @@ class LiveSessionController {
 
   LiveRole? role;
   String? sessionId;
-  int? _myUserId;
 
   // Listener-side in-memory buffer for the incoming song.
   final BytesBuilder _incoming = BytesBuilder(copy: false);
@@ -74,7 +73,6 @@ class LiveSessionController {
     String mime = 'audio/mpeg',
   }) async {
     role = LiveRole.host;
-    _myUserId = myUserId;
 
     // 1) Create the session on the server (metadata only — no audio uploaded).
     final base = await AppConfig.baseUrl;
@@ -171,7 +169,6 @@ class LiveSessionController {
     required String token,
   }) async {
     role = LiveRole.listener;
-    _myUserId = myUserId;
     this.sessionId = sessionId;
     _incoming.clear();
     _listenerStarted = false;

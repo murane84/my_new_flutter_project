@@ -1,0 +1,9 @@
+{
+  "typeCheckingMode": "basic",
+  "useLibraryCodeForTypes": true,
+
+  "reportAttributeAccessIssue": false,
+  "reportReturnType": false,
+  "reportGeneralTypeIssues": false,
+  "reportArgumentType": false
+}

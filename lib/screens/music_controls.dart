@@ -911,7 +911,7 @@ class _MusicControlsState extends State<MusicControls>
                   ),
                   const SizedBox(width: 12),
                   _CtrlChip(
-                    icon: Icons.bedtime_rounded,
+                    icon: Icons.timer_outlined,
                     active: _sleepRemaining != null,
                     activeColor: Colors.indigo,
                     onTap: _showSleepTimerDialog,
@@ -1009,7 +1009,7 @@ class _MusicControlsState extends State<MusicControls>
 
                 // Sleep remaining (compact, inline)
                 if (_sleepRemaining != null) ...[
-                  Icon(Icons.bedtime_rounded,
+                  Icon(Icons.timer_outlined,
                       size: 11, color: Colors.indigo.withAlpha(200)),
                   const SizedBox(width: 3),
                   Text(

@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../utils/toast_helper.dart';
 import '../utils/app_reload.dart';
+import '../utils/connection_status.dart';
 import 'auth_page.dart';
 import 'theme_provider.dart';
 import 'music_controls.dart';
@@ -107,6 +108,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // React to the shared connection status so the footer dot / header badge
+    // update even when the change originates elsewhere (e.g. the chat page).
+    ConnectionStatus.instance.online.addListener(_onGlobalConnChanged);
     _loadUserData();
     _loadCachedFriends();    // show cached list instantly (no spinner flash)
     _fetchFriends();          // then refresh from network
@@ -130,6 +134,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _autoReconnect();      // go online + refresh data
       } else {
         // Lost network — mark offline, cached data stays visible
+        ConnectionStatus.instance.set(false);
         if (mounted) {
           setState(() {
             _isCurrentUserOnline = false;
@@ -148,10 +153,22 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    ConnectionStatus.instance.online.removeListener(_onGlobalConnChanged);
     _refreshTimer?.cancel();
     _heartbeatTimer?.cancel();
     _connectivitySub?.cancel();
     super.dispose();
+  }
+
+  // Mirrors the shared connection status into the local flags the UI reads.
+  void _onGlobalConnChanged() {
+    final v = ConnectionStatus.instance.isOnline;
+    if (mounted && (_serverReachable != v || _isCurrentUserOnline != v)) {
+      setState(() {
+        _serverReachable = v;
+        _isCurrentUserOnline = v;
+      });
+    }
   }
 
   // ── App lifecycle: reconnect the session when the app is resumed ───────────
@@ -172,6 +189,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     try {
       final ok = await ApiService().setOnlineStatus(true);
       if (!mounted) return;
+      ConnectionStatus.instance.set(ok);
       if (_serverReachable != ok || _isCurrentUserOnline != ok) {
         setState(() {
           _serverReachable = ok;
@@ -179,6 +197,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         });
       }
     } catch (_) {
+      ConnectionStatus.instance.set(false);
       if (mounted && (_serverReachable || _isCurrentUserOnline)) {
         setState(() {
           _serverReachable = false;
@@ -237,6 +256,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // origin — there's no LAN to scan. Probe /health directly and report status.
     if (kIsWeb || kReleaseMode) {
       final ok = await AppConfig.probeServer();
+      ConnectionStatus.instance.set(ok);
       if (mounted) {
         setState(() {
           _serverIp = AppConfig.displayHost;
@@ -253,6 +273,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       await AppConfig.baseUrl; // trigger discovery
       final ip = AppConfig.cachedIp ?? 'unknown';
       final reachable = await AppConfig.probeIp(ip);
+      ConnectionStatus.instance.set(reachable);
       if (mounted) {
         setState(() {
           _serverIp = ip;
@@ -563,6 +584,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _serverReachable = true;
         _isLoadingFriends = false;
       });
+      ConnectionStatus.instance.set(true);
     } catch (_) {
       // ─── API error (401 session expired, network down, etc.) ────────────
       // IMPORTANT: do NOT overwrite _allFriends here.
@@ -576,6 +598,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           _serverReachable = false;
           _isLoadingFriends = false;
         });
+        ConnectionStatus.instance.set(false);
       }
     }
   }
@@ -592,6 +615,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (!mounted) return;
       if (ok) {
         final wasOffline = !_isCurrentUserOnline;
+        ConnectionStatus.instance.set(true);
         setState(() {
           _isCurrentUserOnline = true;
           _serverReachable = true;
@@ -615,6 +639,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (!mounted) return;
     setState(() => _isGoingOnline = false);
     if (ok) {
+      ConnectionStatus.instance.set(true);
       setState(() {
         _isCurrentUserOnline = true;
         _serverReachable = true;

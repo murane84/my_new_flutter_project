@@ -11,6 +11,7 @@ import 'api_service.dart';
 import 'token_helper.dart';
 import 'websocket_manager.dart';
 import '../utils/toast_helper.dart';
+import '../utils/connection_status.dart';
 import 'live_session_screen.dart';
 
 // ─── Timestamp helpers ───────────────────────────────────────────────────────
@@ -114,6 +115,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _ctrl.addListener(_onTextChanged);
     _scrollCtrl.addListener(_onScroll);
+    // Mirror the app-wide connection status so this banner never disagrees
+    // with the home footer dot / header badge.
+    _isUserOffline = !ConnectionStatus.instance.isOnline;
+    ConnectionStatus.instance.online.addListener(_onConnStatusChanged);
     _initChat();
 
     _statusTimer = Timer.periodic(
@@ -128,9 +133,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     );
   }
 
+  void _onConnStatusChanged() {
+    if (mounted) {
+      setState(() => _isUserOffline = !ConnectionStatus.instance.isOnline);
+    }
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    ConnectionStatus.instance.online.removeListener(_onConnStatusChanged);
     _statusTimer?.cancel();
     _pollTimer?.cancel();
     _typingTimer?.cancel();
@@ -213,13 +225,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       _saveMessagesCache();
       if (_isAtBottom) _scrollToBottom();
     } catch (_) {
-      // API error (session expired, network issue) — show cached messages
-      // _isLoading is already false if _loadCachedMessages ran first
+      // API error (session expired, network issue) — show cached messages.
+      // Do NOT flip global offline on a single message-fetch failure; the
+      // app-wide heartbeat is the authority for connection status.
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _isUserOffline = true;
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -237,13 +247,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       final secsSinceActivity =
           DateTime.now().difference(_lastActivityTime).inSeconds;
       if (secsSinceActivity < 180) {
-        // User was active in the last 3 minutes — keep them online
+        // User was active in the last 3 minutes — keep them online.
         final ok = await ApiService().setOnlineStatus(true);
-        if (mounted && !ok && !_isUserOffline) {
-          setState(() => _isUserOffline = true);
-        } else if (mounted && ok && _isUserOffline) {
-          setState(() => _isUserOffline = false);
-        }
+        ConnectionStatus.instance.set(ok);
       }
     });
   }
@@ -253,7 +259,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     if (_isUserOffline && mounted) {
       // Quietly try to go back online when user resumes activity
       ApiService().setOnlineStatus(true).then((ok) {
-        if (ok && mounted) setState(() => _isUserOffline = false);
+        if (ok) ConnectionStatus.instance.set(true);
       });
     }
   }
@@ -294,8 +300,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       final hasNet = results.any((r) => r != ConnectivityResult.none);
       if (hasNet && _isUserOffline) {
         _autoReconnect();
-      } else if (!hasNet && !_isUserOffline) {
-        if (mounted) setState(() => _isUserOffline = true);
+      } else if (!hasNet) {
+        ConnectionStatus.instance.set(false);
       }
     });
   }
@@ -309,10 +315,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
     if (ok) {
       final wasOffline = _isUserOffline;
-      setState(() {
-        _isUserOffline = false;
-        _isReconnecting = false;
-      });
+      ConnectionStatus.instance.set(true);
+      setState(() => _isReconnecting = false);
       _startPolling();
 
       // Fetch any messages that arrived while offline
@@ -341,6 +345,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         if (_isAtBottom) _scrollToBottom();
       }
     } else {
+      ConnectionStatus.instance.set(false);
       setState(() => _isReconnecting = false);
       showToast(context, 'Network error — check your connection',
           type: ToastType.error);
@@ -363,8 +368,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         skip: 0, limit: 60,
       );
     } catch (_) {
-      // Network failure — mark user as offline but keep showing cached messages
-      if (mounted && !_isUserOffline) setState(() => _isUserOffline = true);
+      // A single poll failure is not proof the whole server is down — leave the
+      // connection status to the app-wide heartbeat so indicators stay in sync.
       return;
     }
     if (fetched.isEmpty) return;

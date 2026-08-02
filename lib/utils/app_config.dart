@@ -23,7 +23,7 @@ class AppConfig {
   // Otherwise update the default below to your Railway domain after deploying.
   static const String _prodUrl =
       String.fromEnvironment('PROD_URL',
-          defaultValue: 'https://mynewflutterproject-production.up.railway.app');
+          defaultValue: 'https://aluta.ozilane.com');
   static const int    port          = 8000;
   static const String tokenKey      = 'access_token';
   static const String _prefKey      = 'server_ip_override';

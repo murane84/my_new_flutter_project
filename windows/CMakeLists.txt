@@ -32,6 +32,13 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# Newer MSVC toolchains turn the deprecated <experimental/coroutine> header
+# (error STL1011) into a hard error. Several Flutter Windows plugins
+# (audioplayers_windows, just_audio_windows, permission_handler_windows,
+# flutter_local_notifications_windows) still include it, so silence it globally.
+# Placed before the plugin subdirectories below so it applies to them too.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by

@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../utils/toast_helper.dart';
+import '../utils/app_reload.dart';
 import 'auth_page.dart';
 import 'theme_provider.dart';
 import 'music_controls.dart';
@@ -198,6 +199,91 @@ class HomePageState extends State<HomePage> {
   }
 
   void _showServerSettings() {
+    // On the live app (web / release) the server is fixed to the production
+    // domain — manual IP override and LAN auto-detect do nothing here. Show a
+    // clean read-only status card instead of the dev configuration dialog.
+    if (kIsWeb || kReleaseMode) {
+      showDialog(
+        context: context,
+        builder: (ctx) {
+          final scheme = Theme.of(ctx).colorScheme;
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.wifi_tethering_rounded),
+                SizedBox(width: 8),
+                Text('Server Connection'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: _serverReachable
+                        ? Colors.green.withAlpha(30)
+                        : Colors.red.withAlpha(30),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _serverReachable ? Colors.green : Colors.red,
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _serverReachable
+                            ? Icons.check_circle_outline
+                            : Icons.error_outline,
+                        size: 16,
+                        color: _serverReachable ? Colors.green : Colors.red,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _serverReachable
+                              ? 'Connected: $_serverIp'
+                              : 'Not reachable: $_serverIp',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color:
+                                _serverReachable ? Colors.green : Colors.red,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Aluta connects to its secure cloud server automatically.',
+                  style: TextStyle(
+                      fontSize: 11, color: scheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+            actions: [
+              if (kIsWeb)
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    hardReloadApp();
+                  },
+                  child: const Text('Reload app'),
+                ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
+
     final controller = TextEditingController(
       text: _serverIp == 'discovering…' || _serverIp == 'scanning…'
           ? ''
@@ -822,34 +908,51 @@ class HomePageState extends State<HomePage> {
         Expanded(
           child: _isLoadingFriends
               ? const Center(child: CircularProgressIndicator())
-              : _filteredFriends.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.chat_bubble_outline,
-                              size: 48,
-                              color: scheme.outlineVariant),
-                          const SizedBox(height: 10),
-                          Text('No conversations yet',
-                              style: TextStyle(
-                                  color: scheme.onSurfaceVariant)),
-                        ],
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _fetchFriends,
-                      child: ListView.separated(
-                        itemCount: _filteredFriends.length,
-                        separatorBuilder: (ctx, i) => Divider(
-                          height: 1,
-                          indent: 68,
-                          color: scheme.outlineVariant.withAlpha(70),
+              : RefreshIndicator(
+                  onRefresh: _onPullToRefresh,
+                  // AlwaysScrollable → the list can overscroll (and so trigger
+                  // the pull gesture) even when it's short or empty.
+                  child: _filteredFriends.isEmpty
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(top: 110),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.chat_bubble_outline,
+                                      size: 48,
+                                      color: scheme.outlineVariant),
+                                  const SizedBox(height: 10),
+                                  Text('No conversations yet',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                          color: scheme.onSurfaceVariant)),
+                                  const SizedBox(height: 6),
+                                  Text('Pull down to refresh',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: scheme.onSurfaceVariant
+                                              .withAlpha(150))),
+                                ],
+                              ),
+                            ),
+                          ],
+                        )
+                      : ListView.separated(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          itemCount: _filteredFriends.length,
+                          separatorBuilder: (ctx, i) => Divider(
+                            height: 1,
+                            indent: 68,
+                            color: scheme.outlineVariant.withAlpha(70),
+                          ),
+                          itemBuilder: (_, i) => _buildFriendTile(
+                              _filteredFriends[i], textColor, scheme),
                         ),
-                        itemBuilder: (_, i) =>
-                            _buildFriendTile(_filteredFriends[i], textColor, scheme),
-                      ),
-                    ),
+                ),
         ),
       ],
     );
@@ -992,6 +1095,24 @@ class HomePageState extends State<HomePage> {
   }
 
   // ── Footer ────────────────────────────────────────────────────────────────
+
+  /// Pull-to-refresh handler.
+  /// On web this performs a real full page reload so the newest deployed
+  /// build is fetched. On native it just re-fetches the conversation list.
+  Future<void> _onPullToRefresh() async {
+    if (kIsWeb) {
+      if (mounted) {
+        showToast(context, 'Refreshing…', type: ToastType.info);
+      }
+      // Small delay so the pull animation settles before the page navigates.
+      await Future.delayed(const Duration(milliseconds: 350));
+      hardReloadApp();
+      // The page is now reloading; keep the spinner until it does.
+      await Future.delayed(const Duration(seconds: 2));
+      return;
+    }
+    await _fetchFriends();
+  }
 
   Widget _buildFooter(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;

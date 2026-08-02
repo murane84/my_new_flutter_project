@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/live_session_service.dart' show BytesAudioSource;
 import '../utils/app_config.dart';
+import '../utils/app_reload.dart';
 import '../utils/toast_helper.dart';
 
 /// Web-only replacement for the native [MusicControls] panel.
@@ -64,15 +65,33 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     }
   }
 
+  /// Pull-to-refresh → full page reload to fetch the newest deployed build.
+  Future<void> _reloadPage() async {
+    if (mounted) {
+      showToast(context, 'Refreshing…', type: ToastType.info);
+    }
+    await Future.delayed(const Duration(milliseconds: 350));
+    hardReloadApp();
+    await Future.delayed(const Duration(seconds: 2));
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+    return RefreshIndicator(
+      onRefresh: _reloadPage,
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          // AlwaysScrollable so the panel can overscroll to trigger the pull.
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20),
+          child: ConstrainedBox(
+            constraints:
+                BoxConstraints(minHeight: constraints.maxHeight - 40),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
             Icon(Icons.library_music_outlined, size: 56, color: theme.hintColor),
             const SizedBox(height: 12),
             Text(
@@ -121,7 +140,10 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
               const SizedBox(height: 8),
               _controls(),
             ],
-          ],
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );

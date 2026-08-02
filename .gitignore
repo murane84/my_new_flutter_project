@@ -1,0 +1,105 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# ===============================
+# Flutter Desktop (CRITICAL)
+# ===============================
+windows/flutter/ephemeral/
+windows/build/
+windows/.plugin_symlinks/
+windows/.dart_tool/
+
+# ===============================
+# Android Native Build
+# ===============================
+android/.cxx/
+android/.gradle/
+android/build/
+
+# ===============================
+# Firebase Windows SDK
+# ===============================
+build/windows/x64/extracted/
+
+# ===============================
+# CMake junk
+# ===============================
+**/CMakeFiles/
+**/*.cmake
+**/Makefile
+
+# ===============================
+# Python backend (my_aluta_api)
+# ===============================
+my_aluta_api/venv/
+venv/
+env/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Secrets & local env — NEVER commit these
+.env
+.env.txt
+my_aluta_api/.env
+my_aluta_api/.env.txt
+
+# Local SQLite dev DB
+*.db
+local_dev.db
+
+# Uploaded media (runtime, not source)
+my_aluta_api/media/
+
+# Project docs / scratch
+Flutter App Box Dev.txt
+
+# Build artifacts (any nested build/ dir) & scratch
+build/
+_to_delete/
+.vs/
+android/app/build/

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Allows cleartext (HTTP) traffic to private LAN IPs used during development.
+  Production traffic to your public domain still requires HTTPS.
+-->
+<network-security-config>
+
+    <!-- Allow HTTP to any private LAN address (192.168.x.x / 10.x.x.x / 172.16-31.x.x) -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">192.168.0.1</domain>
+        <domain includeSubdomains="true">10.0.0.1</domain>
+        <domain includeSubdomains="true">172.16.0.1</domain>
+    </domain-config>
+
+    <!-- Fallback: allow cleartext for ALL hosts in debug builds only.
+         This covers any LAN IP the auto-discovery finds. -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+</network-security-config>

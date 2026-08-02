@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -163,6 +164,20 @@ class HomePageState extends State<HomePage> {
       _serverIp = forceReset ? 'scanning…' : (_serverIp == 'discovering…' ? 'discovering…' : _serverIp);
     });
 
+    // Web / release builds always talk to the production server on the same
+    // origin — there's no LAN to scan. Probe /health directly and report status.
+    if (kIsWeb || kReleaseMode) {
+      final ok = await AppConfig.probeServer();
+      if (mounted) {
+        setState(() {
+          _serverIp = AppConfig.displayHost;
+          _serverReachable = ok;
+          _isDiscovering = false;
+        });
+      }
+      return;
+    }
+
     if (forceReset) await AppConfig.resetDiscovery();
 
     try {
@@ -232,8 +247,8 @@ class HomePageState extends State<HomePage> {
                     Expanded(
                       child: Text(
                         _serverReachable
-                            ? 'Connected: $_serverIp:${AppConfig.port}'
-                            : 'Not reachable: $_serverIp:${AppConfig.port}',
+                            ? 'Connected: ${(kIsWeb || kReleaseMode) ? _serverIp : '$_serverIp:${AppConfig.port}'}'
+                            : 'Not reachable: ${(kIsWeb || kReleaseMode) ? _serverIp : '$_serverIp:${AppConfig.port}'}',
                         style: TextStyle(
                           fontSize: 12,
                           color: _serverReachable
@@ -1041,7 +1056,7 @@ class HomePageState extends State<HomePage> {
               // Server IP chip — tap to configure
               Tooltip(
                 message: _serverReachable
-                    ? 'Connected to $_serverIp:${AppConfig.port}\nLong-press to reconfigure'
+                    ? 'Connected to ${(kIsWeb || kReleaseMode) ? _serverIp : '$_serverIp:${AppConfig.port}'}\nLong-press to reconfigure'
                     : 'Not connected — tap to configure',
                 child: GestureDetector(
                   onTap: _showServerSettings,

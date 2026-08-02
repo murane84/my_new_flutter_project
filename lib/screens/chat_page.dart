@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'api_service.dart';
 import 'token_helper.dart';
@@ -497,16 +496,17 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'],
-      withData: true, // load bytes into memory (works on mobile + web)
     );
     if (result == null || result.files.isEmpty) {
       return;
     }
 
     final picked = result.files.single;
-    final Uint8List? bytes = picked.bytes;
-    if (bytes == null || bytes.isEmpty) {
-      if (mounted) showToast(context, 'Could not read that audio file.', type: ToastType.error);
+    final Uint8List bytes = await picked.readAsBytes(); // in-memory, cross-platform
+    if (bytes.isEmpty) {
+      if (mounted) {
+        showToast(context, 'Could not read that audio file.', type: ToastType.error);
+      }
       return;
     }
 

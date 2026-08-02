@@ -68,7 +68,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => HomePageState();
 }
 
-class HomePageState extends State<HomePage> {
+class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String _username = '';
   int _onlineFriendsCount = 0;
   List<Map<String, dynamic>> _allFriends = [];
@@ -98,16 +98,27 @@ class HomePageState extends State<HomePage> {
   String? _activeFriendLastSeen;
 
   Timer? _refreshTimer;
+  Timer? _heartbeatTimer;
   StreamSubscription? _connectivitySub;
+  // Throttles presence pings triggered by user interaction.
+  DateTime _lastActivityPing = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadUserData();
     _loadCachedFriends();    // show cached list instantly (no spinner flash)
     _fetchFriends();          // then refresh from network
     _loadLayoutState();
     _discoverServer();
+
+    // Foreground heartbeat: keep the server-side presence alive while the app
+    // is open, so idling no longer silently drops the user offline.
+    _heartbeatTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _sendHeartbeat(),
+    );
 
     // WhatsApp-style: auto-reconnect when network comes back,
     // silently go offline when it disappears.
@@ -131,9 +142,48 @@ class HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
+    _heartbeatTimer?.cancel();
     _connectivitySub?.cancel();
     super.dispose();
+  }
+
+  // ── App lifecycle: reconnect the session when the app is resumed ───────────
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      // Coming back from idle/background — re-check the server and go online.
+      _discoverServer();
+      _autoReconnect();
+    }
+  }
+
+  // Sends a presence heartbeat; flips the UI back to "online" on success.
+  Future<void> _sendHeartbeat() async {
+    if (!mounted) return;
+    try {
+      final ok = await ApiService().setOnlineStatus(true);
+      if (ok && mounted && !_isCurrentUserOnline) {
+        setState(() => _isCurrentUserOnline = true);
+      }
+    } catch (_) {}
+  }
+
+  // Called on ANY touch/pointer down anywhere in the app. Immediately recovers
+  // the session if we're offline, and keeps presence fresh (throttled to 30s)
+  // so the user never has to log out / back in just to reconnect.
+  void _onUserActivity() {
+    if (!_isCurrentUserOnline) {
+      _autoReconnect();
+      return;
+    }
+    final now = DateTime.now();
+    if (now.difference(_lastActivityPing).inSeconds >= 30) {
+      _lastActivityPing = now;
+      _sendHeartbeat();
+    }
   }
 
   // ── Persistence ───────────────────────────────────────────────────────────
@@ -1274,7 +1324,11 @@ class HomePageState extends State<HomePage> {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final scheme = Theme.of(context).colorScheme;
 
-    return Scaffold(
+    // Listener sits above the whole app and is passive (it never consumes
+    // events), so every touch also nudges the session back online if needed.
+    return Listener(
+      onPointerDown: (_) => _onUserActivity(),
+      child: Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
         backgroundColor: scheme.surfaceContainerHighest,
@@ -1383,6 +1437,7 @@ class HomePageState extends State<HomePage> {
         },
       ),
       bottomNavigationBar: _buildFooter(context),
+      ),
     );
   }
 }

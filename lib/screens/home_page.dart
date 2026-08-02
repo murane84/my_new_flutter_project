@@ -1066,62 +1066,43 @@ class HomePageState extends State<HomePage> {
                 child: GestureDetector(
                   onTap: _showServerSettings,
                   onLongPress: () => _discoverServer(forceReset: true),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
+                  behavior: HitTestBehavior.opaque,
+                  // Just a status dot — green (live) / red (offline).
+                  // No domain text; full info lives in the tooltip.
+                  child: Padding(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 7, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: _isDiscovering
-                          ? scheme.onSurface.withAlpha(30)
-                          : _serverReachable
-                              ? Colors.green.withAlpha(50)
-                              : Colors.red.withAlpha(50),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: _isDiscovering
-                            ? scheme.outlineVariant
-                            : _serverReachable
-                                ? Colors.green
-                                : Colors.red.withAlpha(180),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _isDiscovering
-                            ? SizedBox(
-                                width: 8,
-                                height: 8,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 1.5,
-                                  color: scheme.onSurface
-                                      .withAlpha(180),
+                        horizontal: 6, vertical: 4),
+                    child: _isDiscovering
+                        ? SizedBox(
+                            width: 11,
+                            height: 11,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.6,
+                              color: scheme.onSurface.withAlpha(160),
+                            ),
+                          )
+                        : AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            width: 11,
+                            height: 11,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _serverReachable
+                                  ? Colors.green
+                                  : Colors.red,
+                              // Soft glow so the dot "emits"
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (_serverReachable
+                                          ? Colors.green
+                                          : Colors.red)
+                                      .withAlpha(150),
+                                  blurRadius: 6,
+                                  spreadRadius: 1,
                                 ),
-                              )
-                            : Container(
-                                width: 6,
-                                height: 6,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: _serverReachable
-                                      ? Colors.green
-                                      : Colors.red,
-                                ),
-                              ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _isDiscovering
-                              ? 'scanning…'
-                              : _serverIp,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: scheme.onSurface.withAlpha(200),
-                            fontWeight: FontWeight.w500,
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
                   ),
                 ),
               ),

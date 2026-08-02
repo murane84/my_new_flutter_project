@@ -479,9 +479,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           if (mounted) setState(() => _friendTyping = false);
         });
       }
-    } else if (type == 'live_invite') {
-      _handleLiveInvite(event);
     }
+    // NOTE: `live_invite` is handled globally in HomePage's notification socket
+    // so invites reach the user on any screen (not just an open chat).
   }
 
   // ── Listen Together ─────────────────────────────────────────────────────────
@@ -516,66 +516,17 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
 
     if (!mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => LiveSessionScreen.host(
-          token: token,
-          myUserId: myUserId,
-          receiverId: widget.friendId,
-          audioBytes: bytes,
-          title: picked.name,
-          peerName: widget.friendName,
-        ),
-      ),
-    );
-  }
-
-  /// LISTENER: a `live_invite` arrived over the notification socket.
-  Future<void> _handleLiveInvite(Map<String, dynamic> event) async {
-    final data = (event['data'] as Map?)?.cast<String, dynamic>();
-    if (data == null) return;
-    final sessionId = data['session_id']?.toString();
-    if (sessionId == null) return;
-    final track = (data['track'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
-    final hostName = data['host_username']?.toString() ?? widget.friendName;
-
-    final accept = await showDialog<bool>(
+    // Show as a popup dialog rather than a full page.
+    showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Listen together?'),
-        content: Text(
-          '$hostName wants to play "${track['title'] ?? 'a song'}" with you, live.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Decline'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Join'),
-          ),
-        ],
-      ),
-    );
-    if (accept != true) return;
-
-    final token = await getToken();
-    final myUserId = int.tryParse(_myId ?? '');
-    if (token == null || myUserId == null) return;
-    if (!mounted) return;
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => LiveSessionScreen.listener(
-          token: token,
-          myUserId: myUserId,
-          sessionId: sessionId,
-          track: track,
-          peerName: hostName,
-        ),
+      barrierDismissible: false,
+      builder: (_) => LiveSessionScreen.host(
+        token: token,
+        myUserId: myUserId,
+        receiverId: widget.friendId,
+        audioBytes: bytes,
+        title: picked.name,
+        peerName: widget.friendName,
       ),
     );
   }

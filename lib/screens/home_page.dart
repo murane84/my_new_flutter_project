@@ -16,6 +16,9 @@ import 'music_controls.dart';
 import 'web_music_panel.dart';
 import 'chat_page.dart';
 import 'api_service.dart';
+import 'websocket_manager.dart';
+import 'live_session_screen.dart';
+import 'token_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
 
@@ -82,6 +85,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // ── Current user online status ────────────────────────────────────────────
   bool _isCurrentUserOnline = true;
   bool _isGoingOnline = false;
+  int? _myUserId;
+  // App-wide notification socket so "Listen Together" invites reach the user on
+  // ANY screen — not only when the matching chat happens to be open.
+  WebSocketManager? _notifyWs;
   List<Map<String, dynamic>> _filteredFriends = [];
   bool _isLoadingFriends = false;
 
@@ -157,6 +164,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _refreshTimer?.cancel();
     _heartbeatTimer?.cancel();
     _connectivitySub?.cancel();
+    _notifyWs?.close();
     super.dispose();
   }
 
@@ -527,10 +535,84 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  // ── App-wide notification socket (Listen Together invites, etc.) ──────────
+  void _startNotifyWs() {
+    final id = _myUserId;
+    if (id == null) return;
+    _notifyWs?.close();
+    _notifyWs = WebSocketManager(
+      userId: id.toString(),
+      onEventReceived: _handleNotification,
+      onDisconnected: () {},
+    );
+    _notifyWs!.connect();
+  }
+
+  void _handleNotification(Map<String, dynamic> event) {
+    if (!mounted) return;
+    if (event['type'] == 'live_invite') {
+      _showLiveInvite(event);
+    }
+  }
+
+  /// Show the "Listen together?" prompt anywhere in the app and, on accept,
+  /// open the live session popup as a listener.
+  Future<void> _showLiveInvite(Map<String, dynamic> event) async {
+    final data = (event['data'] as Map?)?.cast<String, dynamic>();
+    if (data == null) return;
+    final sessionId = data['session_id']?.toString();
+    if (sessionId == null) return;
+    final track =
+        (data['track'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+    final hostName = data['host_username']?.toString() ?? 'Someone';
+
+    final accept = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Listen together?'),
+        content: Text(
+          '$hostName wants to play "${track['title'] ?? 'a song'}" with you, live.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Decline'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Join'),
+          ),
+        ],
+      ),
+    );
+    if (accept != true) return;
+
+    final token = await getToken();
+    final myUserId = _myUserId;
+    if (token == null || myUserId == null || !mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => LiveSessionScreen.listener(
+        token: token,
+        myUserId: myUserId,
+        sessionId: sessionId,
+        track: track,
+        peerName: hostName,
+      ),
+    );
+  }
+
   Future<void> _loadUserData() async {
     try {
       final data = await ApiService().getUserData();
       final prefs = await SharedPreferences.getInstance();
+      final id = data['id'];
+      if (id != null) {
+        _myUserId = int.tryParse(id.toString());
+        _startNotifyWs();
+      }
       if (data.isNotEmpty && data['username'] != null) {
         await prefs.setString('username', data['username']);
         if (mounted) setState(() => _username = data['username']);

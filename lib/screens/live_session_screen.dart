@@ -5,7 +5,9 @@ import 'package:just_audio/just_audio.dart';
 
 import '../services/live_session_service.dart';
 
-/// Full-screen "Listen Together" session UI for both the host (DJ) and a listener.
+/// Popup "Listen Together" session UI for both the host (DJ) and a listener.
+/// Presented with `showDialog(...)` so it floats over the chat instead of
+/// taking over the whole screen.
 ///
 /// Host: created with [LiveSessionScreen.host] — starts streaming the picked
 /// song's bytes and controls play/pause/seek.
@@ -188,45 +190,109 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (!didPop) await _leaveOrEnd();
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(_isHost ? 'Listening together (you’re the DJ)' : 'Listening together'),
-        ),
-        body: Padding(
-          padding: const EdgeInsets.all(24),
+      child: Dialog(
+        insetPadding:
+            const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22)),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.headphones_rounded, size: 96),
-              const SizedBox(height: 24),
-              Text(
-                _title,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              // ── Header bar with title + close (end/leave) ──────────────
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 8, 6, 8),
+                color: scheme.surfaceContainerHighest,
+                child: Row(
+                  children: [
+                    Icon(Icons.headphones_rounded,
+                        color: scheme.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _isHost
+                            ? 'Listen Together · DJ'
+                            : 'Listen Together',
+                        style: theme.textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: _isHost ? 'End session' : 'Leave',
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: _ready
+                          ? _leaveOrEnd
+                          : () => Navigator.of(context).maybePop(),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                _isHost ? 'Sharing with ${widget.peerName}' : 'Hosted by ${widget.peerName}',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(color: theme.hintColor),
-              ),
-              const SizedBox(height: 8),
-              Text(_status, textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
-              const SizedBox(height: 24),
-              _buildSeekBar(),
-              const SizedBox(height: 16),
-              if (_isHost) _buildHostControls() else _buildListenerHint(theme),
-              const SizedBox(height: 32),
-              FilledButton.tonalIcon(
-                onPressed: _ready ? _leaveOrEnd : null,
-                icon: Icon(_isHost ? Icons.stop_circle_outlined : Icons.logout),
-                label: Text(_isHost ? 'End session' : 'Leave'),
+              // ── Body ───────────────────────────────────────────────────
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 22),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(
+                        child: CircleAvatar(
+                          radius: 32,
+                          backgroundColor: scheme.primaryContainer,
+                          child: Icon(Icons.headphones_rounded,
+                              size: 32,
+                              color: scheme.onPrimaryContainer),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _title,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _isHost
+                            ? 'Sharing with ${widget.peerName}'
+                            : 'Hosted by ${widget.peerName}',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(color: theme.hintColor),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(_status,
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodySmall),
+                      const SizedBox(height: 18),
+                      _buildSeekBar(),
+                      const SizedBox(height: 12),
+                      if (_isHost)
+                        _buildHostControls()
+                      else
+                        _buildListenerHint(theme),
+                      const SizedBox(height: 20),
+                      FilledButton.tonalIcon(
+                        onPressed: _ready ? _leaveOrEnd : null,
+                        icon: Icon(_isHost
+                            ? Icons.stop_circle_outlined
+                            : Icons.logout),
+                        label:
+                            Text(_isHost ? 'End session' : 'Leave'),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),

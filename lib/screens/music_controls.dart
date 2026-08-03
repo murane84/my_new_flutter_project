@@ -62,6 +62,9 @@ class _MusicControlsState extends State<MusicControls>
 
   List<String> _playlist = [];
   int _currentIndex = -1;
+  // True while we're swapping the audio source for a manual track change.
+  // Guards against a spurious "completed" event auto-advancing to another song.
+  bool _switching = false;
   Set<String> _favorites = {};
 
   String _trackName = 'No track loaded';
@@ -157,8 +160,11 @@ class _MusicControlsState extends State<MusicControls>
     // inside a stream callback, which causes just_audio race conditions.
     _player.processingStateStream.listen((state) {
       if (state == ProcessingState.completed) {
+        // Ignore the spurious "completed" emitted while we swap the source for
+        // a manual track change — only advance on a genuine end-of-track.
+        if (_switching) return;
         Future.delayed(const Duration(milliseconds: 150), () {
-          if (mounted) _onComplete();
+          if (mounted && !_switching) _onComplete();
         });
       }
     });
@@ -177,6 +183,9 @@ class _MusicControlsState extends State<MusicControls>
     if (index < 0 || index >= _playlist.length) return;
     final path = _playlist[index];
 
+    // Suppress auto-advance while swapping the source (see _switching).
+    _switching = true;
+
     setState(() {
       _currentIndex = index;
       _trackName = _nameFromPath(path);
@@ -192,12 +201,18 @@ class _MusicControlsState extends State<MusicControls>
       await _player.setSpeed(_speed);
       await _player.play();
     } on PlayerException catch (e) {
+      _switching = false;
       if (mounted) _snack('Cannot play: ${e.message}');
       return;
     } catch (_) {
+      _switching = false;
       if (mounted) _snack('Playback error — check file format');
       return;
     }
+    // Re-enable auto-advance once playback has actually settled.
+    Future.delayed(const Duration(milliseconds: 600), () {
+      _switching = false;
+    });
     if (_isMobile) _fetchMetadata(path);
   }
 

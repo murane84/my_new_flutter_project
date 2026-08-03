@@ -107,6 +107,28 @@ class RegisterPageState extends State<RegisterPage> {
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = scheme.primary;
+    final gradColors = isDark
+        ? [
+            Color.lerp(primary, Colors.black, 0.25)!,
+            Color.lerp(primary, Colors.black, 0.62)!,
+            const Color(0xFF0B0505),
+          ]
+        : [
+            Color.lerp(primary, Colors.white, 0.78)!,
+            Color.lerp(primary, Colors.white, 0.90)!,
+            Colors.white,
+          ];
+    final onColor = isDark ? Colors.white : const Color(0xFF2A1414);
+    final subColor =
+        isDark ? Colors.white.withAlpha(180) : const Color(0xFF7A4A45);
+    final cardBg =
+        isDark ? Colors.white.withAlpha(20) : Colors.white.withAlpha(175);
+    final cardBorder =
+        isDark ? Colors.white.withAlpha(50) : Colors.black.withAlpha(20);
+    final wmColor = isDark ? Colors.white : primary;
+    final wmOpacity = isDark ? 0.06 : 0.05;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -114,7 +136,7 @@ class RegisterPageState extends State<RegisterPage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+          icon: Icon(Icons.arrow_back_ios_new, color: onColor),
           onPressed: () => Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (_) => const AuthPage()),
@@ -124,7 +146,7 @@ class RegisterPageState extends State<RegisterPage> {
           IconButton(
             icon: Icon(
               themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-              color: Colors.white,
+              color: onColor,
             ),
             onPressed: () =>
                 themeProvider.toggleTheme(!themeProvider.isDarkMode),
@@ -140,11 +162,7 @@ class RegisterPageState extends State<RegisterPage> {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [
-                    Color.lerp(scheme.primary, Colors.black, 0.25)!,
-                    Color.lerp(scheme.primary, Colors.black, 0.62)!,
-                    const Color(0xFF0B0505),
-                  ],
+                  colors: gradColors,
                   stops: const [0.0, 0.55, 1.0],
                 ),
               ),
@@ -157,11 +175,11 @@ class RegisterPageState extends State<RegisterPage> {
                 widthFactor: 0.9,
                 heightFactor: 0.9,
                 child: Opacity(
-                  opacity: 0.06,
+                  opacity: wmOpacity,
                   child: Image.asset(
                     'assets/images/logo.png',
                     fit: BoxFit.contain,
-                    color: Colors.white,
+                    color: wmColor,
                     colorBlendMode: BlendMode.srcIn,
                     errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                   ),
@@ -184,14 +202,14 @@ class RegisterPageState extends State<RegisterPage> {
                         Text(
                           'Join Aluta',
                           style: TextStyle(
-                            color: Colors.white.withAlpha(180),
+                            color: subColor,
                             fontSize: 15,
                           ),
                         ),
-                        const Text(
+                        Text(
                           'Create Account',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: onColor,
                             fontSize: 32,
                             fontWeight: FontWeight.bold,
                           ),
@@ -201,10 +219,9 @@ class RegisterPageState extends State<RegisterPage> {
                         Container(
                           padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
-                            color: Colors.white.withAlpha(20),
+                            color: cardBg,
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                                color: Colors.white.withAlpha(50)),
+                            border: Border.all(color: cardBorder),
                           ),
                           child: Form(
                             key: _formKey,
@@ -238,7 +255,9 @@ class RegisterPageState extends State<RegisterPage> {
                                       _obscurePassword
                                           ? Icons.visibility_off
                                           : Icons.visibility,
-                                      color: Colors.white70,
+                                      color: isDark
+                                          ? Colors.white70
+                                          : Colors.black54,
                                     ),
                                     onPressed: () => setState(
                                       () => _obscurePassword =
@@ -261,7 +280,9 @@ class RegisterPageState extends State<RegisterPage> {
                                   child: Text(
                                     '8+ chars · uppercase · lowercase · number',
                                     style: TextStyle(
-                                      color: Colors.white.withAlpha(120),
+                                      color: isDark
+                                          ? Colors.white.withAlpha(120)
+                                          : Colors.black.withAlpha(120),
                                       fontSize: 11,
                                     ),
                                   ),
@@ -278,7 +299,9 @@ class RegisterPageState extends State<RegisterPage> {
                                       _obscureConfirm
                                           ? Icons.visibility_off
                                           : Icons.visibility,
-                                      color: Colors.white70,
+                                      color: isDark
+                                          ? Colors.white70
+                                          : Colors.black54,
                                     ),
                                     onPressed: () => setState(
                                       () => _obscureConfirm = !_obscureConfirm,
@@ -347,9 +370,7 @@ class RegisterPageState extends State<RegisterPage> {
                           children: [
                             Text(
                               'Already have an account?',
-                              style: TextStyle(
-                                  color: Colors.white.withAlpha(180),
-                                  fontSize: 13),
+                              style: TextStyle(color: subColor, fontSize: 13),
                             ),
                             TextButton(
                               onPressed: () => Navigator.push(
@@ -397,28 +418,37 @@ class RegisterPageState extends State<RegisterPage> {
     TextInputType? keyboardType,
     String? Function(String?)? validator,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onColor = isDark ? Colors.white : const Color(0xFF2A1414);
+    final hintColor = isDark ? Colors.white70 : Colors.black54;
+    final fillCol =
+        isDark ? Colors.white.withAlpha(25) : Colors.white.withAlpha(220);
+    final borderCol =
+        isDark ? Colors.white.withAlpha(60) : Colors.black.withAlpha(38);
+    final focusCol =
+        isDark ? Colors.white : Theme.of(context).colorScheme.primary;
     return TextFormField(
       controller: controller,
       obscureText: obscure,
       keyboardType: keyboardType,
       validator: validator,
-      style: const TextStyle(color: Colors.white),
+      style: TextStyle(color: onColor),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.white70),
-        prefixIcon: Icon(icon, color: Colors.white70, size: 20),
+        labelStyle: TextStyle(color: hintColor),
+        prefixIcon: Icon(icon, color: hintColor, size: 20),
         suffixIcon: suffix,
         filled: true,
-        fillColor: Colors.white.withAlpha(25),
+        fillColor: fillCol,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withAlpha(60)),
+          borderSide: BorderSide(color: borderCol),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.white, width: 1.5),
+          borderSide: BorderSide(color: focusCol, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),

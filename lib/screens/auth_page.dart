@@ -13,11 +13,27 @@ class AuthPage extends StatelessWidget {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final scheme = Theme.of(context).colorScheme;
     final primary = scheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Branded red → black gradient (adapts to the seed colour).
-    final bgTop = Color.lerp(primary, Colors.black, 0.25)!;
-    final bgMid = Color.lerp(primary, Colors.black, 0.62)!;
-    const bgBottom = Color(0xFF0B0505);
+    // Dark: deep red → black. Light: soft red tint → white (bright).
+    final gradColors = isDark
+        ? [
+            Color.lerp(primary, Colors.black, 0.25)!,
+            Color.lerp(primary, Colors.black, 0.62)!,
+            const Color(0xFF0B0505),
+          ]
+        : [
+            Color.lerp(primary, Colors.white, 0.78)!,
+            Color.lerp(primary, Colors.white, 0.90)!,
+            Colors.white,
+          ];
+
+    final titleColor = isDark ? Colors.white : const Color(0xFF3A1210);
+    final subColor =
+        isDark ? Colors.white.withAlpha(205) : const Color(0xFF7A4A45);
+    final iconColor = isDark ? Colors.white : primary;
+    final wmColor = isDark ? Colors.white : primary;
+    final wmOpacity = isDark ? 0.06 : 0.05;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -29,7 +45,7 @@ class AuthPage extends StatelessWidget {
           IconButton(
             icon: Icon(
               themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-              color: Colors.white,
+              color: iconColor,
             ),
             onPressed: () =>
                 themeProvider.toggleTheme(!themeProvider.isDarkMode),
@@ -38,32 +54,31 @@ class AuthPage extends StatelessWidget {
       ),
       body: Stack(
         children: [
-          // ── Branded gradient backdrop ────────────────────────────────
+          // ── Backdrop gradient ────────────────────────────────────────
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [bgTop, bgMid, bgBottom],
+                  colors: gradColors,
                   stops: const [0.0, 0.55, 1.0],
                 ),
               ),
             ),
           ),
-
-          // ── Faint, fully-contained logo watermark (never cropped) ────
+          // ── Faint contained logo watermark ───────────────────────────
           Positioned.fill(
             child: Center(
               child: FractionallySizedBox(
                 widthFactor: 0.9,
                 heightFactor: 0.9,
                 child: Opacity(
-                  opacity: 0.06,
+                  opacity: wmOpacity,
                   child: Image.asset(
                     'assets/images/logo.png',
                     fit: BoxFit.contain,
-                    color: Colors.white,
+                    color: wmColor,
                     colorBlendMode: BlendMode.srcIn,
                     errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                   ),
@@ -71,7 +86,6 @@ class AuthPage extends StatelessWidget {
               ),
             ),
           ),
-
           // ── Content ──────────────────────────────────────────────────
           SafeArea(
             child: Center(
@@ -82,8 +96,6 @@ class AuthPage extends StatelessWidget {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Brand badge — the Aluta logo (music + chat) on a
-                      // clean white disc with a soft shadow.
                       Container(
                         width: 104,
                         height: 104,
@@ -93,7 +105,7 @@ class AuthPage extends StatelessWidget {
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withAlpha(70),
+                              color: Colors.black.withAlpha(isDark ? 70 : 40),
                               blurRadius: 24,
                               offset: const Offset(0, 10),
                             ),
@@ -110,10 +122,10 @@ class AuthPage extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      const Text(
+                      Text(
                         'Aluta',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: titleColor,
                           fontSize: 42,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 3,
@@ -123,7 +135,7 @@ class AuthPage extends StatelessWidget {
                       Text(
                         'Music & Chat — together',
                         style: TextStyle(
-                          color: Colors.white.withAlpha(205),
+                          color: subColor,
                           fontSize: 15,
                           letterSpacing: 0.5,
                         ),
@@ -134,8 +146,8 @@ class AuthPage extends StatelessWidget {
                         width: 220,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: primary,
+                            backgroundColor: isDark ? Colors.white : primary,
+                            foregroundColor: isDark ? primary : Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(28),
@@ -158,10 +170,13 @@ class AuthPage extends StatelessWidget {
                         width: 220,
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
+                            foregroundColor: isDark ? Colors.white : primary,
                             side: BorderSide(
-                                color: Colors.white.withAlpha(160),
-                                width: 1.5),
+                              color: isDark
+                                  ? Colors.white.withAlpha(160)
+                                  : primary.withAlpha(150),
+                              width: 1.5,
+                            ),
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(28),

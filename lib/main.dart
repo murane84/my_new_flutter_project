@@ -210,12 +210,21 @@ class SplashScreenState extends State<SplashScreen> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: scheme.surface,
+      backgroundColor: Colors.black,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.music_note_rounded, size: 72, color: scheme.primary),
+            Image.asset(
+              'assets/images/logo.png',
+              width: 120,
+              height: 120,
+              errorBuilder: (_, __, ___) => Icon(
+                Icons.forum_rounded,
+                size: 72,
+                color: scheme.primary,
+              ),
+            ),
             const SizedBox(height: 16),
             Text(
               'Aluta',

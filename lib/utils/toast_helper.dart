@@ -120,7 +120,9 @@ class _ToastOverlayState extends State<_ToastOverlay>
             scale: Tween<double>(begin: 0.92, end: 1.0).animate(_anim),
             alignment: Alignment.bottomCenter,
             child: Center(
-              child: Container(
+              child: Material(
+                type: MaterialType.transparency,
+                child: Container(
                 constraints: const BoxConstraints(maxWidth: 360),
                 margin: const EdgeInsets.symmetric(horizontal: 24),
                 padding: const EdgeInsets.only(
@@ -165,11 +167,13 @@ class _ToastOverlayState extends State<_ToastOverlay>
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                           height: 1.25,
+                          decoration: TextDecoration.none,
                         ),
                       ),
                     ),
                   ],
                 ),
+              ),
               ),
             ),
           ),

@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel, EmailStr
 from models import User
 from database import get_db
+import crud
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, INACTIVITY_TIMEOUT_MINUTES
 
 router = APIRouter()
@@ -228,7 +229,7 @@ def get_user_status(friend_id: int, db: Session = Depends(get_db), current_user:
 
     return {
         "user_id": friend.id,
-        "is_online": friend.is_online,
+        "is_online": crud.is_effectively_online(friend),
         "last_seen": str(friend.last_seen) if friend.last_seen else None
     }
 

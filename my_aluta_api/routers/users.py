@@ -27,8 +27,8 @@ def get_all_users_except_current(current_user: User = Depends(get_current_user),
 @router.post("/users/me/online", tags=["Users"])
 def set_user_online_status(is_online: bool, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     current_user.is_online = is_online
-    if not is_online:
-        current_user.last_seen = datetime.now(timezone.utc)
+    # Always stamp last_seen — this is the heartbeat that keeps presence "fresh".
+    current_user.last_seen = datetime.now(timezone.utc)
     db.commit()
     return {"message": f"User '{current_user.username}' online status updated to {is_online}"}
 
@@ -37,7 +37,8 @@ def get_user_status(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"user_id": user.id, "is_online": user.is_online, "last_seen": user.last_seen.isoformat() if user.last_seen else None}
+    # Staleness-aware presence so a logged-out/closed friend goes offline.
+    return {"user_id": user.id, "is_online": crud.is_effectively_online(user), "last_seen": user.last_seen.isoformat() if user.last_seen else None}
 
 @router.get("/users/friends/unread_counts", response_model=List[schemas.FriendWithUnread], tags=["Users"])
 def get_friends_with_unread_counts(

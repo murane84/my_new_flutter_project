@@ -8,6 +8,25 @@ from models import Message, User, Friend, MuteStatus, BlockStatus
 from schemas import MessageCreate, FriendWithUnread
 
 
+# ------------------ Presence helper ------------------
+# A user counts as "online" only if their is_online flag is set AND they've been
+# seen recently. Active clients ping every ~30s (which refreshes last_seen), so a
+# user who logs out, closes, crashes, or loses network is reported offline within
+# this window — presence no longer sticks on a stale "true".
+ONLINE_STALE_SECONDS = 75
+
+
+def is_effectively_online(user) -> bool:
+    if user is None or not getattr(user, "is_online", False):
+        return False
+    ls = getattr(user, "last_seen", None)
+    if ls is None:
+        return False
+    if ls.tzinfo is None:
+        ls = ls.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - ls).total_seconds() < ONLINE_STALE_SECONDS
+
+
 # ------------------ User Status ------------------
 def update_user_status(db: Session, user_id: int, is_online: bool):
     user = db.query(User).filter(User.id == user_id).first()
@@ -224,7 +243,7 @@ def get_friends_with_unread_counts(db: Session, user_id: int):
             FriendWithUnread(
                 id=friend.id,
                 username=friend.username,
-                is_online=friend.is_online,
+                is_online=is_effectively_online(friend),
                 last_timestamp=last_message.timestamp.strftime('%Y-%m-%d %H:%M') if last_message else None,
                 last_message=last_message.content if last_message else "",
                 unread_count=unread_count,

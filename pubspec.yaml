@@ -86,10 +86,18 @@ flutter_launcher_icons:
     icon_size: 48
 
 flutter_native_splash:
-  image: "assets/images/splash.png"
+  # Shown the instant the user taps the app icon (before Flutter renders).
+  # Black background for consistency with the app's dark title bar / icon.
   color: "#000000"
+  color_dark: "#000000"
+  image: "assets/images/logo.png"
+  android_12:
+    image: "assets/images/logo.png"
+    color: "#000000"
+    color_dark: "#000000"
   android: true
   ios: true
+  web: false
   fullscreen: true
 
 flutter:

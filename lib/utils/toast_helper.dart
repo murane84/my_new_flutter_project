@@ -14,12 +14,17 @@ void showToast(
   Duration duration = const Duration(milliseconds: 2000),
 }) {
   if (!context.mounted) return;
+  final theme = Theme.of(context);
+  final isDark = theme.brightness == Brightness.dark;
+  final primary = theme.colorScheme.primary;
   OverlayEntry? entry;
   entry = OverlayEntry(
     builder: (_) => _ToastOverlay(
       message: message,
       type: type,
       duration: duration,
+      isDark: isDark,
+      primaryColor: primary,
       onDone: () {
         try {
           entry?.remove();
@@ -36,12 +41,16 @@ class _ToastOverlay extends StatefulWidget {
   final String message;
   final ToastType type;
   final Duration duration;
+  final bool isDark;
+  final Color primaryColor;
   final VoidCallback onDone;
 
   const _ToastOverlay({
     required this.message,
     required this.type,
     required this.duration,
+    required this.isDark,
+    required this.primaryColor,
     required this.onDone,
   });
 
@@ -76,15 +85,16 @@ class _ToastOverlayState extends State<_ToastOverlay>
     super.dispose();
   }
 
-  // Accent colour per toast type — used for the icon and left bar.
+  // Accent colour per toast type. Info uses the warm app colour (primary);
+  // success/error keep their semantic hues (warmed to match the palette).
   Color get _accent {
     switch (widget.type) {
       case ToastType.error:
-        return const Color(0xFFFF5A5A);
+        return const Color(0xFFE53935); // warm red
       case ToastType.success:
-        return const Color(0xFF3DD68C);
+        return const Color(0xFF2E9E6B); // warm green
       case ToastType.info:
-        return const Color(0xFF6FB3FF);
+        return widget.primaryColor; // brand red
     }
   }
 
@@ -101,8 +111,15 @@ class _ToastOverlayState extends State<_ToastOverlay>
 
   @override
   Widget build(BuildContext context) {
-    // A dark glass card reads cleanly over both light and dark backgrounds.
-    const card = Color(0xF01E1E24); // ~94% opaque charcoal
+    // Theme-aware surface: charcoal in dark mode, a warm near-white in light.
+    final card = widget.isDark
+        ? const Color(0xF01E1E24)
+        : const Color(0xF9FFF7F5); // ~97% opaque warm white
+    final textColor =
+        widget.isDark ? Colors.white : const Color(0xFF2A1414);
+    final ambientShadow = widget.isDark
+        ? Colors.black.withAlpha(90)
+        : Colors.black.withAlpha(35);
 
     return Positioned(
       // 44 px footer + gap
@@ -130,15 +147,17 @@ class _ToastOverlayState extends State<_ToastOverlay>
                 decoration: BoxDecoration(
                   color: card,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: _accent.withAlpha(90), width: 1),
+                  border: Border.all(
+                      color: _accent.withAlpha(widget.isDark ? 90 : 130),
+                      width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withAlpha(90),
+                      color: ambientShadow,
                       blurRadius: 18,
                       offset: const Offset(0, 6),
                     ),
                     BoxShadow(
-                      color: _accent.withAlpha(45),
+                      color: _accent.withAlpha(widget.isDark ? 45 : 30),
                       blurRadius: 14,
                       spreadRadius: -2,
                     ),
@@ -162,8 +181,8 @@ class _ToastOverlayState extends State<_ToastOverlay>
                     Flexible(
                       child: Text(
                         widget.message,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: textColor,
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                           height: 1.25,

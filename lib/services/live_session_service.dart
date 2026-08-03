@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../utils/app_config.dart';
@@ -25,22 +28,94 @@ import '../utils/app_config.dart';
 ///   LISTENER: await controller.joinAsListener(sessionId, myUserId, token);
 enum LiveRole { host, listener }
 
+/// The ONE live session currently running, held globally so its popup can be
+/// minimised (closed) while the session keeps streaming in the background. A
+/// fresh [LiveSessionScreen] can rebind to [controller] to reopen it.
+class ActiveLiveSession {
+  ActiveLiveSession({
+    required this.controller,
+    required this.role,
+    required this.peerName,
+    required this.title,
+    required this.token,
+    required this.myUserId,
+  });
+
+  final LiveSessionController controller;
+  final LiveRole role;
+  final String peerName;
+  String title;
+  final String token;
+  final int myUserId;
+
+  bool get isHost => role == LiveRole.host;
+}
+
+/// Non-null while a live session is active (foreground or minimised).
+ActiveLiveSession? activeLiveSession;
+
+/// Tears down and clears the active session (used by the persistent banner's
+/// "End" action, and when a session ends remotely while minimised). Callers in
+/// the UI layer should also call `liveSessionNotifier.stop()` afterwards.
+Future<void> endActiveLiveSession() async {
+  final s = activeLiveSession;
+  activeLiveSession = null;
+  if (s == null) return;
+  try {
+    if (s.role == LiveRole.host) await s.controller.endSession(s.token);
+  } catch (_) {/* best-effort */}
+  try {
+    await s.controller.dispose();
+  } catch (_) {}
+}
+
+/// One song in a live session's host-side queue (audio kept in memory only).
+class LiveTrack {
+  LiveTrack({required this.bytes, required this.title, this.mime = 'audio/mpeg'});
+  final Uint8List bytes;
+  final String title;
+  final String mime;
+}
+
 class LiveSessionController {
-  LiveSessionController({this.onEvent, this.onEnded, this.onError});
+  LiveSessionController({this.onEvent, this.onEnded, this.onError}) {
+    // On Android, give the live player the same EQ + loudness pipeline the
+    // music player uses, so the host's equalizer settings can be applied here
+    // (and mirrored to the listener). Elsewhere it's a plain player.
+    if (_androidEffects) {
+      _eq = AndroidEqualizer();
+      _loud = AndroidLoudnessEnhancer();
+      player = AudioPlayer(
+        audioPipeline: AudioPipeline(androidAudioEffects: [_loud!, _eq!]),
+      );
+    } else {
+      player = AudioPlayer();
+    }
+  }
+
+  static bool get _androidEffects =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  AndroidEqualizer? _eq;
+  AndroidLoudnessEnhancer? _loud;
+  Map<String, dynamic>? _hostEq; // last EQ settings (host), re-sent on join
 
   /// Fired for every control event received (`meta`, `play`, `pause`, `seek`,
   /// `peer_joined`, `peer_left`, `session_state`, ...). Use it to update UI.
-  final void Function(Map<String, dynamic> event)? onEvent;
+  ///
+  /// Mutable so a session can be "minimised" (its popup closed) and later
+  /// reopened by a fresh screen that re-points these handlers at itself.
+  void Function(Map<String, dynamic> event)? onEvent;
 
   /// Fired once when the session ends (host ended / host left / you left).
-  final void Function(String reason)? onEnded;
+  void Function(String reason)? onEnded;
 
   /// Fired on any transport error.
-  final void Function(Object error)? onError;
+  void Function(Object error)? onError;
 
   /// Shared player. For the host it plays the local bytes; for the listener it
   /// plays the streamed-in bytes. Bind your seekbar/controls to this.
-  final AudioPlayer player = AudioPlayer();
+  late final AudioPlayer player;
 
   WebSocketChannel? _channel;
   StreamSubscription? _socketSub;
@@ -60,6 +135,16 @@ class LiveSessionController {
   Uint8List? _hostBytes;
   Map<String, dynamic>? _hostMeta;
 
+  // Host-side queue of songs to play in sequence. [currentIndex] is the one
+  // playing now; entries after it are "up next" and can be added/removed.
+  final List<LiveTrack> queue = [];
+  int currentIndex = 0;
+  bool _peerPresent = false; // a listener has joined → stream track changes now
+  bool _switchingTrack = false; // guards auto-advance during a source swap
+  StreamSubscription? _completeSub;
+  /// Fired whenever the queue or current index changes (host UI refresh).
+  void Function()? onQueueChanged;
+
   bool get isConnected => _channel != null;
 
   // ---------------------------------------------------------------------------
@@ -76,6 +161,7 @@ class LiveSessionController {
     String? artist,
     int? durationMs,
     String mime = 'audio/mpeg',
+    int startPositionMs = 0,
   }) async {
     role = LiveRole.host;
 
@@ -105,9 +191,18 @@ class LiveSessionController {
     // 2) Open the session socket.
     await _openSocket(sessionId!, myUserId, token);
 
-    // 3) Start local playback from the in-memory bytes.
+    // 3) Start local playback from the in-memory bytes, at the requested
+    //    position (so sharing the currently-playing song blends in without a
+    //    restart).
     await player.setAudioSource(BytesAudioSource(audioBytes, contentType: mime));
+    if (startPositionMs > 0) {
+      await player.seek(Duration(milliseconds: startPositionMs));
+    }
     _broadcastHostPlayback(); // mirror play/pause/seek/position to the listener
+
+    // 3b) Apply the host's saved equalizer to the live player AND remember it
+    //     so it can be mirrored to the listener.
+    await _sendHostEq(alsoSend: false);
 
     // 4) Announce metadata. The actual audio is streamed only once a listener
     //    joins (see the `peer_joined` handling below), so a late-accepting
@@ -123,11 +218,132 @@ class LiveSessionController {
     };
     _hostMeta = meta;
     _hostBytes = audioBytes;
+    // Seed the queue with this first track.
+    queue
+      ..clear()
+      ..add(LiveTrack(bytes: audioBytes, title: title, mime: mime));
+    currentIndex = 0;
+    // Auto-advance to the next queued track when one finishes.
+    _completeSub = player.processingStateStream.listen((s) {
+      if (role == LiveRole.host &&
+          s == ProcessingState.completed &&
+          !_switchingTrack) {
+        nextTrack();
+      }
+    });
     _sendControl(meta);
     await player.play();
-    _sendControl({'type': 'play', 'position_ms': 0});
+    _sendControl({'type': 'play', 'position_ms': startPositionMs});
+    onQueueChanged?.call();
 
     return sessionId!;
+  }
+
+  // ---------------------------------------------------------------------------
+  // HOST QUEUE
+  // ---------------------------------------------------------------------------
+  /// Append a song to the up-next queue. If the current track has already
+  /// finished (nothing playing), start this one immediately.
+  Future<void> addTrack(LiveTrack t) async {
+    queue.add(t);
+    onQueueChanged?.call();
+    final ended = player.processingState == ProcessingState.completed ||
+        player.processingState == ProcessingState.idle;
+    if (ended && currentIndex >= queue.length - 1) {
+      await playIndex(queue.length - 1);
+    }
+  }
+
+  /// Remove an UP-NEXT track (cannot remove the one currently playing).
+  Future<void> removeUpcoming(int index) async {
+    if (index <= currentIndex || index >= queue.length) return;
+    queue.removeAt(index);
+    onQueueChanged?.call();
+  }
+
+  /// Skip to the next queued track, if any.
+  Future<void> nextTrack() async {
+    if (currentIndex + 1 < queue.length) {
+      await playIndex(currentIndex + 1);
+    }
+  }
+
+  /// Switch playback (host + listener) to queue entry [index].
+  Future<void> playIndex(int index) async {
+    if (index < 0 || index >= queue.length) return;
+    _switchingTrack = true;
+    currentIndex = index;
+    final t = queue[index];
+    _hostBytes = t.bytes;
+    _hostMeta = {
+      'type': 'meta',
+      'track': {'title': t.title, 'mime': t.mime},
+    };
+    try {
+      await player.setAudioSource(
+          BytesAudioSource(t.bytes, contentType: t.mime));
+      // Tell the listener a new track is starting (resets its buffer), then
+      // stream the new bytes, then eos → listener plays it.
+      _sendControl({
+        'type': 'track_change',
+        'track': {'title': t.title, 'mime': t.mime},
+      });
+      if (_peerPresent) {
+        unawaited(_streamBytesToListener(t.bytes));
+      }
+      await player.play();
+      _sendControl({'type': 'play', 'position_ms': 0});
+    } catch (e) {
+      onError?.call(e);
+    }
+    onQueueChanged?.call();
+    // Clear the guard after the source has settled so genuine end-of-track
+    // completion still auto-advances.
+    Future<void>.delayed(const Duration(milliseconds: 800), () {
+      _switchingTrack = false;
+    });
+  }
+
+  /// Reads the host's saved equalizer settings, applies them to the live
+  /// player, and (optionally) sends them to the listener. Stored so a late
+  /// joiner can be re-sent the same settings on `peer_joined`.
+  Future<void> _sendHostEq({bool alsoSend = true}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final eqMsg = <String, dynamic>{
+        'type': 'eq',
+        'enabled': prefs.getBool('eq_enabled') ?? false,
+        'gains': prefs.getStringList('eq_gains') ?? <String>[],
+        'bass': prefs.getDouble('eq_bass') ?? 0.0,
+        'loud': prefs.getDouble('eq_loud') ?? 0.0,
+      };
+      _hostEq = eqMsg;
+      await _applyEq(eqMsg); // shape the host's own live playback too
+      if (alsoSend) _sendControl(eqMsg);
+    } catch (_) {/* EQ is best-effort — never break the session over it */}
+  }
+
+  /// Applies an EQ settings message to this device's live player (Android).
+  Future<void> _applyEq(Map<String, dynamic> msg) async {
+    final eq = _eq;
+    if (eq == null) return;
+    try {
+      final enabled = msg['enabled'] == true;
+      await eq.setEnabled(enabled);
+      await _loud?.setEnabled(enabled);
+      final params = await eq.parameters;
+      final rawGains = (msg['gains'] as List?) ?? const [];
+      final gains =
+          rawGains.map((e) => double.tryParse(e.toString()) ?? 0.0).toList();
+      final bass = (msg['bass'] as num?)?.toDouble() ?? 0.0;
+      for (var i = 0; i < params.bands.length && i < gains.length; i++) {
+        final extra = i == 0 ? bass * (params.maxDecibels * 0.8) : 0.0;
+        await params.bands[i].setGain(
+            (gains[i] + extra).clamp(params.minDecibels, params.maxDecibels));
+      }
+      final loudV = (msg['loud'] as num?)?.toDouble() ?? 0.0;
+      await _loud?.setTargetGain(loudV * 12);
+    } catch (_) {/* best-effort */}
   }
 
   Future<void> _streamBytesToListener(Uint8List bytes) async {
@@ -179,6 +395,32 @@ class LiveSessionController {
     this.sessionId = sessionId;
     _incoming.clear();
     _listenerStarted = false;
+    await _openSocket(sessionId, myUserId, token);
+  }
+
+  /// Re-open the socket after a transport drop and rejoin the same session.
+  /// The host re-sends metadata/EQ and re-streams the current track on
+  /// `peer_joined`, so playback resumes. Throws if the session is gone.
+  Future<void> reconnectAsListener({
+    required String sessionId,
+    required int myUserId,
+    required String token,
+  }) async {
+    // Drop the dead socket first.
+    try {
+      await _socketSub?.cancel();
+    } catch (_) {}
+    try {
+      await _channel?.sink.close();
+    } catch (_) {}
+    _channel = null;
+    _incoming.clear();
+    _listenerStarted = false;
+    try {
+      await player.stop();
+    } catch (_) {}
+    role = LiveRole.listener;
+    this.sessionId = sessionId;
     await _openSocket(sessionId, myUserId, token);
   }
 
@@ -234,8 +476,12 @@ class LiveSessionController {
     // it (re)sends metadata and streams the song, so join timing doesn't matter.
     if (role == LiveRole.host) {
       if (type == 'peer_joined') {
+        _peerPresent = true;
         final meta = _hostMeta;
         if (meta != null) _sendControl(meta);
+        // Re-send the equalizer settings so a late joiner hears the same shape.
+        final eq = _hostEq;
+        if (eq != null) _sendControl(eq);
         final bytes = _hostBytes;
         if (bytes != null) {
           unawaited(_streamBytesToListener(bytes));
@@ -252,6 +498,21 @@ class LiveSessionController {
       case 'meta':
         final track = msg['track'] as Map<String, dynamic>?;
         if (track?['mime'] is String) _incomingMime = track!['mime'] as String;
+        break;
+      case 'eq':
+        // Mirror the host's equalizer onto our live player.
+        await _applyEq(msg);
+        break;
+      case 'track_change':
+        // The host switched songs: reset our buffer so the incoming bytes
+        // become a fresh track, played once its 'eos' arrives.
+        final track = msg['track'] as Map<String, dynamic>?;
+        if (track?['mime'] is String) _incomingMime = track!['mime'] as String;
+        _incoming.clear();
+        _listenerStarted = false;
+        try {
+          await player.stop();
+        } catch (_) {}
         break;
       case 'eos':
         // All bytes received — start playback from the in-memory buffer.
@@ -316,6 +577,7 @@ class LiveSessionController {
   Future<void> _teardown() async {
     await _posSub?.cancel();
     await _playingSub?.cancel();
+    await _completeSub?.cancel();
     await _socketSub?.cancel();
     try {
       await _channel?.sink.close();

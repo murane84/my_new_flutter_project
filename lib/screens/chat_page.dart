@@ -13,7 +13,9 @@ import 'websocket_manager.dart';
 import '../utils/toast_helper.dart';
 import '../utils/connection_status.dart';
 import '../utils/time_utils.dart';
+import '../utils/file_bytes.dart';
 import 'live_session_screen.dart';
+import 'home_page.dart' show playlistNotifier, playbackBus;
 
 // ─── Timestamp helpers ───────────────────────────────────────────────────────
 
@@ -486,7 +488,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   // ── Listen Together ─────────────────────────────────────────────────────────
 
-  /// HOST: pick a local song and start a live session with this friend.
+  /// HOST: start a live session with this friend, choosing a song from the
+  /// music player's already-loaded playlist (falling back to the file browser
+  /// only when nothing is loaded yet).
   Future<void> _startListenTogether() async {
     final token = await getToken();
     final myUserId = int.tryParse(_myId ?? '');
@@ -498,25 +502,198 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       return;
     }
 
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'],
-    );
-    if (result == null || result.files.isEmpty) {
+    final loaded = playlistNotifier.value;
+    if (loaded.isEmpty) {
+      // Nothing loaded in the player yet — fall back to picking a file.
+      await _startListenTogetherFromFile(token, myUserId);
       return;
     }
 
-    final picked = result.files.single;
-    final Uint8List bytes = await picked.readAsBytes(); // in-memory, cross-platform
+    // Choose from the songs already loaded in the music player.
+    final chosenPath = await _pickFromLoadedPlaylist(loaded);
+    if (chosenPath == null || !mounted) return;
+
+    Uint8List bytes;
+    try {
+      bytes = Uint8List.fromList(await readFileBytes(chosenPath));
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not read that track.',
+            type: ToastType.error);
+      }
+      return;
+    }
     if (bytes.isEmpty) {
       if (mounted) {
-        showToast(context, 'Could not read that audio file.', type: ToastType.error);
+        showToast(context, 'That track appears to be empty.',
+            type: ToastType.error);
       }
       return;
     }
 
+    // If the DJ picked the song already playing locally, blend into the live
+    // stream at its current position (no restart). A different song starts at
+    // the beginning. Either way, pause the local player so nothing plays twice.
+    final localPath = playbackBus.currentPath?.call();
+    final localPlaying = playbackBus.isPlaying?.call() ?? false;
+    final startPositionMs = (chosenPath == localPath && localPlaying)
+        ? (playbackBus.currentPositionMs?.call() ?? 0)
+        : 0;
+    playbackBus.onPause?.call();
+
     if (!mounted) return;
-    // Show as a popup dialog rather than a full page.
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => LiveSessionScreen.host(
+        token: token,
+        myUserId: myUserId,
+        receiverId: widget.friendId,
+        audioBytes: bytes,
+        title: _titleFromPath(chosenPath),
+        peerName: widget.friendName,
+        startPositionMs: startPositionMs,
+      ),
+    );
+  }
+
+  /// Bottom-sheet picker over the player's loaded songs. Returns the chosen
+  /// file path, or null if dismissed.
+  Future<String?> _pickFromLoadedPlaylist(List<String> paths) {
+    final scheme = Theme.of(context).colorScheme;
+    // Surface the currently-playing track first, flagged, so the DJ can share
+    // what they're already listening to in one tap.
+    final nowPath = playbackBus.currentPath?.call();
+    final ordered = <String>[
+      if (nowPath != null && paths.contains(nowPath)) nowPath,
+      ...paths.where((p) => p != nowPath),
+    ];
+    return showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.headphones_rounded,
+                        color: scheme.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Play live with ${widget.friendName}',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                'Pick a song from your player',
+                style: TextStyle(
+                    fontSize: 12, color: scheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 6),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: ordered.length,
+                  itemBuilder: (_, i) {
+                    final p = ordered[i];
+                    final isNow = p == nowPath;
+                    return Container(
+                      color: isNow ? scheme.primary.withAlpha(18) : null,
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          radius: 16,
+                          backgroundColor: isNow
+                              ? scheme.primary
+                              : scheme.primaryContainer,
+                          child: Icon(
+                            isNow
+                                ? Icons.graphic_eq_rounded
+                                : Icons.music_note_rounded,
+                            size: 16,
+                            color: isNow
+                                ? Colors.white
+                                : scheme.onPrimaryContainer,
+                          ),
+                        ),
+                        title: Text(
+                          _titleFromPath(p),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight:
+                                isNow ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                        subtitle: isNow
+                            ? Text('Now playing — share from here',
+                                style: TextStyle(
+                                    fontSize: 11, color: scheme.primary))
+                            : null,
+                        onTap: () => Navigator.pop(ctx, p),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              // Let the user still browse files if the song isn't loaded.
+              TextButton.icon(
+                onPressed: () => Navigator.pop(ctx, '__browse__'),
+                icon: const Icon(Icons.folder_open_rounded, size: 18),
+                label: const Text('Choose a file instead'),
+              ),
+              const SizedBox(height: 4),
+            ],
+          ),
+        );
+      },
+    ).then((choice) async {
+      if (choice == '__browse__') {
+        // Deferred: reopen via the file browser path.
+        final token = await getToken();
+        final myUserId = int.tryParse(_myId ?? '');
+        if (token != null && myUserId != null && mounted) {
+          await _startListenTogetherFromFile(token, myUserId);
+        }
+        return null;
+      }
+      return choice;
+    });
+  }
+
+  /// Fallback: pick a song from the device's file browser and start the
+  /// session (used when the player has no loaded songs, or on the user's
+  /// explicit request).
+  Future<void> _startListenTogetherFromFile(String token, int myUserId) async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'],
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    final picked = result.files.single;
+    final Uint8List bytes = await picked.readAsBytes();
+    if (bytes.isEmpty) {
+      if (mounted) {
+        showToast(context, 'Could not read that audio file.',
+            type: ToastType.error);
+      }
+      return;
+    }
+    if (!mounted) return;
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -529,6 +706,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         peerName: widget.friendName,
       ),
     );
+  }
+
+  /// Derive a clean display title from a file path (basename without extension).
+  String _titleFromPath(String path) {
+    var name = path;
+    final slash = name.lastIndexOf(RegExp(r'[\\/]'));
+    if (slash >= 0) name = name.substring(slash + 1);
+    final dot = name.lastIndexOf('.');
+    if (dot > 0) name = name.substring(0, dot);
+    return name.trim().isEmpty ? 'Live song' : name.trim();
   }
 
   // ── Status ────────────────────────────────────────────────────────────────

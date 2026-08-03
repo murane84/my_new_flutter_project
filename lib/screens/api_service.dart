@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
-import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart';
 import 'token_helper.dart';
 import 'user.dart';
@@ -392,18 +391,16 @@ class ApiService {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = jsonDecode(response.body);
         final bool isOnline = data['is_online'] ?? false;
+        // Return the RAW server timestamp untouched. The UI formats it with
+        // parseServerTime()/formatLastSeen(), which correctly treats a naive
+        // string as UTC and converts to the device's local zone. Formatting
+        // here with DateTime.parse().toLocal() was the 3-hour-off bug: a
+        // tz-less string parses as *local*, so toLocal() did nothing and the
+        // raw UTC value was shown as if local (−3h in EAT). It also caused a
+        // double-format when formatLastSeen re-parsed the pretty string.
         final String? lastSeen = data['last_seen'];
 
-        String? formatted;
-        if (lastSeen != null && lastSeen.isNotEmpty) {
-          try {
-            formatted = DateFormat('MMM d, HH:mm').format(
-              DateTime.parse(lastSeen).toLocal(),
-            );
-          } catch (_) {}
-        }
-
-        return {'is_online': isOnline, 'last_seen': formatted};
+        return {'is_online': isOnline, 'last_seen': lastSeen};
       }
       return {};
     } catch (e) {

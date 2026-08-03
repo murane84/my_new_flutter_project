@@ -19,6 +19,8 @@ import 'chat_page.dart';
 import 'api_service.dart';
 import 'websocket_manager.dart';
 import 'live_session_screen.dart';
+import '../services/live_session_service.dart'
+    show activeLiveSession, endActiveLiveSession;
 import 'token_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
@@ -61,6 +63,66 @@ class NowPlayingNotifier extends ChangeNotifier {
 
 final nowPlayingNotifier = NowPlayingNotifier();
 
+// Tracks an active live "Listen Together" session so ambient UI (like the
+// phone now-playing bar) can highlight who you're streaming with.
+class LiveSessionNotifier extends ChangeNotifier {
+  bool _active = false;
+  String _peer = '';
+  bool _asHost = false;
+
+  bool get active => _active;
+  String get peer => _peer;
+  bool get asHost => _asHost;
+
+  void start({required String peer, required bool asHost}) {
+    _active = true;
+    _peer = peer;
+    _asHost = asHost;
+    notifyListeners();
+  }
+
+  void stop() {
+    if (!_active) return;
+    _active = false;
+    _peer = '';
+    notifyListeners();
+  }
+}
+
+final liveSessionNotifier = LiveSessionNotifier();
+
+// A tiny command bus so lightweight ambient controls (e.g. the collapsed
+// now-playing bar) can drive the ONE mounted player without owning the
+// AudioPlayer. MusicControls registers its handlers on init and clears them
+// on dispose.
+class PlaybackBus {
+  VoidCallback? onToggle;
+  VoidCallback? onNext;
+  VoidCallback? onPrev;
+  // Seek to a fraction (0..1) of the current track's duration.
+  void Function(double fraction)? onSeekFraction;
+  // Pause the local player (used when a live session takes over playback so
+  // the same song isn't heard twice).
+  VoidCallback? onPause;
+  // Read-backs so the live-share flow can sync to what's playing now.
+  String? Function()? currentPath; // file path of the current track, if any
+  int Function()? currentPositionMs; // current playback position
+  bool Function()? isPlaying;
+}
+
+final playbackBus = PlaybackBus();
+
+// Current playback progress (0..1), updated by the player's position stream.
+// Kept separate from nowPlayingNotifier so the frequent per-tick updates only
+// rebuild the tiny progress bar — not the whole chat surface.
+final ValueNotifier<double> playProgressNotifier = ValueNotifier<double>(0.0);
+
+// The music player's currently-loaded playlist (file paths), mirrored here so
+// other features — like starting a live "Listen Together" from already-loaded
+// songs instead of the file browser — can read it without owning the player.
+final ValueNotifier<List<String>> playlistNotifier =
+    ValueNotifier<List<String>>(<String>[]);
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 class HomePage extends StatefulWidget {
@@ -100,6 +162,14 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _isChatFullScreen = false;
   double _prevMusicWidth = 280;
   bool _isDragging = false;
+  // Phone-only: whether the slide-up full player sheet is expanded.
+  bool _playerExpanded = false;
+  // Phone-only: user dismissed the now-playing bar → collapses to a small
+  // floating music button that reopens it.
+  bool _barDismissed = false;
+  // Draggable position of the music FAB. null = default bottom-right anchor
+  // (reset there whenever the bar is freshly collapsed into a FAB).
+  Offset? _fabOffset;
 
   // ── Chat state ────────────────────────────────────────────────────────────
   String? _activeFriendId;
@@ -966,7 +1036,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   _activeFriendOnline == true
                       ? 'Online'
                       : _activeFriendLastSeen?.isNotEmpty == true
-                          ? 'Last seen $_activeFriendLastSeen'
+                          ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
                           : 'Offline',
                   style: TextStyle(
                     fontSize: 11,
@@ -982,25 +1052,31 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       );
     }
 
+    // On phones there's no split to expand, so the ⤢ toggle is meaningless —
+    // hide it and let the "Messages" title lead the header.
+    final bool phone = MediaQuery.of(context).size.width < 640;
+
     return Row(
       children: [
-        _PanelToggleBtn(
-          isFullScreen: _isChatFullScreen,
-          onTap: () {
-            setState(() {
-              if (!_isChatFullScreen) {
-                _prevMusicWidth = _musicPanelWidth;
-                _isChatFullScreen = true;
-                _isMusicFullScreen = false;
-              } else {
-                _musicPanelWidth = _prevMusicWidth;
-                _isChatFullScreen = false;
-              }
-            });
-            _saveLayoutState();
-          },
-        ),
-        const SizedBox(width: 10),
+        if (!phone) ...[
+          _PanelToggleBtn(
+            isFullScreen: _isChatFullScreen,
+            onTap: () {
+              setState(() {
+                if (!_isChatFullScreen) {
+                  _prevMusicWidth = _musicPanelWidth;
+                  _isChatFullScreen = true;
+                  _isMusicFullScreen = false;
+                } else {
+                  _musicPanelWidth = _prevMusicWidth;
+                  _isChatFullScreen = false;
+                }
+              });
+              _saveLayoutState();
+            },
+          ),
+          const SizedBox(width: 10),
+        ],
         Icon(Icons.chat_bubble_outline_rounded,
             color: scheme.primary, size: 20),
         const SizedBox(width: 6),
@@ -1336,6 +1412,501 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await _fetchFriends();
   }
 
+  // ── Phone layout ───────────────────────────────────────────────────────────
+  // Chat is the primary full-width surface. The music player stays mounted the
+  // whole time (so audio never stops) but lives off-screen below; a slim
+  // now-playing bar sits above the footer and expands the player on tap.
+
+  Widget _buildPhoneBody(BuildContext context, BoxConstraints constraints) {
+    return ListenableBuilder(
+      // Rebuild the bar/sheet visibility when the track or live session changes.
+      listenable: Listenable.merge([nowPlayingNotifier, liveSessionNotifier]),
+      builder: (context, _) {
+        final hasTrack = nowPlayingNotifier.track.isNotEmpty;
+        final live = liveSessionNotifier.active;
+        // The now-playing bar is for the user's OWN music (the live session has
+        // its own audio and is surfaced by the top banner). Show it when a
+        // personal track is loaded and the user hasn't dismissed it; otherwise
+        // a small floating music button stands in as the entry point.
+        final barVisible = hasTrack && !_barDismissed;
+        final barSpace = 66.0;
+        final h = constraints.maxHeight;
+
+        return Stack(
+          children: [
+            // Chat surface — full width, leaving room only for the full bar.
+            Positioned.fill(
+              child: Padding(
+                padding: EdgeInsets.only(
+                    bottom: (_playerExpanded || !barVisible) ? 0 : barSpace),
+                child: _buildChatContent(context),
+              ),
+            ),
+
+            // The one, always-mounted player. Off-screen (top = h) when
+            // collapsed → State (and the AudioPlayer) stay alive; slides to
+            // the top when expanded.
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 320),
+              curve: Curves.easeOutCubic,
+              left: 0,
+              right: 0,
+              height: h,
+              top: _playerExpanded ? 0 : h,
+              child: _buildPhonePlayerSheet(context),
+            ),
+
+            // Collapsed now-playing bar (hidden while expanded or dismissed).
+            if (barVisible)
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOut,
+                left: 0,
+                right: 0,
+                bottom: _playerExpanded ? -barSpace : 0,
+                child: _buildNowPlayingBar(context),
+              ),
+
+            // Floating music button — the entry point when the bar is hidden.
+            // Draggable; defaults to bottom-right (above the chat input so it
+            // never covers the send button).
+            if (!barVisible && !_playerExpanded)
+              _buildDraggableFab(context, constraints, live),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildPhonePlayerSheet(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return _panelDecor(
+      context,
+      Column(
+        children: [
+          // Header: grab handle + title + collapse chevron.
+          Row(
+            children: [
+              _PanelToggleBtn(
+                isFullScreen: false,
+                customIcon: Icons.keyboard_arrow_down_rounded,
+                onTap: () => setState(() => _playerExpanded = false),
+              ),
+              const SizedBox(width: 10),
+              Icon(Icons.music_note_rounded, color: scheme.primary, size: 20),
+              const SizedBox(width: 6),
+              const Text('Now Playing',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              const Spacer(),
+              // Live badge in the sheet header too, for context.
+              if (liveSessionNotifier.active) _liveChip(context),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: kIsWeb
+                ? WebMusicPanel(textColor: scheme.onSurface)
+                : MusicControls(textColor: scheme.onSurface),
+          ),
+        ],
+      ),
+      isMusicPanel: true,
+    );
+  }
+
+  Widget _liveChip(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final peer = liveSessionNotifier.peer;
+    final asHost = liveSessionNotifier.asHost;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: scheme.primary.withAlpha(30),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: scheme.primary.withAlpha(120)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Pulsing dot connotes a live stream.
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: scheme.primary,
+              boxShadow: [
+                BoxShadow(
+                    color: scheme.primary.withAlpha(160),
+                    blurRadius: 6,
+                    spreadRadius: 1),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              asHost ? 'Streaming to $peer' : 'Listening with $peer',
+              style: TextStyle(
+                color: scheme.primary,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Live session banner (both layouts) ──────────────────────────────────────
+  Widget _buildLiveBanner(BuildContext context) {
+    return ListenableBuilder(
+      listenable: liveSessionNotifier,
+      builder: (context, _) {
+        if (!liveSessionNotifier.active) return const SizedBox.shrink();
+        final scheme = Theme.of(context).colorScheme;
+        final peer = liveSessionNotifier.peer;
+        final host = liveSessionNotifier.asHost;
+        return Material(
+          color: scheme.primary,
+          child: InkWell(
+            onTap: _reopenLiveSession,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 7, 6, 7),
+              child: Row(
+                children: [
+                  // Pulsing live dot.
+                  Container(
+                    width: 9,
+                    height: 9,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.white.withAlpha(160),
+                            blurRadius: 6,
+                            spreadRadius: 1),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Icon(Icons.headphones_rounded,
+                      size: 17, color: Colors.white.withAlpha(230)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      host
+                          ? 'Live · streaming to $peer'
+                          : 'Live · listening with $peer',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const Text('Tap to open',
+                      style: TextStyle(color: Colors.white70, fontSize: 11)),
+                  const SizedBox(width: 4),
+                  TextButton(
+                    onPressed: _endLiveSession,
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      minimumSize: const Size(0, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(host ? 'End' : 'Leave',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _reopenLiveSession() {
+    if (activeLiveSession == null) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => LiveSessionScreen.resume(),
+    );
+  }
+
+  Future<void> _endLiveSession() async {
+    await endActiveLiveSession();
+    liveSessionNotifier.stop();
+    if (mounted) setState(() {});
+  }
+
+  // Positions the music FAB (default bottom-right) and makes it draggable.
+  Widget _buildDraggableFab(
+      BuildContext context, BoxConstraints constraints, bool live) {
+    const fabSize = 52.0;
+    const margin = 14.0;
+    final w = constraints.maxWidth;
+    final h = constraints.maxHeight;
+    // Default anchor: bottom-right, above the chat input.
+    final defaultLeft = w - margin - fabSize;
+    final defaultTop = h - 78 - fabSize;
+    final left = _fabOffset?.dx ?? defaultLeft;
+    final top = _fabOffset?.dy ?? defaultTop;
+
+    return Positioned(
+      left: left,
+      top: top,
+      child: GestureDetector(
+        onPanStart: (_) {
+          // Seed the offset from wherever it's currently anchored.
+          _fabOffset ??= Offset(defaultLeft, defaultTop);
+        },
+        onPanUpdate: (d) {
+          setState(() {
+            final cur = _fabOffset ?? Offset(defaultLeft, defaultTop);
+            final nx = (cur.dx + d.delta.dx).clamp(margin, w - fabSize - margin);
+            final ny = (cur.dy + d.delta.dy)
+                .clamp(margin, h - fabSize - margin);
+            _fabOffset = Offset(nx.toDouble(), ny.toDouble());
+          });
+        },
+        child: _buildMusicFab(context, live),
+      ),
+    );
+  }
+
+  Widget _buildMusicFab(BuildContext context, bool live) {
+    final scheme = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: () => setState(() {
+        // Bring the bar back and open the player so the user can start music.
+        _barDismissed = false;
+        _playerExpanded = true;
+      }),
+      child: Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: scheme.primary,
+          boxShadow: [
+            BoxShadow(
+              color: scheme.primary.withAlpha(120),
+              blurRadius: 14,
+              spreadRadius: 1,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: live
+              ? Border.all(color: Colors.white.withAlpha(220), width: 2)
+              : null,
+        ),
+        child: const Icon(Icons.music_note_rounded,
+            color: Colors.white, size: 26),
+      ),
+    );
+  }
+
+  Widget _buildNowPlayingBar(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final np = nowPlayingNotifier;
+
+    return GestureDetector(
+      // Tap anywhere (except the play button) to expand; swipe up too.
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => _playerExpanded = true),
+      onVerticalDragEnd: (d) {
+        if ((d.primaryVelocity ?? 0) < 0) {
+          setState(() => _playerExpanded = true);
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: scheme.outlineVariant.withAlpha(70),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(30),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Row(
+                children: [
+                  // Mini disc / art placeholder.
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(colors: [
+                        scheme.primary.withAlpha(60),
+                        scheme.surfaceContainerHighest,
+                      ]),
+                    ),
+                    child: Icon(
+                      np.playing
+                          ? Icons.graphic_eq_rounded
+                          : Icons.music_note_rounded,
+                      size: 18,
+                      color: scheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // Title lives in the footer (single source of truth). Here we
+                  // use the freed space for a seekable progress bar. A plain
+                  // tap still expands (handled by the parent); a horizontal
+                  // drag here scrubs.
+                  Expanded(
+                    child: _barProgress(context),
+                  ),
+                  const SizedBox(width: 8),
+                  // Previous / Play / Next — drive the mounted player via the bus.
+                  _barBtn(
+                    context,
+                    Icons.skip_previous_rounded,
+                    () => playbackBus.onPrev?.call(),
+                    size: 22,
+                  ),
+                  _barBtn(
+                    context,
+                    np.playing
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
+                    () => playbackBus.onToggle?.call(),
+                    size: 26,
+                    filled: true,
+                  ),
+                  _barBtn(
+                    context,
+                    Icons.skip_next_rounded,
+                    () => playbackBus.onNext?.call(),
+                    size: 22,
+                  ),
+                  const SizedBox(width: 2),
+                  // Close the bar entirely → collapses to the floating button,
+                  // freshly reset to the bottom-right anchor.
+                  GestureDetector(
+                    onTap: () => setState(() {
+                      _barDismissed = true;
+                      _fabOffset = null;
+                    }),
+                    behavior: HitTestBehavior.opaque,
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(Icons.close_rounded,
+                          size: 18, color: scheme.onSurface.withAlpha(140)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Slim seekable progress bar for the now-playing bar. Only this widget
+  // rebuilds on each position tick (via playProgressNotifier), so the chat
+  // surface underneath stays still. Horizontal drag / tap scrubs; a plain tap
+  // that isn't a drag bubbles up to the parent (expand).
+  Widget _barProgress(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return LayoutBuilder(
+      builder: (ctx, cons) {
+        final w = cons.maxWidth;
+        void seekAt(double dx) {
+          if (w <= 0) return;
+          playbackBus.onSeekFraction?.call((dx / w).clamp(0.0, 1.0));
+        }
+
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          // Only claim horizontal drags — vertical drags & taps bubble to the
+          // parent (expand). Dragging scrubs the track.
+          onHorizontalDragStart: (d) => seekAt(d.localPosition.dx),
+          onHorizontalDragUpdate: (d) => seekAt(d.localPosition.dx),
+          child: SizedBox(
+            height: 26,
+            child: Center(
+              child: ValueListenableBuilder<double>(
+                valueListenable: playProgressNotifier,
+                builder: (_, frac, __) {
+                  final f = frac.clamp(0.0, 1.0);
+                  return Stack(
+                    alignment: Alignment.centerLeft,
+                    children: [
+                      Container(
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: scheme.onSurface.withAlpha(40),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      FractionallySizedBox(
+                        widthFactor: f == 0 ? 0.001 : f,
+                        child: Container(
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: scheme.primary,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _barBtn(BuildContext context, IconData icon, VoidCallback onTap,
+      {double size = 22, bool filled = false}) {
+    final scheme = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        width: filled ? 40 : 34,
+        height: filled ? 40 : 34,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: filled ? scheme.primary : Colors.transparent,
+        ),
+        child: Icon(
+          icon,
+          size: size,
+          color: filled ? Colors.white : scheme.onSurface.withAlpha(200),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFooter(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
@@ -1475,7 +2046,11 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   color: scheme.onSurface.withAlpha(160)),
               const SizedBox(width: 4),
               Text(
-                _username,
+                // On phones, show just the first name so a full "First Last"
+                // doesn't eat the footer's horizontal space.
+                MediaQuery.of(context).size.width < 640
+                    ? _username.trim().split(RegExp(r'\s+')).first
+                    : _username,
                 style: TextStyle(
                   color: scheme.onSurface,
                   fontSize: 12,
@@ -1500,6 +2075,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // collapse a full-screen panel → then exit), not jump off the app.
     final canLeave = !(_isMusicFullScreen ||
         _isChatFullScreen ||
+        _playerExpanded ||
         _activeFriendId != null);
 
     // Listener sits above the whole app and is passive (it never consumes
@@ -1509,7 +2085,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         setState(() {
-          if (_activeFriendId != null) {
+          if (_playerExpanded) {
+            // Collapse the slide-up player back to the mini bar first.
+            _playerExpanded = false;
+          } else if (_activeFriendId != null) {
             // Close the open conversation → back to the messages list.
             _activeFriendId = null;
             _activeFriendName = null;
@@ -1563,10 +2142,21 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ],
       ),
-      // ── Body: always Row — panels never leave the tree ─────────────────
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final total = constraints.maxWidth;
+      // ── Body ───────────────────────────────────────────────────────────
+      // A persistent live-session banner (both layouts) sits above everything
+      // when a "Listen Together" session is minimised, so the user can keep
+      // chatting and jump back in from anywhere.
+      body: Column(
+        children: [
+          _buildLiveBanner(context),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final total = constraints.maxWidth;
+
+                if (total < 640) {
+                  return _buildPhoneBody(context, constraints);
+                }
 
           // Compute widths for each mode
           double musicW, chatW, divW;
@@ -1632,8 +2222,11 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
             ],
           );
-        },
-      ),
+                },
+              ),
+            ),
+          ],
+        ),
       bottomNavigationBar: _buildFooter(context),
       ),
       ),

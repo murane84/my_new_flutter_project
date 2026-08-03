@@ -579,10 +579,18 @@ class _MusicControlsState extends State<MusicControls>
                   onFavorite: _toggleFavorite,
                   onReorder: (o, n) {
                     setState(() {
+                      // Remember the playing track by PATH so the now-playing
+                      // pointer follows it wherever it lands after the move.
+                      final playingPath = (_currentIndex >= 0 &&
+                              _currentIndex < _playlist.length)
+                          ? _playlist[_currentIndex]
+                          : null;
                       if (n > o) n--;
                       final item = _playlist.removeAt(o);
                       _playlist.insert(n, item);
-                      if (_currentIndex == o) _currentIndex = n;
+                      if (playingPath != null) {
+                        _currentIndex = _playlist.indexOf(playingPath);
+                      }
                     });
                   },
                   onAdd: _pickMusic,
@@ -1523,9 +1531,11 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
                     buildDefaultDragHandles: false,
                     itemCount: displayed.length,
                     onReorder: (o, n) {
-                      final nn = n > o ? n - 1 : n;
-                      widget.onReorder(
-                          displayed[o].key, displayed[nn].key);
+                      // Only the full, unfiltered list maps 1:1 to the real
+                      // playlist. Pass RAW indices — the parent does the single
+                      // insertion-index adjustment (no double-shift).
+                      if (_search.isNotEmpty || _favOnly) return;
+                      widget.onReorder(o, n);
                     },
                     itemBuilder: (ctx, i) {
                       final entry = displayed[i];
@@ -1618,16 +1628,25 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
                                 ),
                               ),
                               const SizedBox(width: 6),
-                              // Explicit reorder handle — the ONLY way to drag.
-                              ReorderableDragStartListener(
-                                index: i,
-                                child: Icon(
+                              // Explicit reorder handle — the ONLY way to drag,
+                              // and only on the unfiltered list.
+                              if (_search.isEmpty && !_favOnly)
+                                ReorderableDragStartListener(
+                                  index: i,
+                                  child: Icon(
+                                    Icons.drag_indicator,
+                                    size: 18,
+                                    color: scheme.onSurfaceVariant
+                                        .withAlpha(140),
+                                  ),
+                                )
+                              else
+                                Icon(
                                   Icons.drag_indicator,
                                   size: 18,
-                                  color: scheme.onSurfaceVariant
-                                      .withAlpha(140),
+                                  color:
+                                      scheme.onSurfaceVariant.withAlpha(50),
                                 ),
-                              ),
                             ],
                             ), // Row
                           ), // SizedBox trailing

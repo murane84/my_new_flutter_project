@@ -23,8 +23,8 @@ class AuthPage extends StatelessWidget {
             const Color(0xFF0B0505),
           ]
         : [
-            Color.lerp(primary, Colors.white, 0.78)!,
-            Color.lerp(primary, Colors.white, 0.90)!,
+            Color.lerp(primary, Colors.white, 0.88)!,
+            Color.lerp(primary, Colors.white, 0.96)!,
             Colors.white,
           ];
 

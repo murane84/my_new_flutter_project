@@ -92,15 +92,15 @@ class LoginPageState extends State<LoginPage> {
             const Color(0xFF0B0505),
           ]
         : [
-            Color.lerp(primary, Colors.white, 0.78)!,
-            Color.lerp(primary, Colors.white, 0.90)!,
+            Color.lerp(primary, Colors.white, 0.88)!,
+            Color.lerp(primary, Colors.white, 0.96)!,
             Colors.white,
           ];
     final onColor = isDark ? Colors.white : const Color(0xFF2A1414);
     final subColor =
         isDark ? Colors.white.withAlpha(180) : const Color(0xFF7A4A45);
     final cardBg =
-        isDark ? Colors.white.withAlpha(20) : Colors.white.withAlpha(175);
+        isDark ? Colors.white.withAlpha(20) : Colors.white.withAlpha(238);
     final cardBorder =
         isDark ? Colors.white.withAlpha(50) : Colors.black.withAlpha(20);
     final wmColor = isDark ? Colors.white : primary;
@@ -202,6 +202,15 @@ class LoginPageState extends State<LoginPage> {
                             color: cardBg,
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(color: cardBorder),
+                            boxShadow: isDark
+                                ? null
+                                : [
+                                    BoxShadow(
+                                      color: Colors.black.withAlpha(20),
+                                      blurRadius: 26,
+                                      offset: const Offset(0, 12),
+                                    ),
+                                  ],
                           ),
                           child: Form(
                             key: _formKey,

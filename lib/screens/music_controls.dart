@@ -561,20 +561,25 @@ class _MusicControlsState extends State<MusicControls>
           // ── Main content ──────────────────────────────────────────────
           _buildMain(context, scheme, isDark),
 
-          // ── Playlist overlay — slides down from top ───────────────────
+          // ── Playlist sheet — slides UP from the bottom, half-height so the
+          //    spinning disc above stays visible ──────────────────────────
           if (_showPlaylist)
-            SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0, -1),
-                end: Offset.zero,
-              ).animate(CurvedAnimation(
-                parent: _playlistCtrl,
-                curve: Curves.easeOutCubic,
-                reverseCurve: Curves.easeInCubic,
-              )),
-              child: FadeTransition(
-                opacity: _playlistCtrl,
-                child: _PlaylistOverlay(
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: FractionallySizedBox(
+                heightFactor: 0.62,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 1),
+                    end: Offset.zero,
+                  ).animate(CurvedAnimation(
+                    parent: _playlistCtrl,
+                    curve: Curves.easeOutCubic,
+                    reverseCurve: Curves.easeInCubic,
+                  )),
+                  child: FadeTransition(
+                    opacity: _playlistCtrl,
+                    child: _PlaylistOverlay(
                   playlist: _playlist,
                   currentIndex: _currentIndex,
                   favorites: _favorites,
@@ -609,6 +614,8 @@ class _MusicControlsState extends State<MusicControls>
                     });
                   },
                   onAdd: _pickMusic,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1403,6 +1410,102 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
     return _cleanTrackName(d > 0 ? n.substring(0, d) : n);
   }
 
+  // Per-track options sheet (opened from the ⋮ button).
+  void _showTrackOptions(
+      BuildContext context, String path, int realIdx, bool isFav) {
+    final scheme = Theme.of(context).colorScheme;
+    final ta = _titleArtist(_name(path));
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 10, bottom: 6),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: scheme.onSurfaceVariant.withAlpha(80),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(ta.$1,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15)),
+                    if (ta.$2 != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(ta.$2!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: scheme.onSurfaceVariant)),
+                      ),
+                  ],
+                ),
+              ),
+              Divider(height: 1, color: scheme.outlineVariant.withAlpha(70)),
+              _optionTile(scheme, Icons.play_arrow_rounded, 'Play now', () {
+                Navigator.pop(ctx);
+                widget.onPlay(realIdx);
+              }),
+              _optionTile(
+                scheme,
+                isFav ? Icons.favorite : Icons.favorite_border,
+                isFav ? 'Remove from favourites' : 'Add to favourites',
+                () {
+                  Navigator.pop(ctx);
+                  widget.onFavorite(path);
+                },
+                iconColor: isFav ? Colors.pinkAccent : null,
+              ),
+              _optionTile(
+                scheme,
+                Icons.playlist_remove_rounded,
+                'Remove from list',
+                () {
+                  Navigator.pop(ctx);
+                  widget.onRemove(realIdx);
+                },
+                danger: true,
+              ),
+              const SizedBox(height: 6),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _optionTile(ColorScheme scheme, IconData icon, String label,
+      VoidCallback onTap,
+      {Color? iconColor, bool danger = false}) {
+    final c = danger ? scheme.error : scheme.onSurface;
+    return ListTile(
+      dense: true,
+      leading: Icon(icon, color: iconColor ?? c, size: 22),
+      title: Text(label, style: TextStyle(color: c, fontSize: 14)),
+      onTap: onTap,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -1417,22 +1520,36 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
         .toList();
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(8, 6, 8, 10),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: scheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: scheme.outlineVariant.withAlpha(70)),
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(22)),
+        border: Border(
+          top: BorderSide(color: scheme.outlineVariant.withAlpha(70)),
+          left: BorderSide(color: scheme.outlineVariant.withAlpha(45)),
+          right: BorderSide(color: scheme.outlineVariant.withAlpha(45)),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(45),
-            blurRadius: 22,
-            offset: const Offset(0, 10),
+            color: Colors.black.withAlpha(55),
+            blurRadius: 26,
+            offset: const Offset(0, -6),
           ),
         ],
       ),
       child: Column(
         children: [
+          // Grab handle
+          Container(
+            margin: const EdgeInsets.only(top: 8, bottom: 2),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: scheme.onSurfaceVariant.withAlpha(80),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
           // Header
           Container(
             padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
@@ -1537,21 +1654,10 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
                           TextStyle(color: scheme.onSurfaceVariant),
                     ),
                   )
-                : ReorderableListView.builder(
+                : ListView.builder(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 6, vertical: 4),
-                    // Tiles are NOT draggable by themselves — reordering only
-                    // happens by grabbing the handle. This stops a tap from
-                    // being read as a drag (which played the wrong song).
-                    buildDefaultDragHandles: false,
                     itemCount: displayed.length,
-                    onReorder: (o, n) {
-                      // Only the full, unfiltered list maps 1:1 to the real
-                      // playlist. Pass RAW indices — the parent does the single
-                      // insertion-index adjustment (no double-shift).
-                      if (_search.isNotEmpty || _favOnly) return;
-                      widget.onReorder(o, n);
-                    },
                     itemBuilder: (ctx, i) {
                       final entry = displayed[i];
                       // entry.key IS the real index in the full playlist.
@@ -1623,48 +1729,27 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
                                     color: scheme.onSurfaceVariant,
                                   ),
                                 ),
-                          // Fixed-width trailing avoids ListTile Row overflow
-                          trailing: SizedBox(
-                            width: 52,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                              GestureDetector(
-                                onTap: () =>
-                                    widget.onFavorite(entry.value),
-                                child: Icon(
-                                  isFav
-                                      ? Icons.favorite
-                                      : Icons.favorite_border,
-                                  size: 18,
-                                  color: isFav
-                                      ? Colors.pinkAccent
-                                      : scheme.onSurfaceVariant,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (isFav)
+                                const Padding(
+                                  padding: EdgeInsets.only(right: 2),
+                                  child: Icon(Icons.favorite,
+                                      size: 14,
+                                      color: Colors.pinkAccent),
                                 ),
+                              IconButton(
+                                icon: Icon(Icons.more_vert,
+                                    size: 20,
+                                    color: scheme.onSurfaceVariant),
+                                visualDensity: VisualDensity.compact,
+                                tooltip: 'Options',
+                                onPressed: () => _showTrackOptions(
+                                    context, entry.value, realIdx, isFav),
                               ),
-                              const SizedBox(width: 6),
-                              // Explicit reorder handle — the ONLY way to drag,
-                              // and only on the unfiltered list.
-                              if (_search.isEmpty && !_favOnly)
-                                ReorderableDragStartListener(
-                                  index: i,
-                                  child: Icon(
-                                    Icons.drag_indicator,
-                                    size: 18,
-                                    color: scheme.onSurfaceVariant
-                                        .withAlpha(140),
-                                  ),
-                                )
-                              else
-                                Icon(
-                                  Icons.drag_indicator,
-                                  size: 18,
-                                  color:
-                                      scheme.onSurfaceVariant.withAlpha(50),
-                                ),
                             ],
-                            ), // Row
-                          ), // SizedBox trailing
+                          ),
                           onTap: () => widget.onPlay(realIdx),
                         ),
                       );

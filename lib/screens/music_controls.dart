@@ -19,6 +19,32 @@ const _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
 String _speedLabel(double s) => s == 1.0 ? '1x' : '${s}x';
 
+/// Cleans junk that downloaders bake into filenames, e.g.
+/// "Two of us- Downloaded from clipzag.com" → "Two of us".
+String _cleanTrackName(String raw) {
+  var n = raw;
+  n = n.replaceAll(
+      RegExp(r'[-_(\[ ]*downloaded\s*from[^)\]]*', caseSensitive: false), ' ');
+  n = n.replaceAll(
+      RegExp(r'\b(clipzag|y2mate|ytmp3|mp3juice|tubidy|savefrom|snaptube)\S*',
+          caseSensitive: false),
+      ' ');
+  n = n.replaceAll(RegExp(r'\s+'), ' ').trim();
+  n = n.replaceAll(RegExp(r'^[\s\-_]+|[\s\-_]+$'), '').trim();
+  return n.isEmpty ? raw.trim() : n;
+}
+
+/// Splits a cleaned name into (title, artist) when it looks like "Title - Artist".
+(String, String?) _titleArtist(String cleaned) {
+  final parts = cleaned
+      .split(RegExp(r'\s*-\s*'))
+      .map((p) => p.trim())
+      .where((p) => p.isNotEmpty)
+      .toList();
+  if (parts.length < 2) return (cleaned, null);
+  return (parts.first, parts.sublist(1).join(' · '));
+}
+
 // =============================================================================
 
 class MusicControls extends StatefulWidget {
@@ -471,7 +497,8 @@ class _MusicControlsState extends State<MusicControls>
             ? path.substring(path.lastIndexOf('/') + 1)
             : path;
     final dot = name.lastIndexOf('.');
-    return dot > 0 ? name.substring(0, dot) : name;
+    final base = dot > 0 ? name.substring(0, dot) : name;
+    return _cleanTrackName(base);
   }
 
   String _fmt(Duration d) {
@@ -1350,7 +1377,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
             ? path.substring(path.lastIndexOf('/') + 1)
             : path;
     final d = n.lastIndexOf('.');
-    return d > 0 ? n.substring(0, d) : n;
+    return _cleanTrackName(d > 0 ? n.substring(0, d) : n);
   }
 
   @override
@@ -1505,33 +1532,50 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
                         child: ListTile(
                           key: ValueKey('tile_$i'),
                           dense: true,
+                          selected: isNow,
+                          selectedTileColor: scheme.primary.withAlpha(22),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 2),
                           leading: CircleAvatar(
-                            radius: 16,
+                            radius: 17,
                             backgroundColor: isNow
                                 ? scheme.primary
                                 : scheme.surfaceContainerHighest,
                             child: isNow
-                                ? Icon(Icons.volume_up_rounded,
-                                    size: 13,
-                                    color: scheme.onPrimary)
+                                ? Icon(Icons.equalizer_rounded,
+                                    size: 15, color: scheme.onPrimary)
                                 : Text('${realIdx + 1}',
                                     style: TextStyle(
-                                        fontSize: 10,
-                                        color:
-                                            scheme.onSurfaceVariant)),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: scheme.onSurfaceVariant)),
                           ),
                           title: Text(
-                            _name(entry.value),
+                            _titleArtist(_name(entry.value)).$1,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: 13.5,
                               fontWeight: isNow
                                   ? FontWeight.bold
-                                  : FontWeight.normal,
+                                  : FontWeight.w500,
                               color: isNow ? scheme.primary : null,
                             ),
                           ),
+                          subtitle: _titleArtist(_name(entry.value)).$2 == null
+                              ? null
+                              : Text(
+                                  _titleArtist(_name(entry.value)).$2!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
                           // Fixed-width trailing avoids ListTile Row overflow
                           trailing: SizedBox(
                             width: 52,

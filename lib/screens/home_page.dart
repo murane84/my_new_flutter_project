@@ -1496,11 +1496,37 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final scheme = Theme.of(context).colorScheme;
 
+    // Back / swipe-back should step DOWN the view stack (close an open chat →
+    // collapse a full-screen panel → then exit), not jump off the app.
+    final canLeave = !(_isMusicFullScreen ||
+        _isChatFullScreen ||
+        _activeFriendId != null);
+
     // Listener sits above the whole app and is passive (it never consumes
     // events), so every touch also nudges the session back online if needed.
-    return Listener(
-      onPointerDown: (_) => _onUserActivity(),
-      child: Scaffold(
+    return PopScope(
+      canPop: canLeave,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        setState(() {
+          if (_activeFriendId != null) {
+            // Close the open conversation → back to the messages list.
+            _activeFriendId = null;
+            _activeFriendName = null;
+            _activeFriendOnline = null;
+            _activeFriendLastSeen = null;
+          } else {
+            // Collapse a full-screen panel back to the split view.
+            _isMusicFullScreen = false;
+            _isChatFullScreen = false;
+            _musicPanelWidth = _prevMusicWidth;
+          }
+        });
+        _saveLayoutState();
+      },
+      child: Listener(
+        onPointerDown: (_) => _onUserActivity(),
+        child: Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
         backgroundColor: scheme.surfaceContainerHighest,
@@ -1609,6 +1635,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         },
       ),
       bottomNavigationBar: _buildFooter(context),
+      ),
       ),
     );
   }

@@ -90,9 +90,11 @@ flutter_native_splash:
   # Black background for consistency with the app's dark title bar / icon.
   color: "#000000"
   color_dark: "#000000"
-  image: "assets/images/logo.png"
+  # Padded square logo so it sits inside the circular splash mask without the
+  # top/bottom clipping the tight logo caused.
+  image: "assets/images/splash_logo.png"
   android_12:
-    image: "assets/images/logo.png"
+    image: "assets/images/splash_logo.png"
     color: "#000000"
     color_dark: "#000000"
   android: true

@@ -9,8 +9,14 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:audio_session/audio_session.dart';
-import '../screens/home_page.dart' show nowPlayingNotifier;
+import '../screens/home_page.dart'
+    show
+        nowPlayingNotifier,
+        playbackBus,
+        playlistNotifier,
+        playProgressNotifier;
 import '../utils/toast_helper.dart';
+import 'equalizer_screen.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 
 bool get _isMobile => Platform.isAndroid || Platform.isIOS;
@@ -60,6 +66,10 @@ class _MusicControlsState extends State<MusicControls>
     with TickerProviderStateMixin {
   late final AudioPlayer _player;
 
+  // Native audio effects (Android only). Null on other platforms.
+  AndroidEqualizer? _equalizer;
+  AndroidLoudnessEnhancer? _loudness;
+
   List<String> _playlist = [];
   int _currentIndex = -1;
   // True while we're swapping the audio source for a manual track change.
@@ -84,6 +94,9 @@ class _MusicControlsState extends State<MusicControls>
 
   bool _showPlaylist = false;
   bool _showSpeedPanel = false;
+  // True while the first-open device scan is running (drives the sheet loader).
+  bool _scanning = false;
+  bool _scannedOnce = false;
 
   late AnimationController _discCtrl;
   late AnimationController _playlistCtrl;
@@ -92,7 +105,19 @@ class _MusicControlsState extends State<MusicControls>
   @override
   void initState() {
     super.initState();
-    _player = AudioPlayer();
+    // On Android, build the player with an equalizer + loudness pipeline so
+    // the Equalizer screen can actually shape the sound. Elsewhere it's plain.
+    if (Platform.isAndroid) {
+      _equalizer = AndroidEqualizer();
+      _loudness = AndroidLoudnessEnhancer();
+      _player = AudioPlayer(
+        audioPipeline: AudioPipeline(
+          androidAudioEffects: [_loudness!, _equalizer!],
+        ),
+      );
+    } else {
+      _player = AudioPlayer();
+    }
 
     _discCtrl = AnimationController(
       duration: const Duration(seconds: 15),
@@ -110,10 +135,66 @@ class _MusicControlsState extends State<MusicControls>
     _configSession();
     _loadFavorites();
     _listenPlayer();
+    if (Platform.isAndroid) _restoreEqualizer();
+
+    // Let the ambient now-playing bar drive this (single) mounted player.
+    playbackBus.onToggle = _togglePlayPause;
+    playbackBus.onNext = _next;
+    playbackBus.onPrev = _previous;
+    playbackBus.onSeekFraction = (f) {
+      final dur = _player.duration;
+      if (dur != null && dur > Duration.zero) {
+        _player.seek(dur * f.clamp(0.0, 1.0));
+      }
+    };
+    playbackBus.onPause = () => _player.pause();
+    playbackBus.currentPath = () =>
+        (_currentIndex >= 0 && _currentIndex < _playlist.length)
+            ? _playlist[_currentIndex]
+            : null;
+    playbackBus.currentPositionMs = () => _player.position.inMilliseconds;
+    playbackBus.isPlaying = () => _player.playing;
+  }
+
+  // Re-apply saved equalizer settings so they affect playback from launch,
+  // not only after the Equalizer screen is opened.
+  Future<void> _restoreEqualizer() async {
+    final eq = _equalizer;
+    if (eq == null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final enabled = prefs.getBool('eq_enabled') ?? false;
+      final params = await eq.parameters;
+      await eq.setEnabled(enabled);
+      await _loudness?.setEnabled(enabled);
+      final saved = prefs.getStringList('eq_gains');
+      final bass = prefs.getDouble('eq_bass') ?? 0;
+      final loudV = prefs.getDouble('eq_loud') ?? 0;
+      if (saved != null && saved.length == params.bands.length) {
+        for (var i = 0; i < params.bands.length; i++) {
+          final g = double.tryParse(saved[i]) ?? 0;
+          final extra = i == 0 ? bass * (params.maxDecibels * 0.8) : 0.0;
+          await params.bands[i].setGain(
+              (g + extra).clamp(params.minDecibels, params.maxDecibels));
+        }
+      }
+      await _loudness?.setTargetGain(loudV * 12);
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    // Only clear the bus if we're still the registered owner.
+    if (playbackBus.onToggle == _togglePlayPause) {
+      playbackBus.onToggle = null;
+      playbackBus.onNext = null;
+      playbackBus.onPrev = null;
+      playbackBus.onSeekFraction = null;
+      playbackBus.onPause = null;
+      playbackBus.currentPath = null;
+      playbackBus.currentPositionMs = null;
+      playbackBus.isPlaying = null;
+    }
     _sleepTimer?.cancel();
     _sleepTick?.cancel();
     _discCtrl.dispose();
@@ -169,7 +250,16 @@ class _MusicControlsState extends State<MusicControls>
       }
     });
 
-    _player.positionStream.listen((_) {
+    _player.positionStream.listen((pos) {
+      // Feed the ambient bar's slim progress indicator (0..1). This updates a
+      // standalone ValueNotifier so only that widget rebuilds, not the chat.
+      final dur = _player.duration;
+      if (dur != null && dur.inMilliseconds > 0) {
+        playProgressNotifier.value =
+            (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0);
+      } else {
+        playProgressNotifier.value = 0;
+      }
       if (mounted) setState(() {});
     });
     _player.durationStream.listen((_) {
@@ -291,6 +381,22 @@ class _MusicControlsState extends State<MusicControls>
     } else {
       _player.seek(Duration.zero);
     }
+  }
+
+  /// Mirror the current playlist to the global notifier so other features
+  /// (e.g. starting a live session from loaded songs) can read it.
+  void _publishPlaylist() {
+    playlistNotifier.value = List<String>.unmodifiable(_playlist);
+  }
+
+  /// Nudge the playback position by [seconds] (negative rewinds), clamped
+  /// to the current track's bounds.
+  void _seekBy(int seconds) {
+    final dur = _player.duration ?? Duration.zero;
+    var target = _player.position + Duration(seconds: seconds);
+    if (target < Duration.zero) target = Duration.zero;
+    if (dur > Duration.zero && target > dur) target = dur;
+    _player.seek(target);
   }
 
   void _cycleRepeat() {
@@ -424,6 +530,7 @@ class _MusicControlsState extends State<MusicControls>
     if (paths.isEmpty) return;
     final newPaths = paths.where((p) => !_playlist.contains(p)).toList();
     setState(() => _playlist = [..._playlist, ...newPaths]);
+    _publishPlaylist();
     _snack(
         'Added ${newPaths.length} track${newPaths.length == 1 ? '' : 's'}');
     if (!mounted) return;
@@ -431,6 +538,14 @@ class _MusicControlsState extends State<MusicControls>
   }
 
   Future<void> _pickAndroid() async {
+    await _scanIntoPlaylist();
+    if (!mounted || _playlist.isEmpty) return;
+    _openPlaylist();
+  }
+
+  /// Requests permission, scans the device for audio, and loads it into the
+  /// playlist. Does NOT open the sheet — callers decide when to show it.
+  Future<void> _scanIntoPlaylist() async {
     bool granted = await Permission.manageExternalStorage.isGranted ||
         await Permission.audio.isGranted;
     if (!granted) {
@@ -448,9 +563,9 @@ class _MusicControlsState extends State<MusicControls>
       return;
     }
     final paths = files.map((f) => f.path).toList();
-    setState(() => _playlist = paths);
     if (!mounted) return;
-    _openPlaylist();
+    setState(() => _playlist = paths);
+    _publishPlaylist();
   }
 
   Future<List<FileSystemEntity>> _scanAudio() async {
@@ -485,10 +600,63 @@ class _MusicControlsState extends State<MusicControls>
     _playlistCtrl.forward(from: 0);
   }
 
+  /// Unified Playlist action (the "Add" button folded into this). If songs are
+  /// already loaded it just opens the sheet; the first time on an empty list it
+  /// opens the sheet with a loader and scans the device (Android) or opens the
+  /// file picker (desktop/web).
+  Future<void> _openOrScanPlaylist() async {
+    if (_playlist.isNotEmpty) {
+      setState(() => _showPlaylist = true);
+      _playlistCtrl.forward(from: 0);
+      return;
+    }
+    if (!_isMobile) {
+      // Desktop/web: the file picker opens the sheet itself on success.
+      await _pickDesktop();
+      _scannedOnce = true;
+      return;
+    }
+    // Android first-open: show the sheet with a loading animation, then scan.
+    setState(() {
+      _showPlaylist = true;
+      _scanning = true;
+    });
+    _playlistCtrl.forward(from: 0);
+    try {
+      await _scanIntoPlaylist();
+    } finally {
+      _scannedOnce = true;
+      if (mounted) setState(() => _scanning = false);
+      // If the scan found nothing, close the empty sheet again.
+      if (mounted && _playlist.isEmpty) _closePlaylist();
+    }
+  }
+
   void _closePlaylist() {
     _playlistCtrl.reverse().then((_) {
       if (mounted) setState(() => _showPlaylist = false);
     });
+  }
+
+  void _openEqualizer() {
+    // Real EQ only works on Android — elsewhere just let the user know.
+    if (!Platform.isAndroid || _equalizer == null) {
+      showToast(
+        context,
+        'The equalizer works on the Android app — install Aluta on an Android device to use it.',
+        type: ToastType.info,
+        duration: const Duration(seconds: 3),
+      );
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EqualizerScreen(
+          equalizer: _equalizer,
+          loudness: _loudness,
+        ),
+      ),
+    );
   }
 
   void _toggleSpeedPanel() {
@@ -590,6 +758,7 @@ class _MusicControlsState extends State<MusicControls>
                   playlist: _playlist,
                   currentIndex: _currentIndex,
                   favorites: _favorites,
+                  loading: _scanning,
                   onPlay: (i) {
                     _closePlaylist();
                     _play(i);
@@ -602,6 +771,7 @@ class _MusicControlsState extends State<MusicControls>
                         _currentIndex = _playlist.length - 1;
                       }
                     });
+                    _publishPlaylist();
                   },
                   onFavorite: _toggleFavorite,
                   onReorder: (o, n) {
@@ -619,6 +789,7 @@ class _MusicControlsState extends State<MusicControls>
                         _currentIndex = _playlist.indexOf(playingPath);
                       }
                     });
+                    _publishPlaylist();
                   },
                   onAdd: _pickMusic,
                         ),
@@ -845,22 +1016,36 @@ class _MusicControlsState extends State<MusicControls>
 
             const SizedBox(height: 12),
 
-            // ── Play / Prev / Next ────────────────────────────────────
+            // ── Transport: shuffle · prev · −10 · play · +10 · next · repeat
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  _CtrlChip(
+                    icon: Icons.shuffle_rounded,
+                    active: _shuffle,
+                    activeColor: Colors.green,
+                    onTap: _toggleShuffle,
+                    tooltip: 'Shuffle',
+                  ),
+                  const SizedBox(width: 14),
                   _CtrlBtn(
                     icon: Icons.skip_previous_rounded,
-                    size: 36,
-                    color: hasTrack
-                        ? onSurface
-                        : onSurface.withAlpha(40),
+                    size: 32,
+                    color: hasTrack ? onSurface : onSurface.withAlpha(40),
                     onTap: hasTrack ? _previous : null,
                     tooltip: 'Previous',
                   ),
-                  const SizedBox(width: 24),
+                  const SizedBox(width: 8),
+                  _CtrlBtn(
+                    icon: Icons.replay_10_rounded,
+                    size: 28,
+                    color: hasTrack ? onSurface : onSurface.withAlpha(40),
+                    onTap: hasTrack ? () => _seekBy(-10) : null,
+                    tooltip: 'Back 10s',
+                  ),
+                  const SizedBox(width: 14),
                   GestureDetector(
                     onTap: _togglePlayPause,
                     child: AnimatedContainer(
@@ -895,28 +1080,23 @@ class _MusicControlsState extends State<MusicControls>
                             ),
                     ),
                   ),
-                  const SizedBox(width: 24),
+                  const SizedBox(width: 14),
+                  _CtrlBtn(
+                    icon: Icons.forward_10_rounded,
+                    size: 28,
+                    color: hasTrack ? onSurface : onSurface.withAlpha(40),
+                    onTap: hasTrack ? () => _seekBy(10) : null,
+                    tooltip: 'Forward 10s',
+                  ),
+                  const SizedBox(width: 8),
                   _CtrlBtn(
                     icon: Icons.skip_next_rounded,
-                    size: 36,
-                    color: hasTrack
-                        ? onSurface
-                        : onSurface.withAlpha(40),
+                    size: 32,
+                    color: hasTrack ? onSurface : onSurface.withAlpha(40),
                     onTap: hasTrack ? _next : null,
                     tooltip: 'Next',
                   ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // ── Secondary controls ────────────────────────────────────
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
+                  const SizedBox(width: 14),
                   _CtrlChip(
                     icon: _repeatOne
                         ? Icons.repeat_one_rounded
@@ -930,63 +1110,54 @@ class _MusicControlsState extends State<MusicControls>
                             ? 'Repeat All'
                             : 'Repeat Off',
                   ),
-                  const SizedBox(width: 12),
-                  _CtrlChip(
-                    icon: Icons.shuffle_rounded,
-                    active: _shuffle,
-                    activeColor: Colors.green,
-                    onTap: _toggleShuffle,
-                    tooltip: 'Shuffle',
-                  ),
-                  const SizedBox(width: 12),
-                  _CtrlChip(
-                    icon: Icons.folder_open_rounded,
-                    active: false,
-                    activeColor: accent,
-                    onTap: _pickMusic,
-                    tooltip: 'Add music',
-                  ),
-                  const SizedBox(width: 12),
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      _CtrlChip(
-                        icon: Icons.queue_music_rounded,
-                        active: _showPlaylist || _playlist.isNotEmpty,
-                        activeColor: accent,
-                        onTap: _openPlaylist,
-                        tooltip: 'Playlist',
-                      ),
-                      if (_playlist.isNotEmpty)
-                        Positioned(
-                          top: -4,
-                          right: -4,
-                          child: Container(
-                            padding: const EdgeInsets.all(3),
-                            decoration: BoxDecoration(
-                                color: accent,
-                                shape: BoxShape.circle),
-                            child: Text('${_playlist.length}',
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 8,
-                                    fontWeight: FontWeight.bold)),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(width: 12),
-                  _CtrlChip(
-                    icon: Icons.timer_outlined,
-                    active: _sleepRemaining != null,
-                    activeColor: Colors.indigo,
-                    onTap: _showSleepTimerDialog,
-                    tooltip: _sleepRemaining != null
-                        ? _fmtSleep(_sleepRemaining!)
-                        : 'Sleep Timer',
-                  ),
                 ],
               ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // ── Utilities ─────────────────────────────────────────────
+            // Shuffle & repeat now live in the transport row, so this row
+            // is reserved for the less-frequent library actions. Each one
+            // is a labelled tile, evenly spaced to breathe across the width.
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _utility(
+                  scheme,
+                  onSurface,
+                  // "Add" folded in here: first tap scans the device, later
+                  // taps just open the playlist.
+                  icon: Icons.queue_music_rounded,
+                  label: 'Playlist',
+                  color: accent,
+                  active: _showPlaylist || _playlist.isNotEmpty,
+                  badge: _playlist.isNotEmpty ? '${_playlist.length}' : null,
+                  onTap: _openOrScanPlaylist,
+                ),
+                _utility(
+                  scheme,
+                  onSurface,
+                  // Snooze "Zᶻ" glyph — deliberately distinct from the crescent
+                  // moon used by the dark-theme toggle in the app header.
+                  icon: Icons.snooze_rounded,
+                  label: 'Sleep',
+                  color: Colors.indigo,
+                  active: _sleepRemaining != null,
+                  badge: _sleepRemaining != null
+                      ? _fmtSleep(_sleepRemaining!)
+                      : null,
+                  onTap: _showSleepTimerDialog,
+                ),
+                _utility(
+                  scheme,
+                  onSurface,
+                  icon: Icons.graphic_eq_rounded,
+                  label: 'Equalizer',
+                  color: accent,
+                  onTap: _openEqualizer,
+                ),
+              ],
             ),
 
             const SizedBox(height: 18),
@@ -1167,19 +1338,91 @@ class _MusicControlsState extends State<MusicControls>
               ],
             ),
 
-            if (!_isMobile) ...[
-              const SizedBox(height: 10),
-              Text(
-                'Space: play/pause  .  arrows: skip / volume',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 9.5, color: onSurface.withAlpha(70)),
-              ),
-            ],
           ],
         ),
       );
     });
+  }
+
+  /// A labelled utility tile — icon in a soft rounded chip with a caption
+  /// underneath, and an optional corner badge (playlist count / sleep time).
+  Widget _utility(
+    ColorScheme scheme,
+    Color onSurface, {
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+    bool active = false,
+    String? badge,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: active
+                      ? color.withAlpha(38)
+                      : scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: active
+                        ? color.withAlpha(150)
+                        : scheme.outlineVariant.withAlpha(70),
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  size: 21,
+                  color: active ? color : onSurface.withAlpha(190),
+                ),
+              ),
+              if (badge != null)
+                Positioned(
+                  top: -5,
+                  right: -5,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(color: scheme.surface, width: 1.5),
+                    ),
+                    child: Text(
+                      badge,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.bold,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w500,
+              color: active ? color : onSurface.withAlpha(160),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1387,6 +1630,7 @@ class _PlaylistOverlay extends StatefulWidget {
   final void Function(int, int) onReorder;
   final VoidCallback onClose;
   final VoidCallback onAdd;
+  final bool loading;
 
   const _PlaylistOverlay({
     required this.playlist,
@@ -1398,6 +1642,7 @@ class _PlaylistOverlay extends StatefulWidget {
     required this.onReorder,
     required this.onClose,
     required this.onAdd,
+    this.loading = false,
   });
 
   @override
@@ -1545,14 +1790,27 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
       ),
       child: Column(
         children: [
-          // Grab handle
-          Container(
-            margin: const EdgeInsets.only(top: 8, bottom: 2),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: scheme.onSurfaceVariant.withAlpha(80),
-              borderRadius: BorderRadius.circular(2),
+          // Grab handle — tap OR slide down to dismiss the sheet.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onClose,
+            onVerticalDragEnd: (details) {
+              // A downward flick (or drag) collapses the panel.
+              if ((details.primaryVelocity ?? 0) > 0) widget.onClose();
+            },
+            child: Container(
+              // Generous padding gives the thin bar a comfortable hit area.
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              width: double.infinity,
+              alignment: Alignment.center,
+              child: Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: scheme.onSurfaceVariant.withAlpha(90),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
             ),
           ),
           // Header
@@ -1608,16 +1866,22 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
                     ),
                   ),
                 ),
-                // Close / minimize arrow
+                // Push the close control to the far edge, away from the
+                // add/favourite actions.
+                const Spacer(),
+                // Close / collapse — down chevron matches the slide-down gesture
                 GestureDetector(
                   onTap: widget.onClose,
                   child: Tooltip(
                     message: 'Close',
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 4),
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest.withAlpha(140),
+                        shape: BoxShape.circle,
+                      ),
                       child: Icon(
-                          Icons.keyboard_arrow_up_rounded,
+                          Icons.keyboard_arrow_down_rounded,
                           size: 22,
                           color: scheme.onSurfaceVariant),
                     ),
@@ -1651,15 +1915,36 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
 
           // Track list
           Expanded(
-            child: displayed.isEmpty
+            child: widget.loading && widget.playlist.isEmpty
                 ? Center(
-                    child: Text(
-                      _favOnly ? 'No favorites yet' : 'No tracks match',
-                      style:
-                          TextStyle(color: scheme.onSurfaceVariant),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 30,
+                          height: 30,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.6,
+                            color: scheme.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          'Scanning your music…',
+                          style: TextStyle(
+                              color: scheme.onSurfaceVariant, fontSize: 13),
+                        ),
+                      ],
                     ),
                   )
-                : ListView.builder(
+                : displayed.isEmpty
+                    ? Center(
+                        child: Text(
+                          _favOnly ? 'No favorites yet' : 'No tracks match',
+                          style: TextStyle(color: scheme.onSurfaceVariant),
+                        ),
+                      )
+                    : ListView.builder(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 6, vertical: 4),
                     itemCount: displayed.length,

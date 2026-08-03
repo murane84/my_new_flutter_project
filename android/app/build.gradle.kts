@@ -16,7 +16,9 @@ android {
         checkReleaseBuilds = false
     }
 
-    // ✅ Updated to satisfy plugin requirements
+    // Build against the stable SDK 36 (installed). permission_handler is
+    //    pinned in pubspec.yaml to a version that compiles against 36, so we
+    //    don't need the preview android-37 platform.
     compileSdk = 36
     ndkVersion = "28.2.13676358"
 

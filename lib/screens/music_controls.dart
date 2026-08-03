@@ -1394,14 +1394,27 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
         .toList();
 
     return Container(
-      color: scheme.surface,
+      margin: const EdgeInsets.fromLTRB(8, 6, 8, 10),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: scheme.outlineVariant.withAlpha(70)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(45),
+            blurRadius: 22,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
       child: Column(
         children: [
           // Header
           Container(
-            padding: const EdgeInsets.fromLTRB(16, 10, 8, 8),
+            padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
             decoration: BoxDecoration(
-              color: scheme.surface,
+              color: scheme.surfaceContainerHighest.withAlpha(120),
               border: Border(
                   bottom: BorderSide(
                       color: scheme.outlineVariant.withAlpha(80))),
@@ -1472,13 +1485,15 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
           // Search bar
           Padding(
             padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             child: TextField(
               onChanged: (v) => setState(() => _search = v),
               decoration: InputDecoration(
                 hintText: 'Search tracks...',
                 prefixIcon: const Icon(Icons.search, size: 18),
                 isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10),
                 filled: true,
                 fillColor: scheme.surfaceContainerHighest,
                 border: OutlineInputBorder(
@@ -1500,19 +1515,22 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
                     ),
                   )
                 : ReorderableListView.builder(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 4),
+                    // Tiles are NOT draggable by themselves — reordering only
+                    // happens by grabbing the handle. This stops a tap from
+                    // being read as a drag (which played the wrong song).
+                    buildDefaultDragHandles: false,
                     itemCount: displayed.length,
                     onReorder: (o, n) {
-                      final realO = widget.playlist
-                          .indexOf(displayed[o].value);
                       final nn = n > o ? n - 1 : n;
-                      final realN = widget.playlist
-                          .indexOf(displayed[nn].value);
-                      widget.onReorder(realO, realN);
+                      widget.onReorder(
+                          displayed[o].key, displayed[nn].key);
                     },
                     itemBuilder: (ctx, i) {
                       final entry = displayed[i];
-                      final realIdx =
-                          widget.playlist.indexOf(entry.value);
+                      // entry.key IS the real index in the full playlist.
+                      final realIdx = entry.key;
                       final isNow = realIdx == widget.currentIndex;
                       final isFav =
                           widget.favorites.contains(entry.value);
@@ -1532,15 +1550,19 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
                         child: ListTile(
                           key: ValueKey('tile_$i'),
                           dense: true,
+                          visualDensity:
+                              const VisualDensity(vertical: -3),
+                          minVerticalPadding: 0,
+                          horizontalTitleGap: 10,
                           selected: isNow,
                           selectedTileColor: scheme.primary.withAlpha(22),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                           contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 2),
+                              horizontal: 10, vertical: 0),
                           leading: CircleAvatar(
-                            radius: 17,
+                            radius: 15,
                             backgroundColor: isNow
                                 ? scheme.primary
                                 : scheme.surfaceContainerHighest,
@@ -1595,8 +1617,17 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
                                       : scheme.onSurfaceVariant,
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              const Icon(Icons.drag_handle, size: 18),
+                              const SizedBox(width: 6),
+                              // Explicit reorder handle — the ONLY way to drag.
+                              ReorderableDragStartListener(
+                                index: i,
+                                child: Icon(
+                                  Icons.drag_indicator,
+                                  size: 18,
+                                  color: scheme.onSurfaceVariant
+                                      .withAlpha(140),
+                                ),
+                              ),
                             ],
                             ), // Row
                           ), // SizedBox trailing

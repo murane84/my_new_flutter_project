@@ -318,16 +318,8 @@ class LoginPageState extends State<LoginPage> {
                                       const RegisterPage(),
                                   transitionsBuilder:
                                       (ctx, anim, sanim, child) =>
-                                          SlideTransition(
-                                            position: Tween<Offset>(
-                                              begin: const Offset(1, 0),
-                                              end: Offset.zero,
-                                            ).animate(CurvedAnimation(
-                                              parent: anim,
-                                              curve: Curves.easeOutCubic,
-                                            )),
-                                            child: child,
-                                          ),
+                                          FadeTransition(
+                                              opacity: anim, child: child),
                                   transitionDuration:
                                       const Duration(milliseconds: 300),
                                 ),

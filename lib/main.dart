@@ -122,7 +122,11 @@ class MyApp extends StatelessWidget {
           theme: _buildTheme(lightScheme),
           darkTheme: _buildTheme(darkScheme),
           themeMode: themeProvider.themeMode,
-          initialRoute: SplashScreen.routeName,
+          // Use `home:` (not initialRoute) so the root stack is a single route.
+          // With initialRoute: '/splash', Flutter also generates a route for '/'
+          // (the unknown-route "Page not found") and puts it underneath — which
+          // is what a back-swipe from Home was revealing.
+          home: const SplashScreen(),
           onGenerateRoute: (settings) {
             switch (settings.name) {
               case SplashScreen.routeName:

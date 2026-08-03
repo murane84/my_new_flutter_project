@@ -562,24 +562,31 @@ class _MusicControlsState extends State<MusicControls>
           _buildMain(context, scheme, isDark),
 
           // ── Playlist sheet — slides UP from the bottom, half-height so the
-          //    spinning disc above stays visible ──────────────────────────
+          //    spinning disc stays visible, and WIDTH-CAPPED + centred so it
+          //    doesn't span the whole screen on desktop/tablet. ────────────
           if (_showPlaylist)
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: FractionallySizedBox(
-                heightFactor: 0.62,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 1),
-                    end: Offset.zero,
-                  ).animate(CurvedAnimation(
-                    parent: _playlistCtrl,
-                    curve: Curves.easeOutCubic,
-                    reverseCurve: Curves.easeInCubic,
-                  )),
-                  child: FadeTransition(
-                    opacity: _playlistCtrl,
-                    child: _PlaylistOverlay(
+            LayoutBuilder(
+              builder: (ctx, cons) {
+                final sheetW =
+                    cons.maxWidth < 520 ? cons.maxWidth : 520.0;
+                final sheetH = cons.maxHeight * 0.62;
+                return Align(
+                  alignment: Alignment.bottomCenter,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, 1),
+                      end: Offset.zero,
+                    ).animate(CurvedAnimation(
+                      parent: _playlistCtrl,
+                      curve: Curves.easeOutCubic,
+                      reverseCurve: Curves.easeInCubic,
+                    )),
+                    child: FadeTransition(
+                      opacity: _playlistCtrl,
+                      child: SizedBox(
+                        width: sheetW,
+                        height: sheetH,
+                        child: _PlaylistOverlay(
                   playlist: _playlist,
                   currentIndex: _currentIndex,
                   favorites: _favorites,
@@ -614,10 +621,12 @@ class _MusicControlsState extends State<MusicControls>
                     });
                   },
                   onAdd: _pickMusic,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
 
           // ── Speed popup — scales from the speed button (bottom-right) ──
@@ -1520,21 +1529,17 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
         .toList();
 
     return Container(
+      margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: scheme.surface,
-        borderRadius:
-            const BorderRadius.vertical(top: Radius.circular(22)),
-        border: Border(
-          top: BorderSide(color: scheme.outlineVariant.withAlpha(70)),
-          left: BorderSide(color: scheme.outlineVariant.withAlpha(45)),
-          right: BorderSide(color: scheme.outlineVariant.withAlpha(45)),
-        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: scheme.outlineVariant.withAlpha(60)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(55),
+            color: Colors.black.withAlpha(50),
             blurRadius: 26,
-            offset: const Offset(0, -6),
+            offset: const Offset(0, 8),
           ),
         ],
       ),

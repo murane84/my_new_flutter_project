@@ -22,11 +22,12 @@ import 'live_session_screen.dart';
 import 'token_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
+import '../utils/time_utils.dart';
 
 String _formatFriendTimestamp(String raw) {
   if (raw.isEmpty) return '';
   try {
-    final dt = DateTime.parse(raw).toLocal();
+    final dt = parseServerTime(raw);
     final now = DateTime.now();
     final diff = now.difference(dt);
     if (diff.inMinutes < 1) return 'now';

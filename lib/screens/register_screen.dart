@@ -20,15 +20,43 @@ class RegisterPageState extends State<RegisterPage> {
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _obscureConfirm = true;
+
+  // Common disposable / throw-away email domains blocked at sign-up.
+  static const Set<String> _disposableDomains = {
+    'mailinator.com', 'guerrillamail.com', '10minutemail.com', 'tempmail.com',
+    'temp-mail.org', 'yopmail.com', 'trashmail.com', 'sharklasers.com',
+    'getnada.com', 'dispostable.com', 'maildrop.cc', 'fakeinbox.com',
+    'throwawaymail.com', 'mailnesia.com', 'tempail.com', 'moakt.com',
+  };
 
   @override
   void dispose() {
     _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmController.dispose();
     super.dispose();
+  }
+
+  // Eligibility scan: valid format, real-looking domain, not disposable.
+  String? _emailError(String value) {
+    final email = value.trim().toLowerCase();
+    if (email.isEmpty) return 'Enter your email';
+    if (!EmailValidator.validate(email)) {
+      return 'Enter a valid email address';
+    }
+    final domain = email.split('@').last;
+    if (!domain.contains('.') || domain.split('.').last.length < 2) {
+      return 'That email domain looks invalid';
+    }
+    if (_disposableDomains.contains(domain)) {
+      return 'Please use a permanent email address';
+    }
+    return null;
   }
 
   bool _isPasswordStrong(String password) =>
@@ -197,16 +225,7 @@ class RegisterPageState extends State<RegisterPage> {
                                   label: 'Email',
                                   icon: Icons.email_outlined,
                                   keyboardType: TextInputType.emailAddress,
-                                  validator: (v) {
-                                    if (v == null || v.isEmpty) {
-                                      return 'Enter your email';
-                                    }
-                                    if (!EmailValidator.validate(
-                                        v.trim())) {
-                                      return 'Enter a valid email address';
-                                    }
-                                    return null;
-                                  },
+                                  validator: (v) => _emailError(v ?? ''),
                                 ),
                                 const SizedBox(height: 14),
                                 _buildField(
@@ -246,6 +265,34 @@ class RegisterPageState extends State<RegisterPage> {
                                       fontSize: 11,
                                     ),
                                   ),
+                                ),
+                                const SizedBox(height: 14),
+                                // Confirm password
+                                _buildField(
+                                  controller: _confirmController,
+                                  label: 'Confirm Password',
+                                  icon: Icons.lock_reset_outlined,
+                                  obscure: _obscureConfirm,
+                                  suffix: IconButton(
+                                    icon: Icon(
+                                      _obscureConfirm
+                                          ? Icons.visibility_off
+                                          : Icons.visibility,
+                                      color: Colors.white70,
+                                    ),
+                                    onPressed: () => setState(
+                                      () => _obscureConfirm = !_obscureConfirm,
+                                    ),
+                                  ),
+                                  validator: (v) {
+                                    if (v == null || v.isEmpty) {
+                                      return 'Confirm your password';
+                                    }
+                                    if (v != _passwordController.text) {
+                                      return 'Passwords do not match';
+                                    }
+                                    return null;
+                                  },
                                 ),
                                 const SizedBox(height: 24),
 

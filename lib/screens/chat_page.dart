@@ -12,18 +12,18 @@ import 'token_helper.dart';
 import 'websocket_manager.dart';
 import '../utils/toast_helper.dart';
 import '../utils/connection_status.dart';
+import '../utils/time_utils.dart';
 import 'live_session_screen.dart';
 
 // ─── Timestamp helpers ───────────────────────────────────────────────────────
 
-String _timeOnly(String iso) =>
-    DateFormat('h:mm a').format(DateTime.parse(iso).toLocal());
+String _timeOnly(String iso) => localTimeOnly(iso);
 
 /// Returns the date label for a separator.
 /// Uses CALENDAR day comparison (not 24-hour duration) so "Today" correctly
 /// flips to "Yesterday" at midnight, not 24 hours later.
 String _dateSeparator(String iso) {
-  final dt = DateTime.parse(iso).toLocal();
+  final dt = parseServerTime(iso);
   final now = DateTime.now();
   // Strip to date-only for accurate calendar comparison
   final today = DateTime(now.year, now.month, now.day);
@@ -38,8 +38,8 @@ String _dateSeparator(String iso) {
 }
 
 bool _sameDay(String a, String b) {
-  final da = DateTime.parse(a).toLocal();
-  final db = DateTime.parse(b).toLocal();
+  final da = parseServerTime(a);
+  final db = parseServerTime(b);
   return da.year == db.year && da.month == db.month && da.day == db.day;
 }
 
@@ -1502,7 +1502,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                       : _isFriendOnline
                           ? 'online'
                           : _lastSeen.isNotEmpty
-                              ? 'last seen $_lastSeen'
+                              ? 'last seen ${formatLastSeen(_lastSeen)}'
                               : 'offline',
                   style: TextStyle(
                     fontSize: 11,

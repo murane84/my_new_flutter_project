@@ -1,5 +1,6 @@
 from sqlalchemy import (
-    Column, DateTime, Integer, String, Text, TIMESTAMP, ForeignKey, Boolean, UniqueConstraint
+    Column, DateTime, Integer, String, Text, TIMESTAMP, ForeignKey, Boolean,
+    UniqueConstraint, LargeBinary
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -46,11 +47,21 @@ class Message(Base):
     id = Column(Integer, primary_key=True, index=True)
     sender_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     receiver_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    content = Column(Text, nullable=False)
+    # Nullable now: media messages may carry an empty (or caption) content.
+    content = Column(Text, nullable=True, default="")
     timestamp = Column(DateTime(timezone=True), default=func.now())
     is_read = Column(Boolean, default=False)
     read_at = Column(DateTime(timezone=True), nullable=True)
     delivered = Column(Boolean, default=False)
+
+    # ── Media attachment (image / file / audio voice note) ──────────────────
+    # message_type: "text" | "image" | "file" | "audio"
+    message_type = Column(String, default="text", nullable=True)
+    media_url = Column(String, nullable=True)      # e.g. /attachments/<id>
+    media_name = Column(String, nullable=True)     # original filename
+    media_mime = Column(String, nullable=True)     # content type
+    media_size = Column(Integer, nullable=True)    # bytes
+    media_duration = Column(Integer, nullable=True)  # audio length in ms
 
     # New fields for visibility
     visible_to_sender = Column(Boolean, default=True)
@@ -113,3 +124,20 @@ class Friend(Base):
 
     def __repr__(self):
         return f"<Friend(user_id={self.user_id}, friend_id={self.friend_id})>"
+
+
+class MediaAsset(Base):
+    """A chat attachment stored directly in Postgres (survives Railway
+    redeploys, no external storage needed). Referenced by Message.media_url as
+    /attachments/<id> and streamed back by the attachments router."""
+    __tablename__ = "media_assets"
+
+    id = Column(String, primary_key=True, index=True)   # uuid hex
+    data = Column(LargeBinary, nullable=False)          # raw bytes
+    mime = Column(String, nullable=True)
+    name = Column(String, nullable=True)
+    size = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<MediaAsset(id={self.id}, mime='{self.mime}', size={self.size})>"

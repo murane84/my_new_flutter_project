@@ -8,25 +8,6 @@ from models import Message, User, Friend, MuteStatus, BlockStatus
 from schemas import MessageCreate, FriendWithUnread
 
 
-# ------------------ Presence helper ------------------
-# A user counts as "online" only if their is_online flag is set AND they've been
-# seen recently. Active clients ping every ~30s (which refreshes last_seen), so a
-# user who logs out, closes, crashes, or loses network is reported offline within
-# this window — presence no longer sticks on a stale "true".
-ONLINE_STALE_SECONDS = 75
-
-
-def is_effectively_online(user) -> bool:
-    if user is None or not getattr(user, "is_online", False):
-        return False
-    ls = getattr(user, "last_seen", None)
-    if ls is None:
-        return False
-    if ls.tzinfo is None:
-        ls = ls.replace(tzinfo=timezone.utc)
-    return (datetime.now(timezone.utc) - ls).total_seconds() < ONLINE_STALE_SECONDS
-
-
 # ------------------ User Status ------------------
 def update_user_status(db: Session, user_id: int, is_online: bool):
     user = db.query(User).filter(User.id == user_id).first()
@@ -44,7 +25,13 @@ def create_message(db: Session, sender_id: int, message: MessageCreate) -> Messa
     db_message = Message(
         sender_id=sender_id,
         receiver_id=message.receiver_id,
-        content=message.content,
+        content=message.content or "",
+        message_type=(message.message_type or "text"),
+        media_url=message.media_url,
+        media_name=message.media_name,
+        media_mime=message.media_mime,
+        media_size=message.media_size,
+        media_duration=message.media_duration,
         timestamp=datetime.now(timezone.utc),
         is_read=False,
         delivered=False,
@@ -243,7 +230,7 @@ def get_friends_with_unread_counts(db: Session, user_id: int):
             FriendWithUnread(
                 id=friend.id,
                 username=friend.username,
-                is_online=is_effectively_online(friend),
+                is_online=friend.is_online,
                 last_timestamp=last_message.timestamp.strftime('%Y-%m-%d %H:%M') if last_message else None,
                 last_message=last_message.content if last_message else "",
                 unread_count=unread_count,
@@ -327,45 +314,3 @@ def toggle_block(db: Session, user_id: int, blocked_user_id: int) -> bool:
 def get_blocked_friends(db: Session, user_id: int):
     blocked = db.query(BlockStatus).filter(BlockStatus.user_id == user_id).all()
     return db.query(User).filter(User.id.in_([b.blocked_user_id for b in blocked])).all()
-
-
-def get_blocked_friends_count(db: Session, user_id: int) -> int:
-    return db.query(BlockStatus).filter(BlockStatus.user_id == user_id).count()
-
-
-def get_blocked_friends_status(db: Session, user_id: int):
-    blocked = get_blocked_friends(db, user_id)
-    return [{"user_id": u.id, "username": u.username, "blocked": True} for u in blocked]
-
-
-# ------------------ Muted lists ------------------
-def get_muted_friends(db: Session, user_id: int):
-    muted = db.query(MuteStatus).filter(MuteStatus.user_id == user_id).all()
-    return db.query(User).filter(User.id.in_([m.muted_user_id for m in muted])).all()
-
-
-def get_muted_friends_count(db: Session, user_id: int) -> int:
-    return db.query(MuteStatus).filter(MuteStatus.user_id == user_id).count()
-
-
-# ------------------ Friend status helpers ------------------
-def get_friends_online_status(db: Session, user_id: int):
-    friends = get_all_users(db, user_id)
-    return [{"user_id": f.id, "username": f.username, "is_online": f.is_online} for f in friends]
-
-
-def get_friends_offline_status(db: Session, user_id: int):
-    friends = get_all_users(db, user_id)
-    return [
-        {"user_id": f.id, "username": f.username, "is_online": f.is_online}
-        for f in friends
-        if not f.is_online
-    ]
-
-
-def get_friends_last_seen_count(db: Session, user_id: int) -> int:
-    """Number of other users that have a recorded last_seen timestamp."""
-    return db.query(User).filter(
-        User.id != user_id,
-        User.last_seen.isnot(None),
-    ).count()

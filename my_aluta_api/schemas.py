@@ -33,17 +33,30 @@ class UserStatus(BaseModel):
 
 class MessageCreate(BaseModel):
     receiver_id: int
-    content: str
+    content: Optional[str] = ""
+    # Attachment fields — omitted for plain text messages.
+    message_type: Optional[str] = "text"   # text | image | file | audio
+    media_url: Optional[str] = None
+    media_name: Optional[str] = None
+    media_mime: Optional[str] = None
+    media_size: Optional[int] = None
+    media_duration: Optional[int] = None
 
 
 class Message(BaseModel):
     id: int
     sender_id: int
     receiver_id: int
-    content: str = Field(..., min_length=1)
+    content: Optional[str] = ""
     timestamp: datetime
     is_read: bool
     delivered: bool
+    message_type: Optional[str] = "text"
+    media_url: Optional[str] = None
+    media_name: Optional[str] = None
+    media_mime: Optional[str] = None
+    media_size: Optional[int] = None
+    media_duration: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -53,10 +66,16 @@ class MessageWithSender(BaseModel):
     sender_id: int
     sender: UserOut  # The sender is now a full UserOut object
     receiver_id: int
-    content: str
+    content: Optional[str] = ""
     timestamp: datetime
     is_read: bool
     delivered: bool
+    message_type: Optional[str] = "text"
+    media_url: Optional[str] = None
+    media_name: Optional[str] = None
+    media_mime: Optional[str] = None
+    media_size: Optional[int] = None
+    media_duration: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 

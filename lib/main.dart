@@ -10,11 +10,20 @@ import 'screens/auth_page.dart';
 import 'screens/friends_list_screen.dart';
 import 'screens/chat_page.dart';
 import 'screens/music_controls.dart';
+import 'services/audio_handler.dart';
+import 'services/notif_service.dart';
+import 'services/metadata_overrides.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Media session (car / Bluetooth / lock-screen controls + a foreground
+  // service that keeps the app alive & online while music plays). Guarded so a
+  // failure never blocks launch.
+  await initAudioService();
+  await initNotifications();
+  await metadataStore.load();
   runApp(
     ChangeNotifierProvider(
       create: (_) => ThemeProvider(),
@@ -99,6 +108,36 @@ class MyApp extends StatelessWidget {
         color: scheme.inverseSurface,
         elevation: 0,
       ),
+      // One card language for every AlertDialog in the app: rounded, on-surface,
+      // soft-bordered, with brand-weighted title/body text.
+      dialogTheme: DialogThemeData(
+        backgroundColor: scheme.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 14,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: scheme.outlineVariant.withAlpha(70)),
+        ),
+        insetPadding:
+            const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        titleTextStyle: TextStyle(
+          color: scheme.onSurface,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+        ),
+        contentTextStyle: TextStyle(
+          color: scheme.onSurface.withAlpha(225),
+          fontSize: 14,
+          height: 1.45,
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
     );
   }
 
@@ -106,13 +145,56 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<ThemeProvider>(
       builder: (context, themeProvider, child) {
+        // Deliberate red-and-black brand palette (logo is red + black). We start
+        // from a seed for harmonised secondary/tertiary tones, then override the
+        // primary + surfaces so light mode reads crisp and vivid instead of the
+        // washed-out pink/maroon that Material's default tonal mapping produces.
         final lightScheme = ColorScheme.fromSeed(
-          seedColor: Colors.red,
+          seedColor: const Color(0xFFD90429),
           brightness: Brightness.light,
+        ).copyWith(
+          primary: const Color(0xFFD90429), // vivid crimson (brand red)
+          onPrimary: Colors.white,
+          primaryContainer: const Color(0xFFFFDAD7),
+          onPrimaryContainer: const Color(0xFF40000A),
+          secondary: const Color(0xFF201A1B), // near-black accent
+          onSecondary: Colors.white,
+          secondaryContainer: const Color(0xFFFFE1DE),
+          onSecondaryContainer: const Color(0xFF2A1416),
+          // Clean, near-neutral warm surfaces — kills the lavender/pink cast.
+          surface: const Color(0xFFFFFBFB),
+          onSurface: const Color(0xFF1A1416),
+          surfaceContainerLowest: Colors.white,
+          surfaceContainerLow: const Color(0xFFFBF3F3),
+          surfaceContainer: const Color(0xFFF6EDED),
+          surfaceContainerHigh: const Color(0xFFF0E7E7),
+          surfaceContainerHighest: const Color(0xFFEAE1E1),
+          onSurfaceVariant: const Color(0xFF4E4547),
+          outline: const Color(0xFF847173),
+          outlineVariant: const Color(0xFFD8C9CA),
+          inverseSurface: const Color(0xFF201A1B), // near-black footer
+          onInverseSurface: const Color(0xFFFBEEEE),
         );
         final darkScheme = ColorScheme.fromSeed(
-          seedColor: Colors.red,
+          seedColor: const Color(0xFFD90429),
           brightness: Brightness.dark,
+        ).copyWith(
+          primary: const Color(0xFFFF5A5F), // punchy red that pops on black
+          onPrimary: const Color(0xFF3A0007),
+          primaryContainer: const Color(0xFF8E1420),
+          onPrimaryContainer: const Color(0xFFFFDAD7),
+          secondary: const Color(0xFFE7BDBD),
+          // True near-black surfaces so the red accents spark.
+          surface: const Color(0xFF141011),
+          onSurface: const Color(0xFFF1E4E4),
+          surfaceContainerLowest: const Color(0xFF0E0B0C),
+          surfaceContainerLow: const Color(0xFF1B1617),
+          surfaceContainer: const Color(0xFF201A1B),
+          surfaceContainerHigh: const Color(0xFF2B2324),
+          surfaceContainerHighest: const Color(0xFF362C2E),
+          onSurfaceVariant: const Color(0xFFD6C4C5),
+          outline: const Color(0xFF9E8E8F),
+          outlineVariant: const Color(0xFF4E4344),
         );
 
         return MaterialApp(

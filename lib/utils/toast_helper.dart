@@ -98,14 +98,16 @@ class _ToastOverlayState extends State<_ToastOverlay>
     }
   }
 
-  IconData get _icon {
+  // Only real errors get an icon (the exclamation). Informational and success
+  // notices — "Back online", "Added to playlist", etc. — show the message text
+  // alone inside the styled box; no icon, so they don't grab negative attention.
+  IconData? get _icon {
     switch (widget.type) {
       case ToastType.error:
         return Icons.error_outline_rounded;
       case ToastType.success:
-        return Icons.check_circle_outline_rounded;
       case ToastType.info:
-        return Icons.info_outline_rounded;
+        return null;
     }
   }
 
@@ -176,8 +178,10 @@ class _ToastOverlayState extends State<_ToastOverlay>
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
-                    Icon(_icon, color: _accent, size: 19),
-                    const SizedBox(width: 10),
+                    if (_icon != null) ...[
+                      Icon(_icon, color: _accent, size: 19),
+                      const SizedBox(width: 10),
+                    ],
                     Flexible(
                       child: Text(
                         widget.message,

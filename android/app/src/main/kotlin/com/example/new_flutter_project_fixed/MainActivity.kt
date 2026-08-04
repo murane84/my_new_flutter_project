@@ -1,5 +1,7 @@
 package com.example.new_flutter_project_fixed
 
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 
-class MainActivity : FlutterActivity()
+// Extends AudioServiceActivity (not FlutterActivity) so audio_service can
+// receive hardware media-button events (car Bluetooth, steering wheel, headset).
+class MainActivity : AudioServiceActivity()

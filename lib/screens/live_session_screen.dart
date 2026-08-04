@@ -7,6 +7,7 @@ import 'package:just_audio/just_audio.dart';
 import '../services/live_session_service.dart';
 import 'home_page.dart' show liveSessionNotifier, playbackBus, playlistNotifier;
 import '../utils/file_bytes.dart';
+import '../utils/marquee_text.dart';
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
 /// Presented with `showDialog(...)` so it floats over the chat instead of
@@ -145,9 +146,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
       _c.onEvent = _onEvent;
       _c.onEnded = _onEnded;
       _c.onError = (e) => _snack('Connection error: $e');
-      _c.onQueueChanged = () {
-        if (mounted) setState(() {});
-      };
+      _c.onQueueChanged = _syncFromQueue;
       _ready = true;
       _status = _isHost
           ? 'Sharing with ${widget.peerName}'
@@ -160,17 +159,17 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     // listener the moment they join).
     playbackBus.onPause?.call();
 
-    // Broadcast that a live co-listening session is active so ambient UI
-    // (the persistent banner / bars) can reflect it.
-    liveSessionNotifier.start(peer: widget.peerName, asHost: _isHost);
     _c = LiveSessionController(
       onEvent: _onEvent,
       onEnded: _onEnded,
       onError: (e) => _snack('Connection error: $e'),
     );
-    _c.onQueueChanged = () {
-      if (mounted) setState(() {});
-    };
+    _c.onQueueChanged = _syncFromQueue;
+    // Register the active session BEFORE announcing it. The music panel listens
+    // for the announcement and immediately reads activeLiveSession.controller to
+    // subscribe to the live player's play/pause stream — if we announced first,
+    // that read would be null and the now-playing bar would never learn the
+    // live playing state (its play/pause icon would stay stuck).
     activeLiveSession = ActiveLiveSession(
       controller: _c,
       role: widget.role,
@@ -179,6 +178,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
       token: widget.token,
       myUserId: widget.myUserId,
     );
+    // Broadcast that a live co-listening session is active so ambient UI
+    // (the persistent banner / bars) can reflect it.
+    liveSessionNotifier.start(peer: widget.peerName, asHost: _isHost);
     _start();
   }
 
@@ -236,6 +238,22 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     }
   }
 
+  // Rebuild on any queue/index change and keep the popup title correct for
+  // whichever role we are: the host reads its own queue, the listener reads the
+  // title the controller mirrored from the host.
+  void _syncFromQueue() {
+    if (!mounted) return;
+    setState(() {
+      if (_isHost) {
+        if (_c.currentIndex >= 0 && _c.currentIndex < _c.queue.length) {
+          _title = _c.queue[_c.currentIndex].title;
+        }
+      } else if (_c.currentTitle.isNotEmpty) {
+        _title = _c.currentTitle;
+      }
+    });
+  }
+
   void _onEvent(Map<String, dynamic> e) {
     if (!mounted) return;
     switch (e['type']) {
@@ -249,9 +267,16 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
         setState(() => _status = '${widget.peerName} left');
         break;
       case 'meta':
+      case 'track_change':
+        // Host switched songs (or initial meta) — follow the new title.
         final t = (e['track']?['title']) as String?;
         setState(() {
-          if (t != null) _title = t;
+          if (t != null && t.isNotEmpty) {
+            _title = t;
+            // Keep the global session title in sync so the music-panel console
+            // (which mirrors the live track) updates on the listener too.
+            activeLiveSession?.title = t;
+          }
           _lostConnection = false; // stream is flowing again after a reconnect
         });
         break;
@@ -291,7 +316,10 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     });
     try {
       await _c.reconnectAsListener(
-        sessionId: widget.sessionId!,
+        // Prefer the controller's live session id so reconnect still works
+        // after the popup was minimised and reopened (widget.sessionId is null
+        // on a resumed screen).
+        sessionId: _c.sessionId ?? widget.sessionId ?? '',
         myUserId: widget.myUserId,
         token: widget.token,
       );
@@ -343,12 +371,18 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    // Cap the sheet height so the queue becomes an independent scroll region
+    // once it grows past the visible space.
+    final maxSheetH = MediaQuery.of(context).size.height * 0.82;
     return PopScope(
       // Back minimises (keeps the session running); use the ✕ to end/leave.
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        if (_ready) {
+        // Minimising is always safe (it just detaches this screen and keeps the
+        // session streaming). Available to host AND listener, ready or still
+        // connecting — so the listener can always tuck it away and keep chatting.
+        if (activeLiveSession != null) {
           _minimize();
         } else {
           _leaveOrEnd();
@@ -361,7 +395,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
+          constraints: BoxConstraints(maxWidth: 520, maxHeight: maxSheetH),
           child: Container(
             decoration: BoxDecoration(
               color: scheme.surface,
@@ -411,7 +445,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
                     IconButton(
                       tooltip: 'Minimize — keep listening while you chat',
                       icon: const Icon(Icons.remove_rounded),
-                      onPressed: _ready ? _minimize : null,
+                      // Always minimisable (host or listener, even mid-connect).
+                      onPressed:
+                          activeLiveSession != null ? _minimize : null,
                     ),
                     IconButton(
                       tooltip: _isHost ? 'End session' : 'Leave',
@@ -421,70 +457,92 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
                   ],
                 ),
               ),
-              // ── Body ───────────────────────────────────────────────────
+              // ── Body (compact; only the queue scrolls) ────────────────
               Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 22),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Center(
-                        child: CircleAvatar(
-                          radius: 32,
-                          backgroundColor: scheme.primaryContainer,
-                          child: Icon(Icons.headphones_rounded,
-                              size: 32,
-                              color: scheme.onPrimaryContainer),
-                        ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Compact now-playing header — small avatar + info on one
+                    // left-aligned row (was a big centred block).
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 22,
+                            backgroundColor: scheme.primaryContainer,
+                            child: Icon(Icons.headphones_rounded,
+                                size: 22, color: scheme.onPrimaryContainer),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                MarqueeText(
+                                  text: _title,
+                                  height: 20,
+                                  style: (theme.textTheme.titleSmall ??
+                                          const TextStyle(fontSize: 14))
+                                      .copyWith(fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _isHost
+                                      ? 'Sharing with ${widget.peerName} · $_status'
+                                      : 'Hosted by ${widget.peerName} · $_status',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall
+                                      ?.copyWith(color: theme.hintColor),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _title,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    if (_lostConnection)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                        child: _buildReconnect(scheme),
+                      )
+                    else ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: _buildSeekBar(),
                       ),
                       const SizedBox(height: 6),
-                      Text(
-                        _isHost
-                            ? 'Sharing with ${widget.peerName}'
-                            : 'Hosted by ${widget.peerName}',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyMedium
-                            ?.copyWith(color: theme.hintColor),
-                      ),
+                      if (_isHost)
+                        _buildHostControls()
+                      else
+                        _buildListenerControls(),
+                      // Queue: fixed header + independently-scrolling list.
+                      // Shown for BOTH roles now — the listener sees the same
+                      // "up next" list the host queued (read-only).
                       const SizedBox(height: 6),
-                      Text(_status,
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodySmall),
-                      if (_lostConnection) ...[
-                        _buildReconnect(scheme),
-                      ] else ...[
-                        const SizedBox(height: 18),
-                        _buildSeekBar(),
-                        const SizedBox(height: 12),
-                        if (_isHost)
-                          _buildHostControls()
-                        else
-                          _buildListenerHint(theme),
-                        if (_isHost) _buildQueue(scheme),
-                      ],
-                      const SizedBox(height: 20),
-                      FilledButton.tonalIcon(
-                        onPressed: (_ready || _lostConnection)
-                            ? _leaveOrEnd
-                            : null,
+                      _buildQueueHeader(scheme),
+                      Flexible(
+                        child: _isHost
+                            ? _buildQueueList(scheme)
+                            : _buildRemoteQueueList(scheme),
+                      ),
+                    ],
+                    // Footer action (fixed).
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                      child: FilledButton.tonalIcon(
+                        onPressed:
+                            (_ready || _lostConnection) ? _leaveOrEnd : null,
                         icon: Icon(_isHost
                             ? Icons.stop_circle_outlined
                             : Icons.logout),
-                        label:
-                            Text(_isHost ? 'End session' : 'Leave'),
+                        label: Text(_isHost ? 'End session' : 'Leave'),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -510,9 +568,17 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
             Slider(
               value: value,
               max: max <= 0 ? 1.0 : max,
-              onChanged: _isHost && max > 0
-                  ? (v) => _c.player.seek(Duration(milliseconds: v.round()))
-                  : null, // listeners can't scrub — the host is the DJ
+              onChanged: max <= 0
+                  ? null
+                  : (v) {
+                      if (_isHost) {
+                        _c.player.seek(Duration(milliseconds: v.round()));
+                      } else {
+                        // Listener scrub → ask the host; host seeks and the new
+                        // position is broadcast back so everyone stays in sync.
+                        _c.requestControl('seek', positionMs: v.round());
+                      }
+                    },
             ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -527,14 +593,38 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     );
   }
 
+  void _liveSeekBy(int seconds) {
+    final dur = _c.player.duration ?? Duration.zero;
+    var target = _c.player.position + Duration(seconds: seconds);
+    if (target < Duration.zero) target = Duration.zero;
+    if (dur > Duration.zero && target > dur) target = dur;
+    _c.player.seek(target);
+  }
+
   Widget _buildHostControls() {
+    final scheme = Theme.of(context).colorScheme;
+    final hasPrev = _c.currentIndex > 0;
+    final hasNext = _c.currentIndex < _c.queue.length - 1;
     return StreamBuilder<PlayerState>(
       stream: _c.player.playerStateStream,
       builder: (context, snap) {
         final playing = snap.data?.playing ?? false;
+        Widget btn(IconData icon, VoidCallback? onTap, double size) => IconButton(
+              iconSize: size,
+              color: onTap == null
+                  ? scheme.onSurface.withAlpha(60)
+                  : scheme.onSurface,
+              onPressed: onTap,
+              icon: Icon(icon),
+            );
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // Previous track in the queue
+            btn(Icons.skip_previous_rounded,
+                (_ready && hasPrev) ? () => _c.playIndex(_c.currentIndex - 1) : null,
+                30),
+            btn(Icons.replay_10_rounded, _ready ? () => _liveSeekBy(-10) : null, 26),
             IconButton.filled(
               iconSize: 40,
               onPressed: !_ready
@@ -542,17 +632,135 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
                   : () => playing ? _c.player.pause() : _c.player.play(),
               icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
             ),
+            btn(Icons.forward_10_rounded, _ready ? () => _liveSeekBy(10) : null, 26),
+            // Next track in the queue
+            btn(Icons.skip_next_rounded,
+                (_ready && hasNext) ? _c.nextTrack : null, 30),
           ],
         );
       },
     );
   }
 
-  Widget _buildListenerHint(ThemeData theme) {
-    return Text(
-      'The host controls playback — sit back and enjoy 🎧',
-      textAlign: TextAlign.center,
-      style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+  // Listener transport. Buttons don't touch the local player directly — they
+  // send a request to the host, who executes it and broadcasts the result, so
+  // host and listener stay perfectly in sync (and the host keeps final say).
+  void _listenerSeekBy(int seconds) {
+    final dur = _c.player.duration ?? Duration.zero;
+    var target = _c.player.position + Duration(seconds: seconds);
+    if (target < Duration.zero) target = Duration.zero;
+    if (dur > Duration.zero && target > dur) target = dur;
+    _c.requestControl('seek', positionMs: target.inMilliseconds);
+  }
+
+  Widget _buildListenerControls() {
+    final scheme = Theme.of(context).colorScheme;
+    final hasPrev = _c.remoteIndex > 0;
+    final hasNext = _c.remoteIndex < _c.remoteQueueTitles.length - 1;
+    return StreamBuilder<PlayerState>(
+      stream: _c.player.playerStateStream,
+      builder: (context, snap) {
+        final playing = snap.data?.playing ?? false;
+        Widget btn(IconData icon, VoidCallback? onTap, double size) =>
+            IconButton(
+              iconSize: size,
+              color: onTap == null
+                  ? scheme.onSurface.withAlpha(60)
+                  : scheme.onSurface,
+              onPressed: onTap,
+              icon: Icon(icon),
+            );
+        return Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                btn(
+                    Icons.skip_previous_rounded,
+                    (_ready && hasPrev)
+                        ? () => _c.requestControl('prev')
+                        : null,
+                    30),
+                btn(Icons.replay_10_rounded,
+                    _ready ? () => _listenerSeekBy(-10) : null, 26),
+                IconButton.filled(
+                  iconSize: 40,
+                  onPressed:
+                      !_ready ? null : () => _c.requestControl('playpause'),
+                  icon: Icon(
+                      playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                ),
+                btn(Icons.forward_10_rounded,
+                    _ready ? () => _listenerSeekBy(10) : null, 26),
+                btn(
+                    Icons.skip_next_rounded,
+                    (_ready && hasNext)
+                        ? () => _c.requestControl('next')
+                        : null,
+                    30),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 2),
+              child: Text(
+                'Play, pause, or skip — the host hears it too 🎧',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Listener's read-only view of the host's queue.
+  Widget _buildRemoteQueueList(ColorScheme scheme) {
+    final titles = _c.remoteQueueTitles;
+    if (titles.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Text(
+          'The host hasn’t queued any extra songs yet.',
+          style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
+        ),
+      );
+    }
+    return ListView.builder(
+      shrinkWrap: true,
+      padding: const EdgeInsets.only(bottom: 4),
+      itemCount: titles.length,
+      itemBuilder: (_, i) {
+        final isCurrent = i == _c.remoteIndex;
+        return ListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+          leading: Icon(
+            isCurrent ? Icons.graphic_eq_rounded : Icons.music_note_rounded,
+            size: 18,
+            color: isCurrent ? scheme.primary : scheme.onSurfaceVariant,
+          ),
+          title: MarqueeText(
+            text: titles[i],
+            height: 18,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+              color: isCurrent ? scheme.primary : scheme.onSurface,
+            ),
+          ),
+          subtitle: isCurrent
+              ? Text('Now playing',
+                  style: TextStyle(fontSize: 10.5, color: scheme.primary))
+              : Text('Tap to play',
+                  style: TextStyle(
+                      fontSize: 10.5, color: scheme.onSurfaceVariant)),
+          // Tap a track → ask the host to jump to it (host stays authoritative).
+          onTap: isCurrent
+              ? null
+              : () => _c.requestControl('play_index', index: i),
+        );
+      },
     );
   }
 
@@ -586,21 +794,21 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     );
   }
 
-  // ── Host queue ──────────────────────────────────────────────────────────────
-  Widget _buildQueue(ColorScheme scheme) {
-    final q = _c.queue;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 18),
-        Row(
-          children: [
-            Icon(Icons.queue_music_rounded, size: 18, color: scheme.primary),
-            const SizedBox(width: 6),
-            Text('Queue (${q.length})',
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            const Spacer(),
+  // ── Host queue (fixed header + independently-scrolling list) ─────────────────
+  Widget _buildQueueHeader(ColorScheme scheme) {
+    final count = _isHost ? _c.queue.length : _c.remoteQueueTitles.length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
+      child: Row(
+        children: [
+          Icon(Icons.queue_music_rounded, size: 18, color: scheme.primary),
+          const SizedBox(width: 6),
+          Text('Queue ($count)',
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          const Spacer(),
+          // Only the host can add to the queue; the listener's view is read-only.
+          if (_isHost)
             TextButton.icon(
               onPressed: _addSongToQueue,
               icon: const Icon(Icons.add_rounded, size: 18),
@@ -611,56 +819,54 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ),
-          ],
-        ),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 176),
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: q.length,
-            itemBuilder: (_, i) {
-              final t = q[i];
-              final isCurrent = i == _c.currentIndex;
-              final upcoming = i > _c.currentIndex;
-              return ListTile(
-                dense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                leading: Icon(
-                  isCurrent
-                      ? Icons.graphic_eq_rounded
-                      : Icons.music_note_rounded,
-                  size: 18,
-                  color: isCurrent ? scheme.primary : scheme.onSurfaceVariant,
-                ),
-                title: Text(
-                  t.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight:
-                        isCurrent ? FontWeight.bold : FontWeight.normal,
-                    color: isCurrent ? scheme.primary : scheme.onSurface,
-                  ),
-                ),
-                subtitle: isCurrent
-                    ? Text('Now playing',
-                        style: TextStyle(fontSize: 10.5, color: scheme.primary))
-                    : null,
-                trailing: upcoming
-                    ? IconButton(
-                        icon: const Icon(Icons.close_rounded, size: 18),
-                        tooltip: 'Remove from queue',
-                        onPressed: () => _c.removeUpcoming(i),
-                      )
-                    : null,
-                // Tap an upcoming track to jump to it now.
-                onTap: isCurrent ? null : () => _c.playIndex(i),
-              );
-            },
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQueueList(ColorScheme scheme) {
+    final q = _c.queue;
+    return ListView.builder(
+      // Fills the space the parent Flexible gives it; scrolls independently as
+      // the queue grows. shrinkWrap keeps it small when the queue is short.
+      shrinkWrap: true,
+      padding: const EdgeInsets.only(bottom: 4),
+      itemCount: q.length,
+      itemBuilder: (_, i) {
+        final t = q[i];
+        final isCurrent = i == _c.currentIndex;
+        final upcoming = i > _c.currentIndex;
+        return ListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+          leading: Icon(
+            isCurrent ? Icons.graphic_eq_rounded : Icons.music_note_rounded,
+            size: 18,
+            color: isCurrent ? scheme.primary : scheme.onSurfaceVariant,
           ),
-        ),
-      ],
+          title: MarqueeText(
+            text: t.title,
+            height: 18,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+              color: isCurrent ? scheme.primary : scheme.onSurface,
+            ),
+          ),
+          subtitle: isCurrent
+              ? Text('Now playing',
+                  style: TextStyle(fontSize: 10.5, color: scheme.primary))
+              : null,
+          trailing: upcoming
+              ? IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  tooltip: 'Remove from queue',
+                  onPressed: () => _c.removeUpcoming(i),
+                )
+              : null,
+          onTap: isCurrent ? null : () => _c.playIndex(i),
+        );
+      },
     );
   }
 

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:audio_session/audio_session.dart';
@@ -14,10 +13,18 @@ import '../screens/home_page.dart'
         nowPlayingNotifier,
         playbackBus,
         playlistNotifier,
-        playProgressNotifier;
+        playProgressNotifier,
+        playClockNotifier,
+        PlayClock,
+        favoriteNotifier,
+        liveSessionNotifier;
+import '../services/live_session_service.dart';
 import '../utils/toast_helper.dart';
 import 'equalizer_screen.dart';
 import 'package:on_audio_query/on_audio_query.dart';
+import '../services/audio_handler.dart';
+import '../services/metadata_overrides.dart';
+import '../utils/marquee_text.dart';
 
 bool get _isMobile => Platform.isAndroid || Platform.isIOS;
 
@@ -71,6 +78,137 @@ class _MusicControlsState extends State<MusicControls>
   AndroidLoudnessEnhancer? _loudness;
 
   List<String> _playlist = [];
+  // MediaStore query (fast, indexed device-library access).
+  final OnAudioQuery _audioQuery = OnAudioQuery();
+
+  // ── Live "blending" console ────────────────────────────────────────────────
+  // When a live session is active the music panel becomes a second control
+  // surface for it: it shows the LIVE track and its transport drives the
+  // session (host acts directly; a listener sends requests the host executes).
+  StreamSubscription? _liveStateSub;
+  StreamSubscription? _livePosSub;
+
+  bool get _liveActive =>
+      liveSessionNotifier.active && activeLiveSession != null;
+  LiveSessionController? get _live => activeLiveSession?.controller;
+  bool get _isLiveHost => activeLiveSession?.role == LiveRole.host;
+
+  void _onLiveChanged() {
+    _liveStateSub?.cancel();
+    _liveStateSub = null;
+    _livePosSub?.cancel();
+    _livePosSub = null;
+    final live = _live;
+    if (liveSessionNotifier.active && live != null) {
+      // Mirror the live player's state into the panel + ambient bars.
+      _liveStateSub = live.player.playerStateStream.listen((_) {
+        _pushLiveToAmbient();
+        if (mounted) setState(() {});
+      });
+      _livePosSub = live.player.positionStream.listen((_) {
+        _pushLiveToAmbient();
+        if (mounted) setState(() {});
+      });
+      // Establish the media/foreground state immediately so the session is
+      // protected from background-kill from the very start.
+      _pushLiveToAmbient();
+    }
+    if (mounted) setState(() {});
+  }
+
+  String _liveTitle() {
+    final live = _live;
+    // Controller-tracked current title works for BOTH host and listener (the
+    // listener has no local queue, so this is how its panel follows changes).
+    if (live != null && live.currentTitle.isNotEmpty) {
+      return live.currentTitle;
+    }
+    if (live != null &&
+        live.currentIndex >= 0 &&
+        live.currentIndex < live.queue.length) {
+      return live.queue[live.currentIndex].title;
+    }
+    return activeLiveSession?.title ?? 'Live song';
+  }
+
+  // Keep the now-playing bar / footer / media notification showing the live
+  // track (and its progress) while a session is active.
+  void _pushLiveToAmbient() {
+    final live = _live;
+    if (!_liveActive || live == null) return;
+    final playing = live.player.playing;
+    nowPlayingNotifier.update(
+        track: _liveTitle(), artist: 'Live', playing: playing);
+    final dur = live.player.duration;
+    final pos = live.player.position;
+    playProgressNotifier.value = (dur != null && dur.inMilliseconds > 0)
+        ? (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0)
+        : 0.0;
+    playClockNotifier.value = PlayClock(pos, dur ?? Duration.zero);
+    // Also drive the car / lock-screen media notification with the live track.
+    audioHandler?.updateFromPlayer(
+      id: 'live-session',
+      title: _liveTitle(),
+      artist: 'Live',
+      playing: playing,
+      position: pos,
+      duration: dur,
+    );
+  }
+
+  // ── Live-aware transport (routes to the live session when active) ───────────
+  void _transportPlayPause() {
+    if (!_liveActive) {
+      _togglePlayPause();
+      return;
+    }
+    final c = _live!;
+    if (_isLiveHost) {
+      c.player.playing ? c.player.pause() : c.player.play();
+    } else {
+      c.requestControl('playpause');
+    }
+  }
+
+  void _transportNext() {
+    if (!_liveActive) return _next();
+    _isLiveHost ? _live!.nextTrack() : _live!.requestControl('next');
+  }
+
+  void _transportPrev() {
+    if (!_liveActive) return _previous();
+    final c = _live!;
+    if (_isLiveHost) {
+      if (c.currentIndex > 0) {
+        c.playIndex(c.currentIndex - 1);
+      } else {
+        c.player.seek(Duration.zero);
+      }
+    } else {
+      c.requestControl('prev');
+    }
+  }
+
+  void _transportSeek(Duration target) {
+    if (!_liveActive) {
+      _player.seek(target);
+      return;
+    }
+    final c = _live!;
+    _isLiveHost
+        ? c.player.seek(target)
+        : c.requestControl('seek', positionMs: target.inMilliseconds);
+  }
+
+  void _transportSeekBy(int seconds) {
+    if (!_liveActive) return _seekBy(seconds);
+    final c = _live!;
+    final dur = c.player.duration ?? Duration.zero;
+    var t = c.player.position + Duration(seconds: seconds);
+    if (t < Duration.zero) t = Duration.zero;
+    if (dur > Duration.zero && t > dur) t = dur;
+    _transportSeek(t);
+  }
   int _currentIndex = -1;
   // True while we're swapping the audio source for a manual track change.
   // Guards against a spurious "completed" event auto-advancing to another song.
@@ -94,6 +232,12 @@ class _MusicControlsState extends State<MusicControls>
 
   bool _showPlaylist = false;
   bool _showSpeedPanel = false;
+  // Volume popup: appears on tap, auto-hides after a short idle.
+  bool _showVolume = false;
+  Timer? _volumeHideTimer;
+  // Anchors the volume popup to the volume button so it grows out of the icon
+  // (instead of floating far away at the bottom of the panel).
+  final LayerLink _volumeLink = LayerLink();
   // True while the first-open device scan is running (drives the sheet loader).
   bool _scanning = false;
   bool _scannedOnce = false;
@@ -101,6 +245,7 @@ class _MusicControlsState extends State<MusicControls>
   late AnimationController _discCtrl;
   late AnimationController _playlistCtrl;
   late AnimationController _speedCtrl;
+  late AnimationController _volumeCtrl;
 
   @override
   void initState() {
@@ -131,29 +276,61 @@ class _MusicControlsState extends State<MusicControls>
       duration: const Duration(milliseconds: 220),
       vsync: this,
     );
+    _volumeCtrl = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
 
     _configSession();
     _loadFavorites();
+    _restorePlaylist();
     _listenPlayer();
     if (Platform.isAndroid) _restoreEqualizer();
 
-    // Let the ambient now-playing bar drive this (single) mounted player.
-    playbackBus.onToggle = _togglePlayPause;
-    playbackBus.onNext = _next;
-    playbackBus.onPrev = _previous;
+    // Ambient controls (now-playing bar, car/lock-screen buttons) drive the
+    // local player — or the LIVE session when one is active (live-aware).
+    playbackBus.onToggle = _transportPlayPause;
+    playbackBus.onNext = _transportNext;
+    playbackBus.onPrev = _transportPrev;
     playbackBus.onSeekFraction = (f) {
-      final dur = _player.duration;
+      final dur =
+          _liveActive ? _live!.player.duration : _player.duration;
       if (dur != null && dur > Duration.zero) {
-        _player.seek(dur * f.clamp(0.0, 1.0));
+        _transportSeek(dur * f.clamp(0.0, 1.0));
       }
     };
-    playbackBus.onPause = () => _player.pause();
+    playbackBus.onPause = () => _liveActive
+        ? (_isLiveHost ? _live!.player.pause() : _live!.requestControl('pause'))
+        : _player.pause();
+    playbackBus.onPlay = () => _liveActive
+        ? (_isLiveHost ? _live!.player.play() : _live!.requestControl('play'))
+        : _player.play();
+    playbackBus.onSeekTo = _transportSeek;
+
+    // Re-bind / refresh when a live session starts or ends.
+    liveSessionNotifier.addListener(_onLiveChanged);
     playbackBus.currentPath = () =>
         (_currentIndex >= 0 && _currentIndex < _playlist.length)
             ? _playlist[_currentIndex]
             : null;
     playbackBus.currentPositionMs = () => _player.position.inMilliseconds;
     playbackBus.isPlaying = () => _player.playing;
+    playbackBus.onToggleFavorite = _toggleCurrentFavorite;
+  }
+
+  // Toggle "favourite" on whatever track is playing now (driven by the bar
+  // heart) and refresh the shared favourite state.
+  void _toggleCurrentFavorite() {
+    if (_currentIndex < 0 || _currentIndex >= _playlist.length) return;
+    // _toggleFavorite already refreshes the ambient heart via _syncFavoriteAmbient.
+    _toggleFavorite(_playlist[_currentIndex]);
+  }
+
+  // Push the current track's favourite state to the ambient bar heart.
+  void _syncFavoriteAmbient() {
+    favoriteNotifier.value = _currentIndex >= 0 &&
+        _currentIndex < _playlist.length &&
+        _favorites.contains(_playlist[_currentIndex]);
   }
 
   // Re-apply saved equalizer settings so they affect playback from launch,
@@ -185,16 +362,24 @@ class _MusicControlsState extends State<MusicControls>
   @override
   void dispose() {
     // Only clear the bus if we're still the registered owner.
-    if (playbackBus.onToggle == _togglePlayPause) {
+    if (playbackBus.onToggle == _transportPlayPause) {
       playbackBus.onToggle = null;
       playbackBus.onNext = null;
       playbackBus.onPrev = null;
       playbackBus.onSeekFraction = null;
       playbackBus.onPause = null;
+      playbackBus.onPlay = null;
+      playbackBus.onSeekTo = null;
       playbackBus.currentPath = null;
       playbackBus.currentPositionMs = null;
       playbackBus.isPlaying = null;
+      playbackBus.onToggleFavorite = null;
     }
+    liveSessionNotifier.removeListener(_onLiveChanged);
+    _liveStateSub?.cancel();
+    _livePosSub?.cancel();
+    _volumeHideTimer?.cancel();
+    _volumeCtrl.dispose();
     _sleepTimer?.cancel();
     _sleepTick?.cancel();
     _discCtrl.dispose();
@@ -224,12 +409,36 @@ class _MusicControlsState extends State<MusicControls>
 
   // ── Player listeners ───────────────────────────────────────────────────────
 
+  // Mirror the player's state into the media session (notification + car /
+  // Bluetooth / lock-screen controls). No-op when there's no media session.
+  void _pushMediaState({bool buffering = false}) {
+    final h = audioHandler;
+    if (h == null) return;
+    final hasTrack = _currentIndex >= 0 && _currentIndex < _playlist.length;
+    h.updateFromPlayer(
+      id: hasTrack ? _playlist[_currentIndex] : 'aluta',
+      title: _trackName,
+      artist: _artistName,
+      playing: _player.playing,
+      position: _player.position,
+      duration: _player.duration,
+      buffering: buffering,
+    );
+  }
+
   void _listenPlayer() {
     _player.playerStateStream.listen((s) {
       if (!mounted) return;
       setState(() {});
-      nowPlayingNotifier.update(
-          track: _trackName, artist: _artistName, playing: s.playing);
+      // While a live session owns the ambient bar/notification, don't let the
+      // (paused) local player overwrite the live play/pause state.
+      if (!_liveActive) {
+        nowPlayingNotifier.update(
+            track: _trackName, artist: _artistName, playing: s.playing);
+        _pushMediaState(
+            buffering: s.processingState == ProcessingState.loading ||
+                s.processingState == ProcessingState.buffering);
+      }
       if (s.playing) {
         _discCtrl.repeat();
       } else {
@@ -260,10 +469,15 @@ class _MusicControlsState extends State<MusicControls>
       } else {
         playProgressNotifier.value = 0;
       }
+      if (!_liveActive) {
+        playClockNotifier.value = PlayClock(pos, dur ?? Duration.zero);
+      }
+      _pushMediaState();
       if (mounted) setState(() {});
     });
     _player.durationStream.listen((_) {
       if (mounted) setState(() {});
+      _pushMediaState();
     });
   }
 
@@ -276,13 +490,16 @@ class _MusicControlsState extends State<MusicControls>
     // Suppress auto-advance while swapping the source (see _switching).
     _switching = true;
 
+    final initTitle = metadataStore.title(path, _nameFromPath(path));
+    final initArtist = metadataStore.artist(path, '');
     setState(() {
       _currentIndex = index;
-      _trackName = _nameFromPath(path);
-      _artistName = '';
+      _trackName = initTitle;
+      _artistName = initArtist;
     });
     nowPlayingNotifier.update(
-        track: _nameFromPath(path), artist: '', playing: true);
+        track: initTitle, artist: initArtist, playing: true);
+    _syncFavoriteAmbient();
 
     try {
       // setFilePath implicitly stops previous — no need for explicit stop()
@@ -314,13 +531,15 @@ class _MusicControlsState extends State<MusicControls>
           .cast<SongModel?>()
           .firstWhere((s) => s?.data == path, orElse: () => null);
       if (m != null && mounted) {
-        final t = m.title.isNotEmpty ? m.title : _nameFromPath(path);
+        // User overrides win over the file's own tags.
+        final t = metadataStore.title(
+            path, m.title.isNotEmpty ? m.title : _nameFromPath(path));
+        final a = metadataStore.artist(path, m.artist ?? '');
         setState(() {
           _trackName = t;
-          _artistName = m.artist ?? '';
+          _artistName = a;
         });
-        nowPlayingNotifier.update(
-            track: t, artist: m.artist ?? '', playing: true);
+        nowPlayingNotifier.update(track: t, artist: a, playing: true);
       }
     } catch (_) {}
   }
@@ -387,6 +606,68 @@ class _MusicControlsState extends State<MusicControls>
   /// (e.g. starting a live session from loaded songs) can read it.
   void _publishPlaylist() {
     playlistNotifier.value = List<String>.unmodifiable(_playlist);
+    _savePlaylist();
+  }
+
+  // Persist the loaded playlist so it survives a full app restart (no re-scan).
+  Future<void> _savePlaylist() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setStringList('music_playlist', _playlist);
+    } catch (_) {}
+  }
+
+  // On launch: restore the saved playlist immediately (pruning any files that
+  // were deleted since), then quietly merge in any NEW media on the device —
+  // so the list persists and stays fresh like other music apps.
+  Future<void> _restorePlaylist() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final saved = p.getStringList('music_playlist') ?? const [];
+      if (saved.isNotEmpty) {
+        final existing = <String>[];
+        for (final path in saved) {
+          try {
+            if (File(path).existsSync()) existing.add(path);
+          } catch (_) {
+            existing.add(path);
+          }
+        }
+        if (!mounted) return;
+        setState(() => _playlist = existing);
+        _publishPlaylist();
+      }
+    } catch (_) {}
+    if (Platform.isAndroid) {
+      if (_playlist.isEmpty) {
+        // Fresh install / nothing saved yet: auto-load the whole library via
+        // MediaStore (prompts for media permission once) so the user never has
+        // to manually tap "scan" after installing.
+        _scanIntoPlaylist();
+      } else {
+        // Returning user: keep the saved list and quietly merge any new songs.
+        _mergeNewMedia();
+      }
+    }
+  }
+
+  Future<void> _mergeNewMedia() async {
+    try {
+      // Silent (no prompt): only merge if MediaStore access is already granted.
+      final granted = await _audioQuery.permissionsStatus();
+      if (!granted) return;
+      final songs = await _audioQuery.querySongs(uriType: UriType.EXTERNAL);
+      final current = _playlist.toSet();
+      final additions = songs
+          .map((s) => s.data)
+          .where((p) => p.isNotEmpty && !current.contains(p))
+          .toList();
+      if (additions.isEmpty || !mounted) return;
+      setState(() => _playlist = [..._playlist, ...additions]);
+      _publishPlaylist();
+      _snack(
+          'Added ${additions.length} new track${additions.length == 1 ? '' : 's'}');
+    } catch (_) {}
   }
 
   /// Nudge the playback position by [seconds] (negative rewinds), clamped
@@ -448,7 +729,7 @@ class _MusicControlsState extends State<MusicControls>
   // ── Sleep timer ────────────────────────────────────────────────────────────
 
   void _showSleepTimerDialog() {
-    final opts = {
+    final opts = <String, Duration?>{
       'Off': null,
       '5 min': const Duration(minutes: 5),
       '15 min': const Duration(minutes: 15),
@@ -456,21 +737,124 @@ class _MusicControlsState extends State<MusicControls>
       '45 min': const Duration(minutes: 45),
       '60 min': const Duration(minutes: 60),
     };
+    final scheme = Theme.of(context).colorScheme;
+    // How many whole minutes are currently armed (null/0 => Off) so we can
+    // highlight the active row.
+    final activeMin = _sleepRemaining?.inMinutes;
+
     showDialog(
       context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Sleep Timer'),
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        children: opts.entries
-            .map((e) => SimpleDialogOption(
-                  child: Text(e.key),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _setSleepTimer(e.value);
-                  },
-                ))
-            .toList(),
+      barrierColor: Colors.black.withAlpha(120),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 300),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: scheme.outlineVariant.withAlpha(90)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(70),
+                  blurRadius: 28,
+                  offset: const Offset(0, 10),
+                ),
+                BoxShadow(
+                  color: scheme.primary.withAlpha(28),
+                  blurRadius: 20,
+                  spreadRadius: -4,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Title row with the sleep glyph.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.snooze_rounded,
+                          size: 20, color: scheme.primary),
+                      const SizedBox(width: 10),
+                      Text('Sleep Timer',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface,
+                          )),
+                    ],
+                  ),
+                ),
+                ...opts.entries.map((e) {
+                  final isOff = e.value == null;
+                  final selected = isOff
+                      ? activeMin == null
+                      : activeMin == e.value!.inMinutes;
+                  return _sleepOption(
+                    scheme,
+                    label: e.key,
+                    selected: selected,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _setSleepTimer(e.value);
+                    },
+                  );
+                }),
+                const SizedBox(height: 4),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sleepOption(
+    ColorScheme scheme, {
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: selected
+                ? scheme.primary.withAlpha(30)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected
+                  ? scheme.primary.withAlpha(120)
+                  : Colors.transparent,
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected ? scheme.primary : scheme.onSurface,
+                  ),
+                ),
+              ),
+              if (selected)
+                Icon(Icons.check_rounded, size: 18, color: scheme.primary),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -506,6 +890,7 @@ class _MusicControlsState extends State<MusicControls>
         ? _favorites.remove(path)
         : _favorites.add(path));
     _saveFavorites();
+    _syncFavoriteAmbient();
   }
 
   // ── File picking ───────────────────────────────────────────────────────────
@@ -543,50 +928,29 @@ class _MusicControlsState extends State<MusicControls>
     _openPlaylist();
   }
 
-  /// Requests permission, scans the device for audio, and loads it into the
-  /// playlist. Does NOT open the sheet — callers decide when to show it.
+  /// Loads the device's music library via MediaStore (fast, indexed), prompting
+  /// for permission if needed. Does NOT open the sheet — callers decide when to
+  /// show it.
   Future<void> _scanIntoPlaylist() async {
-    bool granted = await Permission.manageExternalStorage.isGranted ||
-        await Permission.audio.isGranted;
+    bool granted = await _audioQuery.permissionsStatus();
+    if (!granted) granted = await _audioQuery.permissionsRequest();
     if (!granted) {
-      final s1 = await Permission.manageExternalStorage.request();
-      final s2 = await Permission.audio.request();
-      granted = s1.isGranted || s2.isGranted;
-    }
-    if (!granted) {
-      _snack('Storage permission denied');
+      _snack('Media permission denied');
       return;
     }
-    final files = await _scanAudio();
-    if (files.isEmpty) {
+    final songs = await _audioQuery.querySongs(
+      sortType: SongSortType.TITLE,
+      orderType: OrderType.ASC_OR_SMALLER,
+      uriType: UriType.EXTERNAL,
+    );
+    final paths = songs.map((s) => s.data).where((p) => p.isNotEmpty).toList();
+    if (paths.isEmpty) {
       _snack('No audio files found');
       return;
     }
-    final paths = files.map((f) => f.path).toList();
     if (!mounted) return;
     setState(() => _playlist = paths);
     _publishPlaylist();
-  }
-
-  Future<List<FileSystemEntity>> _scanAudio() async {
-    final exts = {'.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac'};
-    final result = <FileSystemEntity>[];
-    for (final d in [
-      '/storage/emulated/0/Music',
-      '/storage/emulated/0/Download',
-      '/storage/emulated/0/',
-    ]) {
-      try {
-        final dir = Directory(d);
-        if (!await dir.exists()) continue;
-        await for (final f in dir.list(recursive: true)) {
-          if (f is File && exts.any(f.path.toLowerCase().endsWith)) {
-            result.add(f);
-          }
-        }
-      } catch (_) {}
-    }
-    return result;
   }
 
   // ── Overlays ───────────────────────────────────────────────────────────────
@@ -670,6 +1034,126 @@ class _MusicControlsState extends State<MusicControls>
     }
   }
 
+  // ── Volume popup (tap-to-reveal, auto-hide) ─────────────────────────────────
+  void _openVolume() {
+    if (_showVolume) {
+      _closeVolume();
+      return;
+    }
+    setState(() => _showVolume = true);
+    _volumeCtrl.forward(from: 0);
+    _armVolumeHide();
+  }
+
+  // Restart the idle countdown whenever the user touches the control.
+  void _armVolumeHide() {
+    _volumeHideTimer?.cancel();
+    _volumeHideTimer =
+        Timer(const Duration(milliseconds: 1500), _closeVolume);
+  }
+
+  void _closeVolume() {
+    _volumeHideTimer?.cancel();
+    if (!mounted || !_showVolume) return;
+    _volumeCtrl.reverse().then((_) {
+      if (mounted) setState(() => _showVolume = false);
+    });
+  }
+
+  // The pill that grows rightward out of the volume button. Its leading 40×40
+  // icon sits exactly on top of the button (same size / centre), so while the
+  // popup is open the user sees a single volume icon — never two.
+  Widget _buildVolumePopup(ColorScheme scheme) {
+    final onSurface = scheme.onSurface;
+    return GestureDetector(
+      onTap: () {}, // absorb taps inside the card (barrier handles outside)
+      child: Container(
+        // Fixed, compact height == the volume button (44). The pill can never
+        // grow tall; it only extends sideways out of the icon.
+        height: 44,
+        padding: const EdgeInsets.only(right: 12),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: scheme.outlineVariant.withAlpha(90)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(60),
+              blurRadius: 20,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Leading icon — same 40×40 footprint as the button, so it lands
+            // precisely over it. Doubles as the mute toggle.
+            GestureDetector(
+              onTap: () {
+                _toggleMute();
+                _armVolumeHide();
+              },
+              child: SizedBox(
+                width: 40,
+                height: 44,
+                child: Icon(
+                  _muted || _volume == 0
+                      ? Icons.volume_off_rounded
+                      : _volume < 0.5
+                          ? Icons.volume_down_rounded
+                          : Icons.volume_up_rounded,
+                  size: 18,
+                  color: _muted ? scheme.error : onSurface.withAlpha(200),
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 150,
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 4,
+                  thumbShape:
+                      const RoundSliderThumbShape(enabledThumbRadius: 7),
+                  overlayShape:
+                      const RoundSliderOverlayShape(overlayRadius: 14),
+                  activeTrackColor:
+                      _muted ? scheme.outlineVariant : scheme.primary,
+                  inactiveTrackColor: onSurface.withAlpha(28),
+                  thumbColor: _muted ? scheme.outlineVariant : scheme.primary,
+                  overlayColor: scheme.primary.withAlpha(30),
+                ),
+                child: Slider(
+                  value: _muted ? 0 : _volume,
+                  onChanged: (v) {
+                    if (_muted) setState(() => _muted = false);
+                    _setVolume(v);
+                    _armVolumeHide();
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            SizedBox(
+              width: 46,
+              child: Text(
+                _muted ? 'mute' : '${(_volume * 100).round()}%',
+                maxLines: 1,
+                overflow: TextOverflow.visible,
+                softWrap: false,
+                style: TextStyle(
+                    color: onSurface.withAlpha(160),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   String _nameFromPath(String path) {
@@ -735,8 +1219,10 @@ class _MusicControlsState extends State<MusicControls>
           if (_showPlaylist)
             LayoutBuilder(
               builder: (ctx, cons) {
-                final sheetW =
-                    cons.maxWidth < 520 ? cons.maxWidth : 520.0;
+                // Fill the panel width so the header (and its right-aligned
+                // collapse chevron) reach the far edge instead of floating in a
+                // centred 520-wide column that looks orphaned on desktop.
+                final sheetW = cons.maxWidth;
                 final sheetH = cons.maxHeight * 0.62;
                 return Align(
                   alignment: Alignment.bottomCenter,
@@ -827,6 +1313,46 @@ class _MusicControlsState extends State<MusicControls>
                 ),
               ),
             ),
+
+          // ── Volume popup — grows rightward out of the volume button ─────────
+          // A transparent full-screen barrier catches taps outside; the pill
+          // itself is anchored to the button via the LayerLink so it appears
+          // right on top of the icon and expands forward (to the right).
+          if (_showVolume)
+            Positioned.fill(
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: GestureDetector(
+                      onTap: _closeVolume,
+                      behavior: HitTestBehavior.opaque,
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                  CompositedTransformFollower(
+                    link: _volumeLink,
+                    showWhenUnlinked: false,
+                    // Pin the pill's centre-left to the button's centre-left, so
+                    // the pill's leading icon lands exactly over the button icon.
+                    targetAnchor: Alignment.centerLeft,
+                    followerAnchor: Alignment.centerLeft,
+                    child: ScaleTransition(
+                      scale: CurvedAnimation(
+                        parent: _volumeCtrl,
+                        curve: Curves.easeOutBack,
+                        reverseCurve: Curves.easeIn,
+                      ),
+                      // Grow out of the icon toward the right.
+                      alignment: Alignment.centerLeft,
+                      child: FadeTransition(
+                        opacity: _volumeCtrl,
+                        child: _buildVolumePopup(scheme),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -837,13 +1363,24 @@ class _MusicControlsState extends State<MusicControls>
     final accent = scheme.primary;
     final onSurface = scheme.onSurface;
 
-    final isPlaying = _player.playing;
-    final hasTrack = _currentIndex >= 0 && _playlist.isNotEmpty;
-    final position = _player.position;
-    final duration = _player.duration ?? Duration.zero;
-    final buffering =
-        _player.processingState == ProcessingState.buffering ||
-            _player.processingState == ProcessingState.loading;
+    // When a live session is active the panel becomes its console: it shows
+    // and drives the LIVE track instead of the local library.
+    final live = _liveActive;
+    final lc = _live;
+    final isPlaying =
+        live ? (lc?.player.playing ?? false) : _player.playing;
+    final hasTrack = _currentIndex >= 0 && _playlist.isNotEmpty; // local
+    final controlsOn = live || hasTrack;
+    final position =
+        live ? (lc?.player.position ?? Duration.zero) : _player.position;
+    final duration = live
+        ? (lc?.player.duration ?? Duration.zero)
+        : (_player.duration ?? Duration.zero);
+    final buffering = live
+        ? (lc?.player.processingState == ProcessingState.buffering ||
+            lc?.player.processingState == ProcessingState.loading)
+        : (_player.processingState == ProcessingState.buffering ||
+            _player.processingState == ProcessingState.loading);
     final sliderMax = duration.inMilliseconds > 0
         ? duration.inMilliseconds.toDouble()
         : 1.0;
@@ -851,6 +1388,11 @@ class _MusicControlsState extends State<MusicControls>
         position.inMilliseconds.toDouble().clamp(0.0, sliderMax);
     final isFav =
         hasTrack && _favorites.contains(_playlist[_currentIndex]);
+    final displayTitle =
+        live ? _liveTitle() : (hasTrack ? _trackName : 'No track loaded');
+    final displayArtist = live
+        ? 'Live · ${_isLiveHost ? 'streaming to' : 'with'} ${activeLiveSession?.peerName ?? ''}'
+        : _artistName;
 
     return LayoutBuilder(builder: (context, box) {
       final isNarrow = box.maxWidth < 220;
@@ -866,14 +1408,26 @@ class _MusicControlsState extends State<MusicControls>
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white.withAlpha(10)
-                    : Colors.black.withAlpha(6),
+                // Subtle brand-tinted wash: a whisper of red in the corner that
+                // fades out — modern and "alive" without overpowering the text.
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isDark
+                      ? [
+                          accent.withAlpha(38),
+                          Colors.white.withAlpha(10),
+                        ]
+                      : [
+                          accent.withAlpha(28),
+                          accent.withAlpha(8),
+                        ],
+                ),
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
                   color: isDark
-                      ? Colors.white.withAlpha(18)
-                      : Colors.black.withAlpha(12),
+                      ? Colors.white.withAlpha(20)
+                      : accent.withAlpha(40),
                 ),
               ),
               child: Row(
@@ -923,26 +1477,51 @@ class _MusicControlsState extends State<MusicControls>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          hasTrack ? _trackName : 'No track loaded',
+                        MarqueeText(
+                          text: displayTitle,
+                          height: isNarrow ? 17 : 19,
                           style: TextStyle(
                             color: onSurface,
                             fontSize: isNarrow ? 12 : 13.5,
                             fontWeight: FontWeight.bold,
                             height: 1.3,
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                        if (_artistName.isNotEmpty) ...[
+                        if (displayArtist.isNotEmpty) ...[
                           const SizedBox(height: 2),
-                          Text(_artistName,
+                          Text(displayArtist,
                               style: TextStyle(
-                                  color: onSurface.withAlpha(160),
+                                  color: live
+                                      ? accent
+                                      : onSurface.withAlpha(160),
+                                  fontWeight: live
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
                                   fontSize: 11.5),
                               overflow: TextOverflow.ellipsis),
                         ],
-                        if (_playlist.isNotEmpty) ...[
+                        if (live) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Container(
+                                width: 7,
+                                height: 7,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: accent,
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Text('LIVE',
+                                  style: TextStyle(
+                                      color: accent,
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1)),
+                            ],
+                          ),
+                        ] else if (_playlist.isNotEmpty) ...[
                           const SizedBox(height: 4),
                           Text(
                             '${_currentIndex + 1} / ${_playlist.length}',
@@ -955,7 +1534,7 @@ class _MusicControlsState extends State<MusicControls>
                     ),
                   ),
                   const SizedBox(width: 8),
-                  if (hasTrack)
+                  if (!live && hasTrack)
                     GestureDetector(
                       onTap: () =>
                           _toggleFavorite(_playlist[_currentIndex]),
@@ -1001,8 +1580,8 @@ class _MusicControlsState extends State<MusicControls>
                     child: Slider(
                       value: sliderVal,
                       max: sliderMax,
-                      onChanged: hasTrack
-                          ? (v) => _player.seek(
+                      onChanged: controlsOn
+                          ? (v) => _transportSeek(
                               Duration(milliseconds: v.toInt()))
                           : null,
                     ),
@@ -1033,33 +1612,44 @@ class _MusicControlsState extends State<MusicControls>
                   _CtrlBtn(
                     icon: Icons.skip_previous_rounded,
                     size: 32,
-                    color: hasTrack ? onSurface : onSurface.withAlpha(40),
-                    onTap: hasTrack ? _previous : null,
+                    color: controlsOn ? onSurface : onSurface.withAlpha(40),
+                    onTap: controlsOn ? _transportPrev : null,
                     tooltip: 'Previous',
                   ),
                   const SizedBox(width: 8),
                   _CtrlBtn(
                     icon: Icons.replay_10_rounded,
                     size: 28,
-                    color: hasTrack ? onSurface : onSurface.withAlpha(40),
-                    onTap: hasTrack ? () => _seekBy(-10) : null,
+                    color: controlsOn ? onSurface : onSurface.withAlpha(40),
+                    onTap: controlsOn ? () => _transportSeekBy(-10) : null,
                     tooltip: 'Back 10s',
                   ),
                   const SizedBox(width: 14),
                   GestureDetector(
-                    onTap: _togglePlayPause,
+                    onTap: _transportPlayPause,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       width: 68,
                       height: 68,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: accent,
+                        // Glossy red gradient gives the transport a lively,
+                        // "spark" feel instead of a flat maroon disc.
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Color.lerp(accent, Colors.white, 0.22)!,
+                            accent,
+                            Color.lerp(accent, Colors.black, 0.14)!,
+                          ],
+                          stops: const [0.0, 0.55, 1.0],
+                        ),
                         boxShadow: [
                           BoxShadow(
                             color: accent
-                                .withAlpha(isPlaying ? 140 : 60),
-                            blurRadius: isPlaying ? 22 : 10,
+                                .withAlpha(isPlaying ? 150 : 70),
+                            blurRadius: isPlaying ? 24 : 12,
                             spreadRadius: 2,
                           ),
                         ],
@@ -1084,16 +1674,16 @@ class _MusicControlsState extends State<MusicControls>
                   _CtrlBtn(
                     icon: Icons.forward_10_rounded,
                     size: 28,
-                    color: hasTrack ? onSurface : onSurface.withAlpha(40),
-                    onTap: hasTrack ? () => _seekBy(10) : null,
+                    color: controlsOn ? onSurface : onSurface.withAlpha(40),
+                    onTap: controlsOn ? () => _transportSeekBy(10) : null,
                     tooltip: 'Forward 10s',
                   ),
                   const SizedBox(width: 8),
                   _CtrlBtn(
                     icon: Icons.skip_next_rounded,
                     size: 32,
-                    color: hasTrack ? onSurface : onSurface.withAlpha(40),
-                    onTap: hasTrack ? _next : null,
+                    color: controlsOn ? onSurface : onSurface.withAlpha(40),
+                    onTap: controlsOn ? _transportNext : null,
                     tooltip: 'Next',
                   ),
                   const SizedBox(width: 14),
@@ -1167,100 +1757,49 @@ class _MusicControlsState extends State<MusicControls>
             // ── Volume (left ~45%) + Speed button (right) on same row ────
             Row(
               children: [
-                // Mute toggle
-                GestureDetector(
-                  onTap: _toggleMute,
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: _muted
-                          ? scheme.error.withAlpha(28)
-                          : scheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      _muted || _volume == 0
-                          ? Icons.volume_off_rounded
-                          : _volume < 0.5
-                              ? Icons.volume_down_rounded
-                              : Icons.volume_up_rounded,
-                      size: 17,
-                      color: _muted
-                          ? scheme.error
-                          : onSurface.withAlpha(180),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                // Volume slider + % chip — grouped and WIDTH-CAPPED so the
-                // volume control never stretches full-width and visually
-                // collides with the accent seek bar above it. Left-aligned;
-                // the empty space it leaves pushes the speed button right.
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 210),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Expanded(
-                            child: SliderTheme(
-                              data: SliderTheme.of(context).copyWith(
-                                trackHeight: 3,
-                                thumbShape: const RoundSliderThumbShape(
-                                    enabledThumbRadius: 5),
-                                overlayShape: const RoundSliderOverlayShape(
-                                    overlayRadius: 11),
-                                // Grey palette — distinct from accent seek bar
-                                activeTrackColor: _muted
-                                    ? scheme.outlineVariant
-                                    : onSurface.withAlpha(155),
-                                inactiveTrackColor:
-                                    onSurface.withAlpha(28),
-                                thumbColor: _muted
-                                    ? scheme.outlineVariant
-                                    : onSurface.withAlpha(200),
-                                overlayColor: onSurface.withAlpha(18),
-                              ),
-                              child: Slider(
-                                value: _muted ? 0 : _volume,
-                                onChanged: (v) {
-                                  if (_muted) {
-                                    setState(() => _muted = false);
-                                  }
-                                  _setVolume(v);
-                                },
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          // Volume percentage chip
-                          Container(
-                            width: 40,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: scheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(7),
-                            ),
-                            child: Text(
-                              _muted
-                                  ? 'mut'
-                                  : '${(_volume * 100).round()}%',
-                              style: TextStyle(
-                                  color: onSurface.withAlpha(150),
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w600),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ],
+                // Volume — tap to reveal a popup slider that auto-hides. Keeps
+                // the row clean and stops the volume track from clashing with
+                // the accent seek bar above it.
+                CompositedTransformTarget(
+                  link: _volumeLink,
+                  child: GestureDetector(
+                    onTap: _openVolume,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        // While the popup is open it sits over this spot, so the
+                        // button box/icon fade out — the user sees one icon only.
+                        color: _showVolume
+                            ? Colors.transparent
+                            : (_muted
+                                ? scheme.error.withAlpha(28)
+                                : scheme.surfaceContainerHighest),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _showVolume
+                              ? Colors.transparent
+                              : scheme.outlineVariant.withAlpha(80),
+                        ),
+                      ),
+                      child: Icon(
+                        _muted || _volume == 0
+                            ? Icons.volume_off_rounded
+                            : _volume < 0.5
+                                ? Icons.volume_down_rounded
+                                : Icons.volume_up_rounded,
+                        size: 18,
+                        color: _showVolume
+                            ? Colors.transparent
+                            : (_muted
+                                ? scheme.error
+                                : onSurface.withAlpha(180)),
                       ),
                     ),
                   ),
                 ),
+                const Spacer(),
 
                 const SizedBox(width: 10),
 
@@ -1664,11 +2203,24 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
     return _cleanTrackName(d > 0 ? n.substring(0, d) : n);
   }
 
+  // Display title/artist with the user's in-app override applied on top of the
+  // heuristic derived from the filename.
+  String _effTitle(String path) {
+    final ta = _titleArtist(_name(path));
+    return metadataStore.title(path, ta.$1);
+  }
+
+  String _effArtist(String path) {
+    final ta = _titleArtist(_name(path));
+    return metadataStore.artist(path, ta.$2 ?? '');
+  }
+
   // Per-track options sheet (opened from the ⋮ button).
   void _showTrackOptions(
       BuildContext context, String path, int realIdx, bool isFav) {
     final scheme = Theme.of(context).colorScheme;
-    final ta = _titleArtist(_name(path));
+    final title = _effTitle(path);
+    final artist = _effArtist(path);
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1697,15 +2249,15 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(ta.$1,
+                    Text(title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 15)),
-                    if (ta.$2 != null)
+                    if (artist.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
-                        child: Text(ta.$2!,
+                        child: Text(artist,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -1719,6 +2271,10 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
               _optionTile(scheme, Icons.play_arrow_rounded, 'Play now', () {
                 Navigator.pop(ctx);
                 widget.onPlay(realIdx);
+              }),
+              _optionTile(scheme, Icons.edit_rounded, 'Edit details', () {
+                Navigator.pop(ctx);
+                _showEditDetails(context, path);
               }),
               _optionTile(
                 scheme,
@@ -1757,6 +2313,134 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
       leading: Icon(icon, color: iconColor ?? c, size: 22),
       title: Text(label, style: TextStyle(color: c, fontSize: 14)),
       onTap: onTap,
+    );
+  }
+
+  // ── Edit track details (in-app, Play-safe — no file rewrite) ────────────────
+  Future<void> _showEditDetails(BuildContext context, String path) async {
+    final scheme = Theme.of(context).colorScheme;
+    final o = metadataStore.of(path);
+    final ta = _titleArtist(_name(path));
+    final titleC = TextEditingController(text: o?.title ?? ta.$1);
+    final artistC = TextEditingController(text: o?.artist ?? (ta.$2 ?? ''));
+    final albumC = TextEditingController(text: o?.album ?? '');
+    final genreC = TextEditingController(text: o?.genre ?? '');
+    final yearC = TextEditingController(text: o?.year ?? '');
+
+    Widget field(String label, TextEditingController c,
+        {TextInputType? kb, IconData? icon}) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: TextField(
+          controller: c,
+          keyboardType: kb,
+          decoration: InputDecoration(
+            labelText: label,
+            prefixIcon: icon != null ? Icon(icon, size: 20) : null,
+            isDense: true,
+            filled: true,
+            fillColor: scheme.surfaceContainerHighest,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+      );
+    }
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        // Lift above the keyboard.
+        padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 8,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 4, bottom: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: scheme.onSurfaceVariant.withAlpha(80),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  Icon(Icons.edit_note_rounded, color: scheme.primary),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('Edit details',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                  // One-tap cleanup of junk titles.
+                  TextButton.icon(
+                    onPressed: () {
+                      titleC.text = _cleanTrackName(titleC.text);
+                    },
+                    icon: const Icon(Icons.auto_fix_high_rounded, size: 16),
+                    label: const Text('Clean'),
+                    style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              field('Title', titleC, icon: Icons.music_note_rounded),
+              field('Artist', artistC, icon: Icons.person_rounded),
+              field('Album', albumC, icon: Icons.album_rounded),
+              Row(
+                children: [
+                  Expanded(child: field('Genre', genreC)),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 110,
+                    child: field('Year', yearC,
+                        kb: TextInputType.number),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              FilledButton.icon(
+                onPressed: () async {
+                  await metadataStore.set(
+                    path,
+                    TrackMeta(
+                      title: titleC.text.trim(),
+                      artist: artistC.text.trim(),
+                      album: albumC.text.trim(),
+                      genre: genreC.text.trim(),
+                      year: yearC.text.trim(),
+                    ),
+                  );
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (mounted) setState(() {}); // refresh the list
+                },
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Save details'),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -1877,13 +2561,15 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
                     child: Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: scheme.surfaceContainerHighest.withAlpha(140),
+                        // Red accent touch to match the brand.
+                        color: scheme.primary.withAlpha(28),
                         shape: BoxShape.circle,
+                        border: Border.all(color: scheme.primary.withAlpha(70)),
                       ),
                       child: Icon(
                           Icons.keyboard_arrow_down_rounded,
                           size: 22,
-                          color: scheme.onSurfaceVariant),
+                          color: scheme.primary),
                     ),
                   ),
                 ),
@@ -1997,7 +2683,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
                                         color: scheme.onSurfaceVariant)),
                           ),
                           title: Text(
-                            _titleArtist(_name(entry.value)).$1,
+                            _effTitle(entry.value),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -2008,10 +2694,10 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
                               color: isNow ? scheme.primary : null,
                             ),
                           ),
-                          subtitle: _titleArtist(_name(entry.value)).$2 == null
+                          subtitle: _effArtist(entry.value).isEmpty
                               ? null
                               : Text(
-                                  _titleArtist(_name(entry.value)).$2!,
+                                  _effArtist(entry.value),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(

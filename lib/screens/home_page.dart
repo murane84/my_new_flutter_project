@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
-import 'package:intl/intl.dart';
+// Hide intl's TextDirection so TextPainter/TextDirection.ltr resolve to dart:ui's.
+import 'package:intl/intl.dart' hide TextDirection;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:marquee/marquee.dart';
 import '../utils/toast_helper.dart';
 import '../utils/app_reload.dart';
 import '../utils/connection_status.dart';
@@ -19,8 +21,10 @@ import 'chat_page.dart';
 import 'api_service.dart';
 import 'websocket_manager.dart';
 import 'live_session_screen.dart';
+import 'legal_screen.dart';
 import '../services/live_session_service.dart'
     show activeLiveSession, endActiveLiveSession;
+import '../services/notif_service.dart';
 import 'token_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
@@ -104,13 +108,34 @@ class PlaybackBus {
   // Pause the local player (used when a live session takes over playback so
   // the same song isn't heard twice).
   VoidCallback? onPause;
+  // Resume playback (media-button "play"); seek to an absolute position
+  // (media-button / notification scrub).
+  VoidCallback? onPlay;
+  void Function(Duration position)? onSeekTo;
   // Read-backs so the live-share flow can sync to what's playing now.
   String? Function()? currentPath; // file path of the current track, if any
   int Function()? currentPositionMs; // current playback position
   bool Function()? isPlaying;
+  // Toggle "favourite" on the currently-playing track (driven by the bar heart).
+  VoidCallback? onToggleFavorite;
 }
 
 final playbackBus = PlaybackBus();
+
+// Elapsed / total for the current track, so the now-playing bar can show tiny
+// time labels flanking the seek bar. Updated per position tick alongside
+// [playProgressNotifier]; kept separate so only the times rebuild.
+class PlayClock {
+  const PlayClock(this.position, this.duration);
+  final Duration position;
+  final Duration duration;
+}
+
+final ValueNotifier<PlayClock> playClockNotifier =
+    ValueNotifier<PlayClock>(const PlayClock(Duration.zero, Duration.zero));
+
+// Whether the currently-playing track is a favourite — drives the bar's heart.
+final ValueNotifier<bool> favoriteNotifier = ValueNotifier<bool>(false);
 
 // Current playback progress (0..1), updated by the player's position stream.
 // Kept separate from nowPlayingNotifier so the frequent per-tick updates only
@@ -153,6 +178,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // App-wide notification socket so "Listen Together" invites reach the user on
   // ANY screen — not only when the matching chat happens to be open.
   WebSocketManager? _notifyWs;
+  // Whether the app is currently in the foreground (drives whether an incoming
+  // message pops a local notification).
+  bool _appForeground = true;
   List<Map<String, dynamic>> _filteredFriends = [];
   bool _isLoadingFriends = false;
 
@@ -292,6 +320,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+    _appForeground = state == AppLifecycleState.resumed;
     if (state == AppLifecycleState.resumed) {
       // Coming back from idle/background — re-check the server and go online.
       _discoverServer();
@@ -659,8 +688,34 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _handleNotification(Map<String, dynamic> event) {
     if (!mounted) return;
-    if (event['type'] == 'live_invite') {
+    final type = event['type']?.toString();
+    if (type == 'live_invite') {
       _showLiveInvite(event);
+      return;
+    }
+    // A new chat message arriving on the per-user notify socket. When the app
+    // is backgrounded (e.g. music playing in the car), pop a local
+    // notification so the user is prompted back. Requires the backend to emit
+    // a message event on this socket.
+    if (type == 'new_message' || type == 'message' || type == 'chat_message') {
+      final data =
+          (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      // Backend payload is a MessageWithSender: sender is a nested user object
+      // and the text lives in `content`.
+      final senderObj = (data['sender'] as Map?)?.cast<String, dynamic>();
+      final sender = (senderObj?['username'] ??
+              data['sender_name'] ??
+              data['username'] ??
+              'New message')
+          .toString();
+      final text =
+          (data['content'] ?? data['text'] ?? data['message'] ?? '').toString();
+      if (!_appForeground) {
+        showMessageNotification(
+            title: sender, body: text.isEmpty ? 'Sent you a message' : text);
+      }
+      // Refresh the conversation list so previews/unread update either way.
+      _fetchFriends();
     }
   }
 
@@ -675,23 +730,24 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         (data['track'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
     final hostName = data['host_username']?.toString() ?? 'Someone';
 
-    final accept = await showDialog<bool>(
+    final accept = await showGeneralDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Listen together?'),
-        content: Text(
-          '$hostName wants to play "${track['title'] ?? 'a song'}" with you, live.',
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black.withAlpha(120),
+      transitionDuration: const Duration(milliseconds: 260),
+      pageBuilder: (_, __, ___) => _LiveInviteDialog(
+        hostName: hostName,
+        trackTitle: (track['title'] ?? 'a song').toString(),
+      ),
+      transitionBuilder: (_, anim, __, child) => FadeTransition(
+        opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.9, end: 1.0).animate(
+            CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+          ),
+          child: child,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Decline'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Join'),
-          ),
-        ],
       ),
     );
     if (accept != true) return;
@@ -886,13 +942,17 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     required double containerWidth,
     required double minRenderWidth,
     required Widget child,
+    Duration duration = const Duration(milliseconds: 300),
   }) {
     final visible = containerWidth > 0.5;
     // Fade out quickly when collapsing to prevent OverflowBox visual artifact
     final opacity = (containerWidth / minRenderWidth).clamp(0.0, 1.0);
 
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
+      // Zero duration while the user is actively dragging the divider, so the
+      // panel tracks the pointer 1:1 (no chasing/lag); the smooth 300ms tween is
+      // kept for collapse/expand toggles.
+      duration: duration,
       curve: Curves.easeInOut,
       width: containerWidth,
       clipBehavior: Clip.hardEdge,
@@ -1008,6 +1068,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           _PanelToggleBtn(
             isFullScreen: false,
             customIcon: Icons.arrow_back_ios_new_rounded,
+            tooltip: 'Back to messages',
             onTap: () => setState(() {
               _activeFriendId = null;
               _activeFriendName = null;
@@ -1429,7 +1490,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         // personal track is loaded and the user hasn't dismissed it; otherwise
         // a small floating music button stands in as the entry point.
         final barVisible = hasTrack && !_barDismissed;
-        final barSpace = 66.0;
+        // Reserve enough chat space for the now-playing bar (grab handle +
+        // title + progress row).
+        final barSpace = 84.0;
         final h = constraints.maxHeight;
 
         return Stack(
@@ -1484,23 +1547,51 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       context,
       Column(
         children: [
-          // Header: grab handle + title + collapse chevron.
-          Row(
-            children: [
-              _PanelToggleBtn(
-                isFullScreen: false,
-                customIcon: Icons.keyboard_arrow_down_rounded,
-                onTap: () => setState(() => _playerExpanded = false),
-              ),
-              const SizedBox(width: 10),
-              Icon(Icons.music_note_rounded, color: scheme.primary, size: 20),
-              const SizedBox(width: 6),
-              const Text('Now Playing',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-              const Spacer(),
-              // Live badge in the sheet header too, for context.
-              if (liveSessionNotifier.active) _liveChip(context),
-            ],
+          // Grab handle + header. Swiping DOWN anywhere on this handle/header
+          // area minimises the panel (in addition to the chevron button), and a
+          // tap on the handle collapses it too.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _playerExpanded = false),
+            onVerticalDragEnd: (d) {
+              if ((d.primaryVelocity ?? 0) > 120) {
+                setState(() => _playerExpanded = false);
+              }
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Draggable grab handle — the swipe-down affordance.
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  width: 42,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: scheme.onSurfaceVariant.withAlpha(90),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                Row(
+                  children: [
+                    _PanelToggleBtn(
+                      isFullScreen: false,
+                      customIcon: Icons.keyboard_arrow_down_rounded,
+                      onTap: () => setState(() => _playerExpanded = false),
+                    ),
+                    const SizedBox(width: 10),
+                    Icon(Icons.music_note_rounded,
+                        color: scheme.primary, size: 20),
+                    const SizedBox(width: 6),
+                    const Text('Now Playing',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 16)),
+                    const Spacer(),
+                    // Live badge in the sheet header too, for context.
+                    if (liveSessionNotifier.active) _liveChip(context),
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           Expanded(
@@ -1729,57 +1820,116 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         }
       },
       child: Container(
-        margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+        // Flush, full-width strip that sits directly on the footer so the two
+        // read as ONE continuous bottom module (not a floating card above a
+        // separate bar). Rounded only at the top; a soft upward shadow lifts the
+        // whole unit off the chat above.
         decoration: BoxDecoration(
           color: scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: scheme.outlineVariant.withAlpha(70),
-            width: 1,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(18)),
+          border: Border(
+            top: BorderSide(color: scheme.outlineVariant.withAlpha(70)),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withAlpha(30),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+              color: Colors.black.withAlpha(28),
+              blurRadius: 14,
+              offset: const Offset(0, -3),
             ),
           ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Grab handle — caps the module and signals swipe-up to expand.
+            Container(
+              margin: const EdgeInsets.only(top: 7, bottom: 1),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: scheme.onSurfaceVariant.withAlpha(70),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.fromLTRB(10, 0, 8, 8),
               child: Row(
                 children: [
-                  // Mini disc / art placeholder.
+                  // Mini disc / art placeholder — glows when playing.
                   Container(
-                    width: 40,
-                    height: 40,
+                    width: 42,
+                    height: 42,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: RadialGradient(colors: [
-                        scheme.primary.withAlpha(60),
+                        scheme.primary.withAlpha(np.playing ? 110 : 60),
                         scheme.surfaceContainerHighest,
                       ]),
+                      boxShadow: np.playing
+                          ? [
+                              BoxShadow(
+                                color: scheme.primary.withAlpha(90),
+                                blurRadius: 12,
+                                spreadRadius: 1,
+                              ),
+                            ]
+                          : null,
                     ),
                     child: Icon(
                       np.playing
                           ? Icons.graphic_eq_rounded
                           : Icons.music_note_rounded,
-                      size: 18,
+                      size: 19,
                       color: scheme.primary,
                     ),
                   ),
                   const SizedBox(width: 10),
-                  // Title lives in the footer (single source of truth). Here we
-                  // use the freed space for a seekable progress bar. A plain
-                  // tap still expands (handled by the parent); a horizontal
-                  // drag here scrubs.
+                  // Title (auto-scrolls if long) sits directly above a slim
+                  // seekable progress bar — the footer is now status-only.
                   Expanded(
-                    child: _barProgress(context),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          height: 17,
+                          child: _ScrollingText(
+                            text: np.track.isEmpty ? 'No track' : np.track,
+                            style: TextStyle(
+                              color: scheme.onSurface,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        _barProgress(context),
+                      ],
+                    ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 2),
+                  // Quick favourite toggle for the current track.
+                  ValueListenableBuilder<bool>(
+                    valueListenable: favoriteNotifier,
+                    builder: (_, fav, __) => GestureDetector(
+                      onTap: () => playbackBus.onToggleFavorite?.call(),
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: const EdgeInsets.all(5),
+                        child: Icon(
+                          fav
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
+                          size: 20,
+                          color: fav
+                              ? scheme.primary
+                              : scheme.onSurface.withAlpha(150),
+                        ),
+                      ),
+                    ),
+                  ),
                   // Previous / Play / Next — drive the mounted player via the bus.
                   _barBtn(
                     context,
@@ -1826,11 +1976,48 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  // Slim seekable progress bar for the now-playing bar. Only this widget
-  // rebuilds on each position tick (via playProgressNotifier), so the chat
-  // surface underneath stays still. Horizontal drag / tap scrubs; a plain tap
-  // that isn't a drag bubbles up to the parent (expand).
+  // Seek row for the now-playing bar: elapsed · slim seekable bar · remaining.
+  // Driven by playClockNotifier so only this row rebuilds each tick, not the
+  // chat surface. Horizontal drag / tap scrubs; taps bubble up to expand.
   Widget _barProgress(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final timeStyle = TextStyle(
+      fontSize: 9.5,
+      height: 1.0,
+      color: scheme.onSurface.withAlpha(150),
+      fontWeight: FontWeight.w600,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    return ValueListenableBuilder<PlayClock>(
+      valueListenable: playClockNotifier,
+      builder: (_, clock, __) {
+        final durMs = clock.duration.inMilliseconds;
+        final frac =
+            durMs > 0 ? (clock.position.inMilliseconds / durMs).clamp(0.0, 1.0) : 0.0;
+        var remaining = clock.duration - clock.position;
+        if (remaining < Duration.zero) remaining = Duration.zero;
+        return Row(
+          children: [
+            SizedBox(
+              width: 30,
+              child: Text(_fmtClock(clock.position), style: timeStyle),
+            ),
+            const SizedBox(width: 6),
+            Expanded(child: _seekTrack(context, frac)),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: 34,
+              child: Text('-${_fmtClock(remaining)}',
+                  style: timeStyle, textAlign: TextAlign.right),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // The draggable track itself (bar + gradient fill). [frac] is 0..1.
+  Widget _seekTrack(BuildContext context, double frac) {
     final scheme = Theme.of(context).colorScheme;
     return LayoutBuilder(
       builder: (ctx, cons) {
@@ -1840,48 +2027,53 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           playbackBus.onSeekFraction?.call((dx / w).clamp(0.0, 1.0));
         }
 
+        final f = frac.clamp(0.0, 1.0);
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          // Only claim horizontal drags — vertical drags & taps bubble to the
-          // parent (expand). Dragging scrubs the track.
           onHorizontalDragStart: (d) => seekAt(d.localPosition.dx),
           onHorizontalDragUpdate: (d) => seekAt(d.localPosition.dx),
           child: SizedBox(
-            height: 26,
+            height: 22,
             child: Center(
-              child: ValueListenableBuilder<double>(
-                valueListenable: playProgressNotifier,
-                builder: (_, frac, __) {
-                  final f = frac.clamp(0.0, 1.0);
-                  return Stack(
-                    alignment: Alignment.centerLeft,
-                    children: [
-                      Container(
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: scheme.onSurface.withAlpha(40),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
+              child: Stack(
+                alignment: Alignment.centerLeft,
+                children: [
+                  Container(
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: scheme.onSurface.withAlpha(40),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  FractionallySizedBox(
+                    widthFactor: f == 0 ? 0.001 : f,
+                    child: Container(
+                      height: 4,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [
+                          Color.lerp(scheme.primary, Colors.white, 0.25)!,
+                          scheme.primary,
+                        ]),
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                      FractionallySizedBox(
-                        widthFactor: f == 0 ? 0.001 : f,
-                        child: Container(
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: scheme.primary,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
         );
       },
     );
+  }
+
+  // mm:ss (or h:mm:ss for long tracks).
+  String _fmtClock(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60);
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    if (h > 0) return '$h:${m.toString().padLeft(2, '0')}:$s';
+    return '$m:$s';
   }
 
   Widget _barBtn(BuildContext context, IconData icon, VoidCallback onTap,
@@ -1913,66 +2105,17 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return ListenableBuilder(
       listenable: nowPlayingNotifier,
       builder: (context, _) {
-        final np = nowPlayingNotifier;
-        final hasTrack = np.track.isNotEmpty;
-
+        // Pure status strip now — no track info (that lives in the bar above).
+        final statusWord = _isDiscovering
+            ? 'Connecting…'
+            : (_serverReachable ? 'Connected' : 'Offline');
         return Container(
           height: 44,
           color: scheme.surfaceContainerHighest,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              // ── Left: now playing ────────────────────────────────────────
-              Icon(
-                hasTrack && np.playing
-                    ? Icons.equalizer_rounded
-                    : Icons.music_off_rounded,
-                size: 16,
-                color: hasTrack && np.playing
-                    ? scheme.primary
-                    : scheme.onSurface.withAlpha(120),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: hasTrack
-                    ? Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            np.track,
-                            style: TextStyle(
-                              color: scheme.onSurface,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (np.artist.isNotEmpty)
-                            Text(
-                              np.artist,
-                              style: TextStyle(
-                                color:
-                                    scheme.onSurface.withAlpha(160),
-                                fontSize: 10,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                        ],
-                      )
-                    : Text(
-                        'No track playing',
-                        style: TextStyle(
-                          color: scheme.onSurface.withAlpha(120),
-                          fontSize: 12,
-                        ),
-                      ),
-              ),
-
-              // ── Right: server status + user + online count ───────────────
-              const SizedBox(width: 8),
-
-              // Server IP chip — tap to configure
+              // ── Left: server / connection status (tap to configure) ───────
               Tooltip(
                 message: _serverReachable
                     ? 'Connected to ${(kIsWeb || kReleaseMode) ? _serverIp : '$_serverIp:${AppConfig.port}'}\nLong-press to reconfigure'
@@ -1981,47 +2124,56 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   onTap: _showServerSettings,
                   onLongPress: () => _discoverServer(forceReset: true),
                   behavior: HitTestBehavior.opaque,
-                  // Just a status dot — green (live) / red (offline).
-                  // No domain text; full info lives in the tooltip.
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 4),
-                    child: _isDiscovering
-                        ? SizedBox(
-                            width: 11,
-                            height: 11,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.6,
-                              color: scheme.onSurface.withAlpha(160),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _isDiscovering
+                          ? SizedBox(
+                              width: 11,
+                              height: 11,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.6,
+                                color: scheme.onSurface.withAlpha(160),
+                              ),
+                            )
+                          : AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _serverReachable
+                                    ? Colors.green
+                                    : Colors.red,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: (_serverReachable
+                                            ? Colors.green
+                                            : Colors.red)
+                                        .withAlpha(150),
+                                    blurRadius: 6,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
                             ),
-                          )
-                        : AnimatedContainer(
-                            duration: const Duration(milliseconds: 300),
-                            width: 11,
-                            height: 11,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: _serverReachable
-                                  ? Colors.green
-                                  : Colors.red,
-                              // Soft glow so the dot "emits"
-                              boxShadow: [
-                                BoxShadow(
-                                  color: (_serverReachable
-                                          ? Colors.green
-                                          : Colors.red)
-                                      .withAlpha(150),
-                                  blurRadius: 6,
-                                  spreadRadius: 1,
-                                ),
-                              ],
-                            ),
-                          ),
+                      const SizedBox(width: 7),
+                      Text(
+                        statusWord,
+                        style: TextStyle(
+                          color: scheme.onSurface.withAlpha(180),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
 
+              const Spacer(),
+
+              // ── Right: online friends + current user ──────────────────────
               if (_onlineFriendsCount > 0) ...[
                 Container(
                   width: 7,
@@ -2033,13 +2185,19 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ),
                 const SizedBox(width: 3),
                 Text(
-                  '$_onlineFriendsCount',
+                  '$_onlineFriendsCount online',
                   style: TextStyle(
-                    color: scheme.onSurface.withAlpha(180),
+                    color: scheme.onSurface.withAlpha(170),
                     fontSize: 11,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
+                Container(
+                  width: 1,
+                  height: 16,
+                  color: scheme.outlineVariant.withAlpha(90),
+                ),
+                const SizedBox(width: 10),
               ],
               Icon(Icons.person_rounded,
                   size: 14,
@@ -2131,12 +2289,19 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   : Icons.dark_mode_rounded,
               color: scheme.onSurface,
             ),
+            tooltip: themeProvider.isDarkMode
+                ? 'Switch to light mode'
+                : 'Switch to dark mode',
             onPressed: () =>
                 themeProvider.toggleTheme(!themeProvider.isDarkMode),
           ),
           IconButton(
-            icon: Icon(Icons.logout_rounded,
-                color: scheme.onSurface),
+            icon: Icon(Icons.shield_outlined, color: scheme.onSurface),
+            tooltip: 'Legal & About',
+            onPressed: () => showLegalMenu(context),
+          ),
+          IconButton(
+            icon: _LogoutGlyph(color: scheme.onSurface.withAlpha(210)),
             onPressed: _logout,
             tooltip: 'Sign out',
           ),
@@ -2195,6 +2360,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
               _animatedPanel(
                 containerWidth: musicW,
                 minRenderWidth: 220,
+                duration: _isDragging
+                    ? Duration.zero
+                    : const Duration(milliseconds: 300),
                 child: _buildMusicContent(context),
               ),
 
@@ -2240,35 +2408,320 @@ class _PanelToggleBtn extends StatelessWidget {
   final bool isFullScreen;
   final VoidCallback onTap;
   final IconData? customIcon;
+  final String? tooltip;
 
   const _PanelToggleBtn({
     required this.isFullScreen,
     required this.onTap,
     this.customIcon,
+    this.tooltip,
   });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(7),
-        decoration: BoxDecoration(
-          color: isFullScreen
-              ? scheme.primary
-              : scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(9),
+    final label = tooltip ??
+        (customIcon == Icons.keyboard_arrow_down_rounded
+            ? 'Minimize'
+            : (isFullScreen ? 'Exit full screen' : 'Full screen'));
+    return Tooltip(
+      message: label,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: isFullScreen
+                ? scheme.primary
+                : scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(
+            customIcon ??
+                (isFullScreen
+                    ? Icons.close_fullscreen_rounded
+                    : Icons.open_in_full_rounded),
+            size: 17,
+            color:
+                isFullScreen ? scheme.onPrimary : scheme.onSurfaceVariant,
+          ),
         ),
-        child: Icon(
-          customIcon ??
-              (isFullScreen
-                  ? Icons.close_fullscreen_rounded
-                  : Icons.open_in_full_rounded),
-          size: 17,
-          color:
-              isFullScreen ? scheme.onPrimary : scheme.onSurfaceVariant,
+      ),
+    );
+  }
+}
+
+/// A single-line label that gently auto-scrolls (marquee) ONLY when the text is
+/// too wide to fit; short titles render as a plain static label. Used by the
+/// now-playing bar so long song filenames stay fully readable without stealing
+/// vertical space.
+class _ScrollingText extends StatelessWidget {
+  const _ScrollingText({required this.text, required this.style});
+
+  final String text;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final tp = TextPainter(
+          text: TextSpan(text: text, style: style),
+          maxLines: 1,
+          textDirection: TextDirection.ltr,
+        )..layout();
+        final overflows = tp.width > constraints.maxWidth;
+        if (!overflows) {
+          return Text(text,
+              style: style, maxLines: 1, overflow: TextOverflow.clip);
+        }
+        return Marquee(
+          text: text,
+          style: style,
+          blankSpace: 46,
+          velocity: 26,
+          pauseAfterRound: const Duration(seconds: 2),
+          fadingEdgeStartFraction: 0.06,
+          fadingEdgeEndFraction: 0.12,
+          showFadingOnlyWhenScrolling: true,
+        );
+      },
+    );
+  }
+}
+
+/// A refined, thin-stroke logout mark — a rounded door frame with an arrow
+/// gliding out through the opening. Lighter and more elegant than the stock
+/// filled Material "exit" glyph.
+class _LogoutGlyph extends StatelessWidget {
+  const _LogoutGlyph({required this.color, this.size = 22});
+
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+        size: Size.square(size),
+        painter: _LogoutPainter(color),
+      );
+}
+
+class _LogoutPainter extends CustomPainter {
+  _LogoutPainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.width / 24.0;
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.15 * s
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    // Door frame: a rounded "[" open on the right.
+    final frame = Path()
+      ..moveTo(14 * s, 4 * s)
+      ..lineTo(8 * s, 4 * s)
+      ..cubicTo(6.9 * s, 4 * s, 6 * s, 4.9 * s, 6 * s, 6 * s)
+      ..lineTo(6 * s, 18 * s)
+      ..cubicTo(6 * s, 19.1 * s, 6.9 * s, 20 * s, 8 * s, 20 * s)
+      ..lineTo(14 * s, 20 * s);
+    canvas.drawPath(frame, stroke);
+
+    // Arrow gliding out through the opening.
+    canvas.drawLine(Offset(11 * s, 12 * s), Offset(20 * s, 12 * s), stroke);
+    final head = Path()
+      ..moveTo(16.5 * s, 8.5 * s)
+      ..lineTo(20 * s, 12 * s)
+      ..lineTo(16.5 * s, 15.5 * s);
+    canvas.drawPath(head, stroke);
+  }
+
+  @override
+  bool shouldRepaint(covariant _LogoutPainter old) => old.color != color;
+}
+
+/// Polished "Listen together?" invitation — a centered brand card with a
+/// headphones badge, the host's avatar + name, the track on a pill, and clear
+/// Decline / Join actions. Pops `true` on Join, `false`/null otherwise.
+class _LiveInviteDialog extends StatelessWidget {
+  const _LiveInviteDialog({required this.hostName, required this.trackTitle});
+
+  final String hostName;
+  final String trackTitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final initial =
+        hostName.trim().isNotEmpty ? hostName.trim()[0].toUpperCase() : '?';
+    // Tidy a messy filename-title a little for display.
+    var title = trackTitle.trim();
+    if (title.startsWith('- ')) title = title.substring(2).trim();
+    if (title.isEmpty) title = 'a song';
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Material(
+          type: MaterialType.transparency,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(22, 22, 22, 16),
+              decoration: BoxDecoration(
+                color: scheme.surface,
+                borderRadius: BorderRadius.circular(26),
+                border: Border.all(color: scheme.outlineVariant.withAlpha(70)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(80),
+                    blurRadius: 34,
+                    offset: const Offset(0, 14),
+                  ),
+                  BoxShadow(
+                    color: scheme.primary.withAlpha(40),
+                    blurRadius: 26,
+                    spreadRadius: -6,
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Headphones badge with a soft brand halo.
+                  Center(
+                    child: Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(colors: [
+                          scheme.primary.withAlpha(60),
+                          scheme.primary.withAlpha(18),
+                        ]),
+                        border:
+                            Border.all(color: scheme.primary.withAlpha(90)),
+                      ),
+                      child: Icon(Icons.headphones_rounded,
+                          size: 30, color: scheme.primary),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Center(
+                    child: Text(
+                      'Listen together?',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  // Host row.
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: scheme.primaryContainer,
+                        child: Text(
+                          initial,
+                          style: TextStyle(
+                            color: scheme.onPrimaryContainer,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: RichText(
+                          text: TextSpan(
+                            style: TextStyle(
+                                fontSize: 13.5,
+                                color: scheme.onSurface.withAlpha(220),
+                                height: 1.3),
+                            children: [
+                              TextSpan(
+                                text: hostName,
+                                style:
+                                    const TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              const TextSpan(
+                                  text: ' wants to listen with you, live.'),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Track pill.
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest.withAlpha(140),
+                      borderRadius: BorderRadius.circular(14),
+                      border:
+                          Border.all(color: scheme.outlineVariant.withAlpha(70)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.music_note_rounded,
+                            size: 18, color: scheme.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.onSurface,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  // Actions.
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        style: TextButton.styleFrom(
+                          foregroundColor: scheme.onSurfaceVariant,
+                        ),
+                        child: const Text('Decline'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton.icon(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        icon: const Icon(Icons.headphones_rounded, size: 18),
+                        label: const Text('Join'),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );

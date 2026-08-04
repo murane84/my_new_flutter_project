@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
+// Hide intl's TextDirection so the unprefixed name resolves to dart:ui's
+// (needed by the ShapeBorder overrides below).
+import 'package:intl/intl.dart' hide TextDirection;
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -14,6 +16,7 @@ import '../utils/toast_helper.dart';
 import '../utils/connection_status.dart';
 import '../utils/time_utils.dart';
 import '../utils/file_bytes.dart';
+import '../utils/marquee_text.dart';
 import 'live_session_screen.dart';
 import 'home_page.dart' show playlistNotifier, playbackBus;
 
@@ -577,86 +580,141 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       ),
       builder: (ctx) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-                child: Row(
-                  children: [
-                    Icon(Icons.headphones_rounded,
-                        color: scheme.primary, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Play live with ${widget.friendName}',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 15),
-                        overflow: TextOverflow.ellipsis,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header — headphones badge + title + subtitle.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 2, 18, 10),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: scheme.primary.withAlpha(28),
+                          ),
+                          child: Icon(Icons.headphones_rounded,
+                              color: scheme.primary, size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                'Listen together',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 16),
+                              ),
+                              const SizedBox(height: 1),
+                              Text(
+                                'Pick a song to stream to ${widget.friendName}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onSurfaceVariant),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(
+                      height: 1,
+                      color: scheme.outlineVariant.withAlpha(60)),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      itemCount: ordered.length,
+                      itemBuilder: (_, i) {
+                        final p = ordered[i];
+                        final isNow = p == nowPath;
+                        final tile = ListTile(
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 8),
+                          leading: CircleAvatar(
+                            radius: 18,
+                            backgroundColor: isNow
+                                ? scheme.primary
+                                : scheme.primaryContainer,
+                            child: Icon(
+                              isNow
+                                  ? Icons.graphic_eq_rounded
+                                  : Icons.music_note_rounded,
+                              size: 17,
+                              color: isNow
+                                  ? Colors.white
+                                  : scheme.onPrimaryContainer,
+                            ),
+                          ),
+                          title: MarqueeText(
+                            text: _titleFromPath(p),
+                            height: 18,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: isNow
+                                  ? FontWeight.bold
+                                  : FontWeight.w500,
+                              color:
+                                  isNow ? scheme.primary : scheme.onSurface,
+                            ),
+                          ),
+                          subtitle: isNow
+                              ? Text('Now playing — share from here',
+                                  style: TextStyle(
+                                      fontSize: 11, color: scheme.primary))
+                              : null,
+                          trailing: Icon(Icons.sensors_rounded,
+                              size: 18,
+                              color: isNow
+                                  ? scheme.primary
+                                  : scheme.onSurfaceVariant.withAlpha(120)),
+                          onTap: () => Navigator.pop(ctx, p),
+                        );
+                        if (!isNow) return tile;
+                        // Highlight the now-playing row as a rounded chip.
+                        return Container(
+                          margin: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: scheme.primary.withAlpha(22),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                                color: scheme.primary.withAlpha(90)),
+                          ),
+                          child: tile,
+                        );
+                      },
+                    ),
+                  ),
+                  Divider(
+                      height: 1,
+                      color: scheme.outlineVariant.withAlpha(60)),
+                  // Let the user still browse files if the song isn't loaded.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.tonalIcon(
+                        onPressed: () => Navigator.pop(ctx, '__browse__'),
+                        icon: const Icon(Icons.folder_open_rounded, size: 18),
+                        label: const Text('Choose a file instead'),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 4),
+                ],
               ),
-              Text(
-                'Pick a song from your player',
-                style: TextStyle(
-                    fontSize: 12, color: scheme.onSurfaceVariant),
-              ),
-              const SizedBox(height: 6),
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: ordered.length,
-                  itemBuilder: (_, i) {
-                    final p = ordered[i];
-                    final isNow = p == nowPath;
-                    return Container(
-                      color: isNow ? scheme.primary.withAlpha(18) : null,
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          radius: 16,
-                          backgroundColor: isNow
-                              ? scheme.primary
-                              : scheme.primaryContainer,
-                          child: Icon(
-                            isNow
-                                ? Icons.graphic_eq_rounded
-                                : Icons.music_note_rounded,
-                            size: 16,
-                            color: isNow
-                                ? Colors.white
-                                : scheme.onPrimaryContainer,
-                          ),
-                        ),
-                        title: Text(
-                          _titleFromPath(p),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontWeight:
-                                isNow ? FontWeight.bold : FontWeight.normal,
-                          ),
-                        ),
-                        subtitle: isNow
-                            ? Text('Now playing — share from here',
-                                style: TextStyle(
-                                    fontSize: 11, color: scheme.primary))
-                            : null,
-                        onTap: () => Navigator.pop(ctx, p),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              // Let the user still browse files if the song isn't loaded.
-              TextButton.icon(
-                onPressed: () => Navigator.pop(ctx, '__browse__'),
-                icon: const Icon(Icons.folder_open_rounded, size: 18),
-                label: const Text('Choose a file instead'),
-              ),
-              const SizedBox(height: 4),
-            ],
+            ),
           ),
         );
       },
@@ -955,20 +1013,22 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   // ── Build helpers ─────────────────────────────────────────────────────────
 
-  Widget _buildStatusIcon(Map<String, dynamic> msg, {bool isMe = false}) {
+  // [muted] tints "sending / sent / delivered"; [read] highlights the read
+  // receipt. Both are passed in so the ticks stay legible on either the dark
+  // teal-green or the pale-mint sent bubble.
+  Widget _buildStatusIcon(Map<String, dynamic> msg,
+      {required Color muted, required Color read}) {
     final status = msg['status']?.toString();
     if (status == 'sending') {
-      return const Icon(Icons.access_time, size: 12,
-          color: Colors.white54);
+      return Icon(Icons.access_time, size: 12, color: muted);
     }
     if (msg['is_read'] == true) {
-      return const Icon(Icons.done_all, size: 13,
-          color: Color(0xFF53D8FB)); // bright cyan — stands out on dark bubble
+      return Icon(Icons.done_all, size: 13, color: read);
     }
     if (msg['delivered'] == true) {
-      return const Icon(Icons.done_all, size: 13, color: Colors.white54);
+      return Icon(Icons.done_all, size: 13, color: muted);
     }
-    return const Icon(Icons.done, size: 13, color: Colors.white54);
+    return Icon(Icons.done, size: 13, color: muted);
   }
 
   // Checks if two adjacent messages (list is reversed = newer first) should
@@ -985,7 +1045,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   Widget _buildBubble(Map<String, dynamic> msg, bool isMe, bool isDark,
-      bool showAvatar, bool isFirst) {
+      bool showAvatar, bool isFirst, bool showTail) {
     final scheme = Theme.of(context).colorScheme;
     final content = msg['content'] as String? ?? '';
     final hasQuote = content.startsWith('> ');
@@ -1006,23 +1066,40 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final emojiOnly = !hasQuote && _isEmojiOnly(mainText);
 
     // ── Bubble colours ──────────────────────────────────────────────────────
-    final bubbleColor = isMe
+    // Sent messages use a green/mint family in BOTH themes, so the sender's
+    // identity stays consistent: a deep teal-green on dark, a soft pale mint on
+    // light. Received bubbles are a clean neutral (warm charcoal / white).
+    final sentBubble =
+        isDark ? const Color(0xFF12634A) : const Color(0xFFCFEFDD);
+    final recvBubble =
+        isDark ? const Color(0xFF241E20) : Colors.white;
+    final bubbleColor = isMe ? sentBubble : recvBubble;
+    // Pale mint needs dark text; the deep green (and received) keep their own.
+    final onSent = isDark ? Colors.white : const Color(0xFF063825);
+    final textColor = isMe ? onSent : scheme.onSurface;
+    final quoteBarColor = isMe
+        ? (isDark ? Colors.white54 : const Color(0xFF0B7A4C))
+        : scheme.primary;
+    // Muted + "read" accent for the timestamp/ticks, tuned per bubble.
+    final sentMuted = onSent.withAlpha(isDark ? 150 : 140);
+    final sentRead =
+        isDark ? const Color(0xFF53D8FB) : const Color(0xFF0B7A4C);
+    // Subtle border to lift each bubble off the wallpaper.
+    final bubbleBorder = isMe
         ? (isDark
-            ? const Color(0xFF1E4D78)  // rich navy-blue for sent (dark)
-            : const Color(0xFF0B7A4C)) // WhatsApp-green for sent (light)
-        : (isDark ? const Color(0xFF2A2A3A) : Colors.white);
-    final textColor = isMe ? Colors.white : scheme.onSurface;
-    final quoteBarColor = isMe ? Colors.white54 : scheme.primary;
+            ? Colors.white.withAlpha(18)
+            : const Color(0xFF0B7A4C).withAlpha(46))
+        : (isDark ? Colors.white.withAlpha(20) : Colors.black.withAlpha(14));
 
-    // ── Bubble shape: tail on the last message of each group ───────────────
-    // showAvatar == last message in group (oldest, visually at top of group)
-    const rFull = Radius.circular(18);
-    const rTail = Radius.circular(5);
-    final radius = BorderRadius.only(
-      topLeft: rFull,
-      topRight: rFull,
-      bottomLeft: isMe ? rFull : (showAvatar ? rTail : rFull),
-      bottomRight: isMe ? (showAvatar ? rTail : rFull) : rFull,
+    // ── Bubble shape: a little beak/tail on the bottom-most bubble of each
+    // group, pointing to its sender's side (avatar for received, edge for me).
+    const tailSize = 7.0;
+    final bubbleShape = _BubbleBorder(
+      radius: 18,
+      tailSize: tailSize,
+      tailOnRight: isMe,
+      showTail: showTail,
+      side: BorderSide(color: bubbleBorder, width: 0.8),
     );
 
     // ── Spacing: tighter between grouped messages ──────────────────────────
@@ -1086,19 +1163,23 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                 // ── Normal bubble ─────────────────────────────────────
                 Flexible(
                   child: Container(
-                    decoration: BoxDecoration(
+                    decoration: ShapeDecoration(
                       color: bubbleColor,
-                      borderRadius: radius,
-                      boxShadow: [
+                      shape: bubbleShape,
+                      shadows: [
                         BoxShadow(
-                          color: Colors.black.withAlpha(22),
-                          blurRadius: 5,
-                          offset: const Offset(0, 2),
+                          color: Colors.black.withAlpha(isDark ? 46 : 20),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
                         ),
                       ],
                     ),
-                    padding: const EdgeInsets.only(
-                        left: 11, right: 11, top: 8, bottom: 6),
+                    // Extra padding on the tail side so text clears the beak.
+                    padding: EdgeInsets.only(
+                        left: 11 + (showTail && !isMe ? tailSize : 0),
+                        right: 11 + (showTail && isMe ? tailSize : 0),
+                        top: 8,
+                        bottom: 6),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
@@ -1169,13 +1250,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                   style: TextStyle(
                                     fontSize: 10.5,
                                     color: isMe
-                                        ? Colors.white60
+                                        ? sentMuted
                                         : scheme.onSurface.withAlpha(120),
                                   ),
                                 ),
                                 if (isMe) ...[
                                   const SizedBox(width: 3),
-                                  _buildStatusIcon(msg, isMe: true),
+                                  _buildStatusIcon(msg,
+                                      muted: sentMuted, read: sentRead),
                                 ],
                               ],
                             ),
@@ -1414,6 +1496,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               children: [
                 // Emoji button
                 IconButton(
+                  tooltip: _showEmoji ? 'Keyboard' : 'Emoji',
                   icon: Icon(
                     _showEmoji
                         ? Icons.keyboard_rounded
@@ -1426,6 +1509,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   },
                   visualDensity: VisualDensity.compact,
                 ),
+
                 // Listen together — play a local song live with this friend.
                 // Lives in the composer so it's always visible, including when
                 // the chat is embedded in a panel (showAppBar == false).
@@ -1485,18 +1569,21 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
                   child: hasText
-                      ? GestureDetector(
-                          key: const ValueKey('send'),
-                          onTap: _sendMessage,
-                          child: Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: scheme.primary,
-                              shape: BoxShape.circle,
+                      ? Tooltip(
+                          message: 'Send',
+                          child: GestureDetector(
+                            key: const ValueKey('send'),
+                            onTap: _sendMessage,
+                            child: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: scheme.primary,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.send_rounded,
+                                  color: Colors.white, size: 20),
                             ),
-                            child: const Icon(Icons.send_rounded,
-                                color: Colors.white, size: 20),
                           ),
                         )
                       : const SizedBox(key: ValueKey('empty'), width: 44),
@@ -1504,11 +1591,18 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               ],
             ),
           ),
-          // Emoji picker
+          // Emoji picker — themed to the brand (no stock blue), rounded top,
+          // sitting flush on the input like a sheet.
           Offstage(
             offstage: !_showEmoji,
-            child: SizedBox(
-              height: 240,
+            child: Container(
+              height: 262,
+              decoration: BoxDecoration(
+                color: scheme.surface,
+                border: Border(
+                  top: BorderSide(color: scheme.outlineVariant.withAlpha(90)),
+                ),
+              ),
               child: EmojiPicker(
                 onEmojiSelected: (_, emoji) {
                   _ctrl
@@ -1518,15 +1612,37 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                 },
                 textEditingController: _ctrl,
                 config: Config(
-                  height: 240,
+                  height: 262,
                   emojiViewConfig: EmojiViewConfig(
-                    emojiSizeMax: 28,
-                    backgroundColor:
-                        isDark ? Colors.grey[900]! : Colors.white,
+                    emojiSizeMax: 26,
+                    columns: 8,
+                    backgroundColor: scheme.surface,
+                    gridPadding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    recentsLimit: 40,
+                    buttonMode: ButtonMode.MATERIAL,
+                    noRecents: Text(
+                      'No recent emoji yet',
+                      style: TextStyle(
+                          fontSize: 13, color: scheme.onSurfaceVariant),
+                    ),
                   ),
                   categoryViewConfig: CategoryViewConfig(
-                    backgroundColor:
-                        isDark ? Colors.grey[900]! : Colors.white,
+                    backgroundColor: scheme.surfaceContainerHighest,
+                    indicatorColor: scheme.primary,
+                    iconColor: scheme.onSurfaceVariant,
+                    iconColorSelected: scheme.primary,
+                    dividerColor: scheme.outlineVariant.withAlpha(80),
+                  ),
+                  bottomActionBarConfig: BottomActionBarConfig(
+                    backgroundColor: scheme.surfaceContainerHighest,
+                    buttonColor: scheme.surfaceContainerHighest,
+                    buttonIconColor: scheme.primary,
+                  ),
+                  searchViewConfig: SearchViewConfig(
+                    backgroundColor: scheme.surfaceContainerHighest,
+                    buttonIconColor: scheme.primary,
+                    hintText: 'Search emoji',
                   ),
                 ),
               ),
@@ -1543,18 +1659,40 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final scheme = Theme.of(context).colorScheme;
+    // On phones the conversation goes edge-to-edge and flush at the bottom (only
+    // its top corners round, meeting the header); on wider screens it stays an
+    // inset, fully-rounded card within the split panel.
+    final isPhone = MediaQuery.of(context).size.width < 640;
 
     final body = Column(
       children: [
         // Message list
         Expanded(
-          child: _isLoading
+          // Rounded, bordered conversation card — consistent with the app's
+          // other cards/boxes instead of a sharp-cornered full-bleed panel.
+          child: Container(
+            margin: isPhone
+                ? EdgeInsets.zero
+                : const EdgeInsets.fromLTRB(6, 6, 6, 6),
+            decoration: BoxDecoration(
+              borderRadius: isPhone
+                  ? const BorderRadius.vertical(top: Radius.circular(18))
+                  : BorderRadius.circular(18),
+              border: isPhone
+                  ? Border(
+                      top: BorderSide(
+                          color: scheme.outlineVariant.withAlpha(70)))
+                  : Border.all(color: scheme.outlineVariant.withAlpha(70)),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : Stack(
                   children: [
                     // ── Chat wallpaper background ─────────────────────────
                     Positioned.fill(
-                      child: _ChatWallpaper(isDark: isDark),
+                      child: _ChatWallpaper(
+                          isDark: isDark, brand: scheme.primary),
                     ),
                     GestureDetector(
                       onTap: () => setState(() => _showEmoji = false),
@@ -1575,6 +1713,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                               msg['sender_id'].toString() == _myId;
                           // showAvatar = last message in a group (bottom-most)
                           final showAvatar = !isMe && !_grouped(msgIdx);
+                          // The bottom-most bubble of each group (either side)
+                          // gets the little tail/beak pointing to its sender.
+                          final showTail = !_grouped(msgIdx);
                           // isFirst = first message in group (top-most, newest)
                           final isFirst = msgIdx == 0 ||
                               !_grouped(msgIdx - 1);
@@ -1602,8 +1743,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
                           return Column(
                             children: [
-                              _buildBubble(
-                                  msg, isMe, isDark, showAvatar, isFirst),
+                              _buildBubble(msg, isMe, isDark, showAvatar,
+                                  isFirst, showTail),
                               if (showDate)
                                 _buildDateSeparator(dateLabel),
                             ],
@@ -1652,6 +1793,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                       ),
                   ],
                 ),
+          ),
         ),
         // Input
         _buildInput(isDark),
@@ -1721,50 +1863,89 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
 class _ChatWallpaper extends StatelessWidget {
   final bool isDark;
-  const _ChatWallpaper({required this.isDark});
+  final Color brand;
+  const _ChatWallpaper({required this.isDark, required this.brand});
 
   @override
   Widget build(BuildContext context) {
     return Container(
+      // Warm brand-neutral base — near-black on dark, soft warm off-white on
+      // light — with a faint music-motif pattern painted over it.
       decoration: BoxDecoration(
-        // Warm base colour — light: WhatsApp beige, dark: dark teal
-        color: isDark ? const Color(0xFF0B141A) : const Color(0xFFE5DDD5),
+        color: isDark ? const Color(0xFF141011) : const Color(0xFFF3ECEA),
       ),
       child: CustomPaint(
-        painter: _WallpaperPainter(isDark: isDark),
+        painter: _WallpaperPainter(isDark: isDark, brand: brand),
         size: Size.infinite,
       ),
     );
   }
 }
 
+/// A faint, tiled music-motif wallpaper (notes, headphones, hearts, discs…) in
+/// the brand colour — like WhatsApp's doodle background, tuned to Aluta. Only
+/// repaints when the theme/brand changes, so it's effectively free after first
+/// layout.
 class _WallpaperPainter extends CustomPainter {
   final bool isDark;
-  const _WallpaperPainter({required this.isDark});
+  final Color brand;
+  const _WallpaperPainter({required this.isDark, required this.brand});
+
+  static const List<IconData> _icons = [
+    Icons.music_note_rounded,
+    Icons.headphones_rounded,
+    Icons.favorite_rounded,
+    Icons.album_rounded,
+    Icons.graphic_eq_rounded,
+    Icons.queue_music_rounded,
+    Icons.radio_rounded,
+    Icons.audiotrack_rounded,
+  ];
 
   @override
   void paint(Canvas canvas, Size size) {
-    final dot = Paint()
-      ..color =
-          (isDark ? Colors.white : Colors.black).withAlpha(isDark ? 10 : 14)
-      ..style = PaintingStyle.fill;
-
-    const gap = 22.0;
-    const r = 1.5;
-
-    // Offset every other row for a subtle diamond grid
-    for (double y = 0; y < size.height + gap; y += gap) {
-      final row = (y / gap).floor();
-      final xOffset = (row % 2 == 0) ? 0.0 : gap / 2;
-      for (double x = xOffset; x < size.width + gap; x += gap) {
-        canvas.drawCircle(Offset(x, y), r, dot);
+    // Very low alpha keeps it a whisper behind the bubbles.
+    final color =
+        (isDark ? Colors.white : brand).withAlpha(isDark ? 12 : 15);
+    const cell = 66.0;
+    var i = 0;
+    for (double y = 0; y < size.height + cell; y += cell) {
+      final row = (y / cell).floor();
+      final xOff = row.isEven ? 0.0 : cell / 2; // brick-lay for organic feel
+      for (double x = xOff; x < size.width + cell; x += cell) {
+        final icon = _icons[(i * 5 + row * 3) % _icons.length];
+        final tilt = (((i * 7 + row * 11) % 7) - 3) * 0.16; // small varied tilt
+        final glyphSize = 18.0 + ((i + row) % 3) * 5.0;
+        _glyph(canvas, icon, Offset(x, y), glyphSize, color, tilt);
+        i++;
       }
     }
   }
 
+  void _glyph(Canvas canvas, IconData icon, Offset c, double glyphSize,
+      Color color, double tilt) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: String.fromCharCode(icon.codePoint),
+        style: TextStyle(
+          fontSize: glyphSize,
+          fontFamily: icon.fontFamily,
+          package: icon.fontPackage,
+          color: color,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    canvas.save();
+    canvas.translate(c.dx, c.dy);
+    canvas.rotate(tilt);
+    tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
+    canvas.restore();
+  }
+
   @override
   bool shouldRepaint(covariant _WallpaperPainter old) =>
-      old.isDark != isDark;
+      old.isDark != isDark || old.brand != brand;
 }
 
 // ─── Typing dot animation ────────────────────────────────────────────────────
@@ -1847,4 +2028,100 @@ class _ActionTile extends StatelessWidget {
       onTap: onTap,
     );
   }
+}
+
+// ─── Chat bubble with a WhatsApp-style beak/tail ─────────────────────────────
+/// A rounded-rectangle bubble whose bottom-outer corner grows a small triangular
+/// tail pointing toward the sender. Drawn as ONE continuous path so the fill,
+/// border and shadow all follow the beak seamlessly (via [ShapeDecoration]).
+///   • [tailOnRight] true  → tail at the bottom-right (my messages)
+///   • [tailOnRight] false → tail at the bottom-left  (the friend's messages)
+///   • [showTail] false    → a plain rounded rectangle (grouped messages)
+class _BubbleBorder extends ShapeBorder {
+  const _BubbleBorder({
+    this.radius = 18,
+    this.tailSize = 7,
+    required this.tailOnRight,
+    required this.showTail,
+    this.side = BorderSide.none,
+  });
+
+  final double radius;
+  final double tailSize;
+  final bool tailOnRight;
+  final bool showTail;
+  final BorderSide side;
+
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.zero;
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) =>
+      getOuterPath(rect, textDirection: textDirection);
+
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) {
+    final r = radius;
+    final path = Path();
+
+    if (!showTail) {
+      path.addRRect(RRect.fromRectAndRadius(rect, Radius.circular(r)));
+      return path;
+    }
+
+    final t = tailSize;
+    final top = rect.top;
+    final bottom = rect.bottom;
+
+    if (tailOnRight) {
+      // Body inset from the right by [t]; beak protrudes into that gap.
+      final left = rect.left;
+      final bodyR = rect.right - t;
+      path.moveTo(left + r, top);
+      path.lineTo(bodyR - r, top);
+      path.arcToPoint(Offset(bodyR, top + r), radius: Radius.circular(r));
+      path.lineTo(bodyR, bottom - t); // down the right edge to the beak base
+      path.lineTo(rect.right, bottom); // out to the beak tip
+      path.lineTo(bodyR, bottom); // back to the body's bottom-right
+      path.lineTo(left + r, bottom);
+      path.arcToPoint(Offset(left, bottom - r), radius: Radius.circular(r));
+      path.lineTo(left, top + r);
+      path.arcToPoint(Offset(left + r, top), radius: Radius.circular(r));
+      path.close();
+    } else {
+      // Body inset from the left by [t]; beak protrudes into that gap.
+      final right = rect.right;
+      final bodyL = rect.left + t;
+      path.moveTo(bodyL + r, top);
+      path.lineTo(right - r, top);
+      path.arcToPoint(Offset(right, top + r), radius: Radius.circular(r));
+      path.lineTo(right, bottom - r);
+      path.arcToPoint(Offset(right - r, bottom), radius: Radius.circular(r));
+      path.lineTo(bodyL, bottom); // along the bottom to the body's bottom-left
+      path.lineTo(rect.left, bottom); // out to the beak tip
+      path.lineTo(bodyL, bottom - t); // back up to the body's left edge
+      path.lineTo(bodyL, top + r);
+      path.arcToPoint(Offset(bodyL + r, top), radius: Radius.circular(r));
+      path.close();
+    }
+    return path;
+  }
+
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
+    if (side.style == BorderStyle.none) return;
+    canvas.drawPath(
+      getOuterPath(rect, textDirection: textDirection),
+      side.toPaint(),
+    );
+  }
+
+  @override
+  ShapeBorder scale(double t) => _BubbleBorder(
+        radius: radius * t,
+        tailSize: tailSize * t,
+        tailOnRight: tailOnRight,
+        showTail: showTail,
+        side: side.scale(t),
+      );
 }

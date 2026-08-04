@@ -142,8 +142,38 @@ class LiveSessionController {
   bool _peerPresent = false; // a listener has joined → stream track changes now
   bool _switchingTrack = false; // guards auto-advance during a source swap
   StreamSubscription? _completeSub;
-  /// Fired whenever the queue or current index changes (host UI refresh).
+  /// Fired whenever the queue or current index changes (host UI refresh, and —
+  /// now — the listener's mirrored queue too).
   void Function()? onQueueChanged;
+
+  /// Title of the track playing live right now (host or listener). Held here —
+  /// not only in the popup — so it survives the popup being minimised and so
+  /// the music-panel console can always mirror the correct live title.
+  String currentTitle = '';
+
+  // Listener-side mirror of the host's queue (titles only — audio is never sent
+  // until a track actually plays). Lets the listener SEE what the host queued
+  // and know which one is current, exactly like the host does.
+  final List<String> remoteQueueTitles = [];
+  int remoteIndex = 0;
+
+  /// Sets the live title and keeps the global session title in sync so every
+  /// surface (popup, music panel, banner) reflects the current song.
+  void _setCurrentTitle(String? t) {
+    if (t == null || t.isEmpty) return;
+    currentTitle = t;
+    activeLiveSession?.title = t;
+  }
+
+  /// Host → listener: broadcast the queue (titles + current index) so the
+  /// listener can render the same "up next" list. Sent on every queue change.
+  void _broadcastQueue() {
+    _sendControl({
+      'type': 'queue',
+      'items': queue.map((t) => t.title).toList(),
+      'index': currentIndex,
+    });
+  }
 
   bool get isConnected => _channel != null;
 
@@ -232,9 +262,11 @@ class LiveSessionController {
       }
     });
     _sendControl(meta);
+    _setCurrentTitle(title);
     await player.play();
     _sendControl({'type': 'play', 'position_ms': startPositionMs});
     onQueueChanged?.call();
+    _broadcastQueue();
 
     return sessionId!;
   }
@@ -247,6 +279,7 @@ class LiveSessionController {
   Future<void> addTrack(LiveTrack t) async {
     queue.add(t);
     onQueueChanged?.call();
+    _broadcastQueue();
     final ended = player.processingState == ProcessingState.completed ||
         player.processingState == ProcessingState.idle;
     if (ended && currentIndex >= queue.length - 1) {
@@ -259,6 +292,19 @@ class LiveSessionController {
     if (index <= currentIndex || index >= queue.length) return;
     queue.removeAt(index);
     onQueueChanged?.call();
+    _broadcastQueue();
+  }
+
+  /// Listener → host transport request. The host executes it and broadcasts
+  /// the result so playback stays in sync. Actions: playpause / play / pause /
+  /// next / prev / seek (with positionMs) / play_index (with index).
+  void requestControl(String action, {int? positionMs, int? index}) {
+    _sendControl({
+      'type': 'ctl',
+      'action': action,
+      if (positionMs != null) 'position_ms': positionMs,
+      if (index != null) 'index': index,
+    });
   }
 
   /// Skip to the next queued track, if any.
@@ -291,12 +337,14 @@ class LiveSessionController {
       if (_peerPresent) {
         unawaited(_streamBytesToListener(t.bytes));
       }
+      _setCurrentTitle(t.title);
       await player.play();
       _sendControl({'type': 'play', 'position_ms': 0});
     } catch (e) {
       onError?.call(e);
     }
     onQueueChanged?.call();
+    _broadcastQueue();
     // Clear the guard after the source has settled so genuine end-of-track
     // completion still auto-advances.
     Future<void>.delayed(const Duration(milliseconds: 800), () {
@@ -486,6 +534,43 @@ class LiveSessionController {
         if (bytes != null) {
           unawaited(_streamBytesToListener(bytes));
         }
+        // Send the current queue so the freshly-joined listener sees it.
+        _broadcastQueue();
+      } else if (type == 'ctl') {
+        // A listener requested a transport action. The host executes it
+        // authoritatively; the resulting play/pause/position/track_change
+        // broadcast keeps everyone in sync.
+        final action = msg['action'];
+        switch (action) {
+          case 'playpause':
+            player.playing ? player.pause() : player.play();
+            break;
+          case 'play':
+            player.play();
+            break;
+          case 'pause':
+            player.pause();
+            break;
+          case 'next':
+            nextTrack();
+            break;
+          case 'prev':
+            if (currentIndex > 0) {
+              playIndex(currentIndex - 1);
+            } else {
+              player.seek(Duration.zero);
+            }
+            break;
+          case 'seek':
+            final pos = msg['position_ms'];
+            if (pos is int) player.seek(Duration(milliseconds: pos));
+            break;
+          case 'play_index':
+            // Listener tapped a specific queue track — jump to it.
+            final idx = msg['index'];
+            if (idx is int) playIndex(idx);
+            break;
+        }
       }
       return;
     }
@@ -498,6 +583,20 @@ class LiveSessionController {
       case 'meta':
         final track = msg['track'] as Map<String, dynamic>?;
         if (track?['mime'] is String) _incomingMime = track!['mime'] as String;
+        _setCurrentTitle(track?['title'] as String?);
+        break;
+      case 'queue':
+        // Host's queue snapshot — mirror it so the listener can see "up next".
+        final items = (msg['items'] as List?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            const <String>[];
+        remoteQueueTitles
+          ..clear()
+          ..addAll(items);
+        final idx = msg['index'];
+        if (idx is int) remoteIndex = idx;
+        onQueueChanged?.call();
         break;
       case 'eq':
         // Mirror the host's equalizer onto our live player.
@@ -508,6 +607,7 @@ class LiveSessionController {
         // become a fresh track, played once its 'eos' arrives.
         final track = msg['track'] as Map<String, dynamic>?;
         if (track?['mime'] is String) _incomingMime = track!['mime'] as String;
+        _setCurrentTitle(track?['title'] as String?);
         _incoming.clear();
         _listenerStarted = false;
         try {

@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, Response
 
 from config import DATABASE_URL
 from database import engine
@@ -155,14 +156,32 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 
-# ✅ Serve the Flutter web app (built into ./webapp) at the site root. Mounted
-#    LAST so it only catches paths the API routers / /health / /api / /media
-#    didn't already handle. html=True serves index.html for "/". If the build
-#    folder is missing the API still runs (root just 404s) — so a bad deploy
-#    never takes the whole API down.
+# ✅ Serve the Flutter web app (built into ./webapp) at the site root.
+#
+#    IMPORTANT: this is a GET-only catch-all, NOT `app.mount("/", StaticFiles)`.
+#    A Mount at "/" also matches WEBSOCKET scopes and can swallow the /ws and
+#    /live/ws upgrade handshakes (which breaks chat read-receipts and listen-
+#    together with "was not upgraded to websocket"). A plain @app.get route can
+#    never match a WebSocket, so the API's WebSocket routes always win. It also
+#    gives SPA deep-link fallback to index.html. Declared LAST so it only
+#    handles GET paths the API routers / /health / /api / /media didn't.
 _WEBAPP_DIR = os.path.join(os.path.dirname(__file__), "webapp")
-if os.path.isdir(_WEBAPP_DIR):
-    app.mount("/", StaticFiles(directory=_WEBAPP_DIR, html=True), name="webapp")
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def _serve_web_app(full_path: str):
+    if os.path.isdir(_WEBAPP_DIR):
+        # Serve the requested static file if it exists (assets, js, wasm, …),
+        # guarding against path traversal, else fall back to index.html.
+        candidate = os.path.normpath(os.path.join(_WEBAPP_DIR, full_path))
+        if (full_path
+                and candidate.startswith(_WEBAPP_DIR)
+                and os.path.isfile(candidate)):
+            return FileResponse(candidate)
+        index = os.path.join(_WEBAPP_DIR, "index.html")
+        if os.path.isfile(index):
+            return FileResponse(index)
+    return Response(status_code=404)
 
 
 # ✅ Run server

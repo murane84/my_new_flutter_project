@@ -2041,35 +2041,23 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
               padding: const EdgeInsets.fromLTRB(10, 0, 8, 8),
               child: Row(
                 children: [
-                  // Mini disc / art placeholder — glows when playing.
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(colors: [
-                        scheme.primary.withAlpha(np.playing ? 110 : 60),
-                        scheme.surfaceContainerHighest,
-                      ]),
-                      boxShadow: np.playing
-                          ? [
-                              BoxShadow(
-                                color: scheme.primary.withAlpha(90),
-                                blurRadius: 12,
-                                spreadRadius: 1,
-                              ),
-                            ]
-                          : null,
-                    ),
-                    child: Icon(
-                      np.playing
-                          ? Icons.graphic_eq_rounded
-                          : Icons.music_note_rounded,
-                      size: 19,
-                      color: scheme.primary,
+                  // App logo — replaces the old glowing music-note disc. Kept
+                  // flat (no circle/glow) so the play button is the only accent
+                  // circle in the bar: cleaner, less busy.
+                  SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => Icon(
+                        Icons.music_note_rounded,
+                        size: 20,
+                        color: scheme.primary,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
                   // Transport controls now sit on the LEFT so the play button is
                   // far from the composer's Send button (stops mis-taps while
                   // typing). Favourite · Previous · Play · Next.

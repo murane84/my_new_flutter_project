@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:audio_service/audio_service.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:path_provider/path_provider.dart';
 
 import '../screens/home_page.dart' show playbackBus;
 
@@ -55,6 +59,9 @@ class AlutaAudioHandler extends BaseAudioHandler {
         title: title.isEmpty ? 'Aluta' : title,
         artist: artist.isEmpty ? 'Aluta' : artist,
         duration: duration,
+        // Show the Aluta logo as the lock-screen / notification artwork instead
+        // of Android's generic music-note placeholder.
+        artUri: _notificationArtUri,
       ));
     } else if (duration != null && mediaItem.value?.duration != duration) {
       final mi = mediaItem.value;
@@ -82,10 +89,32 @@ class AlutaAudioHandler extends BaseAudioHandler {
 /// session (web/desktop, or if init fails) — callers must null-check.
 AlutaAudioHandler? audioHandler;
 
+/// Cached file URI of the app logo, copied out of the bundle once so
+/// audio_service can load it as the media-notification artwork — it needs a
+/// real file URI, not an `assets/...` path. Null until [_prepareNotificationArt]
+/// has run (and stays null on any platform where the copy fails).
+Uri? _notificationArtUri;
+
+Future<void> _prepareNotificationArt() async {
+  if (_notificationArtUri != null) return;
+  try {
+    final dir = await getApplicationSupportDirectory();
+    final file = File('${dir.path}/aluta_notification_art.png');
+    if (!await file.exists()) {
+      final data = await rootBundle.load('assets/images/logo.png');
+      await file.writeAsBytes(data.buffer.asUint8List(), flush: true);
+    }
+    _notificationArtUri = Uri.file(file.path);
+  } catch (_) {
+    // No artwork — the notification just falls back to the default glyph.
+  }
+}
+
 /// Initialise the media session. Wrapped so a failure (e.g. on a platform that
 /// doesn't support it) can never stop the app from launching.
 Future<void> initAudioService() async {
   try {
+    await _prepareNotificationArt();
     audioHandler = await AudioService.init(
       builder: () => AlutaAudioHandler(),
       config: const AudioServiceConfig(

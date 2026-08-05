@@ -1,15 +1,14 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
 import 'package:logger/logger.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart';
 import 'token_helper.dart';
 import 'user.dart';
 import '../utils/app_config.dart';
+import '../utils/session_events.dart';
 
 final _logger = Logger();
-final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 
 class ApiService {
   Future<String> get _baseUrl => AppConfig.baseUrl;
@@ -19,9 +18,8 @@ class ApiService {
     'Content-Type': 'application/json',
   };
 
-  Future<String?> _getToken() async {
-    return await _secureStorage.read(key: AppConfig.tokenKey);
-  }
+  // Delegates to the platform-aware token store (web-safe).
+  Future<String?> _getToken() async => getToken();
 
   // REGISTER
   Future<Map<String, dynamic>> register(
@@ -69,7 +67,11 @@ class ApiService {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final String token = data['access_token'] ?? '';
         if (token.isNotEmpty) {
-          await _secureStorage.write(key: AppConfig.tokenKey, value: token);
+          await saveToken(token);
+        }
+        final String refresh = data['refresh_token'] ?? '';
+        if (refresh.isNotEmpty) {
+          await saveRefreshToken(refresh);
         }
         return {
           'success': true,
@@ -110,23 +112,65 @@ class ApiService {
         headers: _authHeaders(token),
       );
 
-      await _secureStorage.delete(key: AppConfig.tokenKey);
+      await removeToken();
+      await removeRefreshToken();
     } catch (e) {
       _logger.e('Logout exception: $e');
-      await _secureStorage.delete(key: AppConfig.tokenKey);
+      await removeToken();
+      await removeRefreshToken();
+    }
+  }
+
+  // ── Silent token refresh ────────────────────────────────────────────────
+  // Exchanges the long-lived refresh token for a fresh access token so an
+  // expired access token is invisible to the user. Returns true on success.
+  Future<bool> refreshAccessToken() async {
+    try {
+      final refresh = await getRefreshToken();
+      if (refresh == null || refresh.isEmpty) return false;
+      final res = await http.post(
+        Uri.parse('${await _baseUrl}/auth/refresh'),
+        headers: _authHeaders(refresh),
+      );
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final data = jsonDecode(res.body);
+        final newToken = data is Map ? data['access_token'] as String? : null;
+        if (newToken != null && newToken.isNotEmpty) {
+          await saveToken(newToken);
+          return true;
+        }
+      }
+      return false;
+    } catch (_) {
+      return false;
     }
   }
 
   // SET ONLINE STATUS (keepalive / reconnect / logout)
   Future<bool> setOnlineStatus(bool isOnline) async {
     try {
-      final token = await _getToken();
-      if (token == null) return false;
-      final res = await http.post(
-        Uri.parse(
-            '${await _baseUrl}/users/me/online?is_online=$isOnline'),
-        headers: _authHeaders(token),
-      );
+      Future<http.Response?> post(String? tok) async {
+        if (tok == null) return null;
+        return http.post(
+          Uri.parse('${await _baseUrl}/users/me/online?is_online=$isOnline'),
+          headers: _authHeaders(tok),
+        );
+      }
+
+      var res = await post(await _getToken());
+      if (res == null) return false;
+
+      // Access token expired? Silently refresh and retry once. Only if the
+      // refresh itself fails do we treat the session as truly expired.
+      if (res.statusCode == 401 || res.statusCode == 403) {
+        if (await refreshAccessToken()) {
+          res = await post(await _getToken());
+        }
+        if (res == null || res.statusCode == 401 || res.statusCode == 403) {
+          SessionEvents.instance.markExpired();
+          return false;
+        }
+      }
       return res.statusCode >= 200 && res.statusCode < 300;
     } catch (_) {
       return false;
@@ -139,16 +183,32 @@ class ApiService {
       final token = await _getToken();
       if (token == null) throw Exception('No access token found');
 
-      final response = await http.get(
+      var activeToken = token;
+      var response = await http.get(
         Uri.parse('${await _baseUrl}/users/me'),
-        headers: _authHeaders(token),
+        headers: _authHeaders(activeToken),
       );
+
+      // Access token expired? Silently refresh and retry once.
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        if (await refreshAccessToken()) {
+          final fresh = await _getToken();
+          if (fresh != null) {
+            activeToken = fresh;
+            response = await http.get(
+              Uri.parse('${await _baseUrl}/users/me'),
+              headers: _authHeaders(activeToken),
+            );
+          }
+        }
+      }
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = jsonDecode(response.body);
         if (data is Map<String, dynamic>) return data;
         throw Exception('Invalid user data format');
-      } else if (response.statusCode == 401) {
+      } else if (response.statusCode == 401 || response.statusCode == 403) {
+        SessionEvents.instance.markExpired();
         throw Exception('Session expired. Please log in again.');
       }
       throw Exception('Failed to fetch user data');
@@ -159,6 +219,81 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getCurrentUser(String token) => getUserData();
+
+  // UPDATE PROFILE — username / phone / password. Email is immutable.
+  Future<Map<String, dynamic>> updateProfile({
+    String? username,
+    String? phone,
+    String? currentPassword,
+    String? newPassword,
+  }) async {
+    final token = await _getToken();
+    if (token == null) return {'success': false, 'message': 'Not signed in'};
+    try {
+      final response = await http.patch(
+        Uri.parse('${await _baseUrl}/users/me/update'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          if (username != null) 'username': username,
+          if (phone != null) 'phone': phone,
+          if (currentPassword != null && currentPassword.isNotEmpty)
+            'current_password': currentPassword,
+          if (newPassword != null && newPassword.isNotEmpty)
+            'new_password': newPassword,
+        }),
+      );
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return {
+          'success': true,
+          'user': jsonDecode(response.body) as Map<String, dynamic>,
+        };
+      }
+      final body = _tryDecode(response.body);
+      return {
+        'success': false,
+        'message': body?['detail'] ?? 'Could not update profile',
+      };
+    } catch (e) {
+      _logger.e('Update profile exception: $e');
+      return {
+        'success': false,
+        'message': 'Network error. Check your connection.',
+      };
+    }
+  }
+
+  // DELETE ACCOUNT — wipes the account + data on the server, clears local creds.
+  Future<Map<String, dynamic>> deleteAccount() async {
+    final token = await _getToken();
+    if (token == null) return {'success': false, 'message': 'Not signed in'};
+    try {
+      final response = await http.delete(
+        Uri.parse('${await _baseUrl}/users/me'),
+        headers: _authHeaders(token),
+      );
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        try {
+          await removeToken();
+          await removeRefreshToken();
+        } catch (_) {}
+        return {'success': true};
+      }
+      final body = _tryDecode(response.body);
+      return {
+        'success': false,
+        'message': body?['detail'] ?? 'Could not delete account',
+      };
+    } catch (e) {
+      _logger.e('Delete account exception: $e');
+      return {
+        'success': false,
+        'message': 'Network error. Check your connection.',
+      };
+    }
+  }
 
   // FETCH USERS / FRIENDS WITH UNREAD COUNTS
   // NOTE: throws on any error so callers can distinguish "API error"
@@ -266,8 +401,14 @@ class ApiService {
   // SEND MESSAGE
   Future<Map<String, dynamic>?> sendMessage(
     int receiverId,
-    String content,
-  ) async {
+    String content, {
+    String? messageType, // text | image | file | audio
+    String? mediaUrl, // relative, e.g. /attachments/<id>
+    String? mediaName,
+    String? mediaMime,
+    int? mediaSize,
+    int? mediaDuration, // audio length in ms
+  }) async {
     try {
       final token = await _getToken();
       if (token == null) throw Exception('No access token');
@@ -275,7 +416,16 @@ class ApiService {
       final response = await http.post(
         Uri.parse('${await _baseUrl}/messages/'),
         headers: _authHeaders(token),
-        body: jsonEncode({'receiver_id': receiverId, 'content': content}),
+        body: jsonEncode({
+          'receiver_id': receiverId,
+          'content': content,
+          if (messageType != null) 'message_type': messageType,
+          if (mediaUrl != null) 'media_url': mediaUrl,
+          if (mediaName != null) 'media_name': mediaName,
+          if (mediaMime != null) 'media_mime': mediaMime,
+          if (mediaSize != null) 'media_size': mediaSize,
+          if (mediaDuration != null) 'media_duration': mediaDuration,
+        }),
       );
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -286,6 +436,42 @@ class ApiService {
       return null;
     } catch (e) {
       _logger.e('Send message exception: $e');
+      return null;
+    }
+  }
+
+  /// Upload a chat attachment (image / file / voice note). Returns the server's
+  /// response: {url: /attachments/<id>, name, mime, size}, or null on failure.
+  Future<Map<String, dynamic>?> uploadMedia({
+    required List<int> bytes,
+    required String filename,
+    required String mime,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('No access token');
+
+      final uri = Uri.parse('${await _baseUrl}/upload/media');
+      final req = http.MultipartRequest('POST', uri)
+        ..headers['Authorization'] = 'Bearer $token'
+        ..files.add(http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: filename,
+          contentType: MediaType.parse(
+              mime.isNotEmpty ? mime : 'application/octet-stream'),
+        ));
+
+      final streamed = await req.send();
+      final resp = await http.Response.fromStream(streamed);
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      _logger.w('Upload media failed: ${resp.statusCode} ${resp.body}');
+      return null;
+    } catch (e) {
+      _logger.e('Upload media exception: $e');
       return null;
     }
   }
@@ -334,20 +520,18 @@ class ApiService {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = jsonDecode(response.body);
         final bool isOnline = data['is_online'] ?? false;
+        // Return the RAW server timestamp untouched. The UI formats it with
+        // parseServerTime()/formatLastSeen(), which correctly treats a naive
+        // string as UTC and converts to the device's local zone. Formatting
+        // here with DateTime.parse().toLocal() was the 3-hour-off bug: a
+        // tz-less string parses as *local*, so toLocal() did nothing and the
+        // raw UTC value was shown as if local (−3h in EAT). It also caused a
+        // double-format when formatLastSeen re-parsed the pretty string.
         final String? lastSeen = data['last_seen'];
-
-        String? formatted;
-        if (lastSeen != null && lastSeen.isNotEmpty) {
-          try {
-            formatted = DateFormat('MMM d, HH:mm').format(
-              DateTime.parse(lastSeen).toLocal(),
-            );
-          } catch (_) {}
-        }
 
         return {
           'is_online': isOnline,
-          'last_seen': formatted,
+          'last_seen': lastSeen,
           'phone': data['phone'],
         };
       }

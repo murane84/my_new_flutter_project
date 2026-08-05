@@ -116,7 +116,7 @@ class MyApp extends StatelessWidget {
         elevation: 14,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: scheme.outlineVariant.withAlpha(70)),
+          side: BorderSide(color: scheme.primary.withAlpha(130)),
         ),
         insetPadding:
             const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
@@ -129,6 +129,16 @@ class MyApp extends StatelessWidget {
           color: scheme.onSurface.withAlpha(225),
           fontSize: 14,
           height: 1.45,
+        ),
+      ),
+      // Thin red accent margin on modal bottom sheets, matching the dialogs
+      // and the custom popups.
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: scheme.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+          side: BorderSide(color: scheme.primary.withAlpha(130)),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(

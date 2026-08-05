@@ -21,6 +21,7 @@ import '../screens/home_page.dart'
 import '../services/live_session_service.dart';
 import '../utils/toast_helper.dart';
 import 'equalizer_screen.dart';
+import '../utils/popup_shell.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import '../services/audio_handler.dart';
 import '../services/metadata_overrides.dart';
@@ -428,8 +429,10 @@ class _MusicControlsState extends State<MusicControls>
 
   void _listenPlayer() {
     _player.playerStateStream.listen((s) {
-      if (!mounted) return;
-      setState(() {});
+      // Keep the global ambient notifier (footer play/pause icon + media
+      // notification) in sync with the REAL player state regardless of whether
+      // this widget is currently mounted — otherwise a pause can leave the
+      // footer button stuck showing "playing".
       // While a live session owns the ambient bar/notification, don't let the
       // (paused) local player overwrite the live play/pause state.
       if (!_liveActive) {
@@ -439,6 +442,8 @@ class _MusicControlsState extends State<MusicControls>
             buffering: s.processingState == ProcessingState.loading ||
                 s.processingState == ProcessingState.buffering);
       }
+      if (!mounted) return;
+      setState(() {});
       if (s.playing) {
         _discCtrl.repeat();
       } else {
@@ -539,7 +544,9 @@ class _MusicControlsState extends State<MusicControls>
           _trackName = t;
           _artistName = a;
         });
-        nowPlayingNotifier.update(track: t, artist: a, playing: true);
+        // Use the real player state — a late metadata fetch must not re-mark a
+        // paused track as playing.
+        nowPlayingNotifier.update(track: t, artist: a, playing: _player.playing);
       }
     } catch (_) {}
   }
@@ -755,7 +762,7 @@ class _MusicControlsState extends State<MusicControls>
             decoration: BoxDecoration(
               color: scheme.surface,
               borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: scheme.outlineVariant.withAlpha(90)),
+              border: Border.all(color: scheme.primary.withAlpha(130)),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withAlpha(70),
@@ -1013,12 +1020,11 @@ class _MusicControlsState extends State<MusicControls>
       );
       return;
     }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => EqualizerScreen(
-          equalizer: _equalizer,
-          loudness: _loudness,
-        ),
+    showAppPopup(
+      context,
+      EqualizerScreen(
+        equalizer: _equalizer,
+        loudness: _loudness,
       ),
     );
   }
@@ -1075,7 +1081,7 @@ class _MusicControlsState extends State<MusicControls>
         decoration: BoxDecoration(
           color: scheme.surface,
           borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: scheme.outlineVariant.withAlpha(90)),
+          border: Border.all(color: scheme.primary.withAlpha(130)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withAlpha(60),
@@ -2075,7 +2081,7 @@ class _SpeedPanel extends StatelessWidget {
               color: scheme.surface,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                  color: scheme.outlineVariant.withAlpha(80)),
+                  color: scheme.primary.withAlpha(130)),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withAlpha(70),
@@ -2463,7 +2469,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
       decoration: BoxDecoration(
         color: scheme.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: scheme.outlineVariant.withAlpha(60)),
+        border: Border.all(color: scheme.primary.withAlpha(130)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withAlpha(50),

@@ -401,7 +401,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
               color: scheme.surface,
               borderRadius: BorderRadius.circular(20),
               border:
-                  Border.all(color: scheme.outlineVariant.withAlpha(60)),
+                  Border.all(color: scheme.primary.withAlpha(130)),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withAlpha(50),

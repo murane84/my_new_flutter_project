@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/popup_shell.dart';
 
 /// A functional equalizer + sound-enhancement screen.
 ///
@@ -145,53 +146,54 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Equalizer'),
-        actions: [
-          if (_supported)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Switch(
-                value: _enabled,
-                onChanged: (v) {
-                  setState(() => _enabled = v);
-                  _apply();
-                },
-              ),
-            ),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
+    // Rendered as a top-anchored popup UNDER the Aluta header (never covering
+    // it), with the body scrolling internally for longer content.
+    return AppPopupShell(
+      title: 'Equalizer',
+      icon: Icons.graphic_eq_rounded,
+      desktopMaxWidth: 720,
+      headerAction: (_supported && !_loading)
+          ? Switch(
+              value: _enabled,
+              onChanged: (v) {
+                setState(() => _enabled = v);
+                _apply();
+              },
+            )
+          : null,
+      builder: (context, isWide) => _loading
+          ? const Padding(
+              padding: EdgeInsets.all(40),
+              child: Center(child: CircularProgressIndicator()),
+            )
           : !_supported
               ? _unsupported(scheme)
               : Opacity(
                   opacity: _enabled ? 1 : 0.7,
                   child: ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                      children: [
-                        _sectionTitle('Recommended presets'),
-                        const SizedBox(height: 10),
-                        _presetGrid(scheme),
-                        const SizedBox(height: 24),
-                        _sectionTitle('Manual adjustment'),
-                        const SizedBox(height: 8),
-                        _bandSliders(scheme),
-                        const SizedBox(height: 24),
-                        _sectionTitle('Enhance sound'),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Put in earphones before adjusting sound effects',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: scheme.onSurfaceVariant),
-                        ),
-                        const SizedBox(height: 16),
-                        _enhanceRow(scheme),
-                      ],
-                    ),
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    children: [
+                      _sectionTitle('Recommended presets'),
+                      const SizedBox(height: 10),
+                      _presetGrid(scheme),
+                      const SizedBox(height: 24),
+                      _sectionTitle('Manual adjustment'),
+                      const SizedBox(height: 8),
+                      _bandSliders(scheme),
+                      const SizedBox(height: 24),
+                      _sectionTitle('Enhance sound'),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Put in earphones before adjusting sound effects',
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 16),
+                      _enhanceRow(scheme),
+                    ],
                   ),
+                ),
     );
   }
 

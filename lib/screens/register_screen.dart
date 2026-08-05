@@ -21,6 +21,7 @@ class RegisterPageState extends State<RegisterPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
+  final _phoneController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
@@ -34,12 +35,38 @@ class RegisterPageState extends State<RegisterPage> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    // Live feedback for the confirm-password match indicator.
+    _passwordController.addListener(_onPwChanged);
+    _confirmController.addListener(_onPwChanged);
+  }
+
+  void _onPwChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
+    _passwordController.removeListener(_onPwChanged);
+    _confirmController.removeListener(_onPwChanged);
     _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
+    _phoneController.dispose();
     super.dispose();
+  }
+
+  String? _phoneError(String value) {
+    final p = value.trim();
+    if (p.isEmpty) return 'Enter your phone number';
+    // Optional leading +, then 7–15 digits (spaces/dashes/parens allowed).
+    final cleaned = p.replaceAll(RegExp(r'[\s\-()]'), '');
+    if (!RegExp(r'^\+?\d{7,15}$').hasMatch(cleaned)) {
+      return 'Enter a valid phone number';
+    }
+    return null;
   }
 
   // Eligibility scan: valid format, real-looking domain, not disposable.
@@ -73,6 +100,7 @@ class RegisterPageState extends State<RegisterPage> {
       _emailController.text.trim(),
       _passwordController.text.trim(),
       _usernameController.text.trim(),
+      phone: _phoneController.text.trim(),
     );
 
     if (!mounted) return;
@@ -255,6 +283,27 @@ class RegisterPageState extends State<RegisterPage> {
                                 ),
                                 const SizedBox(height: 14),
                                 _buildField(
+                                  controller: _phoneController,
+                                  label: 'Phone number',
+                                  icon: Icons.phone_outlined,
+                                  keyboardType: TextInputType.phone,
+                                  validator: (v) => _phoneError(v ?? ''),
+                                ),
+                                const SizedBox(height: 6),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    'Used so friends can call you directly',
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? Colors.white.withAlpha(120)
+                                          : Colors.black.withAlpha(120),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                _buildField(
                                   controller: _passwordController,
                                   label: 'Password',
                                   icon: Icons.lock_outline,
@@ -326,6 +375,43 @@ class RegisterPageState extends State<RegisterPage> {
                                     return null;
                                   },
                                 ),
+                                // Live match feedback as the user types.
+                                if (_confirmController.text.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          _confirmController.text ==
+                                                  _passwordController.text
+                                              ? Icons.check_circle_rounded
+                                              : Icons.cancel_rounded,
+                                          size: 14,
+                                          color: _confirmController.text ==
+                                                  _passwordController.text
+                                              ? Colors.green
+                                              : Colors.redAccent,
+                                        ),
+                                        const SizedBox(width: 5),
+                                        Text(
+                                          _confirmController.text ==
+                                                  _passwordController.text
+                                              ? 'Passwords match'
+                                              : 'Passwords do not match',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: _confirmController.text ==
+                                                    _passwordController.text
+                                                ? Colors.green
+                                                : Colors.redAccent,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(height: 24),
 
                                 // Create Account button — pill width, centred

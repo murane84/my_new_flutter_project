@@ -5,7 +5,7 @@ import crud, schemas
 from database import get_db
 from models import User, Message
 from .users import get_current_user
-from datetime import datetime, timezone
+from datetime import datetime
 from websocket_manager import safe_notify_user
 
 router = APIRouter(
@@ -78,8 +78,7 @@ def mark_messages_as_read(sender_id: int, db: Session = Depends(get_db), current
     updated_ids = []
 
     for msg in unread_messages:
-        msg.is_read = True
-        msg.read_at = datetime.now(timezone.utc)
+        msg.read = True
         updated_ids.append(msg.id)
 
     if updated_ids:
@@ -106,7 +105,17 @@ def delete_single_message(message_id: int, delete_for_all: bool = Query(False), 
     if delete_for_all:
         if current_user.id != message.sender_id:
             raise HTTPException(status_code=403, detail="Only sender can delete for everyone")
-        db.delete(message)
+        # Soft-delete: keep the row as a tombstone so both sides render
+        # "This message was deleted" rather than the bubble silently vanishing.
+        message.is_deleted = True
+        message.content = ""
+        message.message_type = "text"
+        message.media_url = None
+        message.media_name = None
+        message.media_mime = None
+        message.media_size = None
+        message.media_duration = None
+        message.reactions = None
         db.commit()
         safe_notify_user(message.receiver_id, {
             "type": "message_deleted",
@@ -123,6 +132,75 @@ def delete_single_message(message_id: int, delete_for_all: bool = Query(False), 
         db.commit()
 
     return {"detail": "Message deleted"}
+
+# 4️⃣.b REACT TO MESSAGE — toggle the current user's emoji (one per user).
+@router.post("/{message_id}/react")
+def react_to_message(
+    message_id: int,
+    emoji: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    import json
+    message = db.query(Message).filter(Message.id == message_id).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if current_user.id not in [message.sender_id, message.receiver_id]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if message.is_deleted:
+        raise HTTPException(status_code=400, detail="Cannot react to a deleted message")
+
+    try:
+        reactions = json.loads(message.reactions) if message.reactions else {}
+    except Exception:
+        reactions = {}
+    key = str(current_user.id)
+    # Same emoji again = remove (toggle); a different one replaces it.
+    if reactions.get(key) == emoji:
+        reactions.pop(key, None)
+    else:
+        reactions[key] = emoji
+    message.reactions = json.dumps(reactions) if reactions else None
+    db.commit()
+
+    other_id = (
+        message.receiver_id
+        if current_user.id == message.sender_id
+        else message.sender_id
+    )
+    safe_notify_user(other_id, {
+        "type": "message_reaction",
+        "data": {"message_id": message_id, "reactions": message.reactions},
+    })
+    return {"message_id": message_id, "reactions": message.reactions}
+
+# 4️⃣.c EDIT MESSAGE — sender only, text messages only.
+@router.patch("/{message_id}/edit", response_model=schemas.MessageWithSender)
+def edit_message(
+    message_id: int,
+    payload: schemas.MessageEdit,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    message = db.query(Message).filter(Message.id == message_id).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if current_user.id != message.sender_id:
+        raise HTTPException(status_code=403, detail="Only the sender can edit")
+    if message.is_deleted:
+        raise HTTPException(status_code=400, detail="Cannot edit a deleted message")
+    if (message.message_type or "text") != "text":
+        raise HTTPException(status_code=400, detail="Only text messages can be edited")
+
+    message.content = payload.content or ""
+    message.edited = True
+    db.commit()
+    db.refresh(message)
+
+    validated = schemas.MessageWithSender.model_validate(message)
+    serialized = serialize_message(validated)
+    safe_notify_user(message.receiver_id, {"type": "message_edited", "data": serialized})
+    return validated
 
 # 5️⃣ Single message delivery endpoint
 @router.put("/{message_id}/delivered", response_model=schemas.Message)

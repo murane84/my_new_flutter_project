@@ -2194,9 +2194,52 @@ class _PlaylistOverlay extends StatefulWidget {
   State<_PlaylistOverlay> createState() => _PlaylistOverlayState();
 }
 
-class _PlaylistOverlayState extends State<_PlaylistOverlay> {
+class _PlaylistOverlayState extends State<_PlaylistOverlay>
+    with SingleTickerProviderStateMixin {
   String _search = '';
   bool _favOnly = false;
+  late final ScrollController _listCtrl;
+  late final AnimationController _pulseCtrl;
+  final GlobalKey _nowKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    // Start near the playing row (estimate) so it's already built, then snap
+    // pixel-perfect onto it and give it a gentle highlight-pulse.
+    final offset = widget.currentIndex > 0
+        ? (widget.currentIndex * 56.0 - 100).clamp(0.0, double.infinity)
+        : 0.0;
+    _listCtrl = ScrollController(initialScrollOffset: offset);
+    _pulseCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 500));
+
+    if (widget.currentIndex >= 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final ctx = _nowKey.currentContext;
+        if (ctx != null) {
+          await Scrollable.ensureVisible(
+            ctx,
+            alignment: 0.35,
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeInOut,
+          );
+        }
+        for (int i = 0; i < 2 && mounted; i++) {
+          await _pulseCtrl.forward(from: 0);
+          if (!mounted) break;
+          await _pulseCtrl.reverse();
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _listCtrl.dispose();
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
 
   String _name(String path) {
     final sep = Platform.pathSeparator;
@@ -2637,6 +2680,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
                         ),
                       )
                     : ListView.builder(
+                    controller: _listCtrl,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 6, vertical: 4),
                     itemCount: displayed.length,
@@ -2648,7 +2692,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
                       final isFav =
                           widget.favorites.contains(entry.value);
 
-                      return Dismissible(
+                      Widget buildRow() => Dismissible(
                         key: ValueKey(entry.value),
                         direction: DismissDirection.endToStart,
                         background: Container(
@@ -2668,7 +2712,10 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
                           minVerticalPadding: 0,
                           horizontalTitleGap: 10,
                           selected: isNow,
-                          selectedTileColor: scheme.primary.withAlpha(22),
+                          selectedTileColor: scheme.primary.withAlpha(
+                              isNow
+                                  ? 22 + (70 * _pulseCtrl.value).round()
+                                  : 22),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -2733,6 +2780,17 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay> {
                             ],
                           ),
                           onTap: () => widget.onPlay(realIdx),
+                        ),
+                      );
+
+                      if (!isNow) return buildRow();
+                      // The playing row: keyed for precise scroll + rebuilt on
+                      // each pulse frame so its highlight breathes on open.
+                      return KeyedSubtree(
+                        key: _nowKey,
+                        child: AnimatedBuilder(
+                          animation: _pulseCtrl,
+                          builder: (_, __) => buildRow(),
                         ),
                       );
                     },

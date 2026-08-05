@@ -135,9 +135,21 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
         await websocket.close(code=4404)  # no such session / not invited
         return
 
+    is_host = (user.id == session.host_id)
+
     MANAGER.attach(session_id, user.id, websocket)
 
-    # Tell the newcomer the current playback state, and let others know someone joined.
+    # If the HOST just (re)connected, cancel any pending "host never came back"
+    # timer so a transient glitch doesn't end the session after the fact.
+    if is_host:
+        MANAGER.cancel_host_timeout(session_id)
+
+    # Tell the newcomer the current playback state, and let others know someone
+    # joined. We ALSO tell the newcomer about every peer already connected: this
+    # is what makes a reconnecting HOST re-stream to the listener who is still
+    # there (the host re-streams the current track on each `peer_joined`).
+    # Without it, a reconnected host would sit idle and playback would never
+    # resume on the listener.
     try:
         await websocket.send_text(json.dumps({
             "type": "session_state",
@@ -148,9 +160,16 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
                 "track": session.track,
             },
         }))
+        # Existing peers hear that this user (re)joined.
         await MANAGER.relay_text(session_id, user.id, json.dumps({
             "type": "peer_joined", "data": {"user_id": user.id},
         }))
+        # Newcomer hears about each already-present peer.
+        for uid in list(session.connections.keys()):
+            if uid != user.id:
+                await websocket.send_text(json.dumps({
+                    "type": "peer_joined", "data": {"user_id": uid},
+                }))
     except Exception:
         pass
 
@@ -176,14 +195,21 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
         pass
     finally:
         MANAGER.detach(session_id, user.id)
-        # If the host leaves, the whole session ends.
         current = MANAGER.get(session_id)
         if current is not None:
             if user.id == current.host_id:
-                await MANAGER.broadcast_text(
-                    session_id, json.dumps({"type": "end", "reason": "host_left"})
+                # The host's socket dropped. This is often just a network glitch
+                # (WiFi blip / cell handover), so DON'T tear the session down
+                # right away. Tell the listener(s) the host is reconnecting (so
+                # they can pause and wait rather than see "ended"), and arm a
+                # grace timer. If the host reconnects within HOST_GRACE_SECONDS
+                # the timer is cancelled and playback resumes; otherwise the
+                # session ends then.
+                await MANAGER.relay_text(
+                    session_id, user.id,
+                    json.dumps({"type": "host_reconnecting", "data": {}}),
                 )
-                MANAGER.remove(session_id)
+                MANAGER.schedule_host_timeout(session_id)
             else:
                 await MANAGER.relay_text(
                     session_id, user.id,

@@ -12,8 +12,18 @@ lifetime of the process / session.
 """
 from __future__ import annotations
 
+import asyncio
+import json
 from typing import Dict, List, Optional
 from fastapi import WebSocket
+
+
+# How long the session survives after the HOST's socket drops before we give up
+# and end it for everyone. A brief network glitch (WiFi blip, cell handover)
+# should NOT kill a live session — the host reconnects within this window and
+# playback resumes. Only a genuinely-gone host (closed app, long outage) lets
+# the timer fire and ends the session.
+HOST_GRACE_SECONDS = 45
 
 
 class LiveSession:
@@ -30,6 +40,9 @@ class LiveSession:
         # be told where the host currently is.
         self.is_playing: bool = False
         self.position_ms: int = 0
+        # Pending "end the session because the host never came back" timer.
+        # Set when the host drops, cancelled if the host reconnects in time.
+        self.close_task: Optional["asyncio.Task"] = None
 
     def other_connections(self, sender_id: int) -> List[WebSocket]:
         return [ws for uid, ws in self.connections.items() if uid != sender_id]
@@ -61,6 +74,53 @@ class LiveSessionManager:
         session = self.sessions.get(session_id)
         if session is not None:
             session.connections.pop(user_id, None)
+
+    def host_connected(self, session_id: str) -> bool:
+        session = self.sessions.get(session_id)
+        return session is not None and session.host_id in session.connections
+
+    # ---- host reconnection grace window ------------------------------------
+    def schedule_host_timeout(self, session_id: str, seconds: int = HOST_GRACE_SECONDS) -> None:
+        """Arm a timer that ends the session if the host doesn't return in time.
+
+        Called when the host's socket drops. Cancels any timer already armed so
+        repeated blips just keep extending the same grace window.
+        """
+        session = self.sessions.get(session_id)
+        if session is None:
+            return
+        if session.close_task is not None and not session.close_task.done():
+            session.close_task.cancel()
+        session.close_task = asyncio.create_task(
+            self._end_if_host_absent(session_id, seconds)
+        )
+
+    def cancel_host_timeout(self, session_id: str) -> None:
+        """Host came back — stop the pending end-the-session timer."""
+        session = self.sessions.get(session_id)
+        if session is None:
+            return
+        task = session.close_task
+        session.close_task = None
+        if task is not None and not task.done():
+            task.cancel()
+
+    async def _end_if_host_absent(self, session_id: str, seconds: int) -> None:
+        try:
+            await asyncio.sleep(seconds)
+        except asyncio.CancelledError:
+            return
+        session = self.sessions.get(session_id)
+        if session is None:
+            return
+        # Host reconnected during the grace window → nothing to do.
+        if session.host_id in session.connections:
+            return
+        # Host never came back — end the session for the remaining listener(s).
+        await self.broadcast_text(
+            session_id, json.dumps({"type": "end", "reason": "host_left"})
+        )
+        self.remove(session_id)
 
     # ---- relaying ----------------------------------------------------------
     async def relay_text(self, session_id: str, sender_id: int, message: str) -> None:

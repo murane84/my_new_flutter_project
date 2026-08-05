@@ -209,6 +209,8 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String? _activeFriendLastSeen;
   String? _activeFriendPhone;
   String? _activeFriendAvatar;
+  // Chat header: tap the friend's avatar to expand their photo above the thread.
+  bool _avatarExpanded = false;
   String _apiBase = '';
 
   // Build a full avatar URL from a stored relative ref (/attachments/<id>).
@@ -947,6 +949,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _activeFriendPhone = friend['phone'] as String?;
       _activeFriendAvatar = friend['avatar_url'] as String?;
       friend['unread_count'] = 0;
+      _avatarExpanded = false;
     });
     ApiService().markMessagesAsReadPatch(friend['id'] as int);
   }
@@ -1077,6 +1080,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ],
       ),
+      // Clip the child to the rounded shape so scrolling content can never
+      // paint into the top corners (which was flickering the header/triangle
+      // pockets faintly visible during a fast scroll).
+      clipBehavior: Clip.antiAlias,
       padding: padding ?? const EdgeInsets.all(14),
       child: child,
     );
@@ -1136,6 +1143,67 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   // ── Chat panel ────────────────────────────────────────────────────────────
 
+  // Tap-to-expand profile photo: drops an enlarged, collapsible view of the
+  // friend's avatar in between the header and the thread. Tap the header avatar
+  // to open, tap the enlarged photo (or the header avatar again) to collapse.
+  Widget _buildExpandedAvatar(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final full = _avatarFull(_activeFriendAvatar);
+    final show = _avatarExpanded && full != null;
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+      child: !show
+          ? const SizedBox(width: double.infinity)
+          : Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _avatarExpanded = false),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: scheme.primary.withAlpha(60)),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      InitialsAvatar(
+                        name: _activeFriendName ?? '',
+                        radius: 78,
+                        isOnline: false,
+                        imageUrl: full,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _activeFriendName ?? '',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.keyboard_arrow_up_rounded,
+                              size: 16, color: scheme.onSurfaceVariant),
+                          const SizedBox(width: 3),
+                          Text('Tap to collapse',
+                              style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: scheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+
   Widget _buildChatHeader(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final textColor = scheme.onSurface;
@@ -1152,14 +1220,24 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
               _activeFriendName = null;
               _activeFriendOnline = null;
               _activeFriendLastSeen = null;
+              _avatarExpanded = false;
             }),
           ),
           const SizedBox(width: 10),
-          InitialsAvatar(
-            name: _activeFriendName ?? '',
-            radius: 17,
-            isOnline: _activeFriendOnline == true,
-            imageUrl: _avatarFull(_activeFriendAvatar),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              // Only expand when there's an actual photo to show.
+              if (_avatarFull(_activeFriendAvatar) != null) {
+                setState(() => _avatarExpanded = !_avatarExpanded);
+              }
+            },
+            child: InitialsAvatar(
+              name: _activeFriendName ?? '',
+              radius: 17,
+              isOnline: _activeFriendOnline == true,
+              imageUrl: _avatarFull(_activeFriendAvatar),
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1289,6 +1367,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         children: [
           _buildChatHeader(context),
           const SizedBox(height: 10),
+          if (_activeFriendId != null) _buildExpandedAvatar(context),
           Expanded(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 280),
@@ -1912,9 +1991,16 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return GestureDetector(
       // Tap anywhere (except the play button) to expand; swipe up too.
       behavior: HitTestBehavior.opaque,
-      onTap: () => setState(() => _playerExpanded = true),
+      onTap: () {
+        // Dragging/tapping the handle to open the player drops the keyboard,
+        // same as closing a popup — the composer shouldn't stay focused behind
+        // the expanded player.
+        FocusManager.instance.primaryFocus?.unfocus();
+        setState(() => _playerExpanded = true);
+      },
       onVerticalDragEnd: (d) {
         if ((d.primaryVelocity ?? 0) < 0) {
+          FocusManager.instance.primaryFocus?.unfocus();
           setState(() => _playerExpanded = true);
         }
       },
@@ -2383,9 +2469,18 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       child: Listener(
         onPointerDown: (_) => _onUserActivity(),
         child: Scaffold(
+      // Match the header colour so the rounded-top chat/music panels appear to
+      // emerge seamlessly from the header — no visible "triangle pocket" of a
+      // different shade behind their top corners in either light or dark theme.
+      backgroundColor: scheme.surfaceContainerHighest,
       appBar: AppBar(
         automaticallyImplyLeading: false,
         backgroundColor: scheme.surfaceContainerHighest,
+        // Keep the header a flat, opaque colour — no Material-3 scroll-under
+        // tint that would shift its shade (and momentarily show content through)
+        // as the conversation scrolls beneath it.
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
         titleSpacing: 14,
         title: Row(
           children: [

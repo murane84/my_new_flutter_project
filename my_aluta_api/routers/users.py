@@ -42,6 +42,9 @@ def update_profile(
     if payload.phone is not None:
         current_user.phone = payload.phone.strip() or None
 
+    if payload.avatar_url is not None:
+        current_user.avatar_url = payload.avatar_url.strip() or None
+
     if payload.new_password:
         if not payload.current_password or not verify_password(
             payload.current_password, current_user.hashed_password
@@ -106,7 +109,7 @@ def get_user_status(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"user_id": user.id, "is_online": user.is_online, "last_seen": user.last_seen.isoformat() if user.last_seen else None, "phone": user.phone}
+    return {"user_id": user.id, "is_online": user.is_online, "last_seen": user.last_seen.isoformat() if user.last_seen else None, "phone": user.phone, "avatar_url": user.avatar_url}
 
 @router.get("/users/friends/unread_counts", response_model=List[schemas.FriendWithUnread], tags=["Users"])
 def get_friends_with_unread_counts(

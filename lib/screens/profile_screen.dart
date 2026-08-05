@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'api_service.dart';
 import 'auth_page.dart';
 import '../utils/toast_helper.dart';
 import '../utils/popup_shell.dart';
+import '../utils/app_config.dart';
 
 /// Profile popup: edit username / phone / password (email is fixed), or
 /// permanently delete the account and wipe all data from the server. Rendered
@@ -27,6 +30,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _email = '';
   String _origUsername = '';
   String _origPhone = '';
+  String _avatarUrl = ''; // relative (/attachments/<id>) or empty
+  String _origAvatar = '';
+  String _apiBase = '';
+  bool _uploadingAvatar = false;
   bool _loading = true;
   bool _saving = false;
   bool _obscureCur = true;
@@ -41,7 +48,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     for (final c in [_username, _phone, _currentPw, _newPw, _confirmPw]) {
       c.addListener(_rebuild);
     }
+    AppConfig.baseUrl.then((b) {
+      if (mounted) setState(() => _apiBase = b);
+    });
     _load();
+  }
+
+  String? get _fullAvatar {
+    if (_avatarUrl.isEmpty) return null;
+    return _avatarUrl.startsWith('http') ? _avatarUrl : '$_apiBase$_avatarUrl';
   }
 
   void _rebuild() {
@@ -52,6 +67,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool get _hasChanges =>
       _username.text.trim() != _origUsername ||
       _phone.text.trim() != _origPhone ||
+      _avatarUrl != _origAvatar ||
       _currentPw.text.isNotEmpty ||
       _newPw.text.isNotEmpty ||
       _confirmPw.text.isNotEmpty;
@@ -63,10 +79,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _email = data['email']?.toString() ?? '';
       _origUsername = data['username']?.toString() ?? '';
       _origPhone = data['phone']?.toString() ?? '';
+      _origAvatar = data['avatar_url']?.toString() ?? '';
+      _avatarUrl = _origAvatar;
       _username.text = _origUsername;
       _phone.text = _origPhone;
       _loading = false;
     });
+  }
+
+  Future<void> _pickAvatar() async {
+    try {
+      final x = await ImagePicker().pickImage(
+          source: ImageSource.gallery, imageQuality: 78, maxWidth: 800);
+      if (x == null) return;
+      final bytes = await x.readAsBytes();
+      setState(() => _uploadingAvatar = true);
+      final res = await ApiService()
+          .uploadMedia(bytes: bytes, filename: x.name, mime: 'image/jpeg');
+      if (!mounted) return;
+      setState(() => _uploadingAvatar = false);
+      if (res != null && res['url'] != null) {
+        setState(() => _avatarUrl = res['url'].toString());
+      } else {
+        showToast(context, 'Could not upload photo', type: ToastType.error);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _uploadingAvatar = false);
+        showToast(context, 'Could not pick photo', type: ToastType.error);
+      }
+    }
   }
 
   @override
@@ -123,6 +165,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final res = await ApiService().updateProfile(
       username: _username.text.trim(),
       phone: _phone.text.trim(),
+      avatarUrl: _avatarUrl,
       currentPassword: wantsPwChange ? _currentPw.text : null,
       newPassword: wantsPwChange ? _newPw.text : null,
     );
@@ -139,6 +182,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _confirmPw.clear();
       _origUsername = _username.text.trim();
       _origPhone = _phone.text.trim();
+      _origAvatar = _avatarUrl;
       if (!mounted) return;
       showToast(context, 'Profile updated', type: ToastType.success);
       Navigator.pop(context, true);
@@ -289,6 +333,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              _avatarPicker(scheme),
+              const SizedBox(height: 20),
               _ReadonlyTile(
                 icon: Icons.email_outlined,
                 label: 'Email (cannot be changed)',
@@ -381,6 +427,74 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _avatarPicker(ColorScheme scheme) {
+    final full = _fullAvatar;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: _uploadingAvatar ? null : _pickAvatar,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                CircleAvatar(
+                  radius: 42,
+                  backgroundColor: scheme.primaryContainer,
+                  backgroundImage:
+                      full != null ? CachedNetworkImageProvider(full) : null,
+                  child: full == null
+                      ? Text(
+                          _origUsername.isNotEmpty
+                              ? _origUsername[0].toUpperCase()
+                              : '?',
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: scheme.onPrimaryContainer,
+                          ),
+                        )
+                      : null,
+                ),
+                if (_uploadingAvatar)
+                  Positioned.fill(
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: Colors.black45,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Padding(
+                        padding: EdgeInsets.all(28),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  right: -2,
+                  bottom: -2,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: scheme.primary,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: scheme.surface, width: 2),
+                    ),
+                    child: const Icon(Icons.camera_alt_rounded,
+                        size: 15, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text('Tap to change photo',
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+        ],
       ),
     );
   }

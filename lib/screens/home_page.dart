@@ -208,6 +208,15 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool? _activeFriendOnline;
   String? _activeFriendLastSeen;
   String? _activeFriendPhone;
+  String? _activeFriendAvatar;
+  String _apiBase = '';
+
+  // Build a full avatar URL from a stored relative ref (/attachments/<id>).
+  String? _avatarFull(dynamic rel) {
+    final s = rel?.toString() ?? '';
+    if (s.isEmpty) return null;
+    return s.startsWith('http') ? s : '$_apiBase$s';
+  }
 
   Timer? _refreshTimer;
   Timer? _heartbeatTimer;
@@ -219,6 +228,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    AppConfig.baseUrl.then((b) {
+      if (mounted) setState(() => _apiBase = b);
+    });
     // React to the shared connection status so the footer dot / header badge
     // update even when the change originates elsewhere (e.g. the chat page).
     ConnectionStatus.instance.online.addListener(_onGlobalConnChanged);
@@ -922,6 +934,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _activeFriendOnline = friend['is_online'] ?? false;
       _activeFriendLastSeen = friend['last_timestamp'] ?? '';
       _activeFriendPhone = friend['phone'] as String?;
+      _activeFriendAvatar = friend['avatar_url'] as String?;
       friend['unread_count'] = 0;
     });
     ApiService().markMessagesAsReadPatch(friend['id'] as int);
@@ -1106,6 +1119,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
             name: _activeFriendName ?? '',
             radius: 17,
             isOnline: _activeFriendOnline == true,
+            imageUrl: _avatarFull(_activeFriendAvatar),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1367,7 +1381,11 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
         child: Row(
           children: [
-            InitialsAvatar(name: name, radius: 22, isOnline: isOnline),
+            InitialsAvatar(
+                name: name,
+                radius: 22,
+                isOnline: isOnline,
+                imageUrl: _avatarFull(f['avatar_url'])),
             const SizedBox(width: 10),
             Expanded(
               child: Column(

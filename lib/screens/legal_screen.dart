@@ -165,7 +165,10 @@ class _LegalPopup extends StatelessWidget {
                         IconButton(
                           tooltip: 'Close',
                           icon: const Icon(Icons.close_rounded),
-                          onPressed: () => Navigator.of(context).pop(),
+                          onPressed: () {
+                            FocusScope.of(context).unfocus();
+                            Navigator.of(context).pop();
+                          },
                         ),
                       ],
                     ),
@@ -309,7 +312,7 @@ List<Widget> _legalBody(BuildContext context, String raw) {
 // ── Official content (v1) ───────────────────────────────────────────────────
 const String _privacy = '''
 Aluta — Privacy Policy
-Version 1.0 — Last updated: 4 August 2026
+Version 1.1 — Last updated: 5 August 2026
 
 This Privacy Policy explains what information Aluta ("Aluta", "we", "us")
 collects, how we use it, and the choices you have. By using Aluta you agree to
@@ -317,35 +320,47 @@ this Policy.
 
 1. Information we collect
 - Account details: the username and email address you provide when you register.
-- Messages: the chat messages you send and receive, so we can deliver them to
-  your contacts.
+- Phone number: if you add a phone number to your profile, we store it so your
+  contacts can start a direct phone call to you from within the app. Providing a
+  phone number is optional, and you can change or remove it at any time from your
+  profile.
+- Messages: the chat messages you send and receive — including any edits you make
+  and reactions you add — so we can deliver and display them to your contacts.
+- Shared media: photos, files and voice notes you attach to a chat are uploaded
+  to and stored on our servers so they can be delivered to, and replayed by, the
+  people you send them to.
 - Presence: your online status and a "last seen" time, so friends can see when
   you are available.
 - Technical data: basic device and connection information needed to keep the
   service running (for example, to maintain your live session and notifications).
 
 Your music files stay on your device. Aluta reads them only to build your local
-library and to display track details. We never upload your music, except that
-when you choose to stream a song live to a friend, that audio is relayed through
-our servers in real time so your friend can hear it. Live audio is passed through
-in real time and is not stored on our servers.
+library and to display track details. We never upload your music library. When
+you choose to stream a song live to a friend, that audio is relayed through our
+servers in real time so your friend can hear it; live audio is passed through in
+real time and is not stored on our servers. This is separate from chat media —
+the photos, files and voice notes you attach to a conversation — which is stored
+so it can be delivered.
 
 2. How we use your information
 We use your information only to operate and improve the app: to authenticate you,
-deliver your messages, show presence, run live listening sessions, and send you
+deliver your messages and shared media, show presence, enable direct calls to
+contacts who have shared a number, run live listening sessions, and send you
 notifications about new messages.
 
 3. Sharing
-We do not sell your personal data and we do not share it with advertisers.
-Messages are shared only with the contacts you send them to. We may disclose
-information if required by law or to protect the safety, rights, or property of
-our users or of Aluta.
+We do not sell your personal data and we do not share it with advertisers. Your
+messages, shared media and phone number are shared only with the contacts you
+send them to or choose to make them available to. We may disclose information if
+required by law or to protect the safety, rights, or property of our users or of
+Aluta.
 
-4. Data retention
-We keep your account details and messages for as long as your account is active
-so the service works as expected. When you request account deletion, we remove
-your account details and associated messages from our systems, except where we
-are required to retain certain records by law.
+4. Data retention and deletion
+We keep your account details, messages and shared media for as long as your
+account is active so the service works as expected. You can delete your account
+at any time from the Profile page; doing so permanently removes your profile,
+your phone number, your messages, your shared media and your reactions from our
+servers, except where we are required to retain certain records by law.
 
 5. Security
 We take reasonable technical and organisational measures to protect your data,
@@ -359,9 +374,10 @@ country). We do not knowingly collect data from children below that age. If you
 believe a child has provided us data, contact us and we will remove it.
 
 7. Your choices
-You can edit your profile and delete messages within the app at any time. To
-request deletion of your account and associated data, contact us at the address
-below.
+You can edit your profile — including your username and phone number — change
+your password, and delete messages within the app at any time. You can also
+delete your entire account and all associated data yourself from the Profile
+page, or contact us at the address below for help.
 
 8. Changes to this Policy
 We may update this Policy from time to time. When we do, we will change the
@@ -373,7 +389,7 @@ For any privacy questions or requests, contact us at: support@ozilane.com
 
 const String _terms = '''
 Aluta — Terms of Service
-Version 1.0 — Last updated: 4 August 2026
+Version 1.1 — Last updated: 5 August 2026
 
 These Terms of Service ("Terms") govern your use of the Aluta app. By using
 Aluta you agree to these Terms. If you do not agree, please do not use the app.
@@ -389,36 +405,46 @@ without your permission.
 
 3. Acceptable use
 You agree not to use Aluta to: harass, threaten, or abuse others; share unlawful,
-hateful, or infringing content; attempt to disrupt or reverse-engineer the
-service; or access accounts or data that are not yours. Only share or stream
-music that you own or otherwise have the right to share.
+hateful, or infringing content — including photos, files, voice notes, or profile
+pictures; make unwanted or harassing calls to other users; attempt to disrupt or
+reverse-engineer the service; or access accounts or data that are not yours. Only
+share or stream media and music that you own or otherwise have the right to share.
 
-4. Your content
-You retain the rights to the content you create, send, or stream. You are solely
-responsible for the music files on your device and for any content you send or
-stream to others, including ensuring you have the necessary rights to do so. You
-grant us the limited permission needed to transmit your content to the recipients
-you choose (for example, relaying a live stream to a friend).
+4. Your content and shared media
+You retain the rights to the content you create, send, or stream — including the
+messages, photos, files, voice notes, and profile picture you upload. You are
+solely responsible for that content and for the music files on your device,
+including ensuring you have the necessary rights to share them. You grant us the
+limited permission needed to store your shared media on our servers and transmit
+your content to the recipients you choose (for example, delivering a photo or
+voice note to a friend, or relaying a live stream). We store shared media only to
+deliver it, and you can remove your content or delete your account at any time.
 
 5. Music and third-party rights
 Aluta plays music that already exists on your device. We do not provide, license,
 or supply music. You are responsible for complying with the licence terms of any
 music you play or stream.
 
-6. Service availability
+6. Direct calls
+When you tap a contact's call button, Aluta hands the phone number to your
+device's own dialer to place a normal phone or carrier call — Aluta does not
+carry or record the call itself, and your carrier's standard rates may apply.
+Only add a phone number you are entitled to use, and keep it up to date.
+
+7. Service availability
 The service is provided "as is" and "as available", without warranties of any
 kind, to the fullest extent permitted by law. We may add, change, suspend, or
 remove features at any time, and we do not guarantee uninterrupted availability.
 
-7. Limitation of liability
+8. Limitation of liability
 To the fullest extent permitted by law, Aluta is not liable for any indirect,
 incidental, or consequential damages arising from your use of the app.
 
-8. Termination
+9. Termination
 You may stop using Aluta at any time. We may suspend or terminate access if you
 breach these Terms or use the app in a way that harms other users or the service.
 
-9. Changes to these Terms
+10. Changes to these Terms
 We may update these Terms from time to time. When we do, we will change the
 "Last updated" date above. Continued use of the app after changes take effect
 means you accept the updated Terms.

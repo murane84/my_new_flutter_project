@@ -20,6 +20,7 @@ class UserUpdate(BaseModel):
     # Email is intentionally immutable and not accepted here.
     username: Optional[str] = None
     phone: Optional[str] = None
+    avatar_url: Optional[str] = None
     current_password: Optional[str] = None
     new_password: Optional[str] = None
 
@@ -30,6 +31,7 @@ class UserOut(BaseModel):
     email: EmailStr
     is_online: Optional[bool] = False
     phone: Optional[str] = None
+    avatar_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -110,6 +112,7 @@ class FriendWithUnread(BaseModel):
     last_message_delivered: Optional[bool] = None    # ✅ Add this
     last_message_read: Optional[bool] = None         # ✅ Add this
     phone: Optional[str] = None                      # for direct call
+    avatar_url: Optional[str] = None                 # profile picture
 
     model_config = ConfigDict(from_attributes=True)  # For Pydantic v2
 

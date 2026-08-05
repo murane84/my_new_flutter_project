@@ -23,6 +23,8 @@ class User(Base):
     refresh_token = Column(String, nullable=True)
     # Optional phone number, used for one-tap direct calls between friends.
     phone = Column(String, nullable=True)
+    # Optional profile picture, stored as an attachment ref (/attachments/<id>).
+    avatar_url = Column(String, nullable=True)
 
     sent_messages = relationship(
         "Message",

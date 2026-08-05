@@ -224,6 +224,7 @@ class ApiService {
   Future<Map<String, dynamic>> updateProfile({
     String? username,
     String? phone,
+    String? avatarUrl,
     String? currentPassword,
     String? newPassword,
   }) async {
@@ -239,6 +240,7 @@ class ApiService {
         body: jsonEncode({
           if (username != null) 'username': username,
           if (phone != null) 'phone': phone,
+          if (avatarUrl != null) 'avatar_url': avatarUrl,
           if (currentPassword != null && currentPassword.isNotEmpty)
             'current_password': currentPassword,
           if (newPassword != null && newPassword.isNotEmpty)

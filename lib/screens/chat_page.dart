@@ -97,6 +97,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   bool _isFriendOnline = false;
   String _lastSeen = '';
   String _friendPhone = '';
+  String _friendAvatar = '';
   bool _friendTyping = false;
 
   List<Map<String, dynamic>> _messages = [];
@@ -845,6 +846,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final online = status['is_online'] ?? false;
     final lastSeen = status['last_seen'] ?? '';
     _friendPhone = (status['phone'] as String?) ?? '';
+    final avatar = (status['avatar_url'] as String?) ?? '';
+    if (avatar != _friendAvatar && mounted) {
+      setState(() => _friendAvatar = avatar);
+    }
     if (online != _isFriendOnline || lastSeen != _lastSeen) {
       setState(() {
         _isFriendOnline = online;
@@ -1859,16 +1864,22 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         ? CircleAvatar(
                             radius: 13,
                             backgroundColor: scheme.primaryContainer,
-                            child: Text(
-                              widget.friendName.isNotEmpty
-                                  ? widget.friendName[0].toUpperCase()
-                                  : '?',
-                              style: TextStyle(
-                                color: scheme.onPrimaryContainer,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                            backgroundImage: _friendAvatar.isNotEmpty
+                                ? CachedNetworkImageProvider(
+                                    fullMediaUrl(_friendAvatar))
+                                : null,
+                            child: _friendAvatar.isNotEmpty
+                                ? null
+                                : Text(
+                                    widget.friendName.isNotEmpty
+                                        ? widget.friendName[0].toUpperCase()
+                                        : '?',
+                                    style: TextStyle(
+                                      color: scheme.onPrimaryContainer,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                           )
                         : const SizedBox(),
                   ),
@@ -2706,13 +2717,18 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               radius: 16,
               backgroundColor:
                   Theme.of(context).colorScheme.primaryContainer,
-              child: Text(
-                widget.friendName.isNotEmpty
-                    ? widget.friendName[0].toUpperCase()
-                    : '?',
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 13),
-              ),
+              backgroundImage: _friendAvatar.isNotEmpty
+                  ? CachedNetworkImageProvider(fullMediaUrl(_friendAvatar))
+                  : null,
+              child: _friendAvatar.isNotEmpty
+                  ? null
+                  : Text(
+                      widget.friendName.isNotEmpty
+                          ? widget.friendName[0].toUpperCase()
+                          : '?',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
             ),
             const SizedBox(width: 10),
             Column(

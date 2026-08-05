@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 /// Presents [child] as a top-anchored popup that sits just BELOW the Aluta app
 /// header — so the brand title and the theme / policy / sign-out controls stay
 /// visible and are never covered. Fades + slides down on entry.
-Future<T?> showAppPopup<T>(BuildContext context, Widget child) {
-  return showGeneralDialog<T>(
+Future<T?> showAppPopup<T>(BuildContext context, Widget child) async {
+  // Drop any active text focus so opening the popup never carries a keyboard
+  // in with it.
+  FocusManager.instance.primaryFocus?.unfocus();
+  final result = await showGeneralDialog<T>(
     context: context,
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
@@ -24,6 +27,10 @@ Future<T?> showAppPopup<T>(BuildContext context, Widget child) {
       );
     },
   );
+  // However it was dismissed (X, barrier tap or back), make sure focus
+  // restoration doesn't pop a keyboard up on the page underneath.
+  FocusManager.instance.primaryFocus?.unfocus();
+  return result;
 }
 
 /// The shared popup card: anchored under the app header, wide-but-capped on
@@ -121,7 +128,10 @@ class AppPopupShell extends StatelessWidget {
                         IconButton(
                           tooltip: 'Close',
                           icon: const Icon(Icons.close_rounded),
-                          onPressed: () => Navigator.of(context).pop(),
+                          onPressed: () {
+                            FocusScope.of(context).unfocus();
+                            Navigator.of(context).pop();
+                          },
                         ),
                       ],
                     ),

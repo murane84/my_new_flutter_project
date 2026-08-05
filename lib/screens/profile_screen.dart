@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'api_service.dart';
 import 'auth_page.dart';
+import '../services/biometric_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/popup_shell.dart';
 import '../utils/app_config.dart';
@@ -39,6 +40,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _obscureCur = true;
   bool _obscureNew = true;
   bool _obscureConf = true;
+  bool _bioAvailable = false;
+  bool _bioOn = false;
 
   @override
   void initState() {
@@ -52,6 +55,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) setState(() => _apiBase = b);
     });
     _load();
+    _loadBio();
+  }
+
+  Future<void> _loadBio() async {
+    final avail = await BiometricService.instance.isAvailable();
+    final on = await BiometricService.instance.isEnabled();
+    if (mounted) {
+      setState(() {
+        _bioAvailable = avail;
+        _bioOn = on;
+      });
+    }
+  }
+
+  Future<void> _toggleBio(bool want) async {
+    // Require a successful biometric / device-credential check to change the
+    // setting either way — so a passer-by can't silently turn the lock off.
+    final ok = await BiometricService.instance.authenticate(
+      want
+          ? 'Confirm to enable quick unlock'
+          : 'Confirm to turn off quick unlock',
+    );
+    if (!ok) {
+      if (mounted) {
+        showToast(context, 'Authentication failed', type: ToastType.error);
+      }
+      return;
+    }
+    if (want) {
+      await BiometricService.instance.enable(_email);
+    } else {
+      await BiometricService.instance.disable();
+    }
+    if (!mounted) return;
+    setState(() => _bioOn = want);
+    showToast(
+      context,
+      want ? 'Quick unlock enabled' : 'Quick unlock turned off',
+      type: ToastType.success,
+    );
   }
 
   String? get _fullAvatar {
@@ -269,6 +312,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.clear();
       } catch (_) {}
+      await BiometricService.instance.disable();
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const AuthPage()),
@@ -422,6 +466,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       )
                     : const Text('Save changes'),
               ),
+              if (_bioAvailable) ...[
+                const SizedBox(height: 22),
+                _heading('Security', scheme),
+                const SizedBox(height: 12),
+                _securitySection(scheme),
+              ],
               const SizedBox(height: 26),
               _dangerZone(scheme),
             ],
@@ -536,6 +586,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
           icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
           onPressed: toggle,
         ),
+      ),
+    );
+  }
+
+  Widget _securitySection(ColorScheme scheme) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 4, 6, 4),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withAlpha(90),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.primary.withAlpha(60)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.fingerprint_rounded, color: scheme.primary),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Fingerprint / Face unlock',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                const SizedBox(height: 2),
+                Text(
+                  'Lock Aluta and sign in with biometrics or your device PIN. '
+                  'Your password is never stored on this device.',
+                  style:
+                      TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: _bioOn,
+            onChanged: _saving ? null : (v) => _toggleBio(v),
+          ),
+        ],
       ),
     );
   }

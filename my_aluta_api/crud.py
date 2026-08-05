@@ -8,6 +8,22 @@ from models import Message, User, Friend, MuteStatus, BlockStatus
 from schemas import MessageCreate, FriendWithUnread
 
 
+# Presence window: a user is shown "online" only if the server heard from them
+# (any authenticated request) within this many seconds; otherwise friends see
+# "last seen". This is decoupled from the login session, which stays alive in
+# the background so messages still deliver. Covers app-closed, backgrounded and
+# no-internet uniformly — in every case the device simply stops checking in.
+PRESENCE_ONLINE_SECONDS = 90
+
+
+def is_recently_active(last_seen) -> bool:
+    if last_seen is None:
+        return False
+    if last_seen.tzinfo is None or last_seen.tzinfo.utcoffset(last_seen) is None:
+        last_seen = last_seen.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - last_seen).total_seconds() <= PRESENCE_ONLINE_SECONDS
+
+
 # ------------------ User Status ------------------
 def update_user_status(db: Session, user_id: int, is_online: bool):
     user = db.query(User).filter(User.id == user_id).first()
@@ -230,7 +246,7 @@ def get_friends_with_unread_counts(db: Session, user_id: int):
             FriendWithUnread(
                 id=friend.id,
                 username=friend.username,
-                is_online=friend.is_online,
+                is_online=friend.is_online and is_recently_active(friend.last_seen),
                 last_timestamp=last_message.timestamp.strftime('%Y-%m-%d %H:%M') if last_message else None,
                 last_message=last_message.content if last_message else "",
                 unread_count=unread_count,

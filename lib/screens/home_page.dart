@@ -836,6 +836,17 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     try {
       final friends = await ApiService().getFriends();
       if (!mounted) return;
+      // While a chat is open you're actively reading it, so never let a refresh
+      // resurrect that friend's unread badge — the read PATCH may not have
+      // round-tripped to the server yet. This kills the stale-badge flicker on
+      // returning to the list.
+      if (_activeFriendId != null) {
+        for (final f in friends) {
+          if (f['id'].toString() == _activeFriendId) {
+            f['unread_count'] = 0;
+          }
+        }
+      }
       // Save fresh data to cache
       await _saveFriendsCache(friends);
       setState(() {
@@ -960,6 +971,35 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _logout() async {
+    // Confirm first — signing out is deliberate, so an accidental tap on the
+    // header icon can never drop the session (and, with quick-unlock off, wipe
+    // the saved login).
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final scheme = Theme.of(ctx).colorScheme;
+        return AlertDialog(
+          icon: Icon(Icons.logout_rounded, color: scheme.primary, size: 30),
+          title: const Text('Sign out?'),
+          content: const Text(
+            'You will stop receiving messages and calls on this device until you '
+            'sign back in. Your chats and account stay safe on the server.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(backgroundColor: scheme.primary),
+              child: const Text('Sign out'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) return;
     await ApiService().logoutUser();
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
@@ -1268,6 +1308,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       key: ValueKey(_activeFriendId),
                       friendId: int.parse(_activeFriendId!),
                       friendName: _activeFriendName!,
+                      friendAvatar: _activeFriendAvatar ?? '',
                       textColor: textColor,
                       showAppBar: false,
                       onFriendOnlineStatusChanged: (online, lastSeen) {
@@ -1942,9 +1983,52 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       color: scheme.primary,
                     ),
                   ),
+                  const SizedBox(width: 6),
+                  // Transport controls now sit on the LEFT so the play button is
+                  // far from the composer's Send button (stops mis-taps while
+                  // typing). Favourite · Previous · Play · Next.
+                  ValueListenableBuilder<bool>(
+                    valueListenable: favoriteNotifier,
+                    builder: (_, fav, __) => GestureDetector(
+                      onTap: () => playbackBus.onToggleFavorite?.call(),
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: const EdgeInsets.all(5),
+                        child: Icon(
+                          fav
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
+                          size: 20,
+                          color: fav
+                              ? scheme.primary
+                              : scheme.onSurface.withAlpha(150),
+                        ),
+                      ),
+                    ),
+                  ),
+                  _barBtn(
+                    context,
+                    Icons.skip_previous_rounded,
+                    () => playbackBus.onPrev?.call(),
+                    size: 22,
+                  ),
+                  _barBtn(
+                    context,
+                    np.playing
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
+                    () => playbackBus.onToggle?.call(),
+                    size: 26,
+                    filled: true,
+                  ),
+                  _barBtn(
+                    context,
+                    Icons.skip_next_rounded,
+                    () => playbackBus.onNext?.call(),
+                    size: 22,
+                  ),
                   const SizedBox(width: 10),
-                  // Title (auto-scrolls if long) sits directly above a slim
-                  // seekable progress bar — the footer is now status-only.
+                  // Title (auto-scrolls if long) above a slim seekable bar.
                   Expanded(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -1967,50 +2051,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 2),
-                  // Quick favourite toggle for the current track.
-                  ValueListenableBuilder<bool>(
-                    valueListenable: favoriteNotifier,
-                    builder: (_, fav, __) => GestureDetector(
-                      onTap: () => playbackBus.onToggleFavorite?.call(),
-                      behavior: HitTestBehavior.opaque,
-                      child: Padding(
-                        padding: const EdgeInsets.all(5),
-                        child: Icon(
-                          fav
-                              ? Icons.favorite_rounded
-                              : Icons.favorite_border_rounded,
-                          size: 20,
-                          color: fav
-                              ? scheme.primary
-                              : scheme.onSurface.withAlpha(150),
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Previous / Play / Next — drive the mounted player via the bus.
-                  _barBtn(
-                    context,
-                    Icons.skip_previous_rounded,
-                    () => playbackBus.onPrev?.call(),
-                    size: 22,
-                  ),
-                  _barBtn(
-                    context,
-                    np.playing
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded,
-                    () => playbackBus.onToggle?.call(),
-                    size: 26,
-                    filled: true,
-                  ),
-                  _barBtn(
-                    context,
-                    Icons.skip_next_rounded,
-                    () => playbackBus.onNext?.call(),
-                    size: 22,
-                  ),
-                  const SizedBox(width: 2),
+                  const SizedBox(width: 6),
                   // Close the bar entirely → collapses to the floating button,
                   // freshly reset to the bottom-right anchor.
                   GestureDetector(
@@ -2175,10 +2216,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return ListenableBuilder(
       listenable: nowPlayingNotifier,
       builder: (context, _) {
-        // Pure status strip now — no track info (that lives in the bar above).
-        final statusWord = _isDiscovering
-            ? 'Connecting…'
-            : (_serverReachable ? 'Connected' : 'Offline');
+        // Pure status strip: a connection dot + online-friends count on the
+        // left, profile pill on the right. The "Connected" label is dropped —
+        // seeing your online friends (plus the toast) already tells you you're
+        // back online, so the word was redundant.
         return Container(
           height: 44,
           color: scheme.surfaceContainerHighest,
@@ -2227,15 +2268,19 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                 ],
                               ),
                             ),
-                      const SizedBox(width: 7),
-                      Text(
-                        statusWord,
-                        style: TextStyle(
-                          color: scheme.onSurface.withAlpha(180),
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w500,
+                      // Online-friends count sits right next to the dot (only
+                      // when actually online). No redundant status word.
+                      if (_serverReachable && !_isDiscovering) ...[
+                        const SizedBox(width: 7),
+                        Text(
+                          '$_onlineFriendsCount online',
+                          style: TextStyle(
+                            color: scheme.onSurface.withAlpha(180),
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -2243,32 +2288,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
               const Spacer(),
 
-              // ── Right: online friends + current user ──────────────────────
-              if (_onlineFriendsCount > 0) ...[
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: const BoxDecoration(
-                    color: Colors.green,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 3),
-                Text(
-                  '$_onlineFriendsCount online',
-                  style: TextStyle(
-                    color: scheme.onSurface.withAlpha(170),
-                    fontSize: 11,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Container(
-                  width: 1,
-                  height: 16,
-                  color: scheme.outlineVariant.withAlpha(90),
-                ),
-                const SizedBox(width: 10),
-              ],
+              // ── Right: profile pill only (online count now sits by the dot) ─
               // Tap the name (a pill-shaped button) to open your profile.
               Material(
                 color: Colors.transparent,

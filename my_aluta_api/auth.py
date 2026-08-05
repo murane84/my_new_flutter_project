@@ -70,7 +70,9 @@ def create_tokens(email: str):
     )
     refresh_token = create_token(
         {"sub": email},
-        timedelta(days=7)
+        # Long-lived so a user who leaves the app idle/backgrounded for weeks is
+        # never forced to re-enter credentials — the app silently refreshes.
+        timedelta(days=365)
     )
     return access_token, refresh_token
 
@@ -125,12 +127,11 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     if not user:
         raise credentials_exception
 
-    # Check for inactivity timeout and update user status
-    set_user_status_based_on_inactivity(user, db)
-
-    # If the user is inactive, raise session expired
-    if not user.is_online:
-        raise HTTPException(status_code=401, detail="Session expired due to inactivity")
+    # A valid token means a valid session. This is a chat app, not a bank —
+    # users stay signed in like WhatsApp and are never logged out for being
+    # idle. Every authenticated request counts as activity, keeping the user
+    # online and reachable in the background so messages still deliver.
+    update_last_seen(user.id, db)
 
     return user
 

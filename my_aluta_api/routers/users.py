@@ -109,7 +109,7 @@ def get_user_status(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"user_id": user.id, "is_online": user.is_online, "last_seen": user.last_seen.isoformat() if user.last_seen else None, "phone": user.phone, "avatar_url": user.avatar_url}
+    return {"user_id": user.id, "is_online": user.is_online and crud.is_recently_active(user.last_seen), "last_seen": user.last_seen.isoformat() if user.last_seen else None, "phone": user.phone, "avatar_url": user.avatar_url}
 
 @router.get("/users/friends/unread_counts", response_model=List[schemas.FriendWithUnread], tags=["Users"])
 def get_friends_with_unread_counts(

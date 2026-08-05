@@ -7,6 +7,8 @@ import 'screens/home_page.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/auth_page.dart';
+import 'screens/lock_screen.dart';
+import 'services/biometric_service.dart';
 import 'screens/friends_list_screen.dart';
 import 'screens/chat_page.dart';
 import 'screens/music_controls.dart';
@@ -229,6 +231,8 @@ class MyApp extends StatelessWidget {
                 return _slide(const RegisterPage());
               case AuthPage.routeName:
                 return _fade(const AuthPage());
+              case LockScreen.routeName:
+                return _fade(const LockScreen());
               case HomePage.routeName:
                 return _fade(const HomePage());
               case FriendsListScreen.routeName:
@@ -239,6 +243,7 @@ class MyApp extends StatelessWidget {
                   textColor: Theme.of(navigatorKey.currentContext!).colorScheme.onSurface,
                   friendId: args['friendId'],
                   friendName: args['friendName'],
+                  friendAvatar: (args['friendAvatar'] as String?) ?? '',
                 ));
               case MusicControls.routeName:
                 return _slide(MusicControls(
@@ -295,10 +300,15 @@ class SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
     final prefs = await SharedPreferences.getInstance();
     final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+    // Signed in + quick-unlock enrolled → gate entry behind the biometric lock
+    // screen. Otherwise fall straight through to Home (or Auth if signed out).
+    final bioLocked = isLoggedIn && await BiometricService.instance.isEnabled();
     if (!mounted) return;
     Navigator.pushReplacementNamed(
       context,
-      isLoggedIn ? HomePage.routeName : AuthPage.routeName,
+      bioLocked
+          ? LockScreen.routeName
+          : (isLoggedIn ? HomePage.routeName : AuthPage.routeName),
     );
   }
 

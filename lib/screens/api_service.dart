@@ -7,6 +7,7 @@ import 'token_helper.dart';
 import 'user.dart';
 import '../utils/app_config.dart';
 import '../utils/session_events.dart';
+import '../services/biometric_service.dart';
 
 final _logger = Logger();
 
@@ -98,36 +99,54 @@ class ApiService {
 
   // LOGOUT
   Future<void> logoutUser() async {
+    // If biometric quick-unlock is enrolled, KEEP the enrollment + refresh token
+    // so the user can fingerprint straight back in on their own device (the
+    // login screen shows a fingerprint button). Without biometric, signing out
+    // is a full wipe. The access token is always cleared either way.
+    final keepForBiometric = await BiometricService.instance.isEnabled();
     try {
       final token = await _getToken();
-      if (token == null) return;
-
-      await http.post(
-        Uri.parse('${await _baseUrl}/users/me/online?is_online=false'),
-        headers: _authHeaders(token),
-      );
-
-      await http.post(
-        Uri.parse('${await _baseUrl}/logout'),
-        headers: _authHeaders(token),
-      );
-
+      if (token != null) {
+        // Always flag offline.
+        await http.post(
+          Uri.parse('${await _baseUrl}/users/me/online?is_online=false'),
+          headers: _authHeaders(token),
+        );
+        // Full server logout can revoke the refresh token, so only call it when
+        // we are NOT keeping that token for fingerprint re-login.
+        if (!keepForBiometric) {
+          await http.post(
+            Uri.parse('${await _baseUrl}/logout'),
+            headers: _authHeaders(token),
+          );
+        }
+      }
       await removeToken();
-      await removeRefreshToken();
+      if (!keepForBiometric) await removeRefreshToken();
     } catch (e) {
       _logger.e('Logout exception: $e');
       await removeToken();
-      await removeRefreshToken();
+      if (!keepForBiometric) await removeRefreshToken();
     }
   }
 
   // ── Silent token refresh ────────────────────────────────────────────────
   // Exchanges the long-lived refresh token for a fresh access token so an
   // expired access token is invisible to the user. Returns true on success.
+  // True only when /auth/refresh EXPLICITLY rejects the refresh token (401/403)
+  // — i.e. the session is genuinely dead. Network errors / transient failures
+  // leave it false, so a blip never signs the user out.
+  bool _refreshRejected = false;
+  bool get refreshWasRejected => _refreshRejected;
+
   Future<bool> refreshAccessToken() async {
+    _refreshRejected = false;
     try {
       final refresh = await getRefreshToken();
-      if (refresh == null || refresh.isEmpty) return false;
+      if (refresh == null || refresh.isEmpty) {
+        _refreshRejected = true; // nothing to refresh with → truly need re-login
+        return false;
+      }
       final res = await http.post(
         Uri.parse('${await _baseUrl}/auth/refresh'),
         headers: _authHeaders(refresh),
@@ -139,10 +158,14 @@ class ApiService {
           await saveToken(newToken);
           return true;
         }
+        return false; // odd 2xx without a token — treat as transient
+      }
+      if (res.statusCode == 401 || res.statusCode == 403) {
+        _refreshRejected = true; // server definitively rejected the token
       }
       return false;
     } catch (_) {
-      return false;
+      return false; // network/transient — NOT a reason to log out
     }
   }
 
@@ -167,7 +190,7 @@ class ApiService {
           res = await post(await _getToken());
         }
         if (res == null || res.statusCode == 401 || res.statusCode == 403) {
-          SessionEvents.instance.markExpired();
+          if (refreshWasRejected) SessionEvents.instance.markExpired();
           return false;
         }
       }
@@ -208,7 +231,7 @@ class ApiService {
         if (data is Map<String, dynamic>) return data;
         throw Exception('Invalid user data format');
       } else if (response.statusCode == 401 || response.statusCode == 403) {
-        SessionEvents.instance.markExpired();
+        if (refreshWasRejected) SessionEvents.instance.markExpired();
         throw Exception('Session expired. Please log in again.');
       }
       throw Exception('Failed to fetch user data');

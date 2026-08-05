@@ -7,6 +7,7 @@ import 'theme_provider.dart';
 import 'auth_page.dart';
 import 'register_screen.dart';
 import 'token_helper.dart';
+import '../services/biometric_service.dart';
 import '../utils/snackbar_helper.dart';
 
 class LoginPage extends StatefulWidget {
@@ -23,6 +24,7 @@ class LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _bioLoginAvailable = false;
 
   @override
   void initState() {
@@ -34,6 +36,7 @@ class LoginPageState extends State<LoginPage> {
         _passwordController.text = args['password'] ?? '';
       }
     });
+    _checkBioLogin();
   }
 
   @override
@@ -61,6 +64,10 @@ class LoginPageState extends State<LoginPage> {
       await prefs.setString('username', result['username'] ?? '');
       await saveToken(result['access_token'] ?? '');
 
+      // Offer biometric quick-unlock now that we have a valid session + refresh
+      // token to gate behind it. Never blocks sign-in.
+      await _maybeOfferBiometric(_emailController.text.trim());
+
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
@@ -75,6 +82,183 @@ class LoginPageState extends State<LoginPage> {
       showErrorSnackBar(
         context,
         result['message'] ?? 'Login failed. Please try again.',
+      );
+    }
+  }
+
+  /// After a successful password sign-in, offer to turn on fingerprint / Face /
+  /// Windows Hello quick-unlock — but only once, and only where the device
+  /// supports it. Declining is remembered so we never nag on every login.
+  Future<void> _maybeOfferBiometric(String email) async {
+    try {
+      if (await BiometricService.instance.isEnabled()) return;
+      if (!await BiometricService.instance.isAvailable()) return;
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('bio_prompt_declined') == true) return;
+      if (!mounted) return;
+      final wantsIt = await showDialog<bool>(
+        context: context,
+        builder: (ctx) {
+          final scheme = Theme.of(ctx).colorScheme;
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+          final badgeIcon = isDark ? const Color(0xFFFF8A93) : scheme.primary;
+          return Dialog(
+            insetPadding: const EdgeInsets.all(24),
+            backgroundColor: scheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+              side: BorderSide(color: scheme.primary.withAlpha(130)),
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 340),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(22, 24, 22, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Soft-red fingerprint badge
+                    Container(
+                      width: 58,
+                      height: 58,
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withAlpha(isDark ? 46 : 26),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: scheme.primary.withAlpha(isDark ? 90 : 70)),
+                      ),
+                      child: Icon(Icons.fingerprint_rounded,
+                          size: 30, color: badgeIcon),
+                    ),
+                    const SizedBox(height: 15),
+                    const Text('Quick unlock',
+                        style: TextStyle(
+                            fontSize: 19, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 7),
+                    Text(
+                      'Sign in with your fingerprint, face or device PIN — and '
+                      'keep Aluta locked when you reopen it.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: scheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.lock_outline_rounded,
+                            size: 13, color: scheme.onSurfaceVariant),
+                        const SizedBox(width: 5),
+                        Text('Your password is never stored',
+                            style: TextStyle(
+                                fontSize: 11.5,
+                                color: scheme.onSurfaceVariant)),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            style: TextButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 12),
+                              foregroundColor: scheme.onSurfaceVariant,
+                            ),
+                            child: const Text('Not now'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            icon: const Icon(Icons.fingerprint_rounded,
+                                size: 18),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: scheme.primary,
+                              foregroundColor: Colors.white,
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            label: const Text('Enable'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+      if (wantsIt == true) {
+        final ok = await BiometricService.instance
+            .authenticate('Confirm to enable quick unlock');
+        if (ok) {
+          await BiometricService.instance.enable(email);
+        }
+      } else if (wantsIt == false) {
+        await prefs.setBool('bio_prompt_declined', true);
+      }
+    } catch (_) {/* never block sign-in on this */}
+  }
+
+  /// If quick-unlock is enrolled and a refresh token is still stored, offer a
+  /// one-tap fingerprint sign-in on this screen (for users returning on their
+  /// own device). Password entry always stays available alongside it.
+  Future<void> _checkBioLogin() async {
+    try {
+      final enabled = await BiometricService.instance.isEnabled();
+      final refresh = await getRefreshToken();
+      if (enabled && refresh != null && refresh.isNotEmpty) {
+        final acct = await BiometricService.instance.enrolledAccount() ?? '';
+        if (!mounted) return;
+        setState(() => _bioLoginAvailable = true);
+        if (_emailController.text.isEmpty && acct.isNotEmpty) {
+          _emailController.text = acct;
+        }
+      }
+    } catch (_) {/* biometric login simply will not be offered */}
+  }
+
+  Future<void> _biometricLogin() async {
+    final ok = await BiometricService.instance.authenticate('Sign in to Aluta');
+    if (!ok || !mounted) return;
+    setState(() => _isLoading = true);
+    final refreshed = await ApiService().refreshAccessToken();
+    if (!mounted) return;
+    if (refreshed) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isLoggedIn', true);
+      try {
+        final data = await ApiService().getUserData();
+        await prefs.setString('username', data['username']?.toString() ?? '');
+      } catch (_) {}
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (ctx, anim, sanim) => const HomePage(),
+          transitionsBuilder: (ctx, anim, sanim, child) =>
+              FadeTransition(opacity: anim, child: child),
+          transitionDuration: const Duration(milliseconds: 300),
+        ),
+      );
+    } else {
+      // Refresh token expired / revoked — fall back to password sign-in.
+      setState(() {
+        _isLoading = false;
+        _bioLoginAvailable = false;
+      });
+      showErrorSnackBar(
+        context,
+        'Session expired — please sign in with your password.',
       );
     }
   }
@@ -295,6 +479,51 @@ class LoginPageState extends State<LoginPage> {
                                     ),
                                   ),
                                 ),
+                                // One-tap fingerprint sign-in (own device)
+                                if (_bioLoginAvailable) ...[
+                                  const SizedBox(height: 18),
+                                  Center(
+                                    child: GestureDetector(
+                                      onTap:
+                                          _isLoading ? null : _biometricLogin,
+                                      behavior: HitTestBehavior.opaque,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(
+                                            width: 54,
+                                            height: 54,
+                                            decoration: BoxDecoration(
+                                              color: scheme.primary.withAlpha(
+                                                  isDark ? 46 : 26),
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color: scheme.primary.withAlpha(
+                                                    isDark ? 90 : 70),
+                                              ),
+                                            ),
+                                            child: Icon(
+                                              Icons.fingerprint_rounded,
+                                              size: 28,
+                                              color: isDark
+                                                  ? const Color(0xFFFF8A93)
+                                                  : scheme.primary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 7),
+                                          Text(
+                                            'Sign in with fingerprint',
+                                            style: TextStyle(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: subColor,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),

@@ -74,6 +74,7 @@ class ChatPage extends StatefulWidget {
   static const routeName = '/chat';
   final int friendId;
   final String friendName;
+  final String friendAvatar;
   final Color textColor;
   final bool showAppBar;
   final Function(bool, String?)? onFriendOnlineStatusChanged;
@@ -82,6 +83,7 @@ class ChatPage extends StatefulWidget {
     super.key,
     required this.friendId,
     required this.friendName,
+    this.friendAvatar = '',
     required this.textColor,
     this.showAppBar = true,
     this.onFriendOnlineStatusChanged,
@@ -145,6 +147,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    // Seed the friend's avatar from the caller (which already knows it, e.g.
+    // the friend list / header) so the per-message bubble avatars show the DP
+    // immediately; the /status poll may later refresh it.
+    _friendAvatar = widget.friendAvatar;
     WidgetsBinding.instance.addObserver(this);
     AppConfig.baseUrl.then((b) {
       if (mounted) setState(() => _apiBase = b);
@@ -516,15 +522,35 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           setState(() => _hasNewMsg = true);
         }
       }
-    } else if (type == 'status_update') {
-      setState(() {
-        final idx = _messages
-            .indexWhere((m) => m['id'] == event['message_id']);
-        if (idx != -1) {
-          _messages[idx]['delivered'] = event['delivered'];
-          _messages[idx]['is_read'] = event['is_read'];
-        }
-      });
+    } else if (type == 'message_delivered') {
+      // Server marks our message delivered once the friend fetches it → the
+      // single tick becomes a double (gray) tick.
+      final data = event['data'] as Map<String, dynamic>?;
+      final mid = data?['id'];
+      if (mid != null) {
+        setState(() {
+          final idx = _messages.indexWhere((m) => m['id'] == mid);
+          if (idx != -1) _messages[idx]['delivered'] = true;
+        });
+      }
+    } else if (type == 'messages_read') {
+      // Friend opened the thread and read our messages → flip the double ticks
+      // from gray to red. Server sends the batch of read message_ids.
+      final data = event['data'] as Map<String, dynamic>?;
+      final ids = (data?['message_ids'] as List?)
+              ?.map((e) => e.toString())
+              .toSet() ??
+          <String>{};
+      if (ids.isNotEmpty) {
+        setState(() {
+          for (final m in _messages) {
+            if (ids.contains(m['id'].toString())) {
+              m['is_read'] = true;
+              m['delivered'] = true;
+            }
+          }
+        });
+      }
     } else if (type == 'delete' || type == 'message_deleted') {
       // Delete-for-everyone now leaves a tombstone; mark it rather than remove.
       setState(() {
@@ -848,7 +874,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final lastSeen = status['last_seen'] ?? '';
     _friendPhone = (status['phone'] as String?) ?? '';
     final avatar = (status['avatar_url'] as String?) ?? '';
-    if (avatar != _friendAvatar && mounted) {
+    // Only override the seeded avatar when /status actually returns one, so we
+    // never blank out a DP the caller already supplied.
+    if (avatar.isNotEmpty && avatar != _friendAvatar && mounted) {
       setState(() => _friendAvatar = avatar);
     }
     if (online != _isFriendOnline || lastSeen != _lastSeen) {

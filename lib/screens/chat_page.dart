@@ -637,8 +637,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       context: context,
       showDragHandle: true,
       backgroundColor: scheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        side: BorderSide(color: scheme.primary.withAlpha(130)),
       ),
       builder: (ctx) {
         return SafeArea(
@@ -925,7 +926,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
     String content = text;
     if (_replyTo != null) {
-      final quoted = (_replyTo!['content'] as String? ?? '').trim();
+      final quoted = _replyQuoteText(_replyTo!);
       final lines = quoted.split('\n').take(2).join('\n');
       content = '> $lines\n\n$text';
     }
@@ -2144,20 +2145,85 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     );
   }
 
+  // Short label describing a message for a reply quote/preview — media messages
+  // get a typed label (📷 Photo / 🎤 Voice message / 📎 name) instead of blank.
+  String _replyQuoteText(Map<String, dynamic> msg) {
+    final caption = _stripQuote((msg['content'] as String?) ?? '').trim();
+    final type = (msg['message_type'] as String?) ?? 'text';
+    final isMedia =
+        type != 'text' && (msg['media_url'] as String? ?? '').isNotEmpty;
+    if (isMedia && caption.isEmpty) {
+      switch (type) {
+        case 'image':
+          return '📷 Photo';
+        case 'audio':
+          return '🎤 Voice message';
+        default:
+          return '📎 ${(msg['media_name'] as String?) ?? 'File'}';
+      }
+    }
+    return caption;
+  }
+
   Widget _buildReplyPreview(Map<String, dynamic> msg) {
     final scheme = Theme.of(context).colorScheme;
-    final content = _stripQuote(msg['content'] as String? ?? '');
     final isFromMe = msg['sender_id'].toString() == _myId;
+    final msgType = (msg['message_type'] as String?) ?? 'text';
+    final mediaRel = msg['media_url'] as String?;
+    final isMedia =
+        msgType != 'text' && mediaRel != null && mediaRel.isNotEmpty;
+    final caption = _stripQuote(msg['content'] as String? ?? '');
+
+    IconData? typeIcon;
+    String label = caption;
+    if (isMedia) {
+      switch (msgType) {
+        case 'image':
+          typeIcon = Icons.photo_rounded;
+          label = caption.isNotEmpty ? caption : 'Photo';
+          break;
+        case 'audio':
+          typeIcon = Icons.mic_rounded;
+          label = caption.isNotEmpty ? caption : 'Voice message';
+          break;
+        default:
+          typeIcon = Icons.insert_drive_file_rounded;
+          label = caption.isNotEmpty
+              ? caption
+              : (msg['media_name'] as String? ?? 'File');
+      }
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
-        border: Border(
-            left: BorderSide(color: scheme.primary, width: 3)),
+        border: Border(left: BorderSide(color: scheme.primary, width: 3)),
       ),
       child: Row(
         children: [
+          // Thumbnail preview so an image reply is instantly recognisable.
+          if (isMedia && msgType == 'image')
+            Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: CachedNetworkImage(
+                  imageUrl: fullMediaUrl(mediaRel!),
+                  width: 36,
+                  height: 36,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(
+                      width: 36, height: 36, color: scheme.surfaceContainerHigh),
+                  errorWidget: (_, __, ___) => Container(
+                      width: 36,
+                      height: 36,
+                      color: scheme.surfaceContainerHigh,
+                      child: Icon(Icons.photo_rounded,
+                          size: 18, color: scheme.onSurfaceVariant)),
+                ),
+              ),
+            ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2170,13 +2236,24 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                Text(
-                  content,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      color: scheme.onSurface.withAlpha(160),
-                      fontSize: 12),
+                Row(
+                  children: [
+                    if (typeIcon != null) ...[
+                      Icon(typeIcon,
+                          size: 13, color: scheme.onSurface.withAlpha(150)),
+                      const SizedBox(width: 4),
+                    ],
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: scheme.onSurface.withAlpha(160),
+                            fontSize: 12),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

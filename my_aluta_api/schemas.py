@@ -8,6 +8,7 @@ class UserCreate(BaseModel):
     username: str
     email: EmailStr
     password: str
+    phone: Optional[str] = None
 
 
 class UserLogin(BaseModel):
@@ -20,6 +21,7 @@ class UserOut(BaseModel):
     username: str
     email: EmailStr
     is_online: Optional[bool] = False
+    phone: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -43,6 +45,10 @@ class MessageCreate(BaseModel):
     media_duration: Optional[int] = None
 
 
+class MessageEdit(BaseModel):
+    content: Optional[str] = ""
+
+
 class Message(BaseModel):
     id: int
     sender_id: int
@@ -57,6 +63,9 @@ class Message(BaseModel):
     media_mime: Optional[str] = None
     media_size: Optional[int] = None
     media_duration: Optional[int] = None
+    reactions: Optional[str] = None
+    edited: Optional[bool] = False
+    is_deleted: Optional[bool] = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -76,6 +85,9 @@ class MessageWithSender(BaseModel):
     media_mime: Optional[str] = None
     media_size: Optional[int] = None
     media_duration: Optional[int] = None
+    reactions: Optional[str] = None
+    edited: Optional[bool] = False
+    is_deleted: Optional[bool] = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -89,6 +101,7 @@ class FriendWithUnread(BaseModel):
     last_sender_id: Optional[int] = None             # ✅ Add this
     last_message_delivered: Optional[bool] = None    # ✅ Add this
     last_message_read: Optional[bool] = None         # ✅ Add this
+    phone: Optional[str] = None                      # for direct call
 
     model_config = ConfigDict(from_attributes=True)  # For Pydantic v2
 

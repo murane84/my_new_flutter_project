@@ -21,6 +21,8 @@ class User(Base):
     last_seen = Column(TIMESTAMP, nullable=True)
     last_login = Column(DateTime, nullable=True)
     refresh_token = Column(String, nullable=True)
+    # Optional phone number, used for one-tap direct calls between friends.
+    phone = Column(String, nullable=True)
 
     sent_messages = relationship(
         "Message",
@@ -62,6 +64,13 @@ class Message(Base):
     media_mime = Column(String, nullable=True)     # content type
     media_size = Column(Integer, nullable=True)    # bytes
     media_duration = Column(Integer, nullable=True)  # audio length in ms
+
+    # ── Conversation features ───────────────────────────────────────────────
+    # reactions: JSON object mapping a reactor's user id -> emoji, e.g.
+    #   {"3": "❤️", "7": "👍"}  (one reaction per user, WhatsApp-style)
+    reactions = Column(Text, nullable=True)
+    edited = Column(Boolean, default=False)      # set once content is edited
+    is_deleted = Column(Boolean, default=False)  # tombstone: delete-for-everyone
 
     # New fields for visibility
     visible_to_sender = Column(Boolean, default=True)

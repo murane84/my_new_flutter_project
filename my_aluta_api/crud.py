@@ -236,7 +236,8 @@ def get_friends_with_unread_counts(db: Session, user_id: int):
                 unread_count=unread_count,
                 last_sender_id=last_message.sender_id if last_message else None,
                 last_message_delivered=last_message.delivered if last_message else None,
-                last_message_read=last_message.is_read if last_message else None
+                last_message_read=last_message.is_read if last_message else None,
+                phone=friend.phone
             )
         )
 

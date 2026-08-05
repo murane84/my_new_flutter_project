@@ -1,13 +1,15 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart';
 import 'token_helper.dart';
 import 'user.dart';
 import '../utils/app_config.dart';
-import '../utils/session_events.dart';
 
 final _logger = Logger();
+final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 
 class ApiService {
   Future<String> get _baseUrl => AppConfig.baseUrl;
@@ -17,15 +19,17 @@ class ApiService {
     'Content-Type': 'application/json',
   };
 
-  // Delegates to the platform-aware token store (web-safe).
-  Future<String?> _getToken() async => getToken();
+  Future<String?> _getToken() async {
+    return await _secureStorage.read(key: AppConfig.tokenKey);
+  }
 
   // REGISTER
   Future<Map<String, dynamic>> register(
     String email,
     String password,
-    String username,
-  ) async {
+    String username, {
+    String? phone,
+  }) async {
     try {
       final response = await http.post(
         Uri.parse('${await _baseUrl}/auth/register/'),
@@ -34,6 +38,7 @@ class ApiService {
           'email': email,
           'password': password,
           'username': username,
+          if (phone != null && phone.isNotEmpty) 'phone': phone,
         }),
       );
 
@@ -64,11 +69,7 @@ class ApiService {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final String token = data['access_token'] ?? '';
         if (token.isNotEmpty) {
-          await saveToken(token);
-        }
-        final String refresh = data['refresh_token'] ?? '';
-        if (refresh.isNotEmpty) {
-          await saveRefreshToken(refresh);
+          await _secureStorage.write(key: AppConfig.tokenKey, value: token);
         }
         return {
           'success': true,
@@ -109,65 +110,23 @@ class ApiService {
         headers: _authHeaders(token),
       );
 
-      await removeToken();
-      await removeRefreshToken();
+      await _secureStorage.delete(key: AppConfig.tokenKey);
     } catch (e) {
       _logger.e('Logout exception: $e');
-      await removeToken();
-      await removeRefreshToken();
-    }
-  }
-
-  // ── Silent token refresh ────────────────────────────────────────────────
-  // Exchanges the long-lived refresh token for a fresh access token so an
-  // expired access token is invisible to the user. Returns true on success.
-  Future<bool> refreshAccessToken() async {
-    try {
-      final refresh = await getRefreshToken();
-      if (refresh == null || refresh.isEmpty) return false;
-      final res = await http.post(
-        Uri.parse('${await _baseUrl}/auth/refresh'),
-        headers: _authHeaders(refresh),
-      );
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final data = jsonDecode(res.body);
-        final newToken = data is Map ? data['access_token'] as String? : null;
-        if (newToken != null && newToken.isNotEmpty) {
-          await saveToken(newToken);
-          return true;
-        }
-      }
-      return false;
-    } catch (_) {
-      return false;
+      await _secureStorage.delete(key: AppConfig.tokenKey);
     }
   }
 
   // SET ONLINE STATUS (keepalive / reconnect / logout)
   Future<bool> setOnlineStatus(bool isOnline) async {
     try {
-      Future<http.Response?> post(String? tok) async {
-        if (tok == null) return null;
-        return http.post(
-          Uri.parse('${await _baseUrl}/users/me/online?is_online=$isOnline'),
-          headers: _authHeaders(tok),
-        );
-      }
-
-      var res = await post(await _getToken());
-      if (res == null) return false;
-
-      // Access token expired? Silently refresh and retry once. Only if the
-      // refresh itself fails do we treat the session as truly expired.
-      if (res.statusCode == 401 || res.statusCode == 403) {
-        if (await refreshAccessToken()) {
-          res = await post(await _getToken());
-        }
-        if (res == null || res.statusCode == 401 || res.statusCode == 403) {
-          SessionEvents.instance.markExpired();
-          return false;
-        }
-      }
+      final token = await _getToken();
+      if (token == null) return false;
+      final res = await http.post(
+        Uri.parse(
+            '${await _baseUrl}/users/me/online?is_online=$isOnline'),
+        headers: _authHeaders(token),
+      );
       return res.statusCode >= 200 && res.statusCode < 300;
     } catch (_) {
       return false;
@@ -180,32 +139,16 @@ class ApiService {
       final token = await _getToken();
       if (token == null) throw Exception('No access token found');
 
-      var activeToken = token;
-      var response = await http.get(
+      final response = await http.get(
         Uri.parse('${await _baseUrl}/users/me'),
-        headers: _authHeaders(activeToken),
+        headers: _authHeaders(token),
       );
-
-      // Access token expired? Silently refresh and retry once.
-      if (response.statusCode == 401 || response.statusCode == 403) {
-        if (await refreshAccessToken()) {
-          final fresh = await _getToken();
-          if (fresh != null) {
-            activeToken = fresh;
-            response = await http.get(
-              Uri.parse('${await _baseUrl}/users/me'),
-              headers: _authHeaders(activeToken),
-            );
-          }
-        }
-      }
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = jsonDecode(response.body);
         if (data is Map<String, dynamic>) return data;
         throw Exception('Invalid user data format');
-      } else if (response.statusCode == 401 || response.statusCode == 403) {
-        SessionEvents.instance.markExpired();
+      } else if (response.statusCode == 401) {
         throw Exception('Session expired. Please log in again.');
       }
       throw Exception('Failed to fetch user data');
@@ -391,16 +334,22 @@ class ApiService {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = jsonDecode(response.body);
         final bool isOnline = data['is_online'] ?? false;
-        // Return the RAW server timestamp untouched. The UI formats it with
-        // parseServerTime()/formatLastSeen(), which correctly treats a naive
-        // string as UTC and converts to the device's local zone. Formatting
-        // here with DateTime.parse().toLocal() was the 3-hour-off bug: a
-        // tz-less string parses as *local*, so toLocal() did nothing and the
-        // raw UTC value was shown as if local (−3h in EAT). It also caused a
-        // double-format when formatLastSeen re-parsed the pretty string.
         final String? lastSeen = data['last_seen'];
 
-        return {'is_online': isOnline, 'last_seen': lastSeen};
+        String? formatted;
+        if (lastSeen != null && lastSeen.isNotEmpty) {
+          try {
+            formatted = DateFormat('MMM d, HH:mm').format(
+              DateTime.parse(lastSeen).toLocal(),
+            );
+          } catch (_) {}
+        }
+
+        return {
+          'is_online': isOnline,
+          'last_seen': formatted,
+          'phone': data['phone'],
+        };
       }
       return {};
     } catch (e) {
@@ -474,6 +423,49 @@ class ApiService {
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to delete message');
+    }
+  }
+
+  // REACT TO MESSAGE — toggle the current user's emoji on a message.
+  // Returns the new reactions JSON string ({"<uid>":"<emoji>"}) or null.
+  Future<String?> reactToMessage(int messageId, String emoji) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse(
+        '${await _baseUrl}/messages/$messageId/react'
+        '?emoji=${Uri.encodeQueryComponent(emoji)}',
+      ),
+      headers: _authHeaders(token ?? ''),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Failed to react');
+    }
+    try {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return data['reactions'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // EDIT MESSAGE — sender-only, text messages. Returns the updated message map.
+  Future<Map<String, dynamic>?> editMessage(int messageId, String content) async {
+    final token = await getToken();
+    final response = await http.patch(
+      Uri.parse('${await _baseUrl}/messages/$messageId/edit'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${token ?? ''}',
+      },
+      body: jsonEncode({'content': content}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Failed to edit message');
+    }
+    try {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
     }
   }
 

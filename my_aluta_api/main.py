@@ -63,7 +63,13 @@ def ensure_media_schema():
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_mime VARCHAR",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_size INTEGER",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_duration INTEGER",
+        # Conversation features: reactions / edit marker / delete tombstone.
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS reactions TEXT",
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE",
         "ALTER TABLE messages ALTER COLUMN content DROP NOT NULL",
+        # Direct-call phone number on the user profile.
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR",
     ]
     try:
         with engine.begin() as conn:

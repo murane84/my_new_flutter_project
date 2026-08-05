@@ -118,6 +118,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   final _ctrl = TextEditingController();
   final _scrollCtrl = ScrollController();
+  // Dedicated controller so the Listen-together picker's scrollbar can auto-hide
+  // (show only while scrolling) instead of sitting over the row icons.
+  final _pickerScrollCtrl = ScrollController();
   bool _showEmoji = false;
   bool _isAtBottom = true;
   bool _hasNewMsg = false;
@@ -194,6 +197,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _recorder.dispose();
     _ctrl.dispose();
     _scrollCtrl.dispose();
+    _pickerScrollCtrl.dispose();
     _ws.close();
     super.dispose();
   }
@@ -720,9 +724,19 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                       height: 1,
                       color: scheme.outlineVariant.withAlpha(60)),
                   Flexible(
-                    child: ListView.builder(
+                    child: ScrollConfiguration(
+                      // Drop the always-on desktop scrollbar and use one that
+                      // fades out shortly after scrolling stops, so it never
+                      // sits over the row's broadcast icons.
+                      behavior: ScrollConfiguration.of(ctx)
+                          .copyWith(scrollbars: false),
+                      child: Scrollbar(
+                        controller: _pickerScrollCtrl,
+                        thumbVisibility: false,
+                        child: ListView.builder(
+                      controller: _pickerScrollCtrl,
                       shrinkWrap: true,
-                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      padding: const EdgeInsets.only(top: 6, bottom: 6, right: 8),
                       itemCount: ordered.length,
                       itemBuilder: (_, i) {
                         final p = ordered[i];
@@ -783,6 +797,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                           child: tile,
                         );
                       },
+                    ),
+                      ),
                     ),
                   ),
                   Divider(

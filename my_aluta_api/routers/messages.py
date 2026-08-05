@@ -78,7 +78,10 @@ def mark_messages_as_read(sender_id: int, db: Session = Depends(get_db), current
     updated_ids = []
 
     for msg in unread_messages:
-        msg.read = True
+        # NOTE: the mapped column is `is_read` — assigning `msg.read` set an
+        # unmapped attribute that never persisted, so reads were lost and the
+        # unread badge kept coming back. Set the real column.
+        msg.is_read = True
         updated_ids.append(msg.id)
 
     if updated_ids:

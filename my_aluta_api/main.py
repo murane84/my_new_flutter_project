@@ -97,9 +97,11 @@ def health_check():
     }
 
 
-# ✅ Root endpoint
-@app.get("/")
-def read_root():
+# ✅ API info endpoint. The site root ("/") now serves the Flutter web app (see
+#    the StaticFiles mount at the bottom of this file), so the JSON welcome
+#    message moved here to /api.
+@app.get("/api")
+def api_info():
     environment = os.getenv("ENVIRONMENT", "development")
     response = {"message": "Welcome to My Aluta API"}
     if environment == "development":
@@ -146,6 +148,16 @@ def custom_openapi():
 
 
 app.openapi = custom_openapi
+
+
+# ✅ Serve the Flutter web app (built into ./webapp) at the site root. Mounted
+#    LAST so it only catches paths the API routers / /health / /api / /media
+#    didn't already handle. html=True serves index.html for "/". If the build
+#    folder is missing the API still runs (root just 404s) — so a bad deploy
+#    never takes the whole API down.
+_WEBAPP_DIR = os.path.join(os.path.dirname(__file__), "webapp")
+if os.path.isdir(_WEBAPP_DIR):
+    app.mount("/", StaticFiles(directory=_WEBAPP_DIR, html=True), name="webapp")
 
 
 # ✅ Run server

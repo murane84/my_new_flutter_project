@@ -115,7 +115,7 @@ class _LegalPopup extends StatelessWidget {
               decoration: BoxDecoration(
                 color: scheme.surface,
                 borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: scheme.outlineVariant.withAlpha(70)),
+                border: Border.all(color: scheme.primary.withAlpha(130)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withAlpha(70),

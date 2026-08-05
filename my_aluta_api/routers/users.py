@@ -7,7 +7,7 @@ from database import get_db
 from models import User, MuteStatus
 import crud, schemas
 from schemas import UserOut  # Ensure this contains fields like id, email, username, is_online
-from auth import get_current_user  # Import the function to fetch current user
+from auth import get_current_user, get_password_hash, verify_password
 
 router = APIRouter()
 
@@ -18,6 +18,75 @@ router = APIRouter()
 @router.get("/users/me", response_model=UserOut, tags=["Users"])
 def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+# Update own profile: username / phone / password. Email is immutable.
+@router.patch("/users/me/update", response_model=UserOut, tags=["Users"])
+def update_profile(
+    payload: schemas.UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if payload.username is not None:
+        new_username = payload.username.strip()
+        if new_username and new_username != current_user.username:
+            clash = (
+                db.query(User)
+                .filter(User.username == new_username, User.id != current_user.id)
+                .first()
+            )
+            if clash:
+                raise HTTPException(status_code=400, detail="Username already taken")
+            current_user.username = new_username
+
+    if payload.phone is not None:
+        current_user.phone = payload.phone.strip() or None
+
+    if payload.new_password:
+        if not payload.current_password or not verify_password(
+            payload.current_password, current_user.hashed_password
+        ):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+        current_user.hashed_password = get_password_hash(payload.new_password)
+
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+# Permanently delete the account and wipe the user's data from the server.
+@router.delete("/users/me", tags=["Users"])
+def delete_account(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from models import Message, MediaAsset
+
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Wipe attachment blobs referenced by this user's messages.
+    msgs = (
+        db.query(Message)
+        .filter((Message.sender_id == user.id) | (Message.receiver_id == user.id))
+        .all()
+    )
+    asset_ids = [
+        m.media_url.rsplit("/", 1)[-1]
+        for m in msgs
+        if m.media_url and m.media_url.startswith("/attachments/")
+    ]
+    if asset_ids:
+        db.query(MediaAsset).filter(MediaAsset.id.in_(asset_ids)).delete(
+            synchronize_session=False
+        )
+
+    # Deleting the user cascades their messages (ORM relationship) and their
+    # friend / mute / block rows (FK ON DELETE CASCADE).
+    db.delete(user)
+    db.commit()
+    return {"detail": "Account deleted"}
 
 @router.get("/users/", response_model=List[UserOut], tags=["Users"])
 def get_all_users_except_current(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

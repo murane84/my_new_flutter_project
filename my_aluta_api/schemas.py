@@ -16,6 +16,14 @@ class UserLogin(BaseModel):
     password: str
 
 
+class UserUpdate(BaseModel):
+    # Email is intentionally immutable and not accepted here.
+    username: Optional[str] = None
+    phone: Optional[str] = None
+    current_password: Optional[str] = None
+    new_password: Optional[str] = None
+
+
 class UserOut(BaseModel):
     id: int
     username: str

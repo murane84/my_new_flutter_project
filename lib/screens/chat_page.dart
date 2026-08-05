@@ -2291,6 +2291,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
     return SafeArea(
       top: false,
+      // When embedded on the phone home layout (no app bar), the player bar +
+      // footer below already handle the bottom safe area — adding it here just
+      // opens a gap between the composer and that module.
+      bottom: widget.showAppBar,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -2376,6 +2380,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                     ),
                                   ),
                                 ),
+                              ),
+                              IconButton(
+                                tooltip: 'Listen together',
+                                icon: Icon(Icons.headphones_rounded,
+                                    color: scheme.primary),
+                                onPressed: _uploadingMedia
+                                    ? null
+                                    : _startListenTogether,
+                                visualDensity: VisualDensity.compact,
                               ),
                               IconButton(
                                 tooltip: 'Attach',
@@ -3100,6 +3113,7 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final playing = _player.playing;
     final total =
         _dur.inMilliseconds > 0 ? _dur.inMilliseconds : widget.durationMs;
@@ -3115,16 +3129,24 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
             child: Container(
               width: 38,
               height: 38,
-              decoration:
-                  BoxDecoration(color: widget.accent, shape: BoxShape.circle),
+              // Soft brand tint (like the composer mic) so it complements the
+              // solid-red Send/FAB instead of competing with it.
+              decoration: BoxDecoration(
+                color: widget.accent.withAlpha(isDark ? 48 : 30),
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: widget.accent.withAlpha(isDark ? 90 : 70),
+                    width: 1),
+              ),
               child: _loading
-                  ? const Padding(
-                      padding: EdgeInsets.all(10),
+                  ? Padding(
+                      padding: const EdgeInsets.all(10),
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                          strokeWidth: 2, color: widget.accent),
                     )
                   : Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                      color: Colors.white, size: 22),
+                      color: isDark ? const Color(0xFFFF8A93) : widget.accent,
+                      size: 20),
             ),
           ),
           const SizedBox(width: 10),

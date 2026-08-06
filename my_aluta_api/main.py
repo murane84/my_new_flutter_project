@@ -73,6 +73,8 @@ def ensure_media_schema():
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS reactions TEXT",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited BOOLEAN DEFAULT FALSE",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE",
+        # Pin-a-message: expiry timestamp (NULL = not pinned).
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS pinned_until TIMESTAMPTZ",
         "ALTER TABLE messages ALTER COLUMN content DROP NOT NULL",
         # Direct-call phone number + profile picture on the user profile.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR",

@@ -5,7 +5,7 @@ import crud, schemas
 from database import get_db
 from models import User, Message
 from .users import get_current_user
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from websocket_manager import safe_notify_user
 
 router = APIRouter(
@@ -176,6 +176,77 @@ def react_to_message(
         "data": {"message_id": message_id, "reactions": message.reactions},
     })
     return {"message_id": message_id, "reactions": message.reactions}
+
+
+# 4️⃣.b PIN MESSAGE — either participant, for a chosen duration (hours).
+@router.post("/{message_id}/pin", response_model=schemas.MessageWithSender)
+def pin_message(
+    message_id: int,
+    hours: int = Query(24, ge=1, le=8760),  # 1 hour … 1 year
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    message = db.query(Message).filter(Message.id == message_id).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if current_user.id not in [message.sender_id, message.receiver_id]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if message.is_deleted:
+        raise HTTPException(status_code=400, detail="Cannot pin a deleted message")
+
+    # One active pin per conversation: clear any other pins between these two
+    # users first, so the banner always reflects the newest pinned message.
+    a, b = message.sender_id, message.receiver_id
+    db.query(Message).filter(
+        (((Message.sender_id == a) & (Message.receiver_id == b)) |
+         ((Message.sender_id == b) & (Message.receiver_id == a))),
+        Message.id != message_id,
+        Message.pinned_until.isnot(None),
+    ).update({Message.pinned_until: None}, synchronize_session=False)
+
+    message.pinned_until = datetime.now(timezone.utc) + timedelta(hours=hours)
+    db.commit()
+    db.refresh(message)
+
+    other_id = (
+        message.receiver_id
+        if current_user.id == message.sender_id
+        else message.sender_id
+    )
+    validated = schemas.MessageWithSender.model_validate(message)
+    serialized = serialize_message(validated)
+    safe_notify_user(other_id, {"type": "message_pinned", "data": serialized})
+    return validated
+
+
+# 4️⃣.b UNPIN MESSAGE — either participant.
+@router.post("/{message_id}/unpin", response_model=schemas.MessageWithSender)
+def unpin_message(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    message = db.query(Message).filter(Message.id == message_id).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if current_user.id not in [message.sender_id, message.receiver_id]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    message.pinned_until = None
+    db.commit()
+    db.refresh(message)
+
+    other_id = (
+        message.receiver_id
+        if current_user.id == message.sender_id
+        else message.sender_id
+    )
+    safe_notify_user(other_id, {
+        "type": "message_unpinned",
+        "data": {"message_id": message_id},
+    })
+    return schemas.MessageWithSender.model_validate(message)
+
 
 # 4️⃣.c EDIT MESSAGE — sender only, text messages only.
 @router.patch("/{message_id}/edit", response_model=schemas.MessageWithSender)

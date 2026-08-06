@@ -73,6 +73,10 @@ class Message(Base):
     reactions = Column(Text, nullable=True)
     edited = Column(Boolean, default=False)      # set once content is edited
     is_deleted = Column(Boolean, default=False)  # tombstone: delete-for-everyone
+    # When set to a future time, this message is "pinned" in the conversation
+    # until that moment; the client shows it in a banner and auto-hides it once
+    # the time passes. NULL = not pinned.
+    pinned_until = Column(DateTime(timezone=True), nullable=True)
 
     # New fields for visibility
     visible_to_sender = Column(Boolean, default=True)

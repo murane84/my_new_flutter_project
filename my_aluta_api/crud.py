@@ -92,7 +92,11 @@ def get_messages_between_users(db: Session, user_id_1: int, user_id_2: int, skip
     return db.query(Message).filter(
         ((Message.sender_id == user_id_1) & (Message.receiver_id == user_id_2) & (Message.visible_to_sender == True)) |
         ((Message.sender_id == user_id_2) & (Message.receiver_id == user_id_1) & (Message.visible_to_receiver == True))
-    ).order_by(Message.timestamp.asc()).offset(skip).limit(limit).all()
+    # NEWEST-first: return the most recent `limit` messages. Was `.asc()`, which
+    # returned the OLDEST `limit`; once a conversation grew past `limit`, skip=0
+    # never included new messages, so the open thread stopped updating (while
+    # home's notification socket still fired). The client re-sorts for display.
+    ).order_by(Message.timestamp.desc()).offset(skip).limit(limit).all()
 
 
 def get_messages_after(db: Session, user_id_1: int, user_id_2: int, last_ts: datetime):

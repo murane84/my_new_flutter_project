@@ -28,8 +28,6 @@ import 'legal_screen.dart';
 import '../services/live_session_service.dart'
     show activeLiveSession, endActiveLiveSession;
 import '../services/notif_service.dart';
-import '../services/share_inbox.dart';
-import '../utils/file_bytes.dart';
 import 'token_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
@@ -37,6 +35,8 @@ import '../services/call_service.dart';
 import 'call_screen.dart';
 import '../main.dart' show navigatorKey;
 import '../utils/time_utils.dart';
+
+part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
 
 String _formatFriendTimestamp(String raw) {
   if (raw.isEmpty) return '';
@@ -201,19 +201,12 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _isDragging = false;
   // Phone-only: whether the slide-up full player sheet is expanded.
   bool _playerExpanded = false;
-  // Where the full panel was opened FROM: true = the footer pill (collapsed
-  // state), false = the now-playing bar. Closing the panel returns to whichever
-  // it emerged from, so the UI genies back into its origin.
-  bool _panelFromPill = false;
   // Phone-only: user dismissed the now-playing bar → collapses to a small
-  // pill docked in the footer that reopens it.
+  // floating music button that reopens it.
   bool _barDismissed = false;
-
-  // Friends currently typing (their user_id, as a string). Fed by the notify
-  // socket's 'typing' events. There's no explicit "stopped typing" event, so
-  // each entry auto-clears after a short idle window.
-  final Set<String> _typingFriendIds = {};
-  final Map<String, Timer> _typingClearTimers = {};
+  // Draggable position of the music FAB. null = default bottom-right anchor
+  // (reset there whenever the bar is freshly collapsed into a FAB).
+  Offset? _fabOffset;
 
   // ── Chat state ────────────────────────────────────────────────────────────
   String? _activeFriendId;
@@ -243,10 +236,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Images shared INTO Aluta (from another app) surface as a banner over this
-    // friend list — the user picks the recipient right here, no separate page.
-    // Listen so a share that arrives while we're already on Home shows up.
-    ShareInbox.instance.addListener(_onShareChanged);
     AppConfig.baseUrl.then((b) {
       if (mounted) setState(() => _apiBase = b);
     });
@@ -298,10 +287,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    for (final t in _typingClearTimers.values) {
-      t.cancel();
-    }
-    ShareInbox.instance.removeListener(_onShareChanged);
     ConnectionStatus.instance.online.removeListener(_onGlobalConnChanged);
     SessionEvents.instance.expired.removeListener(_onSessionExpired);
     _refreshTimer?.cancel();
@@ -759,23 +744,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _showLiveInvite(event);
       return;
     }
-    // A friend is typing (relayed by the backend to our notify socket). Show
-    // "typing…" on their friend-list tile; auto-clear after a short idle since
-    // there's no "stopped typing" event.
-    if (type == 'typing') {
-      final uid = event['user_id']?.toString();
-      if (uid != null && uid.isNotEmpty) {
-        _typingClearTimers[uid]?.cancel();
-        if (mounted && !_typingFriendIds.contains(uid)) {
-          setState(() => _typingFriendIds.add(uid));
-        }
-        _typingClearTimers[uid] = Timer(const Duration(seconds: 4), () {
-          _typingClearTimers.remove(uid);
-          if (mounted) setState(() => _typingFriendIds.remove(uid));
-        });
-      }
-      return;
-    }
     // A new chat message arriving on the per-user notify socket. When the app
     // is backgrounded (e.g. music playing in the car), pop a local
     // notification so the user is prompted back. Requires the backend to emit
@@ -1018,114 +986,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _avatarExpanded = false;
     });
     ApiService().markMessagesAsReadPatch(friend['id'] as int);
-  }
-
-  // ── Share into Aluta (images shared from other apps) ──────────────────────
-  bool _sharingSending = false;
-
-  void _onShareChanged() {
-    if (mounted) setState(() {});
-  }
-
-  String _shareMime(String path) {
-    final p = path.toLowerCase();
-    if (p.endsWith('.png')) return 'image/png';
-    if (p.endsWith('.gif')) return 'image/gif';
-    if (p.endsWith('.webp')) return 'image/webp';
-    return 'image/jpeg';
-  }
-
-  /// Banner shown over the friend list while an inbound shared image is waiting
-  /// for a recipient. Tapping any contact sends it (see [_shareToFriend]).
-  Widget _shareBanner(ColorScheme scheme) {
-    final n = ShareInbox.instance.pending.length;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(10, 4, 10, 2),
-      padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
-      decoration: BoxDecoration(
-        color: scheme.primaryContainer,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.primary.withAlpha(120)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.image_rounded, color: scheme.primary, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              _sharingSending
-                  ? 'Sending…'
-                  : (n > 1
-                      ? 'Tap a contact to send $n images'
-                      : 'Tap a contact to send the image'),
-              style: TextStyle(
-                color: scheme.onPrimaryContainer,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
-            ),
-          ),
-          if (_sharingSending)
-            const Padding(
-              padding: EdgeInsets.only(right: 10),
-              child: SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2)),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.close_rounded, size: 18),
-              tooltip: 'Cancel',
-              onPressed: () => ShareInbox.instance.clear(),
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// Upload + send every pending shared image to [friend], then open that chat.
-  Future<void> _shareToFriend(Map<String, dynamic> friend) async {
-    if (_sharingSending) return;
-    final fid = friend['id'];
-    final friendId = fid is int ? fid : int.tryParse(fid.toString());
-    if (friendId == null) return;
-    final paths = ShareInbox.instance.pending;
-    if (paths.isEmpty) return;
-
-    setState(() => _sharingSending = true);
-    var ok = 0;
-    final api = ApiService();
-    for (final path in paths) {
-      try {
-        final bytes = await readFileBytes(path);
-        if (bytes.isEmpty) continue;
-        var name = path.split('/').last.split('\\').last;
-        if (name.isEmpty) name = 'shared_image.jpg';
-        final mime = _shareMime(path);
-        final up =
-            await api.uploadMedia(bytes: bytes, filename: name, mime: mime);
-        if (up == null || up['url'] == null) continue;
-        final sent = await api.sendMessage(
-          friendId,
-          '',
-          messageType: 'image',
-          mediaUrl: up['url'] as String,
-          mediaName: (up['name'] as String?) ?? name,
-          mediaMime: (up['mime'] as String?) ?? mime,
-          mediaSize: (up['size'] as num?)?.toInt(),
-        );
-        if (sent != null) ok++;
-      } catch (_) {/* skip this image, keep going */}
-    }
-    ShareInbox.instance.clear();
-    if (!mounted) return;
-    setState(() => _sharingSending = false);
-    if (ok == 0) {
-      showToast(context, 'Couldn’t send the image', type: ToastType.error);
-      return;
-    }
-    openChat(friend); // land in the conversation showing the sent image
   }
 
   // Direct call to a friend's saved phone number (tel: dialer).
@@ -1752,7 +1612,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
         const SizedBox(height: 10),
-        if (ShareInbox.instance.hasPending) _shareBanner(scheme),
         Expanded(
           child: _isLoadingFriends
               ? const Center(child: CircularProgressIndicator())
@@ -1814,11 +1673,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final lastTime = f['last_timestamp'] as String? ?? '';
     final unread = (f['unread_count'] as num?)?.toInt() ?? 0;
     final hasUnread = unread > 0;
-    final isTyping = _typingFriendIds.contains(f['id']?.toString());
 
     return InkWell(
-      onTap: () =>
-          ShareInbox.instance.hasPending ? _shareToFriend(f) : openChat(f),
+      onTap: () => openChat(f),
       borderRadius: BorderRadius.circular(10),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
@@ -1845,32 +1702,20 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
-                  isTyping
-                      ? Text(
-                          'typing…',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: scheme.primary,
-                            fontStyle: FontStyle.italic,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        )
-                      : Text(
-                          lastMsg,
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: hasUnread
-                                ? textColor.withAlpha(200)
-                                : textColor.withAlpha(110),
-                            fontWeight: hasUnread
-                                ? FontWeight.w500
-                                : FontWeight.normal,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
+                  Text(
+                    lastMsg,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: hasUnread
+                          ? textColor.withAlpha(200)
+                          : textColor.withAlpha(110),
+                      fontWeight: hasUnread
+                          ? FontWeight.w500
+                          : FontWeight.normal,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
                 ],
               ),
             ),
@@ -2002,6 +1847,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       listenable: Listenable.merge([nowPlayingNotifier, liveSessionNotifier]),
       builder: (context, _) {
         final hasTrack = nowPlayingNotifier.track.isNotEmpty;
+        final live = liveSessionNotifier.active;
         // The now-playing bar is for the user's OWN music (the live session has
         // its own audio and is surfaced by the top banner). Show it when a
         // personal track is loaded and the user hasn't dismissed it; otherwise
@@ -2010,70 +1856,48 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         // Reserve just enough chat space for the now-playing bar (grab handle +
         // title + progress row) so it sits flush under the composer with no gap.
         final barSpace = 70.0;
+        final h = constraints.maxHeight;
 
         return Stack(
           children: [
-            // Chat surface — full width; reserve room for the collapsed bar.
-            // AnimatedPadding so the reflow eases in step with the bar's genie.
+            // Chat surface — full width, leaving room only for the full bar.
             Positioned.fill(
-              child: AnimatedPadding(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
+              child: Padding(
                 padding: EdgeInsets.only(
                     bottom: (_playerExpanded || !barVisible) ? 0 : barSpace),
                 child: _buildChatContent(context, phone: true),
               ),
             ),
 
-            // Full player — ALWAYS mounted (AudioPlayer stays alive). Instead of
-            // sliding from the top it now "genie" scales into / out of the
-            // footer-pill spot (bottom-centre anchor, smooth, no bounce), so it
-            // reads as being pulled out of the button and sucked back into it.
-            Positioned.fill(
-              child: IgnorePointer(
-                ignoring: !_playerExpanded,
-                child: AnimatedScale(
-                  scale: _playerExpanded ? 1.0 : 0.0,
-                  alignment: Alignment.bottomCenter,
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeOutCubic,
-                  child: AnimatedOpacity(
-                    opacity: _playerExpanded ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeOut,
-                    child: _buildPhonePlayerSheet(context),
-                  ),
-                ),
-              ),
+            // The one, always-mounted player. Off-screen (top = h) when
+            // collapsed → State (and the AudioPlayer) stay alive; slides to
+            // the top when expanded.
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 320),
+              curve: Curves.easeOutCubic,
+              left: 0,
+              right: 0,
+              height: h,
+              top: _playerExpanded ? 0 : h,
+              child: _buildPhonePlayerSheet(context),
             ),
 
-            // Collapsed now-playing bar. Kept mounted while a track is loaded so
-            // it can genie-scale DOWN into the footer pill on dismiss and back
-            // OUT of it on resume (bottom-centre anchor, no bounce).
-            if (hasTrack && !_playerExpanded)
-              Positioned(
+            // Collapsed now-playing bar (hidden while expanded or dismissed).
+            if (barVisible)
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOut,
                 left: 0,
                 right: 0,
-                bottom: 0,
-                child: IgnorePointer(
-                  ignoring: _barDismissed,
-                  child: AnimatedScale(
-                    scale: _barDismissed ? 0.0 : 1.0,
-                    alignment: Alignment.bottomCenter,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOutCubic,
-                    child: AnimatedOpacity(
-                      opacity: _barDismissed ? 0.0 : 1.0,
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeOut,
-                      child: _buildNowPlayingBar(context),
-                    ),
-                  ),
-                ),
+                bottom: _playerExpanded ? -barSpace : 0,
+                child: _buildNowPlayingBar(context),
               ),
 
-            // When collapsed the entry point is a compact chip docked in the
-            // footer (see _footerMusicChip) — not a button floating over chat.
+            // Floating music button — the entry point when the bar is hidden.
+            // Draggable; defaults to bottom-right (above the chat input so it
+            // never covers the send button).
+            if (!barVisible && !_playerExpanded)
+              _buildDraggableFab(context, constraints, live),
           ],
         );
       },
@@ -2091,10 +1915,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           // tap on the handle collapses it too.
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: _closePanel,
+            onTap: () => setState(() => _playerExpanded = false),
             onVerticalDragEnd: (d) {
               if ((d.primaryVelocity ?? 0) > 120) {
-                _closePanel();
+                setState(() => _playerExpanded = false);
               }
             },
             child: Column(
@@ -2115,7 +1939,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     _PanelToggleBtn(
                       isFullScreen: false,
                       customIcon: Icons.keyboard_arrow_down_rounded,
-                      onTap: _closePanel,
+                      onTap: () => setState(() => _playerExpanded = false),
                     ),
                     const SizedBox(width: 10),
                     Icon(Icons.music_note_rounded,
@@ -2278,62 +2102,69 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (mounted) setState(() {});
   }
 
-  // Compact music control docked in the footer while the now-playing bar is
-  // collapsed — replaces the button that used to float over the chat and hide
-  // message bubbles. Tap to bring the player back.
-  // Close the full panel back to WHERE it emerged from: the footer pill (if it
-  // was opened from the pill) or the now-playing bar (if opened from the bar).
-  void _closePanel() => setState(() {
-        _playerExpanded = false;
-        _barDismissed = _panelFromPill;
-      });
+  // Positions the music FAB (default bottom-right) and makes it draggable.
+  Widget _buildDraggableFab(
+      BuildContext context, BoxConstraints constraints, bool live) {
+    const fabSize = 52.0;
+    const margin = 14.0;
+    final w = constraints.maxWidth;
+    final h = constraints.maxHeight;
+    // Default anchor: bottom-right, above the chat input.
+    final defaultLeft = w - margin - fabSize;
+    final defaultTop = h - 78 - fabSize;
+    final left = _fabOffset?.dx ?? defaultLeft;
+    final top = _fabOffset?.dy ?? defaultTop;
 
-  Widget _footerMusicChip(ColorScheme scheme) {
-    final title = nowPlayingNotifier.track;
-    final style = TextStyle(
-      fontSize: 12,
-      fontWeight: FontWeight.w600,
-      color: scheme.primary,
+    return Positioned(
+      left: left,
+      top: top,
+      child: GestureDetector(
+        onPanStart: (_) {
+          // Seed the offset from wherever it's currently anchored.
+          _fabOffset ??= Offset(defaultLeft, defaultTop);
+        },
+        onPanUpdate: (d) {
+          setState(() {
+            final cur = _fabOffset ?? Offset(defaultLeft, defaultTop);
+            final nx = (cur.dx + d.delta.dx).clamp(margin, w - fabSize - margin);
+            final ny = (cur.dy + d.delta.dy)
+                .clamp(margin, h - fabSize - margin);
+            _fabOffset = Offset(nx.toDouble(), ny.toDouble());
+          });
+        },
+        child: _buildMusicFab(context, live),
+      ),
     );
-    // Bring the collapsed now-playing bar back above the footer (no full panel).
-    void resumeBar() => setState(() => _barDismissed = false);
-    // Jump straight to the full player panel — remembering it came from the
-    // pill, so closing it returns here (bar stays dismissed).
-    void openPanel() => setState(() {
-          _panelFromPill = true;
-          _playerExpanded = true;
-        });
+  }
+
+  Widget _buildMusicFab(BuildContext context, bool live) {
+    final scheme = Theme.of(context).colorScheme;
     return GestureDetector(
-      // Single tap only resurfaces the bar; long-press OR double-tap opens the
-      // full music panel (the bar's swipe-up handle still opens it too).
-      onTap: resumeBar,
-      onDoubleTap: openPanel,
-      onLongPress: openPanel,
-      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() {
+        // Bring the bar back and open the player so the user can start music.
+        _barDismissed = false;
+        _playerExpanded = true;
+      }),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        width: 52,
+        height: 52,
         decoration: BoxDecoration(
-          color: scheme.primary.withAlpha(28),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: scheme.primary.withAlpha(90)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.music_note_rounded, size: 15, color: scheme.primary),
-            const SizedBox(width: 5),
-            // Marquee the title (only scrolls when it overflows) so long song
-            // names stay readable inside the compact pill.
-            SizedBox(
-              width: 120,
-              height: 16,
-              child: _ScrollingText(
-                text: title.isEmpty ? 'Music' : title,
-                style: style,
-              ),
+          shape: BoxShape.circle,
+          color: scheme.primary,
+          boxShadow: [
+            BoxShadow(
+              color: scheme.primary.withAlpha(120),
+              blurRadius: 14,
+              spreadRadius: 1,
+              offset: const Offset(0, 4),
             ),
           ],
+          border: live
+              ? Border.all(color: Colors.white.withAlpha(220), width: 2)
+              : null,
         ),
+        child: const Icon(Icons.music_note_rounded,
+            color: Colors.white, size: 26),
       ),
     );
   }
@@ -2346,26 +2177,16 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       // Tap anywhere (except the play button) to expand; swipe up too.
       behavior: HitTestBehavior.opaque,
       onTap: () {
-        // Tapping the bar opens the full player (origin = bar). Drop the
-        // keyboard so the composer isn't focused behind the expanded player.
+        // Dragging/tapping the handle to open the player drops the keyboard,
+        // same as closing a popup — the composer shouldn't stay focused behind
+        // the expanded player.
         FocusManager.instance.primaryFocus?.unfocus();
-        setState(() {
-          _panelFromPill = false;
-          _playerExpanded = true;
-        });
+        setState(() => _playerExpanded = true);
       },
       onVerticalDragEnd: (d) {
-        final v = d.primaryVelocity ?? 0;
-        if (v < 0) {
-          // Swipe UP → expand into the full music panel (origin = bar).
+        if ((d.primaryVelocity ?? 0) < 0) {
           FocusManager.instance.primaryFocus?.unfocus();
-          setState(() {
-            _panelFromPill = false;
-            _playerExpanded = true;
-          });
-        } else if (v > 120) {
-          // Swipe DOWN → collapse the bar into the footer pill.
-          setState(() => _barDismissed = true);
+          setState(() => _playerExpanded = true);
         }
       },
       child: Container(
@@ -2478,11 +2299,12 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  // Close the bar entirely → collapses to a compact music chip
-                  // docked in the footer (see _footerMusicChip).
+                  // Close the bar entirely → collapses to the floating button,
+                  // freshly reset to the bottom-right anchor.
                   GestureDetector(
                     onTap: () => setState(() {
                       _barDismissed = true;
+                      _fabOffset = null;
                     }),
                     behavior: HitTestBehavior.opaque,
                     child: Padding(
@@ -2701,15 +2523,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
               const Spacer(),
 
-              // Collapsed music control lives here, centred, instead of floating
-              // over the chat and covering message bubbles.
-              if (nowPlayingNotifier.track.isNotEmpty &&
-                  _barDismissed &&
-                  !_playerExpanded) ...[
-                _footerMusicChip(scheme),
-                const Spacer(),
-              ],
-
               // ── Right: profile pill only (online count now sits by the dot) ─
               // Tap the name (a pill-shaped button) to open your profile.
               Material(
@@ -2785,9 +2598,8 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (didPop) return;
         setState(() {
           if (_playerExpanded) {
-            // Collapse the slide-up player back to its origin (pill or bar).
+            // Collapse the slide-up player back to the mini bar first.
             _playerExpanded = false;
-            _barDismissed = _panelFromPill;
           } else if (_activeFriendId != null) {
             // Close the open conversation → back to the messages list.
             _activeFriendId = null;
@@ -2953,327 +2765,3 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 }
 
-// ─── Small toggle button ───────────────────────────────────────────────────
-
-class _PanelToggleBtn extends StatelessWidget {
-  final bool isFullScreen;
-  final VoidCallback onTap;
-  final IconData? customIcon;
-  final String? tooltip;
-
-  const _PanelToggleBtn({
-    required this.isFullScreen,
-    required this.onTap,
-    this.customIcon,
-    this.tooltip,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final label = tooltip ??
-        (customIcon == Icons.keyboard_arrow_down_rounded
-            ? 'Minimize'
-            : (isFullScreen ? 'Exit full screen' : 'Full screen'));
-    return Tooltip(
-      message: label,
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.all(7),
-          decoration: BoxDecoration(
-            color: isFullScreen
-                ? scheme.primary
-                : scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: Icon(
-            customIcon ??
-                (isFullScreen
-                    ? Icons.close_fullscreen_rounded
-                    : Icons.open_in_full_rounded),
-            size: 17,
-            color:
-                isFullScreen ? scheme.onPrimary : scheme.onSurfaceVariant,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A single-line label that gently auto-scrolls (marquee) ONLY when the text is
-/// too wide to fit; short titles render as a plain static label. Used by the
-/// now-playing bar so long song filenames stay fully readable without stealing
-/// vertical space.
-class _ScrollingText extends StatelessWidget {
-  const _ScrollingText({required this.text, required this.style});
-
-  final String text;
-  final TextStyle style;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final tp = TextPainter(
-          text: TextSpan(text: text, style: style),
-          maxLines: 1,
-          textDirection: TextDirection.ltr,
-        )..layout();
-        final overflows = tp.width > constraints.maxWidth;
-        if (!overflows) {
-          return Text(text,
-              style: style, maxLines: 1, overflow: TextOverflow.clip);
-        }
-        return Marquee(
-          text: text,
-          style: style,
-          blankSpace: 46,
-          velocity: 26,
-          pauseAfterRound: const Duration(seconds: 2),
-          fadingEdgeStartFraction: 0.06,
-          fadingEdgeEndFraction: 0.12,
-          showFadingOnlyWhenScrolling: true,
-        );
-      },
-    );
-  }
-}
-
-/// A refined, thin-stroke logout mark — a rounded door frame with an arrow
-/// gliding out through the opening. Lighter and more elegant than the stock
-/// filled Material "exit" glyph.
-class _LogoutGlyph extends StatelessWidget {
-  const _LogoutGlyph({required this.color});
-
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => CustomPaint(
-        size: Size.square(22),
-        painter: _LogoutPainter(color),
-      );
-}
-
-class _LogoutPainter extends CustomPainter {
-  _LogoutPainter(this.color);
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final s = size.width / 24.0;
-    final stroke = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.15 * s
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    // Door frame: a rounded "[" open on the right.
-    final frame = Path()
-      ..moveTo(14 * s, 4 * s)
-      ..lineTo(8 * s, 4 * s)
-      ..cubicTo(6.9 * s, 4 * s, 6 * s, 4.9 * s, 6 * s, 6 * s)
-      ..lineTo(6 * s, 18 * s)
-      ..cubicTo(6 * s, 19.1 * s, 6.9 * s, 20 * s, 8 * s, 20 * s)
-      ..lineTo(14 * s, 20 * s);
-    canvas.drawPath(frame, stroke);
-
-    // Arrow gliding out through the opening.
-    canvas.drawLine(Offset(11 * s, 12 * s), Offset(20 * s, 12 * s), stroke);
-    final head = Path()
-      ..moveTo(16.5 * s, 8.5 * s)
-      ..lineTo(20 * s, 12 * s)
-      ..lineTo(16.5 * s, 15.5 * s);
-    canvas.drawPath(head, stroke);
-  }
-
-  @override
-  bool shouldRepaint(covariant _LogoutPainter old) => old.color != color;
-}
-
-/// Polished "Listen together?" invitation — a centered brand card with a
-/// headphones badge, the host's avatar + name, the track on a pill, and clear
-/// Decline / Join actions. Pops `true` on Join, `false`/null otherwise.
-class _LiveInviteDialog extends StatelessWidget {
-  const _LiveInviteDialog({required this.hostName, required this.trackTitle});
-
-  final String hostName;
-  final String trackTitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final initial =
-        hostName.trim().isNotEmpty ? hostName.trim()[0].toUpperCase() : '?';
-    // Tidy a messy filename-title a little for display.
-    var title = trackTitle.trim();
-    if (title.startsWith('- ')) title = title.substring(2).trim();
-    if (title.isEmpty) title = 'a song';
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 28),
-        child: Material(
-          type: MaterialType.transparency,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(22, 22, 22, 16),
-              decoration: BoxDecoration(
-                color: scheme.surface,
-                borderRadius: BorderRadius.circular(26),
-                border: Border.all(color: scheme.primary.withAlpha(130)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(80),
-                    blurRadius: 34,
-                    offset: const Offset(0, 14),
-                  ),
-                  BoxShadow(
-                    color: scheme.primary.withAlpha(40),
-                    blurRadius: 26,
-                    spreadRadius: -6,
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Headphones badge with a soft brand halo.
-                  Center(
-                    child: Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(colors: [
-                          scheme.primary.withAlpha(60),
-                          scheme.primary.withAlpha(18),
-                        ]),
-                        border:
-                            Border.all(color: scheme.primary.withAlpha(90)),
-                      ),
-                      child: Icon(Icons.headphones_rounded,
-                          size: 30, color: scheme.primary),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Center(
-                    child: Text(
-                      'Listen together?',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: scheme.onSurface,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  // Host row.
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: scheme.primaryContainer,
-                        child: Text(
-                          initial,
-                          style: TextStyle(
-                            color: scheme.onPrimaryContainer,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: RichText(
-                          text: TextSpan(
-                            style: TextStyle(
-                                fontSize: 13.5,
-                                color: scheme.onSurface.withAlpha(220),
-                                height: 1.3),
-                            children: [
-                              TextSpan(
-                                text: hostName,
-                                style:
-                                    const TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                              const TextSpan(
-                                  text: ' wants to listen with you, live.'),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  // Track pill.
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainerHighest.withAlpha(140),
-                      borderRadius: BorderRadius.circular(14),
-                      border:
-                          Border.all(color: scheme.outlineVariant.withAlpha(70)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.music_note_rounded,
-                            size: 18, color: scheme.primary),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: scheme.onSurface,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  // Actions.
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(false),
-                        style: TextButton.styleFrom(
-                          foregroundColor: scheme.onSurfaceVariant,
-                        ),
-                        child: const Text('Decline'),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton.icon(
-                        onPressed: () => Navigator.of(context).pop(true),
-                        icon: const Icon(Icons.headphones_rounded, size: 18),
-                        label: const Text('Join'),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

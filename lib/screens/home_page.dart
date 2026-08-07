@@ -107,12 +107,13 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
   bool _isDragging = false;
   // Phone-only: whether the slide-up full player sheet is expanded.
   bool _playerExpanded = false;
+  // Where the full panel was opened FROM: true = the footer pill (collapsed
+  // state), false = the now-playing bar. Closing returns to whichever it
+  // emerged from, so the UI genies back into its origin.
+  bool _panelFromPill = false;
   // Phone-only: user dismissed the now-playing bar → collapses to a small
-  // floating music button that reopens it.
+  // pill docked in the footer centre that reopens it.
   bool _barDismissed = false;
-  // Draggable position of the music FAB. null = default bottom-right anchor
-  // (reset there whenever the bar is freshly collapsed into a FAB).
-  Offset? _fabOffset;
 
   // ── Chat state ────────────────────────────────────────────────────────────
   String? _activeFriendId;
@@ -1781,57 +1782,78 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
       // (Was: ListenableBuilder over merged nowPlayingNotifier+liveSessionNotifier.)
       builder: (context, ref, _) {
         final hasTrack = ref.watch(nowPlayingProvider).track.isNotEmpty;
-        final live = ref.watch(liveSessionProvider).active;
         // The now-playing bar is for the user's OWN music (the live session has
         // its own audio and is surfaced by the top banner). Show it when a
         // personal track is loaded and the user hasn't dismissed it; otherwise
-        // a small floating music button stands in as the entry point.
+        // a compact pill docked in the footer centre is the entry point.
         final barVisible = hasTrack && !_barDismissed;
         // Reserve just enough chat space for the now-playing bar (grab handle +
         // title + progress row) so it sits flush under the composer with no gap.
         final barSpace = 70.0;
-        final h = constraints.maxHeight;
 
         return Stack(
           children: [
-            // Chat surface — full width, leaving room only for the full bar.
+            // Chat surface — full width; reserve room for the collapsed bar.
+            // AnimatedPadding so the reflow eases in step with the bar's genie.
             Positioned.fill(
-              child: Padding(
+              child: AnimatedPadding(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
                 padding: EdgeInsets.only(
                     bottom: (_playerExpanded || !barVisible) ? 0 : barSpace),
                 child: _buildChatContent(context, phone: true),
               ),
             ),
 
-            // The one, always-mounted player. Off-screen (top = h) when
-            // collapsed → State (and the AudioPlayer) stay alive; slides to
-            // the top when expanded.
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 320),
-              curve: Curves.easeOutCubic,
-              left: 0,
-              right: 0,
-              height: h,
-              top: _playerExpanded ? 0 : h,
-              child: _buildPhonePlayerSheet(context),
+            // Full player — ALWAYS mounted (AudioPlayer stays alive). Instead of
+            // sliding from the top it "genie" scales into / out of the footer-pill
+            // spot (bottom-centre anchor, smooth, no bounce), so it reads as being
+            // pulled out of the pill and sucked back into it.
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: !_playerExpanded,
+                child: AnimatedScale(
+                  scale: _playerExpanded ? 1.0 : 0.0,
+                  alignment: Alignment.bottomCenter,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic,
+                  child: AnimatedOpacity(
+                    opacity: _playerExpanded ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOut,
+                    child: _buildPhonePlayerSheet(context),
+                  ),
+                ),
+              ),
             ),
 
-            // Collapsed now-playing bar (hidden while expanded or dismissed).
-            if (barVisible)
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 260),
-                curve: Curves.easeOut,
+            // Collapsed now-playing bar. Kept mounted while a track is loaded so
+            // it can genie-scale DOWN into the footer pill on dismiss and back
+            // OUT of it on resume (bottom-centre anchor, no bounce).
+            if (hasTrack && !_playerExpanded)
+              Positioned(
                 left: 0,
                 right: 0,
-                bottom: _playerExpanded ? -barSpace : 0,
-                child: _buildNowPlayingBar(context),
+                bottom: 0,
+                child: IgnorePointer(
+                  ignoring: _barDismissed,
+                  child: AnimatedScale(
+                    scale: _barDismissed ? 0.0 : 1.0,
+                    alignment: Alignment.bottomCenter,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOutCubic,
+                    child: AnimatedOpacity(
+                      opacity: _barDismissed ? 0.0 : 1.0,
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOut,
+                      child: _buildNowPlayingBar(context),
+                    ),
+                  ),
+                ),
               ),
 
-            // Floating music button — the entry point when the bar is hidden.
-            // Draggable; defaults to bottom-right (above the chat input so it
-            // never covers the send button).
-            if (!barVisible && !_playerExpanded)
-              _buildDraggableFab(context, constraints, live),
+            // When collapsed the entry point is a compact pill docked in the
+            // footer centre (see _footerMusicChip) — not a button over the chat.
           ],
         );
       },
@@ -1849,10 +1871,10 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
           // tap on the handle collapses it too.
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => setState(() => _playerExpanded = false),
+            onTap: _closePanel,
             onVerticalDragEnd: (d) {
               if ((d.primaryVelocity ?? 0) > 120) {
-                setState(() => _playerExpanded = false);
+                _closePanel();
               }
             },
             child: Column(
@@ -1873,7 +1895,7 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
                     _PanelToggleBtn(
                       isFullScreen: false,
                       customIcon: Icons.keyboard_arrow_down_rounded,
-                      onTap: () => setState(() => _playerExpanded = false),
+                      onTap: _closePanel,
                     ),
                     const SizedBox(width: 10),
                     Icon(Icons.music_note_rounded,
@@ -2037,69 +2059,60 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
     if (mounted) setState(() {});
   }
 
-  // Positions the music FAB (default bottom-right) and makes it draggable.
-  Widget _buildDraggableFab(
-      BuildContext context, BoxConstraints constraints, bool live) {
-    const fabSize = 52.0;
-    const margin = 14.0;
-    final w = constraints.maxWidth;
-    final h = constraints.maxHeight;
-    // Default anchor: bottom-right, above the chat input.
-    final defaultLeft = w - margin - fabSize;
-    final defaultTop = h - 78 - fabSize;
-    final left = _fabOffset?.dx ?? defaultLeft;
-    final top = _fabOffset?.dy ?? defaultTop;
+  // Close the full panel and return to wherever it emerged from: back to the
+  // footer pill if it opened from there, otherwise back to the now-playing bar.
+  void _closePanel() => setState(() {
+        _playerExpanded = false;
+        _barDismissed = _panelFromPill;
+      });
 
-    return Positioned(
-      left: left,
-      top: top,
-      child: GestureDetector(
-        onPanStart: (_) {
-          // Seed the offset from wherever it's currently anchored.
-          _fabOffset ??= Offset(defaultLeft, defaultTop);
-        },
-        onPanUpdate: (d) {
-          setState(() {
-            final cur = _fabOffset ?? Offset(defaultLeft, defaultTop);
-            final nx = (cur.dx + d.delta.dx).clamp(margin, w - fabSize - margin);
-            final ny = (cur.dy + d.delta.dy)
-                .clamp(margin, h - fabSize - margin);
-            _fabOffset = Offset(nx.toDouble(), ny.toDouble());
-          });
-        },
-        child: _buildMusicFab(context, live),
-      ),
+  // The collapsed music control: a compact pill docked in the footer centre.
+  // Single tap resurfaces the now-playing bar; long-press / double-tap jumps
+  // straight to the full music panel. Shows a marquee of the current title.
+  Widget _footerMusicChip(ColorScheme scheme) {
+    final title = ref.read(nowPlayingProvider).track;
+    final style = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: scheme.primary,
     );
-  }
-
-  Widget _buildMusicFab(BuildContext context, bool live) {
-    final scheme = Theme.of(context).colorScheme;
+    // Bring the collapsed now-playing bar back above the footer (no full panel).
+    void resumeBar() => setState(() => _barDismissed = false);
+    // Jump straight to the full player panel — remembering it came from the
+    // pill, so closing it returns here (bar stays dismissed).
+    void openPanel() => setState(() {
+          _panelFromPill = true;
+          _playerExpanded = true;
+        });
     return GestureDetector(
-      onTap: () => setState(() {
-        // Bring the bar back and open the player so the user can start music.
-        _barDismissed = false;
-        _playerExpanded = true;
-      }),
+      onTap: resumeBar,
+      onDoubleTap: openPanel,
+      onLongPress: openPanel,
+      behavior: HitTestBehavior.opaque,
       child: Container(
-        width: 52,
-        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: scheme.primary,
-          boxShadow: [
-            BoxShadow(
-              color: scheme.primary.withAlpha(120),
-              blurRadius: 14,
-              spreadRadius: 1,
-              offset: const Offset(0, 4),
+          color: scheme.primary.withAlpha(28),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: scheme.primary.withAlpha(90)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.music_note_rounded, size: 15, color: scheme.primary),
+            const SizedBox(width: 5),
+            // Marquee the title (only scrolls when it overflows) so long song
+            // names stay readable inside the compact pill.
+            SizedBox(
+              width: 120,
+              height: 16,
+              child: _ScrollingText(
+                text: title.isEmpty ? 'Music' : title,
+                style: style,
+              ),
             ),
           ],
-          border: live
-              ? Border.all(color: Colors.white.withAlpha(220), width: 2)
-              : null,
         ),
-        child: const Icon(Icons.music_note_rounded,
-            color: Colors.white, size: 26),
       ),
     );
   }
@@ -2115,16 +2128,26 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
       // Tap anywhere (except the play button) to expand; swipe up too.
       behavior: HitTestBehavior.opaque,
       onTap: () {
-        // Dragging/tapping the handle to open the player drops the keyboard,
-        // same as closing a popup — the composer shouldn't stay focused behind
-        // the expanded player.
+        // Tapping the bar opens the full player (origin = bar). Drop the
+        // keyboard so the composer isn't focused behind the expanded player.
         FocusManager.instance.primaryFocus?.unfocus();
-        setState(() => _playerExpanded = true);
+        setState(() {
+          _panelFromPill = false;
+          _playerExpanded = true;
+        });
       },
       onVerticalDragEnd: (d) {
-        if ((d.primaryVelocity ?? 0) < 0) {
+        final v = d.primaryVelocity ?? 0;
+        if (v < 0) {
+          // Swipe UP → expand into the full music panel (origin = bar).
           FocusManager.instance.primaryFocus?.unfocus();
-          setState(() => _playerExpanded = true);
+          setState(() {
+            _panelFromPill = false;
+            _playerExpanded = true;
+          });
+        } else if (v > 120) {
+          // Swipe DOWN → collapse the bar into the footer pill.
+          setState(() => _barDismissed = true);
         }
       },
       child: Container(
@@ -2237,13 +2260,9 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
                     ),
                   ),
                   const SizedBox(width: 4),
-                  // Close the bar entirely → collapses to the floating button,
-                  // freshly reset to the bottom-right anchor.
+                  // Close the bar → it genies down into the footer pill.
                   GestureDetector(
-                    onTap: () => setState(() {
-                      _barDismissed = true;
-                      _fabOffset = null;
-                    }),
+                    onTap: () => setState(() => _barDismissed = true),
                     behavior: HitTestBehavior.opaque,
                     child: Padding(
                       padding: const EdgeInsets.all(4),
@@ -2400,8 +2419,6 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
 
     return rp.Consumer(
       builder: (context, ref, _) {
-        // Keep the same rebuild trigger the old ListenableBuilder had.
-        ref.watch(nowPlayingProvider);
         // Pure status strip: a connection dot + online-friends count on the
         // left, profile pill on the right. The "Connected" label is dropped —
         // seeing your online friends (plus the toast) already tells you you're
@@ -2461,6 +2478,16 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
               ),
 
               const Spacer(),
+
+              // Collapsed music control lives here, centred, instead of floating
+              // over the chat and covering message bubbles. Shown only while the
+              // bar is dismissed and the full panel isn't open.
+              if (ref.watch(nowPlayingProvider).track.isNotEmpty &&
+                  _barDismissed &&
+                  !_playerExpanded) ...[
+                _footerMusicChip(scheme),
+                const Spacer(),
+              ],
 
               // ── Right: profile pill only (online count now sits by the dot) ─
               // Tap the name (a pill-shaped button) to open your profile.

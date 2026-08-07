@@ -40,6 +40,7 @@ import '../utils/time_utils.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rp;
 import '../state/playback_state.dart';
 import '../state/unread_state.dart';
+import '../state/presence_state.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
@@ -77,7 +78,7 @@ class HomePage extends rp.ConsumerStatefulWidget {
 class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserver {
   String _username = '';
   String? _myAvatar;
-  int _onlineFriendsCount = 0;
+  // Online-friends count + per-friend dots now come from presenceProvider.
   List<Map<String, dynamic>> _allFriends = [];
 
   // ── Server discovery state ────────────────────────────────────────────────
@@ -767,9 +768,10 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
       setState(() {
         _allFriends = list;
         _filteredFriends = list;
-        _onlineFriendsCount = 0; // unknown until refreshed
         _isLoadingFriends = false;
       });
+      // Presence is unknown until a fresh fetch — show everyone offline for now.
+      ref.read(presenceProvider.notifier).syncFromFriends(const {});
     } catch (_) {}
   }
 
@@ -800,20 +802,22 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
       setState(() {
         _allFriends = friends;
         _filteredFriends = friends;
-        _onlineFriendsCount =
-            friends.where((f) => f['is_online'] == true).length;
         _isCurrentUserOnline = true;
         _serverReachable = true;
         _isLoadingFriends = false;
       });
-      // Mirror the authoritative unread counts into Riverpod so the badges
-      // (which now read from unreadProvider) reflect the fresh server state.
+      // Mirror the authoritative unread counts + online presence into Riverpod
+      // (the badges and friend-list dots/count now read from these providers).
       final counts = <int, int>{};
+      final online = <int>{};
       for (final f in friends) {
         final id = (f['id'] as num?)?.toInt();
-        if (id != null) counts[id] = (f['unread_count'] as num?)?.toInt() ?? 0;
+        if (id == null) continue;
+        counts[id] = (f['unread_count'] as num?)?.toInt() ?? 0;
+        if (f['is_online'] == true) online.add(id);
       }
       ref.read(unreadProvider.notifier).syncFromFriends(counts);
+      ref.read(presenceProvider.notifier).syncFromFriends(online);
       ConnectionStatus.instance.set(true);
     } catch (_) {
       // ─── API error (401 session expired, network down, etc.) ────────────
@@ -1400,7 +1404,7 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  '$_onlineFriendsCount online',
+                  '${ref.watch(presenceProvider).onlineCount} online',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -1497,6 +1501,13 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
                             _activeFriendOnline = online;
                             _activeFriendLastSeen = lastSeen;
                           });
+                          // Live-update the friend-list dot + count too.
+                          final id = int.tryParse(_activeFriendId ?? '');
+                          if (id != null) {
+                            ref
+                                .read(presenceProvider.notifier)
+                                .setOnline(id, online);
+                          }
                         }
                       },
                     )
@@ -1589,7 +1600,8 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
   Widget _buildFriendTile(
       Map<String, dynamic> f, Color textColor, ColorScheme scheme) {
     final name = f['username'] as String? ?? '';
-    final isOnline = f['is_online'] == true;
+    // Online dot now comes from Riverpod (single source of truth for presence).
+    final isOnline = ref.watch(presenceProvider).isOnline((f['id'] as num).toInt());
     final lastMsg = f['last_message'] as String? ?? '';
     final lastTime = f['last_timestamp'] as String? ?? '';
     // Unread now comes from Riverpod (single source of truth for the badge).

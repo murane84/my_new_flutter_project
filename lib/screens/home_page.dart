@@ -201,8 +201,12 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _isDragging = false;
   // Phone-only: whether the slide-up full player sheet is expanded.
   bool _playerExpanded = false;
+  // Where the full panel was opened FROM: true = the footer pill (collapsed
+  // state), false = the now-playing bar. Closing the panel returns to whichever
+  // it emerged from, so the UI genies back into its origin.
+  bool _panelFromPill = false;
   // Phone-only: user dismissed the now-playing bar → collapses to a small
-  // floating music button that reopens it.
+  // pill docked in the footer that reopens it.
   bool _barDismissed = false;
 
   // Friends currently typing (their user_id, as a string). Fed by the notify
@@ -2087,10 +2091,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           // tap on the handle collapses it too.
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => setState(() => _playerExpanded = false),
+            onTap: _closePanel,
             onVerticalDragEnd: (d) {
               if ((d.primaryVelocity ?? 0) > 120) {
-                setState(() => _playerExpanded = false);
+                _closePanel();
               }
             },
             child: Column(
@@ -2111,7 +2115,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     _PanelToggleBtn(
                       isFullScreen: false,
                       customIcon: Icons.keyboard_arrow_down_rounded,
-                      onTap: () => setState(() => _playerExpanded = false),
+                      onTap: _closePanel,
                     ),
                     const SizedBox(width: 10),
                     Icon(Icons.music_note_rounded,
@@ -2277,6 +2281,13 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // Compact music control docked in the footer while the now-playing bar is
   // collapsed — replaces the button that used to float over the chat and hide
   // message bubbles. Tap to bring the player back.
+  // Close the full panel back to WHERE it emerged from: the footer pill (if it
+  // was opened from the pill) or the now-playing bar (if opened from the bar).
+  void _closePanel() => setState(() {
+        _playerExpanded = false;
+        _barDismissed = _panelFromPill;
+      });
+
   Widget _footerMusicChip(ColorScheme scheme) {
     final title = nowPlayingNotifier.track;
     final style = TextStyle(
@@ -2286,9 +2297,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
     // Bring the collapsed now-playing bar back above the footer (no full panel).
     void resumeBar() => setState(() => _barDismissed = false);
-    // Jump straight to the full player panel.
+    // Jump straight to the full player panel — remembering it came from the
+    // pill, so closing it returns here (bar stays dismissed).
     void openPanel() => setState(() {
-          _barDismissed = false;
+          _panelFromPill = true;
           _playerExpanded = true;
         });
     return GestureDetector(
@@ -2334,16 +2346,26 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       // Tap anywhere (except the play button) to expand; swipe up too.
       behavior: HitTestBehavior.opaque,
       onTap: () {
-        // Dragging/tapping the handle to open the player drops the keyboard,
-        // same as closing a popup — the composer shouldn't stay focused behind
-        // the expanded player.
+        // Tapping the bar opens the full player (origin = bar). Drop the
+        // keyboard so the composer isn't focused behind the expanded player.
         FocusManager.instance.primaryFocus?.unfocus();
-        setState(() => _playerExpanded = true);
+        setState(() {
+          _panelFromPill = false;
+          _playerExpanded = true;
+        });
       },
       onVerticalDragEnd: (d) {
-        if ((d.primaryVelocity ?? 0) < 0) {
+        final v = d.primaryVelocity ?? 0;
+        if (v < 0) {
+          // Swipe UP → expand into the full music panel (origin = bar).
           FocusManager.instance.primaryFocus?.unfocus();
-          setState(() => _playerExpanded = true);
+          setState(() {
+            _panelFromPill = false;
+            _playerExpanded = true;
+          });
+        } else if (v > 120) {
+          // Swipe DOWN → collapse the bar into the footer pill.
+          setState(() => _barDismissed = true);
         }
       },
       child: Container(
@@ -2681,7 +2703,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
               // Collapsed music control lives here, centred, instead of floating
               // over the chat and covering message bubbles.
-              if (nowPlayingNotifier.track.isNotEmpty && _barDismissed) ...[
+              if (nowPlayingNotifier.track.isNotEmpty &&
+                  _barDismissed &&
+                  !_playerExpanded) ...[
                 _footerMusicChip(scheme),
                 const Spacer(),
               ],
@@ -2761,8 +2785,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (didPop) return;
         setState(() {
           if (_playerExpanded) {
-            // Collapse the slide-up player back to the mini bar first.
+            // Collapse the slide-up player back to its origin (pill or bar).
             _playerExpanded = false;
+            _barDismissed = _panelFromPill;
           } else if (_activeFriendId != null) {
             // Close the open conversation → back to the messages list.
             _activeFriendId = null;

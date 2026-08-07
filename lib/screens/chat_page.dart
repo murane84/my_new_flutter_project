@@ -32,6 +32,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_linkify/flutter_linkify.dart';
 import '../utils/app_config.dart';
 
 // ─── Timestamp helpers ───────────────────────────────────────────────────────
@@ -213,7 +214,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   @override
   void didChangeMetrics() {
-    if (View.of(context).viewInsets.bottom > 0 && _showEmoji) {
+    // A rising keyboard normally means the user tapped the composer, so the
+    // emoji panel yields. EXCEPT on the GIF tab (index 1): its "Search GIFs"
+    // field lives INSIDE the panel and needs the keyboard — closing the panel
+    // there bounced the user straight back to the thread mid-search.
+    if (View.of(context).viewInsets.bottom > 0 && _showEmoji && _emojiTab != 1) {
       setState(() => _showEmoji = false);
     }
   }
@@ -2418,6 +2423,59 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   // ── Build helpers ─────────────────────────────────────────────────────────
 
+  static String _fmtCallDur(int secs) {
+    final m = secs ~/ 60;
+    final s = secs % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
+  // Renders a call-log message (message_type 'call'). media_duration holds the
+  // connected length in SECONDS; 0 means the call never connected (no answer /
+  // missed). isMe = I placed the call (outgoing), else incoming.
+  Widget _callLogContent(Map<String, dynamic> msg, bool isMe, Color textColor) {
+    final secs = (msg['media_duration'] as num?)?.toInt() ?? 0;
+    final connected = secs > 0;
+    final IconData icon;
+    final String label;
+    if (connected) {
+      icon = isMe ? Icons.call_made_rounded : Icons.call_received_rounded;
+      label =
+          '${isMe ? 'Outgoing' : 'Incoming'} call · ${_fmtCallDur(secs)}';
+    } else {
+      icon = isMe ? Icons.call_made_rounded : Icons.call_missed_rounded;
+      label = isMe ? 'Call — no answer' : 'Missed call';
+    }
+    // Highlight a genuinely missed incoming call in red; otherwise match bubble.
+    final color = (!connected && !isMe) ? const Color(0xFFE53935) : textColor;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(
+              color: color, fontSize: 14, fontWeight: FontWeight.w500),
+        ),
+      ],
+    );
+  }
+
+  // Open a tapped link from a message bubble in the external browser.
+  Future<void> _openLink(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        showToast(context, 'Could not open link', type: ToastType.error);
+      }
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not open link', type: ToastType.error);
+      }
+    }
+  }
+
   // [muted] tints "sending / sent / delivered"; [read] highlights the read
   // receipt. Both are passed in so the ticks stay legible on either the dark
   // teal-green or the pale-mint sent bubble.
@@ -2475,6 +2533,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final mediaRel = msg['media_url'] as String?;
     final isMedia = !tomb &&
         msgType != 'text' && mediaRel != null && mediaRel.isNotEmpty;
+    // A call-log entry (auto-posted when an Aluta call ends).
+    final isCall = !tomb && msgType == 'call';
     final emojiOnly =
         !tomb && !hasQuote && !isMedia && _isEmojiOnly(mainText);
 
@@ -2490,14 +2550,20 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     // Warm near-white text on the dark maroon; deep maroon text on the rose.
     final onSent = isDark ? const Color(0xFFF6E1E1) : const Color(0xFF4A141A);
     final textColor = isMe ? onSent : scheme.onSurface;
+    // Tappable links: readable + clearly a link on either bubble colour.
+    final linkColor = isDark
+        ? const Color(0xFF9FD0FF)
+        : (isMe ? const Color(0xFF0B4EA2) : const Color(0xFF1565C0));
     final quoteBarColor = isMe
         ? (isDark ? const Color(0xFFFF8A93) : scheme.primary)
         : scheme.primary;
     // Muted + "read" accent for the timestamp/ticks, tuned per bubble.
     final sentMuted = onSent.withAlpha(isDark ? 160 : 150);
+    // Read receipt: a blue double-tick, so it stands out against the red/rose
+    // sender bubble instead of blending in like the old brand-red tick did.
     final sentRead =
-        isDark ? const Color(0xFFFF8A93) : scheme.primary;
-    // Delivery ticks: neutral gray while sent/delivered, brand red once read.
+        isDark ? const Color(0xFF6FB1FF) : const Color(0xFF1976D2);
+    // Delivery ticks: neutral gray while sent/delivered, blue once read.
     final tickGray =
         isDark ? const Color(0xFFB3ACAE) : const Color(0xFF8C8A8E);
     // Subtle border to lift each bubble off the wallpaper.
@@ -2673,18 +2739,29 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                           ),
 
                         // ── Message body (media and/or text) ──────────
+                        if (isCall) _callLogContent(msg, isMe, textColor),
                         if (isMedia)
                           _mediaContent(
                               msgType, mediaRel!, msg, isMe, textColor, scheme),
                         if (!tomb && mainText.trim().isNotEmpty)
                           Padding(
                             padding: EdgeInsets.only(top: isMedia ? 6 : 0),
-                            child: Text(
-                              mainText,
+                            child: Linkify(
+                              text: mainText,
+                              onOpen: (link) => _openLink(link.url),
+                              options:
+                                  const LinkifyOptions(humanize: false),
                               style: TextStyle(
                                 color: textColor,
                                 fontSize: 15,
                                 height: 1.38,
+                              ),
+                              linkStyle: TextStyle(
+                                color: linkColor,
+                                fontSize: 15,
+                                height: 1.38,
+                                decoration: TextDecoration.underline,
+                                decorationColor: linkColor,
                               ),
                             ),
                           ),
@@ -3317,7 +3394,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       final selected = _emojiTab == index;
       return Expanded(
         child: InkWell(
-          onTap: () => setState(() => _emojiTab = index),
+          onTap: () {
+            // Leaving the GIF tab → drop the search keyboard so it doesn't
+            // hang over the emoji grid.
+            if (index == 0) FocusScope.of(context).unfocus();
+            setState(() => _emojiTab = index);
+          },
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 9),
             decoration: BoxDecoration(

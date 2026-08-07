@@ -204,9 +204,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // Phone-only: user dismissed the now-playing bar → collapses to a small
   // floating music button that reopens it.
   bool _barDismissed = false;
-  // Draggable position of the music FAB. null = default bottom-right anchor
-  // (reset there whenever the bar is freshly collapsed into a FAB).
-  Offset? _fabOffset;
 
   // Friends currently typing (their user_id, as a string). Fed by the notify
   // socket's 'typing' events. There's no explicit "stopped typing" event, so
@@ -2001,7 +1998,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       listenable: Listenable.merge([nowPlayingNotifier, liveSessionNotifier]),
       builder: (context, _) {
         final hasTrack = nowPlayingNotifier.track.isNotEmpty;
-        final live = liveSessionNotifier.active;
         // The now-playing bar is for the user's OWN music (the live session has
         // its own audio and is surfaced by the top banner). Show it when a
         // personal track is loaded and the user hasn't dismissed it; otherwise
@@ -2047,11 +2043,8 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 child: _buildNowPlayingBar(context),
               ),
 
-            // Floating music button — the entry point when the bar is hidden.
-            // Draggable; defaults to bottom-right (above the chat input so it
-            // never covers the send button).
-            if (!barVisible && !_playerExpanded)
-              _buildDraggableFab(context, constraints, live),
+            // When collapsed the entry point is a compact chip docked in the
+            // footer (see _footerMusicChip) — not a button floating over chat.
           ],
         );
       },
@@ -2256,69 +2249,44 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (mounted) setState(() {});
   }
 
-  // Positions the music FAB (default bottom-right) and makes it draggable.
-  Widget _buildDraggableFab(
-      BuildContext context, BoxConstraints constraints, bool live) {
-    const fabSize = 52.0;
-    const margin = 14.0;
-    final w = constraints.maxWidth;
-    final h = constraints.maxHeight;
-    // Default anchor: bottom-right, above the chat input.
-    final defaultLeft = w - margin - fabSize;
-    final defaultTop = h - 78 - fabSize;
-    final left = _fabOffset?.dx ?? defaultLeft;
-    final top = _fabOffset?.dy ?? defaultTop;
-
-    return Positioned(
-      left: left,
-      top: top,
-      child: GestureDetector(
-        onPanStart: (_) {
-          // Seed the offset from wherever it's currently anchored.
-          _fabOffset ??= Offset(defaultLeft, defaultTop);
-        },
-        onPanUpdate: (d) {
-          setState(() {
-            final cur = _fabOffset ?? Offset(defaultLeft, defaultTop);
-            final nx = (cur.dx + d.delta.dx).clamp(margin, w - fabSize - margin);
-            final ny = (cur.dy + d.delta.dy)
-                .clamp(margin, h - fabSize - margin);
-            _fabOffset = Offset(nx.toDouble(), ny.toDouble());
-          });
-        },
-        child: _buildMusicFab(context, live),
-      ),
-    );
-  }
-
-  Widget _buildMusicFab(BuildContext context, bool live) {
-    final scheme = Theme.of(context).colorScheme;
+  // Compact music control docked in the footer while the now-playing bar is
+  // collapsed — replaces the button that used to float over the chat and hide
+  // message bubbles. Tap to bring the player back.
+  Widget _footerMusicChip(ColorScheme scheme) {
+    final title = nowPlayingNotifier.track;
     return GestureDetector(
       onTap: () => setState(() {
-        // Bring the bar back and open the player so the user can start music.
         _barDismissed = false;
         _playerExpanded = true;
       }),
+      behavior: HitTestBehavior.opaque,
       child: Container(
-        width: 52,
-        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: scheme.primary,
-          boxShadow: [
-            BoxShadow(
-              color: scheme.primary.withAlpha(120),
-              blurRadius: 14,
-              spreadRadius: 1,
-              offset: const Offset(0, 4),
+          color: scheme.primary.withAlpha(28),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: scheme.primary.withAlpha(90)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.music_note_rounded, size: 15, color: scheme.primary),
+            const SizedBox(width: 5),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 120),
+              child: Text(
+                title.isEmpty ? 'Music' : title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.primary,
+                ),
+              ),
             ),
           ],
-          border: live
-              ? Border.all(color: Colors.white.withAlpha(220), width: 2)
-              : null,
         ),
-        child: const Icon(Icons.music_note_rounded,
-            color: Colors.white, size: 26),
       ),
     );
   }
@@ -2453,12 +2421,11 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  // Close the bar entirely → collapses to the floating button,
-                  // freshly reset to the bottom-right anchor.
+                  // Close the bar entirely → collapses to a compact music chip
+                  // docked in the footer (see _footerMusicChip).
                   GestureDetector(
                     onTap: () => setState(() {
                       _barDismissed = true;
-                      _fabOffset = null;
                     }),
                     behavior: HitTestBehavior.opaque,
                     child: Padding(
@@ -2676,6 +2643,13 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
 
               const Spacer(),
+
+              // Collapsed music control lives here, centred, instead of floating
+              // over the chat and covering message bubbles.
+              if (nowPlayingNotifier.track.isNotEmpty && _barDismissed) ...[
+                _footerMusicChip(scheme),
+                const Spacer(),
+              ],
 
               // ── Right: profile pill only (online count now sits by the dot) ─
               // Tap the name (a pill-shaped button) to open your profile.

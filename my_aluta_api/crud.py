@@ -238,6 +238,41 @@ def get_friends(db: Session, user_id: int):
     ).all()
 
 
+def list_preview(msg) -> str:
+    """Human-readable last-message preview for the friend list.
+
+    Media messages (photo, GIF, voice note, file) are sent with EMPTY text
+    content, which used to render as a blank last line. Show a type label
+    instead so every message kind previews sensibly. Any text message just
+    shows its content.
+    """
+    if msg is None:
+        return ""
+    # Deleted-for-everyone keeps its row (tombstone) with blank content.
+    if getattr(msg, "is_deleted", False):
+        return "This message was deleted"
+    content = (msg.content or "").strip()
+    if content:
+        return content
+    mtype = (msg.message_type or "text").lower()
+    mime = (msg.media_mime or "").lower()
+    name = (msg.media_name or "").strip()
+    if mtype == "image":
+        # GIFs (incl. GIPHY) are sent as image/gif; plain photos are jpg/png.
+        return "🎞️ GIF" if "gif" in mime else "📷 Photo"
+    if mtype == "audio":
+        return "🎤 Voice note"
+    if mtype == "video":
+        return "🎬 Video"
+    if mtype == "file":
+        return f"📎 {name}" if name else "📎 File"
+    # Unknown/other non-text type with no content → generic attachment label
+    # rather than a blank line; plain empty text falls through to "".
+    if mtype != "text":
+        return f"📎 {name}" if name else "📎 Attachment"
+    return content
+
+
 def get_friends_with_unread_counts(db: Session, user_id: int):
     friends = get_all_users(db, user_id)
     friends_with_data = []
@@ -252,14 +287,10 @@ def get_friends_with_unread_counts(db: Session, user_id: int):
                 username=friend.username,
                 is_online=friend.is_online and is_recently_active(friend.last_seen),
                 last_timestamp=last_message.timestamp.strftime('%Y-%m-%d %H:%M') if last_message else None,
-                # A deleted-for-everyone message keeps its row (tombstone) but has
-                # blank content; show the tombstone text in the list preview so
-                # the receiver sees the deletion instead of an empty last line.
-                last_message=(
-                    "This message was deleted"
-                    if last_message and last_message.is_deleted
-                    else (last_message.content if last_message else "")
-                ),
+                # Media-aware preview: tombstone text for deletions, a type
+                # label ("📷 Photo", "🎞️ GIF", "🎤 Voice note", "📎 File") for
+                # media messages with empty content, else the text content.
+                last_message=list_preview(last_message),
                 unread_count=unread_count,
                 last_sender_id=last_message.sender_id if last_message else None,
                 last_message_delivered=last_message.delivered if last_message else None,

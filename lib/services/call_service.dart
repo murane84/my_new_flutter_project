@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import '../screens/api_service.dart';
+
 /// High-level state of the single active Aluta voice call.
 enum CallState {
   idle, // nothing happening
@@ -40,6 +42,9 @@ class CallService extends ChangeNotifier {
   bool speakerOn = false;
   CallEndReason endReason = CallEndReason.none;
   DateTime? connectedAt;
+  // Guards against posting more than one call-log message per call (the caller
+  // posts it when the call ends). Reset when the call is torn down.
+  bool _callLogged = false;
   /// The friend's phone number, if known — used to offer a normal phone call
   /// when the Aluta (internet) call can't be connected.
   String? fallbackPhone;
@@ -355,10 +360,30 @@ class CallService extends ChangeNotifier {
     state = CallState.ended;
     notifyListeners();
     _teardownMedia();
+    _maybeLogCall();
     // NOTE: we stay in `ended` (not `idle`) so the call screen can show the
     // outcome — and, if the internet call couldn't connect, offer a phone
     // fallback. The screen calls reset() when it's dismissed. `ended` doesn't
     // count as active, so a fresh call can still start meanwhile.
+  }
+
+  // Post a call-log entry to the thread so both users see the call in their
+  // history. Only the CALLER posts (single source of truth); the message is
+  // delivered to the peer like any other, so it shows on both sides. Duration
+  // is the connected length in seconds (0 = never connected → no answer/missed).
+  void _maybeLogCall() {
+    if (_callLogged || !isCaller) return;
+    final to = peerId;
+    if (to == null) return;
+    _callLogged = true;
+    final secs = connectedAt != null
+        ? DateTime.now().difference(connectedAt!).inSeconds
+        : 0;
+    unawaited(
+      ApiService()
+          .sendMessage(to, '', messageType: 'call', mediaDuration: secs)
+          .catchError((_) => null),
+    );
   }
 
   /// Return to idle once the UI has finished showing the end state.
@@ -401,6 +426,7 @@ class CallService extends ChangeNotifier {
     speakerOn = false;
     connectedAt = null;
     endReason = CallEndReason.none;
+    _callLogged = false;
   }
 
   int? _asInt(dynamic v) =>

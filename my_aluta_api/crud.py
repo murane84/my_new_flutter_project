@@ -264,6 +264,8 @@ def list_preview(msg) -> str:
         return "🎤 Voice note"
     if mtype == "video":
         return "🎬 Video"
+    if mtype == "call":
+        return "📞 Call"
     if mtype == "file":
         return f"📎 {name}" if name else "📎 File"
     # Unknown/other non-text type with no content → generic attachment label

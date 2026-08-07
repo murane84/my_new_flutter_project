@@ -7,12 +7,18 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 /// GIPHY API key.
 ///
-/// This defaults to GIPHY's public "beta" key, which their own docs/tutorials
-/// use for testing. It works out of the box with NO signup, so GIF stickers are
-/// available immediately — but it's shared and rate-limited, so for production
-/// reliability and higher limits grab a free key at https://developers.giphy.com
-/// and paste it here (that's the only change needed).
-const String kGiphyApiKey = 'dc6zaTOxFJmzC';
+/// This is Aluta's own GIPHY API key (a free "beta" key, rate-limited to 100
+/// calls/hour — plenty for the picker, which only calls GIPHY on open/search).
+/// GIPHY's old shared public key (`dc6zaTOxFJmzC`) was disabled and now returns
+/// 403, which is why GIFs stopped loading; this replaces it.
+///
+/// Overridable at build time without editing code (same pattern as PROD_URL /
+/// SERVER_IP), so a production key can be supplied via CI without committing it:
+///   flutter build apk --dart-define=GIPHY_API_KEY=your_prod_key
+const String kGiphyApiKey = String.fromEnvironment(
+  'GIPHY_API_KEY',
+  defaultValue: 'OG5iS6Z0Yu1D7XrOXy9BWsr6uu5wCLhf',
+);
 
 /// One GIF result: a small looping [previewUrl] for the grid, and the
 /// [fullUrl] that actually gets sent into the conversation.
@@ -42,6 +48,9 @@ class _GifPickerState extends State<GifPicker> {
   List<GifResult> _gifs = [];
   bool _loading = true;
   bool _error = false;
+  // Human-readable reason for the last failure (bad key, rate limit, network),
+  // shown under the error state so issues like a rejected key are obvious.
+  String? _errorDetail;
 
   @override
   void initState() {
@@ -68,6 +77,7 @@ class _GifPickerState extends State<GifPicker> {
       setState(() {
       _loading = true;
       _error = false;
+      _errorDetail = null;
     });
     }
     try {
@@ -87,6 +97,12 @@ class _GifPickerState extends State<GifPicker> {
           setState(() {
           _loading = false;
           _error = true;
+          _errorDetail = (res.statusCode == 401 || res.statusCode == 403)
+              ? 'GIF service key was rejected (${res.statusCode}). '
+                  'Check the GIPHY API key.'
+              : res.statusCode == 429
+                  ? 'GIF rate limit reached — try again in a bit.'
+                  : 'GIF service error (${res.statusCode}).';
         });
         }
         return;
@@ -115,6 +131,7 @@ class _GifPickerState extends State<GifPicker> {
       setState(() {
         _loading = false;
         _error = true;
+        _errorDetail = 'Couldn’t reach the GIF service. Check your connection.';
       });
     }
   }
@@ -198,6 +215,15 @@ class _GifPickerState extends State<GifPicker> {
                 textAlign: TextAlign.center,
                 style: TextStyle(color: scheme.onSurface, fontSize: 13),
               ),
+              if (_errorDetail != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _errorDetail!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: scheme.onSurfaceVariant, fontSize: 11),
+                ),
+              ],
               const SizedBox(height: 8),
               TextButton(
                 onPressed: () => _fetch(_searchCtrl.text.trim()),

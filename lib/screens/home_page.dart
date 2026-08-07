@@ -39,6 +39,7 @@ import '../utils/time_utils.dart';
 // names (Consumer, Provider, ChangeNotifierProvider). `rp.` keeps them distinct.
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rp;
 import '../state/playback_state.dart';
+import '../state/unread_state.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
@@ -669,6 +670,13 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
         showMessageNotification(
             title: sender, body: text.isEmpty ? 'Sent you a message' : text);
       }
+      // Badge the sender immediately (unless their chat is open) — the fetch
+      // below reconciles to the server's authoritative count a moment later.
+      final senderId = (senderObj?['id'] as num?)?.toInt() ??
+          (data['sender_id'] as num?)?.toInt();
+      if (senderId != null && senderId.toString() != _activeFriendId) {
+        ref.read(unreadProvider.notifier).bump(senderId);
+      }
       // Refresh the conversation list so previews/unread update either way.
       _fetchFriends();
     }
@@ -798,6 +806,14 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
         _serverReachable = true;
         _isLoadingFriends = false;
       });
+      // Mirror the authoritative unread counts into Riverpod so the badges
+      // (which now read from unreadProvider) reflect the fresh server state.
+      final counts = <int, int>{};
+      for (final f in friends) {
+        final id = (f['id'] as num?)?.toInt();
+        if (id != null) counts[id] = (f['unread_count'] as num?)?.toInt() ?? 0;
+      }
+      ref.read(unreadProvider.notifier).syncFromFriends(counts);
       ConnectionStatus.instance.set(true);
     } catch (_) {
       // ─── API error (401 session expired, network down, etc.) ────────────
@@ -886,9 +902,10 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
       _activeFriendLastSeen = friend['last_timestamp'] ?? '';
       _activeFriendPhone = friend['phone'] as String?;
       _activeFriendAvatar = friend['avatar_url'] as String?;
-      friend['unread_count'] = 0;
       _avatarExpanded = false;
     });
+    // Optimistically clear the badge (was: friend['unread_count'] = 0).
+    ref.read(unreadProvider.notifier).clear(friend['id'] as int);
     ApiService().markMessagesAsReadPatch(friend['id'] as int);
   }
 
@@ -1575,7 +1592,8 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
     final isOnline = f['is_online'] == true;
     final lastMsg = f['last_message'] as String? ?? '';
     final lastTime = f['last_timestamp'] as String? ?? '';
-    final unread = (f['unread_count'] as num?)?.toInt() ?? 0;
+    // Unread now comes from Riverpod (single source of truth for the badge).
+    final unread = ref.watch(unreadProvider).countFor((f['id'] as num).toInt());
     final hasUnread = unread > 0;
 
     return InkWell(

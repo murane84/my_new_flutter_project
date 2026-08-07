@@ -16,6 +16,10 @@ dependencies:
   # Riverpod: typed, compile-safe app state (replacing ad-hoc global
   # ChangeNotifiers). Pinned to the 2.x line (Notifier / NotifierProvider API).
   flutter_riverpod: ^2.6.1
+  # Crash/error reporting. Kept on the 8.x line (SentryFlutter.init +
+  # PlatformDispatcher-based async capture). If pub get resolves a build that
+  # bumps the Android compileSdk past 36, pin it down like the packages above.
+  sentry_flutter: ^8.0.0
 
   # Networking
   http: ^1.5.0

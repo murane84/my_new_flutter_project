@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 // Prefixed: package:provider also exports Consumer/ChangeNotifierProvider.
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rp;
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -88,16 +89,31 @@ void main() async {
   // Start listening for images shared into Aluta while it's running (Android/
   // iOS only; a no-op elsewhere).
   _listenForSharedMedia();
-  runApp(
-    // Riverpod's scope wraps everything. We pass OUR container (the same one
-    // non-widget code uses via `providerContainer`) so widget `ref` and that
-    // container share a single state tree. The existing provider-package
-    // ThemeProvider stays untouched inside it.
-    rp.UncontrolledProviderScope(
-      container: providerContainer,
-      child: ChangeNotifierProvider(
-        create: (_) => ThemeProvider(),
-        child: const MyApp(),
+  // Crash/error reporting. Running the app via Sentry's `appRunner` is what
+  // installs capture of BOTH uncaught Flutter framework errors and async
+  // (PlatformDispatcher / zone) errors — no manual FlutterError.onError needed.
+  await SentryFlutter.init(
+    (options) {
+      // Placeholder DSN. Replace with your project's DSN, or supply it at build
+      // time: --dart-define=SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<id>
+      // An empty DSN keeps Sentry installed but inert (no events sent), so the
+      // app runs cleanly until a real DSN is provided.
+      options.dsn =
+          const String.fromEnvironment('SENTRY_DSN', defaultValue: '');
+      // Errors only — no performance tracing — to keep it lightweight.
+      options.tracesSampleRate = 0.0;
+    },
+    appRunner: () => runApp(
+      // Riverpod's scope wraps everything. We pass OUR container (the same one
+      // non-widget code uses via `providerContainer`) so widget `ref` and that
+      // container share a single state tree. The existing provider-package
+      // ThemeProvider stays untouched inside it.
+      rp.UncontrolledProviderScope(
+        container: providerContainer,
+        child: ChangeNotifierProvider(
+          create: (_) => ThemeProvider(),
+          child: const MyApp(),
+        ),
       ),
     ),
   );

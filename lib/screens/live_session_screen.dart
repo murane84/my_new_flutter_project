@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../services/live_session_service.dart';
-import 'home_page.dart' show liveSessionNotifier, playbackBus, playlistNotifier;
+import 'home_page.dart' show playbackBus, playlistNotifier;
+import '../state/playback_state.dart';
 import '../utils/file_bytes.dart';
 import '../utils/marquee_text.dart';
 
@@ -136,7 +137,7 @@ void _handleMinimizedEnd(String reason) {
 void _finalizeMinimizedEnd() {
   final s = activeLiveSession;
   activeLiveSession = null;
-  liveSessionNotifier.stop();
+  providerContainer.read(liveSessionProvider.notifier).stop();
   s?.controller.dispose();
 }
 
@@ -145,11 +146,6 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   String _status = 'Connecting…';
   String _title = '';
   bool _ready = false;
-  // Host-only: true once the session is live (started or resumed) and the LOCAL
-  // player has the track. The host's transport controls act on its own player,
-  // so they must stay enabled even while the signaling socket is momentarily
-  // reconnecting — unlike `_ready`, which the socket-drop path toggles off.
-  bool _hostStarted = false;
   // True while we're closing the popup to minimise (keep the session alive).
   bool _minimizing = false;
   // Listener lost the transport and can choose to reconnect.
@@ -177,7 +173,6 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
       _c.onError = (e) => _snack('Connection error: $e');
       _c.onQueueChanged = _syncFromQueue;
       _ready = true;
-      _hostStarted = _isHost;
       _status = _isHost
           ? 'Sharing with ${widget.peerName}'
           : 'Listening with ${widget.peerName}';
@@ -210,7 +205,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     );
     // Broadcast that a live co-listening session is active so ambient UI
     // (the persistent banner / bars) can reflect it.
-    liveSessionNotifier.start(peer: widget.peerName, asHost: _isHost);
+    providerContainer
+        .read(liveSessionProvider.notifier)
+        .start(peer: widget.peerName, asHost: _isHost);
     _start();
   }
 
@@ -240,7 +237,6 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
         );
         setState(() {
           _ready = true;
-          _hostStarted = true;
           _status = 'Waiting for ${widget.peerName} to join…';
         });
       } else {
@@ -434,7 +430,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     // If we're just minimising, leave the session (controller, notifier,
     // activeLiveSession) fully intact — only detach this screen.
     if (!_minimizing) {
-      liveSessionNotifier.stop();
+      providerContainer.read(liveSessionProvider.notifier).stop();
       activeLiveSession = null;
       _c.dispose();
     }
@@ -563,18 +559,14 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
                                       .copyWith(fontWeight: FontWeight.bold),
                                 ),
                                 const SizedBox(height: 2),
-                                // Marquee like the title above, so long status
-                                // lines (e.g. "… · X left the session") scroll
-                                // fully on a narrow phone instead of clipping.
-                                MarqueeText(
-                                  text: _isHost
+                                Text(
+                                  _isHost
                                       ? 'Sharing with ${widget.peerName} · $_status'
                                       : 'Hosted by ${widget.peerName} · $_status',
-                                  height: 18,
-                                  velocity: 22,
-                                  style: (theme.textTheme.bodySmall ??
-                                          const TextStyle(fontSize: 12))
-                                      .copyWith(color: theme.hintColor),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall
+                                      ?.copyWith(color: theme.hintColor),
                                 ),
                               ],
                             ),
@@ -698,28 +690,22 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Previous track in the queue. Gated on _hostStarted (local player
-            // ready), NOT _ready — the host controls its own player and must
-            // stay usable even while the signaling socket is reconnecting.
+            // Previous track in the queue
             btn(Icons.skip_previous_rounded,
-                (_hostStarted && hasPrev)
-                    ? () => _c.playIndex(_c.currentIndex - 1)
-                    : null,
+                (_ready && hasPrev) ? () => _c.playIndex(_c.currentIndex - 1) : null,
                 30),
-            btn(Icons.replay_10_rounded,
-                _hostStarted ? () => _liveSeekBy(-10) : null, 26),
+            btn(Icons.replay_10_rounded, _ready ? () => _liveSeekBy(-10) : null, 26),
             IconButton.filled(
               iconSize: 40,
-              onPressed: !_hostStarted
+              onPressed: !_ready
                   ? null
                   : () => playing ? _c.player.pause() : _c.player.play(),
               icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
             ),
-            btn(Icons.forward_10_rounded,
-                _hostStarted ? () => _liveSeekBy(10) : null, 26),
+            btn(Icons.forward_10_rounded, _ready ? () => _liveSeekBy(10) : null, 26),
             // Next track in the queue
             btn(Icons.skip_next_rounded,
-                (_hostStarted && hasNext) ? _c.nextTrack : null, 30),
+                (_ready && hasNext) ? _c.nextTrack : null, 30),
           ],
         );
       },

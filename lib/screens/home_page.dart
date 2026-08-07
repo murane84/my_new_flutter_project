@@ -35,8 +35,12 @@ import '../services/call_service.dart';
 import 'call_screen.dart';
 import '../main.dart' show navigatorKey;
 import '../utils/time_utils.dart';
+// Prefixed: this file also imports package:provider, which exports colliding
+// names (Consumer, Provider, ChangeNotifierProvider). `rp.` keeps them distinct.
+import 'package:flutter_riverpod/flutter_riverpod.dart' as rp;
+import '../state/playback_state.dart';
 
-part 'home/home_playback.dart'; // now-playing/live-session notifiers, playback bus, value-notifiers
+part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
 
 String _formatFriendTimestamp(String raw) {
@@ -58,7 +62,7 @@ String _formatFriendTimestamp(String raw) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-class HomePage extends StatefulWidget {
+class HomePage extends rp.ConsumerStatefulWidget {
   static const String routeName = '/home';
   const HomePage({super.key});
 
@@ -66,10 +70,10 @@ class HomePage extends StatefulWidget {
       context.findAncestorStateOfType<HomePageState>();
 
   @override
-  State<HomePage> createState() => HomePageState();
+  rp.ConsumerState<HomePage> createState() => HomePageState();
 }
 
-class HomePageState extends State<HomePage> with WidgetsBindingObserver {
+class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserver {
   String _username = '';
   String? _myAvatar;
   int _onlineFriendsCount = 0;
@@ -1742,12 +1746,12 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // now-playing bar sits above the footer and expands the player on tap.
 
   Widget _buildPhoneBody(BuildContext context, BoxConstraints constraints) {
-    return ListenableBuilder(
+    return rp.Consumer(
       // Rebuild the bar/sheet visibility when the track or live session changes.
-      listenable: Listenable.merge([nowPlayingNotifier, liveSessionNotifier]),
-      builder: (context, _) {
-        final hasTrack = nowPlayingNotifier.track.isNotEmpty;
-        final live = liveSessionNotifier.active;
+      // (Was: ListenableBuilder over merged nowPlayingNotifier+liveSessionNotifier.)
+      builder: (context, ref, _) {
+        final hasTrack = ref.watch(nowPlayingProvider).track.isNotEmpty;
+        final live = ref.watch(liveSessionProvider).active;
         // The now-playing bar is for the user's OWN music (the live session has
         // its own audio and is surfaced by the top banner). Show it when a
         // personal track is loaded and the user hasn't dismissed it; otherwise
@@ -1850,7 +1854,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                             fontWeight: FontWeight.w700, fontSize: 16)),
                     const Spacer(),
                     // Live badge in the sheet header too, for context.
-                    if (liveSessionNotifier.active) _liveChip(context),
+                    if (ref.read(liveSessionProvider).active) _liveChip(context),
                   ],
                 ),
               ],
@@ -1870,8 +1874,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _liveChip(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final peer = liveSessionNotifier.peer;
-    final asHost = liveSessionNotifier.asHost;
+    final session = ref.read(liveSessionProvider);
+    final peer = session.peer;
+    final asHost = session.asHost;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
@@ -1916,13 +1921,13 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   // ── Live session banner (both layouts) ──────────────────────────────────────
   Widget _buildLiveBanner(BuildContext context) {
-    return ListenableBuilder(
-      listenable: liveSessionNotifier,
-      builder: (context, _) {
-        if (!liveSessionNotifier.active) return const SizedBox.shrink();
+    return rp.Consumer(
+      builder: (context, ref, _) {
+        final session = ref.watch(liveSessionProvider);
+        if (!session.active) return const SizedBox.shrink();
         final scheme = Theme.of(context).colorScheme;
-        final peer = liveSessionNotifier.peer;
-        final host = liveSessionNotifier.asHost;
+        final peer = session.peer;
+        final host = session.asHost;
         return Material(
           color: scheme.primary,
           child: InkWell(
@@ -1998,7 +2003,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> _endLiveSession() async {
     await endActiveLiveSession();
-    liveSessionNotifier.stop();
+    ref.read(liveSessionProvider.notifier).stop();
     if (mounted) setState(() {});
   }
 
@@ -2071,7 +2076,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _buildNowPlayingBar(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final np = nowPlayingNotifier;
+    // Snapshot: this bar is built inside _buildPhoneBody's Consumer, which
+    // watches nowPlayingProvider — so it rebuilds when the track/play-state
+    // changes and this read is always fresh.
+    final np = ref.read(nowPlayingProvider);
 
     return GestureDetector(
       // Tap anywhere (except the play button) to expand; swipe up too.
@@ -2360,9 +2368,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Widget _buildFooter(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    return ListenableBuilder(
-      listenable: nowPlayingNotifier,
-      builder: (context, _) {
+    return rp.Consumer(
+      builder: (context, ref, _) {
+        // Keep the same rebuild trigger the old ListenableBuilder had.
+        ref.watch(nowPlayingProvider);
         // Pure status strip: a connection dot + online-friends count on the
         // left, profile pill on the right. The "Connected" label is dropped —
         // seeing your online friends (plus the toast) already tells you you're

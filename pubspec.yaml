@@ -13,6 +13,9 @@ dependencies:
   # Core
   cupertino_icons: ^1.0.8
   provider: ^6.1.1
+  # Riverpod: typed, compile-safe app state (replacing ad-hoc global
+  # ChangeNotifiers). Pinned to the 2.x line (Notifier / NotifierProvider API).
+  flutter_riverpod: ^2.6.1
 
   # Networking
   http: ^1.5.0

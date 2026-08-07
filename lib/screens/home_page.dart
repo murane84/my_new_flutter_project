@@ -208,6 +208,12 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // (reset there whenever the bar is freshly collapsed into a FAB).
   Offset? _fabOffset;
 
+  // Friends currently typing (their user_id, as a string). Fed by the notify
+  // socket's 'typing' events. There's no explicit "stopped typing" event, so
+  // each entry auto-clears after a short idle window.
+  final Set<String> _typingFriendIds = {};
+  final Map<String, Timer> _typingClearTimers = {};
+
   // ── Chat state ────────────────────────────────────────────────────────────
   String? _activeFriendId;
   String? _activeFriendName;
@@ -291,6 +297,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    for (final t in _typingClearTimers.values) {
+      t.cancel();
+    }
     ShareInbox.instance.removeListener(_onShareChanged);
     ConnectionStatus.instance.online.removeListener(_onGlobalConnChanged);
     SessionEvents.instance.expired.removeListener(_onSessionExpired);
@@ -747,6 +756,23 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     if (type == 'live_invite') {
       _showLiveInvite(event);
+      return;
+    }
+    // A friend is typing (relayed by the backend to our notify socket). Show
+    // "typing…" on their friend-list tile; auto-clear after a short idle since
+    // there's no "stopped typing" event.
+    if (type == 'typing') {
+      final uid = event['user_id']?.toString();
+      if (uid != null && uid.isNotEmpty) {
+        _typingClearTimers[uid]?.cancel();
+        if (mounted && !_typingFriendIds.contains(uid)) {
+          setState(() => _typingFriendIds.add(uid));
+        }
+        _typingClearTimers[uid] = Timer(const Duration(seconds: 4), () {
+          _typingClearTimers.remove(uid);
+          if (mounted) setState(() => _typingFriendIds.remove(uid));
+        });
+      }
       return;
     }
     // A new chat message arriving on the per-user notify socket. When the app
@@ -1787,6 +1813,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final lastTime = f['last_timestamp'] as String? ?? '';
     final unread = (f['unread_count'] as num?)?.toInt() ?? 0;
     final hasUnread = unread > 0;
+    final isTyping = _typingFriendIds.contains(f['id']?.toString());
 
     return InkWell(
       onTap: () =>
@@ -1817,20 +1844,32 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    lastMsg,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: hasUnread
-                          ? textColor.withAlpha(200)
-                          : textColor.withAlpha(110),
-                      fontWeight: hasUnread
-                          ? FontWeight.w500
-                          : FontWeight.normal,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
+                  isTyping
+                      ? Text(
+                          'typing…',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: scheme.primary,
+                            fontStyle: FontStyle.italic,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        )
+                      : Text(
+                          lastMsg,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: hasUnread
+                                ? textColor.withAlpha(200)
+                                : textColor.withAlpha(110),
+                            fontWeight: hasUnread
+                                ? FontWeight.w500
+                                : FontWeight.normal,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
                 ],
               ),
             ),

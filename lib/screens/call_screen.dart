@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/call_service.dart';
+import '../state/call_state.dart';
 import '../utils/app_config.dart';
 import 'token_helper.dart' show mediaAuthHeaders;
 
@@ -12,14 +14,14 @@ import 'token_helper.dart' show mediaAuthHeaders;
 /// [CallService]'s state — ring / calling / connected / ended — and drives the
 /// accept/decline/mute/speaker/hang-up controls. Pops itself when the call
 /// returns to idle.
-class CallScreen extends StatefulWidget {
+class CallScreen extends ConsumerStatefulWidget {
   const CallScreen({super.key});
 
   @override
-  State<CallScreen> createState() => _CallScreenState();
+  ConsumerState<CallScreen> createState() => _CallScreenState();
 }
 
-class _CallScreenState extends State<CallScreen> {
+class _CallScreenState extends ConsumerState<CallScreen> {
   final CallService _call = CallService.instance;
   Timer? _tick;
   Timer? _endTimer;
@@ -32,7 +34,6 @@ class _CallScreenState extends State<CallScreen> {
     AppConfig.baseUrl.then((b) {
       if (mounted) setState(() => _base = b);
     });
-    _call.addListener(_onCallChanged);
     // Refresh once a second so the call timer counts up.
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted && _call.state == CallState.connected) setState(() {});
@@ -43,13 +44,13 @@ class _CallScreenState extends State<CallScreen> {
   void dispose() {
     _tick?.cancel();
     _endTimer?.cancel();
-    _call.removeListener(_onCallChanged);
     super.dispose();
   }
 
-  void _onCallChanged() {
+  // Reacts to call-state transitions (was the _call.addListener callback). Only
+  // the side-effects live here now; the rebuild is handled by ref.watch below.
+  void _onCallStateChanged(CallState s) {
     if (!mounted) return;
-    final s = _call.state;
     if (s == CallState.idle) {
       _dismiss();
     } else if (s == CallState.ended && !_showFallback) {
@@ -57,7 +58,6 @@ class _CallScreenState extends State<CallScreen> {
       _endTimer?.cancel();
       _endTimer = Timer(const Duration(milliseconds: 1600), _dismiss);
     }
-    setState(() {});
   }
 
   void _dismiss() {
@@ -91,6 +91,13 @@ class _CallScreenState extends State<CallScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Rebuild whenever the call state/mute/speaker changes (was _call's
+    // ChangeNotifier). ref.listen handles the one-off transitions (dismiss on
+    // idle, auto-close on end) that the old listener also did.
+    ref.watch(callProvider);
+    ref.listen<CallSnapshot>(callProvider, (prev, next) {
+      _onCallStateChanged(next.state);
+    });
     return PopScope(
       canPop: false,
       child: Scaffold(

@@ -1,9 +1,10 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../screens/api_service.dart';
+import '../state/call_state.dart';
+import '../state/playback_state.dart' show providerContainer;
 
 /// High-level state of the single active Aluta voice call.
 enum CallState {
@@ -28,9 +29,21 @@ enum CallEndReason { none, hangup, declined, busy, cancelled, failed, unanswered
 ///
 /// This is a singleton because there is only ever one active call, and it must
 /// outlive individual screens (an incoming call can arrive on any screen).
-class CallService extends ChangeNotifier {
+class CallService {
   CallService._();
   static final CallService instance = CallService._();
+
+  /// Publish the current call state into Riverpod. Replaces notifyListeners():
+  /// screens now `ref.watch(callProvider)` instead of add/removeListener. Called
+  /// from non-widget engine code, so it writes through the app-wide container.
+  void _publish() {
+    providerContainer.read(callProvider.notifier).set(CallSnapshot(
+          state: state,
+          endReason: endReason,
+          muted: muted,
+          speakerOn: speakerOn,
+        ));
+  }
 
   // ── Public state (screens listen to this) ────────────────────────────────
   CallState state = CallState.idle;
@@ -123,7 +136,7 @@ class CallService extends ChangeNotifier {
     isCaller = true;
     state = CallState.calling;
     endReason = CallEndReason.none;
-    notifyListeners();
+    _publish();
     onShowCallUI?.call();
 
     try {
@@ -170,7 +183,7 @@ class CallService extends ChangeNotifier {
     _pendingOffer = RTCSessionDescription(msg['sdp'] as String?, 'offer');
     state = CallState.ringing;
     endReason = CallEndReason.none;
-    notifyListeners();
+    _publish();
     onShowCallUI?.call();
     // Auto-miss if we don't answer in 45s.
     _ringTimeout = Timer(const Duration(seconds: 45), () {
@@ -186,7 +199,7 @@ class CallService extends ChangeNotifier {
     if (state != CallState.ringing || _pendingOffer == null) return;
     _ringTimeout?.cancel();
     state = CallState.connecting;
-    notifyListeners();
+    _publish();
     try {
       await _createPeer();
       await _pc!.setRemoteDescription(_pendingOffer!);
@@ -227,7 +240,7 @@ class CallService extends ChangeNotifier {
         if (isCaller && _pc != null) {
           _ringTimeout?.cancel();
           state = CallState.connecting;
-          notifyListeners();
+          _publish();
           await _pc!.setRemoteDescription(
               RTCSessionDescription(msg['sdp'] as String?, 'answer'));
           _remoteDescSet = true;
@@ -270,7 +283,7 @@ class CallService extends ChangeNotifier {
     for (final t in _localStream?.getAudioTracks() ?? const []) {
       t.enabled = !muted;
     }
-    notifyListeners();
+    _publish();
   }
 
   Future<void> toggleSpeaker() async {
@@ -278,7 +291,7 @@ class CallService extends ChangeNotifier {
     try {
       await Helper.setSpeakerphoneOn(speakerOn);
     } catch (_) {}
-    notifyListeners();
+    _publish();
   }
 
   String get elapsedLabel {
@@ -317,7 +330,7 @@ class CallService extends ChangeNotifier {
         if (state != CallState.connected) {
           state = CallState.connected;
           connectedAt = DateTime.now();
-          notifyListeners();
+          _publish();
         }
       } else if (s == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
         _finish(CallEndReason.failed);
@@ -358,7 +371,7 @@ class CallService extends ChangeNotifier {
     _ringTimeout?.cancel();
     endReason = reason;
     state = CallState.ended;
-    notifyListeners();
+    _publish();
     _teardownMedia();
     _maybeLogCall();
     // NOTE: we stay in `ended` (not `idle`) so the call screen can show the
@@ -396,7 +409,7 @@ class CallService extends ChangeNotifier {
       peerAvatar = null;
       fallbackPhone = null;
       isCaller = false;
-      notifyListeners();
+      _publish();
     }
   }
 

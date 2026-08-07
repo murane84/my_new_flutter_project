@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'api_service.dart';
+import 'token_helper.dart' show mediaAuthHeaders;
 import 'auth_page.dart';
 import '../services/biometric_service.dart';
 import '../utils/toast_helper.dart';
@@ -495,8 +496,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 CircleAvatar(
                   radius: 42,
                   backgroundColor: scheme.primaryContainer,
-                  backgroundImage:
-                      full != null ? CachedNetworkImageProvider(full) : null,
+                  backgroundImage: full != null
+                      ? CachedNetworkImageProvider(full,
+                          headers: mediaAuthHeaders(full))
+                      : null,
                   child: full == null
                       ? Text(
                           _origUsername.isNotEmpty

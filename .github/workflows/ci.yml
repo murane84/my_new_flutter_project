@@ -1,0 +1,60 @@
+name: CI
+
+# Budget-conscious (2000 free Actions minutes/month):
+#   • analyze + test run on every push — cheap (~3 min, no Android toolchain).
+#   • the heavier Android APK build runs ONLY on `main` + manual dispatch.
+#   • superseded runs on the same ref are cancelled automatically.
+#   • pushes that touch only *.md are skipped.
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+# Cancel an in-progress run when a newer commit lands on the same branch, so
+# rapid pushes don't stack up billable minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze_test:
+    name: Analyze & test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true # cache the Flutter SDK to shave minutes off each run
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+  build_apk:
+    name: Debug APK
+    needs: analyze_test # skip the expensive build if analyze/test failed
+    # Only build on main or a manual run — feature-branch pushes get analyze+test
+    # only, keeping typical usage well within the free minutes.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17' # AGP 8 needs JDK 17
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build apk --debug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

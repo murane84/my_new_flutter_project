@@ -1132,7 +1132,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         radius: 20,
                         backgroundColor: scheme.primary.withAlpha(38),
                         backgroundImage: avatarUrl != null
-                            ? CachedNetworkImageProvider(avatarUrl)
+                            ? CachedNetworkImageProvider(avatarUrl,
+                                headers: mediaAuthHeaders(avatarUrl))
                             : null,
                         child: avatarUrl == null
                             ? Text(
@@ -1682,6 +1683,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               maxWidth: 240, maxHeight: 300, minWidth: 120, minHeight: 80),
           child: CachedNetworkImage(
             imageUrl: url,
+            httpHeaders: mediaAuthHeaders(url),
             fit: BoxFit.cover,
             placeholder: (_, __) => Container(
               width: 200,
@@ -1718,7 +1720,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               child: InteractiveViewer(
                 minScale: 0.8,
                 maxScale: 4,
-                child: CachedNetworkImage(imageUrl: url, fit: BoxFit.contain),
+                child: CachedNetworkImage(
+                    imageUrl: url,
+                    httpHeaders: mediaAuthHeaders(url),
+                    fit: BoxFit.contain),
               ),
             ),
           ),
@@ -1824,12 +1829,28 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   Future<void> _openUrl(String url) async {
+    // Attachments are auth-protected now, so an external browser can't fetch
+    // them. Download the bytes WITH our token, then hand the file to the system
+    // sheet (open / save / share) — same pattern as saving an image.
     try {
-      final ok = await launchUrl(Uri.parse(url),
-          mode: LaunchMode.externalApplication);
-      if (!ok && mounted) {
-        showToast(context, 'Could not open file', type: ToastType.error);
+      if (mounted) showToast(context, 'Opening…');
+      final res = await http.get(Uri.parse(url), headers: mediaAuthHeaders(url));
+      if (res.statusCode != 200) {
+        if (mounted) {
+          showToast(context, 'Could not open file', type: ToastType.error);
+        }
+        return;
       }
+      var name = Uri.parse(url).pathSegments.isNotEmpty
+          ? Uri.parse(url).pathSegments.last
+          : '';
+      if (name.isEmpty) {
+        name = 'aluta_file_${DateTime.now().millisecondsSinceEpoch}';
+      }
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/$name');
+      await file.writeAsBytes(res.bodyBytes, flush: true);
+      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
     } catch (_) {
       if (mounted) showToast(context, 'Could not open file', type: ToastType.error);
     }
@@ -1840,7 +1861,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   Future<void> _saveImage(String url) async {
     try {
       if (mounted) showToast(context, 'Downloading…');
-      final res = await http.get(Uri.parse(url));
+      final res = await http.get(Uri.parse(url), headers: mediaAuthHeaders(url));
       if (res.statusCode != 200) {
         if (mounted) showToast(context, 'Download failed', type: ToastType.error);
         return;
@@ -2628,7 +2649,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             backgroundColor: scheme.primaryContainer,
                             backgroundImage: _friendAvatar.isNotEmpty
                                 ? CachedNetworkImageProvider(
-                                    fullMediaUrl(_friendAvatar))
+                                    fullMediaUrl(_friendAvatar),
+                                    headers: mediaAuthHeaders(
+                                        fullMediaUrl(_friendAvatar)))
                                 : null,
                             child: _friendAvatar.isNotEmpty
                                 ? null
@@ -3007,6 +3030,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                 borderRadius: BorderRadius.circular(6),
                 child: CachedNetworkImage(
                   imageUrl: fullMediaUrl(mediaRel!),
+                  httpHeaders: mediaAuthHeaders(fullMediaUrl(mediaRel!)),
                   width: 36,
                   height: 36,
                   fit: BoxFit.cover,
@@ -3666,7 +3690,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               backgroundColor:
                   Theme.of(context).colorScheme.primaryContainer,
               backgroundImage: _friendAvatar.isNotEmpty
-                  ? CachedNetworkImageProvider(fullMediaUrl(_friendAvatar))
+                  ? CachedNetworkImageProvider(fullMediaUrl(_friendAvatar),
+                      headers: mediaAuthHeaders(fullMediaUrl(_friendAvatar)))
                   : null,
               child: _friendAvatar.isNotEmpty
                   ? null
@@ -4050,7 +4075,8 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
     if (!_prepared) {
       setState(() => _loading = true);
       try {
-        final d = await _player.setUrl(widget.url);
+        final d = await _player.setUrl(widget.url,
+            headers: mediaAuthHeaders(widget.url));
         if (d != null && mounted) _dur = d;
         _prepared = true;
       } catch (_) {

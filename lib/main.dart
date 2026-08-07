@@ -17,6 +17,7 @@ import 'services/notif_service.dart';
 import 'services/metadata_overrides.dart';
 import 'services/live_session_service.dart' show liveHostNotify;
 import 'utils/toast_helper.dart';
+import 'screens/token_helper.dart' show warmMediaAuth;
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -28,6 +29,11 @@ void main() async {
   await initAudioService();
   await initNotifications();
   await metadataStore.load();
+  // Warm the in-memory auth caches (access token + API origin) before any UI
+  // renders, so the very first avatar/image frame can attach the auth header to
+  // our now-protected media endpoints (otherwise a cold-start frame could 401),
+  // and so the header is correctly scoped to our host (never leaked to GIF CDNs).
+  await warmMediaAuth();
   runApp(
     ChangeNotifierProvider(
       create: (_) => ThemeProvider(),

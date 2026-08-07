@@ -12,6 +12,7 @@ import '../utils/app_config.dart';
 final FlutterSecureStorage _storage = FlutterSecureStorage();
 
 Future<void> saveToken(String token) async {
+  _cachedAccessToken = token; // keep the sync cache (media headers) in step
   try {
     if (kIsWeb) {
       final prefs = await SharedPreferences.getInstance();
@@ -24,17 +25,18 @@ Future<void> saveToken(String token) async {
 
 Future<String?> getToken() async {
   try {
-    if (kIsWeb) {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getString(AppConfig.tokenKey);
-    }
-    return await _storage.read(key: AppConfig.tokenKey);
+    final t = kIsWeb
+        ? (await SharedPreferences.getInstance()).getString(AppConfig.tokenKey)
+        : await _storage.read(key: AppConfig.tokenKey);
+    _cachedAccessToken = t; // refresh the sync cache used by media loaders
+    return t;
   } catch (_) {
-    return null;
+    return _cachedAccessToken;
   }
 }
 
 Future<void> removeToken() async {
+  _cachedAccessToken = null;
   try {
     if (kIsWeb) {
       final prefs = await SharedPreferences.getInstance();
@@ -82,4 +84,45 @@ Future<void> removeRefreshToken() async {
       await _storage.delete(key: _refreshKey);
     }
   } catch (_) {/* best-effort */}
+}
+
+// ── Media auth ───────────────────────────────────────────────────────────────
+// In-memory copies of the access token AND our API origin, kept for widgets
+// that need them SYNCHRONOUSLY (image / file / audio widgets build without
+// awaiting, so they read from here). Warmed by warmMediaAuth() at startup.
+String? _cachedAccessToken;
+String? _cachedApiBase;
+
+/// Prime the synchronous caches (token + API base) before the first UI frame,
+/// so media loaders can attach the right auth header immediately and never 401
+/// on a cold start. In release the base resolves instantly to the prod origin.
+Future<void> warmMediaAuth() async {
+  await getToken(); // populates _cachedAccessToken
+  try {
+    _cachedApiBase = await AppConfig.baseUrl;
+  } catch (_) {/* falls back to relative-only matching */}
+}
+
+/// Authorization header for fetching OUR OWN protected media. The token is
+/// attached ONLY when the URL is on our own backend — a relative path, or an
+/// absolute URL under our API origin — AND points at a media route
+/// (`/attachments/` or `/media/`). This is deliberately host-scoped: an
+/// external host must NEVER receive our JWT. That matters because
+///   • GIF CDNs (e.g. GIPHY, whose URLs are https://media.giphy.com/media/…)
+///     would otherwise match on the `/media/` substring and both leak the token
+///     AND get rejected by the CDN (breaking GIF display); and
+///   • `media_url` is client-writable, so a malicious sender could set an image
+///     URL to https://evil.com/attachments/x to try to exfiltrate the token.
+/// Host-scoping closes both.
+Map<String, String> mediaAuthHeaders(String url) {
+  final t = _cachedAccessToken;
+  if (t == null || t.isEmpty) return const {};
+  final base = _cachedApiBase;
+  final onOurBackend = !url.startsWith('http') || // relative → our own origin
+      (base != null && base.isNotEmpty && url.startsWith(base));
+  if (!onOurBackend) return const {};
+  if (url.contains('/attachments/') || url.contains('/media/')) {
+    return {'Authorization': 'Bearer $t'};
+  }
+  return const {};
 }

@@ -232,39 +232,53 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
 
   Widget _presetGrid(ColorScheme scheme) {
     final names = ['Custom', ..._presets.keys];
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: names.map((n) {
-        final active = _preset == n;
-        return GestureDetector(
-          onTap: () => _applyPreset(n),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            width: 104,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              gradient: active
-                  ? LinearGradient(colors: [
-                      scheme.primary,
-                      Color.lerp(scheme.primary, Colors.black, 0.25)!,
-                    ])
-                  : null,
-              color: active ? null : scheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              n,
-              style: TextStyle(
-                color: active ? Colors.white : scheme.onSurface,
-                fontWeight: active ? FontWeight.bold : FontWeight.w500,
-                fontSize: 13,
+    const spacing = 10.0;
+    // Size each chip from the ACTUAL available width so a whole number of
+    // columns fills the row edge-to-edge — no more fixed 104px chips leaving a
+    // gutter on the right. 3 columns on phones, 4 on wider screens/tablets.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth;
+        final cols = maxW >= 520 ? 4 : 3;
+        final chipW = (maxW - spacing * (cols - 1)) / cols;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: names.map((n) {
+            final active = _preset == n;
+            return GestureDetector(
+              onTap: () => _applyPreset(n),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: chipW,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  gradient: active
+                      ? LinearGradient(colors: [
+                          scheme.primary,
+                          Color.lerp(scheme.primary, Colors.black, 0.25)!,
+                        ])
+                      : null,
+                  color: active ? null : scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  n,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: active ? Colors.white : scheme.onSurface,
+                    fontWeight: active ? FontWeight.bold : FontWeight.w500,
+                    fontSize: 13,
+                  ),
+                ),
               ),
-            ),
-          ),
+            );
+          }).toList(),
         );
-      }).toList(),
+      },
     );
   }
 

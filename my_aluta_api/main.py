@@ -36,8 +36,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-# ✅ Mount media folder
-app.mount("/media", StaticFiles(directory="media"), name="media")
+# ⚠️ The public StaticFiles mount at /media was REMOVED: it served every
+# uploaded file with no auth, so any URL was world-readable. Disk media (legacy
+# /media/audio/*) is now served by an authenticated, participant-checked route
+# in routers/attachments.py; DB attachments go through /attachments/{id}, also
+# authenticated. See attachments.py.
 
 
 # ✅ Include Routers
@@ -79,6 +82,10 @@ def ensure_media_schema():
         # Direct-call phone number + profile picture on the user profile.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR",
+        # Owner of a DB-stored attachment, for the authenticated media endpoint.
+        # New uploads set this at upload time; pre-existing rows stay NULL and
+        # are handled by the endpoint's legacy path (see routers/attachments.py).
+        "ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS uploader_id INTEGER",
     ]
     try:
         with engine.begin() as conn:

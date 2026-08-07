@@ -152,6 +152,11 @@ class MediaAsset(Base):
     mime = Column(String, nullable=True)
     name = Column(String, nullable=True)
     size = Column(Integer, nullable=True)
+    # Who uploaded this asset. Lets the uploader always fetch their own file
+    # (e.g. previewing before the message is sent), and is the fast-path owner
+    # check for the authenticated attachment endpoint. Nullable for pre-existing
+    # rows uploaded before this column existed.
+    uploader_id = Column(Integer, index=True, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     def __repr__(self):

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart'
-    show kIsWeb, defaultTargetPlatform, TargetPlatform;
+    show kIsWeb, defaultTargetPlatform, TargetPlatform, debugPrint;
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
@@ -322,7 +322,11 @@ class LiveSessionController {
     });
     _sendControl(meta);
     _setCurrentTitle(title);
-    await player.play();
+    // Do NOT await: just_audio's play() future completes only when playback
+    // FINISHES (the song ends), so awaiting it would block startHost from
+    // returning for the whole track — leaving the host's controls disabled the
+    // entire time on backends (e.g. Android) that honour that contract.
+    unawaited(player.play());
     _sendControl({'type': 'play', 'position_ms': startPositionMs});
     onQueueChanged?.call();
     _broadcastQueue();
@@ -399,7 +403,8 @@ class LiveSessionController {
         _streamTrackToAllPeers(t.bytes, t.mime);
       }
       _setCurrentTitle(t.title);
-      await player.play();
+      // Fire-and-forget (see startHost): play()'s future completes on track END.
+      unawaited(player.play());
       _sendControl({'type': 'play', 'position_ms': 0});
     } catch (e) {
       onError?.call(e);
@@ -474,6 +479,7 @@ class LiveSessionController {
   Future<void> _hostConnectToPeer(int peerId) async {
     await _closePeer(peerId);
     try {
+      _log('host: negotiating peer connection to $peerId');
       final pc = await createPeerConnection(_iceConfig);
       final peer = _Peer(pc);
       _peers[peerId] = peer;
@@ -489,6 +495,8 @@ class LiveSessionController {
           },
         });
       };
+      pc.onConnectionState =
+          (s) => _log('host: pc($peerId) state → $s');
 
       final ch = await pc.createDataChannel(
         'audio',
@@ -496,6 +504,7 @@ class LiveSessionController {
       );
       peer.channel = ch;
       ch.onDataChannelState = (RTCDataChannelState s) {
+        _log('host: dc($peerId) state → $s');
         if (s == RTCDataChannelState.RTCDataChannelOpen) {
           final bytes = _hostBytes;
           if (bytes != null) {
@@ -507,7 +516,9 @@ class LiveSessionController {
       final offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       _signalTo(peerId, {'type': 'rtc_offer', 'sdp': offer.sdp});
+      _log('host: sent offer to $peerId');
     } catch (e) {
+      _log('host: connect-to-peer error: $e');
       onError?.call(e);
     }
   }
@@ -524,6 +535,7 @@ class LiveSessionController {
     // even a straggler frame from the old stream is discarded harmlessly.
     final epoch = ++p.streamEpoch;
     try {
+      _log('host: streaming ${bytes.length} bytes ($mime)');
       ch.send(RTCDataChannelMessage(jsonEncode({'t': 'track_start', 'mime': mime})));
       // 16 KB frames stay under every WebRTC implementation's reliable
       // single-message limit (browsers included), so the web PWA interops too.
@@ -547,7 +559,9 @@ class LiveSessionController {
         'pos': player.position.inMilliseconds,
         'playing': player.playing,
       })));
+      _log('host: sent eos');
     } catch (e) {
+      _log('host: stream error: $e');
       onError?.call(e);
     }
   }
@@ -573,12 +587,16 @@ class LiveSessionController {
   /// LISTENER: answer the host's offer — build the peer connection, wire the
   /// inbound data channel, and send the answer back. Replaces any stale one.
   Future<void> _listenerAnswer(int hostId, String? sdp) async {
+    // Drop stale ICE from any prior offer SYNCHRONOUSLY, before the first await,
+    // so candidates that trickle in for THIS offer (they arrive right after it)
+    // queue into a clean list and survive until the remote SDP is applied.
+    _lPendingIce.clear();
+    _lRemoteSet = false;
     await _closeListenerPc();
     try {
+      _log('listener: got offer from $hostId — answering');
       final pc = await createPeerConnection(_iceConfig);
       _lpc = pc;
-      _lRemoteSet = false;
-      _lPendingIce.clear();
 
       pc.onIceCandidate = (RTCIceCandidate c) {
         if (c.candidate == null) return;
@@ -591,6 +609,7 @@ class LiveSessionController {
           },
         });
       };
+      pc.onConnectionState = (s) => _log('listener: pc state → $s');
       pc.onDataChannel = (RTCDataChannel ch) => _bindListenerChannel(ch);
 
       await pc.setRemoteDescription(RTCSessionDescription(sdp, 'offer'));
@@ -599,7 +618,9 @@ class LiveSessionController {
       final answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       _signalTo(hostId, {'type': 'rtc_answer', 'sdp': answer.sdp});
+      _log('listener: sent answer to $hostId');
     } catch (e) {
+      _log('listener: answer error: $e');
       onError?.call(e);
     }
   }
@@ -608,6 +629,7 @@ class LiveSessionController {
   /// `track_start`, accumulate binary frames, and play on `eos`.
   void _bindListenerChannel(RTCDataChannel ch) {
     _lchan = ch;
+    _log('listener: audio data channel bound');
     ch.onMessage = (RTCDataChannelMessage m) async {
       if (m.isBinary) {
         _incoming.add(m.binary);
@@ -617,6 +639,7 @@ class LiveSessionController {
         final j = jsonDecode(m.text) as Map<String, dynamic>;
         switch (j['t']) {
           case 'track_start':
+            _log('listener: track_start');
             final mime = j['mime'];
             if (mime is String) _incomingMime = mime;
             _incoming.clear();
@@ -626,6 +649,7 @@ class LiveSessionController {
             } catch (_) {}
             break;
           case 'eos':
+            _log('listener: eos — buffered ${_incoming.length} bytes');
             // The host stamped its position + play state on the terminator.
             final pos = j['pos'];
             if (pos is int) _hostPositionMs = pos;
@@ -648,7 +672,9 @@ class LiveSessionController {
     } catch (_) {}
     _lpc = null;
     _lRemoteSet = false;
-    _lPendingIce.clear();
+    // NOTE: _lPendingIce is intentionally NOT cleared here — _listenerAnswer
+    // clears it synchronously at its start, so candidates that arrive for the
+    // new offer while this close is still awaiting aren't wiped.
   }
 
   /// Inbound WebRTC signaling (both roles). Host handles answer/ice from each
@@ -676,15 +702,14 @@ class LiveSessionController {
       if (type == 'rtc_offer') {
         await _listenerAnswer(from, msg['sdp'] as String?);
       } else if (type == 'rtc_ice') {
-        final pc = _lpc;
-        if (pc != null) {
-          await _addOrQueueIce(pc, _lRemoteSet, _lPendingIce, msg['candidate']);
-        }
+        // Queue even if the connection isn't up yet (the offer may still be
+        // negotiating) — drained once the remote SDP is set in _listenerAnswer.
+        await _addOrQueueIce(_lpc, _lRemoteSet, _lPendingIce, msg['candidate']);
       }
     }
   }
 
-  Future<void> _addOrQueueIce(RTCPeerConnection pc, bool remoteSet,
+  Future<void> _addOrQueueIce(RTCPeerConnection? pc, bool remoteSet,
       List<RTCIceCandidate> pending, dynamic c) async {
     if (c is! Map) return;
     final cand = RTCIceCandidate(
@@ -692,12 +717,13 @@ class LiveSessionController {
       c['sdpMid'] as String?,
       (c['sdpMLineIndex'] as num?)?.toInt(),
     );
-    if (remoteSet) {
+    if (pc != null && remoteSet) {
       try {
         await pc.addCandidate(cand);
       } catch (_) {}
     } else {
-      pending.add(cand); // queue until the remote SDP is set
+      // Queue until the connection exists AND its remote SDP is applied.
+      pending.add(cand);
     }
   }
 
@@ -833,16 +859,27 @@ class LiveSessionController {
     // at 00:00 forever.
     if (bytes.isEmpty) return;
     _listenerStarted = true;
-    await player.setAudioSource(BytesAudioSource(bytes, contentType: _incomingMime));
-    // Resume at the host's position, and only play if the host is playing — so
-    // joining (or re-buffering after a reconnect) while the host is paused, or
-    // mid-track, lands us in sync instead of blasting from 0:00.
-    if (_hostPositionMs > 0) {
-      try {
-        await player.seek(Duration(milliseconds: _hostPositionMs));
-      } catch (_) {}
+    try {
+      _log('listener: starting playback (${bytes.length} bytes, '
+          '$_incomingMime, hostPlaying=$_hostPlaying)');
+      await player.setAudioSource(
+          BytesAudioSource(bytes, contentType: _incomingMime));
+      // Resume at the host's position, and only play if the host is playing — so
+      // joining (or re-buffering after a reconnect) while the host is paused, or
+      // mid-track, lands us in sync instead of blasting from 0:00.
+      if (_hostPositionMs > 0) {
+        try {
+          await player.seek(Duration(milliseconds: _hostPositionMs));
+        } catch (_) {}
+      }
+      if (autoplay && _hostPlaying) unawaited(player.play());
+    } catch (e) {
+      // A playback failure was previously silent — surface it so the listener
+      // screen can show an error instead of sitting mute at 00:00.
+      _listenerStarted = false;
+      _log('listener: playback failed: $e');
+      onError?.call(e);
     }
-    if (autoplay && _hostPlaying) await player.play();
   }
 
   // ---------------------------------------------------------------------------
@@ -861,11 +898,7 @@ class LiveSessionController {
     );
   }
 
-  // Serializes control handling so messages apply in arrival order — crucially,
-  // an `rtc_offer` finishes building the peer connection before any trailing
-  // `rtc_ice` for it is processed (otherwise the candidate could hit a not-yet-
-  // assigned connection and be dropped).
-  Future<void> _ctrlQueue = Future.value();
+  void _log(String m) => debugPrint('[live] $m');
 
   void _onSocketMessage(dynamic message) {
     // Audio is peer-to-peer now — the socket carries only JSON control. Ignore
@@ -877,7 +910,11 @@ class LiveSessionController {
     } catch (_) {
       return;
     }
-    _ctrlQueue = _ctrlQueue.then((_) => _handleControl(msg)).catchError((_) {});
+    // Fire-and-forget — do NOT serialize handling behind a future chain. A slow
+    // WebRTC offer/answer on one platform must never block the sync clock or the
+    // queue broadcast behind it. ICE that arrives before the peer connection is
+    // ready is queued (see _addOrQueueIce), so out-of-order handling is safe.
+    _handleControl(msg);
   }
 
   Future<void> _handleControl(Map<String, dynamic> msg) async {
@@ -1051,7 +1088,7 @@ class LiveSessionController {
         // via 'eos'); otherwise playback would begin from a partial buffer.
         if (!_listenerStarted) break;
         if (playPos is int) await player.seek(Duration(milliseconds: playPos));
-        await player.play();
+        unawaited(player.play()); // future resolves on track END — don't await
         break;
       case 'pause':
         _hostPlaying = false;

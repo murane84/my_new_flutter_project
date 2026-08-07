@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/services.dart';
@@ -19,11 +20,15 @@ import '../utils/time_utils.dart';
 import '../utils/file_bytes.dart';
 import '../utils/marquee_text.dart';
 import 'live_session_screen.dart';
+import 'gif_picker.dart';
+import '../services/call_service.dart';
 import 'home_page.dart' show playlistNotifier, playbackBus;
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
+import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -100,6 +105,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   String _lastSeen = '';
   String _friendPhone = '';
   String _friendAvatar = '';
+  String _myName = '';
+  String? _myAvatar;
   bool _friendTyping = false;
 
   List<Map<String, dynamic>> _messages = [];
@@ -122,11 +129,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   // (show only while scrolling) instead of sitting over the row icons.
   final _pickerScrollCtrl = ScrollController();
   bool _showEmoji = false;
+  // Which tab is showing in the emoji panel: 0 = emoji, 1 = GIF stickers.
+  int _emojiTab = 0;
   bool _isAtBottom = true;
   bool _hasNewMsg = false;
 
   Timer? _statusTimer;
-  Timer? _pollTimer;
+  // Debounces persisting the message cache after bursts of realtime WS updates
+  // (delivered/read ticks, reactions) so we don't hammer storage on every event.
+  Timer? _cacheSaveTimer;
   Timer? _typingTimer;
   Timer? _keepAliveTimer;
   StreamSubscription? _connectivitySub;
@@ -174,7 +185,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _ws = WebSocketManager(
       userId: '',
       onEventReceived: _handleWsEvent,
-      onDisconnected: () => _startPolling(),
+      onConnected: _onWsConnected,
+      onDisconnected: _onWsGaveUp,
     );
   }
 
@@ -189,7 +201,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     ConnectionStatus.instance.online.removeListener(_onConnStatusChanged);
     _statusTimer?.cancel();
-    _pollTimer?.cancel();
+    _cacheSaveTimer?.cancel();
     _typingTimer?.cancel();
     _keepAliveTimer?.cancel();
     _connectivitySub?.cancel();
@@ -206,6 +218,22 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   void didChangeMetrics() {
     if (View.of(context).viewInsets.bottom > 0 && _showEmoji) {
       setState(() => _showEmoji = false);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    // Coming back to the foreground: the OS may have frozen or dropped the
+    // socket while backgrounded, so any events in that window were missed.
+    _markActivity();
+    if (_ws.isConnected) {
+      // Socket survived → just catch up.
+      _reconcile();
+    } else {
+      // Socket is down → revive it; its onConnected fires _reconcile for us,
+      // so we don't double-fetch here.
+      _ws.ensureConnected();
     }
   }
 
@@ -229,19 +257,27 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     if (token == null) return;
     final user = await ApiService().getCurrentUser(token);
     _myId = user['id']?.toString();
+    _myName = (user['username'] ?? '').toString();
+    _myAvatar = (user['avatar_url'] as String?)?.trim();
 
     await _loadCachedMessages(); // show cached messages instantly
     await _loadMessages();        // then fetch fresh from network
     _checkOnlineStatus();
-    _startPolling();
     _startKeepAlive();
     _startConnectivityWatch();
 
     if (_myId?.isNotEmpty == true) {
+      // Close any prior socket (the initState placeholder, or the previous
+      // friend's socket when the thread changes) so we never leave a stray
+      // connection alive in the background.
+      _ws.close();
       _ws = WebSocketManager(
         userId: _myId!,
         onEventReceived: _handleWsEvent,
-        onDisconnected: () => _startPolling(),
+        // On every (re)connect, run one reconciliation fetch to close any gap
+        // between the last event we saw and the socket coming (back) up.
+        onConnected: _onWsConnected,
+        onDisconnected: _onWsGaveUp,
       );
       _ws.connect();
     }
@@ -256,7 +292,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     try {
       final msgs = await ApiService().fetchMessagesBetween(
         uid, widget.friendId,
-        skip: 0, limit: 60,
+        skip: 0, limit: _reconcileLimit,
       );
 
       final unread = msgs.any((m) =>
@@ -282,9 +318,32 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
   }
 
-  void _startPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) => _poll());
+  // ── Realtime lifecycle ────────────────────────────────────────────────────
+  //
+  // The WebSocket is the single source of truth for live updates. We no longer
+  // poll every 2s; instead we run ONE reconciliation fetch whenever the realtime
+  // link is (re)established or the app returns to the foreground. See _reconcile.
+
+  void _onWsConnected() {
+    // The socket just came (back) up. Events that fired while it was down were
+    // never delivered, so do a single catch-up fetch, then trust WS events.
+    _reconcile();
+  }
+
+  void _onWsGaveUp() {
+    // The manager exhausted its internal retries (a prolonged outage). Don't
+    // fall back to tight polling — the 60s keepalive, the connectivity watcher,
+    // and app-resume all call _ws.ensureConnected() to revive the socket, and
+    // each successful revive triggers _onWsConnected → _reconcile.
+    if (mounted) setState(() => _isReconnecting = false);
+  }
+
+  // Persist the cache shortly after a burst of WS updates settles, instead of
+  // writing on every single delivered/read/reaction event.
+  void _scheduleCacheSave() {
+    _cacheSaveTimer?.cancel();
+    _cacheSaveTimer =
+        Timer(const Duration(milliseconds: 500), _saveMessagesCache);
   }
 
   // ── Keepalive: ping the server every 60s while chat is open and active ──
@@ -292,6 +351,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _keepAliveTimer?.cancel();
     _keepAliveTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
       if (!mounted) return;
+      // Cheap no-op if the socket is healthy; revives it if a prolonged outage
+      // made the manager give up. This is the safety net that keeps realtime
+      // alive without a 2s poll.
+      _ws.ensureConnected();
       final secsSinceActivity =
           DateTime.now().difference(_lastActivityTime).inSeconds;
       if (secsSinceActivity < 180) {
@@ -365,13 +428,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       final wasOffline = _isUserOffline;
       ConnectionStatus.instance.set(true);
       setState(() => _isReconnecting = false);
-      _startPolling();
+      // Bring the realtime socket back if it had given up; a successful revive
+      // also fires _onWsConnected → _reconcile. We still do an explicit fetch
+      // below so the "N new messages" toast is accurate on this manual path.
+      _ws.ensureConnected();
 
       // Fetch any messages that arrived while offline
       final uid = int.tryParse(_myId ?? '');
       if (uid != null) {
         final fresh = await ApiService().fetchMessagesBetween(
-          uid, widget.friendId, skip: 0, limit: 60);
+          uid, widget.friendId, skip: 0, limit: _reconcileLimit);
         if (!mounted) return;
         final before = _messages.length;
         final merged = _merge(_messages, fresh, markRead: _isAtBottom);
@@ -403,27 +469,64 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   // Manual reconnect (tap "Go Online" banner)
   Future<void> _reconnect() => _autoReconnect();
 
-  Future<void> _poll() async {
-    final uid = int.tryParse(_myId ?? '');
-    if (uid == null) return;
+  // How many recent messages a reconciliation fetch pulls. Sized to the WHOLE
+  // currently-loaded window rather than a fixed 60, so status changes (edited /
+  // reaction / read / delivered / tombstone) on ANY loaded message reconcile
+  // after the socket was down — not just the newest 60. Safe because the
+  // endpoint returns newest-first and the loaded list is always the newest
+  // contiguous run: fetching this many refreshes exactly what's already loaded
+  // (plus any brand-new messages) and never pulls older history into view.
+  // Floored at 60 (initial page size) and capped so a marathon session can't
+  // trigger a pathologically large fetch.
+  int get _reconcileLimit {
+    final n = _messages.length;
+    if (n < 60) return 60;
+    if (n > 300) return 300;
+    return n;
+  }
 
-    // Always fetch without lastTimestamp so status changes (is_read, delivered)
-    // on already-visible messages are captured every cycle — no manual refresh needed.
+  // Reconciliation fetch. Runs on (re)connect and app-resume — NOT on a timer.
+  //
+  // Usually a SINGLE fetch: pull the loaded window, merge it over the current
+  // list (so status changes — is_read/delivered/edited/reactions/tombstones —
+  // are picked up) and mark anything freshly received as delivered/read.
+  //
+  // The one wrinkle: if messages arrived while the socket was down, that first
+  // fetch spends part of its window on those new arrivals and may not reach the
+  // oldest loaded messages, leaving their status stale for a cycle. So when a
+  // pass ADDS messages (the window shifted), we run one more — the window is now
+  // sized to include them, so the stragglers get refreshed immediately instead
+  // of waiting for the next reconnect. Bounded so a burst of live traffic during
+  // reconnect can't loop us indefinitely; the WS delivers the rest live anyway.
+  Future<void> _reconcile() async {
+    for (var pass = 0; pass < 3; pass++) {
+      final addedNew = await _reconcileOnce();
+      if (!addedNew) break; // window fully covered → nothing left to catch up
+    }
+  }
+
+  // A single reconciliation fetch+merge+mark. Returns true iff it ADDED new
+  // messages to the list (which means the window shifted and a follow-up pass
+  // should refresh any now-uncovered stragglers).
+  Future<bool> _reconcileOnce() async {
+    final uid = int.tryParse(_myId ?? '');
+    if (uid == null) return false;
+
     List<Map<String, dynamic>> fetched;
     try {
       fetched = await ApiService().fetchMessagesBetween(
         uid, widget.friendId,
-        skip: 0, limit: 60,
+        skip: 0, limit: _reconcileLimit,
       );
     } catch (_) {
-      // A single poll failure is not proof the whole server is down — leave the
+      // A single fetch failure is not proof the whole server is down — leave the
       // connection status to the app-wide heartbeat so indicators stay in sync.
-      return;
+      return false;
     }
-    if (fetched.isEmpty) return;
+    if (fetched.isEmpty || !mounted) return false;
 
+    final before = _messages.length;
     final merged = _merge(_messages, fetched, markRead: _isAtBottom);
-    if (!mounted) return;
     if (!_listEq(_messages, merged)) {
       setState(() => _messages = merged);
       _saveMessagesCache();
@@ -446,6 +549,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           m['receiver_id'].toString() == _myId && m['is_read'] == false);
       if (needsRead) ApiService().markMessagesAsReadPatch(widget.friendId);
     }
+
+    return _messages.length > before;
   }
 
   List<Map<String, dynamic>> _merge(
@@ -476,6 +581,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         ex['media_mime'] = m['media_mime'];
         ex['media_size'] = m['media_size'];
         ex['media_duration'] = m['media_duration'];
+        ex['pinned_until'] = m['pinned_until'];
       } else {
         map[id] = m;
       }
@@ -499,6 +605,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           a[i]['content'] != b[i]['content'] ||
           a[i]['edited'] != b[i]['edited'] ||
           a[i]['is_deleted'] != b[i]['is_deleted'] ||
+          a[i]['pinned_until'] != b[i]['pinned_until'] ||
           a[i]['reactions'] != b[i]['reactions']) { return false; }
     }
     return true;
@@ -510,22 +617,48 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final type = event['type'];
     if (!mounted) return;
 
-    if (type == 'new_message') {
-      final msg = event['message'] as Map<String, dynamic>?;
-      if (msg != null) {
-        setState(() {
-          final id = msg['id'].toString();
-          if (!_messages.any((m) => m['id'].toString() == id)) {
-            _messages.insert(0, msg);
-          }
-        });
-        if (_isAtBottom) {
-          _scrollToBottom();
-          ApiService().markMessagesAsReadPatch(widget.friendId);
-        } else {
-          setState(() => _hasNewMsg = true);
-        }
+    if (type == 'new_message' || type == 'message_sent') {
+      // The server sends the serialized message under 'data' (older builds used
+      // 'message' — accept either so a version skew never drops messages).
+      // 'new_message' is the peer's message to us; 'message_sent' is our own
+      // copy echoed back, normally already inserted optimistically by the send
+      // path, so the upsert below just dedupes it.
+      final msg = (event['data'] ?? event['message']) as Map<String, dynamic>?;
+      if (msg == null) return;
+
+      // Scope to THIS conversation. The per-user socket also carries events for
+      // our OTHER threads, and these two types INSERT, so without this guard a
+      // message from a different chat would leak into this list.
+      final sender = msg['sender_id']?.toString();
+      final receiver = msg['receiver_id']?.toString();
+      final fid = widget.friendId.toString();
+      final inThisThread = (sender == fid && receiver == _myId) ||
+          (sender == _myId && receiver == fid);
+      if (!inThisThread) return;
+
+      final id = msg['id'].toString();
+      final incoming = type == 'new_message';
+      final existed = _messages.any((m) => m['id'].toString() == id);
+      if (!existed) {
+        setState(() => _messages.insert(0, msg));
       }
+
+      if (incoming && !existed &&
+          msg['receiver_id'].toString() == _myId &&
+          msg['delivered'] == false) {
+        // We now hold the message without ever hitting the fetch endpoint that
+        // auto-marks delivery, so mark it explicitly. The server then emits
+        // message_delivered back to the sender → their tick turns double.
+        ApiService().markMessageAsDelivered(msg['id']);
+      }
+
+      if (_isAtBottom) {
+        _scrollToBottom();
+        if (incoming) ApiService().markMessagesAsReadPatch(widget.friendId);
+      } else if (incoming) {
+        setState(() => _hasNewMsg = true);
+      }
+      _scheduleCacheSave();
     } else if (type == 'message_delivered') {
       // Server marks our message delivered once the friend fetches it → the
       // single tick becomes a double (gray) tick.
@@ -536,6 +669,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           final idx = _messages.indexWhere((m) => m['id'] == mid);
           if (idx != -1) _messages[idx]['delivered'] = true;
         });
+        _scheduleCacheSave();
       }
     } else if (type == 'messages_read') {
       // Friend opened the thread and read our messages → flip the double ticks
@@ -554,6 +688,35 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             }
           }
         });
+        _scheduleCacheSave();
+      }
+    } else if (type == 'message_edited') {
+      // Sender edited a text message → update the body in place and flag it
+      // edited. Payload is the full serialized message under 'data'.
+      final data = event['data'] as Map<String, dynamic>?;
+      final id = data?['id'];
+      if (id != null) {
+        setState(() {
+          final idx = _messages.indexWhere((m) => m['id'] == id);
+          if (idx != -1) {
+            _messages[idx]['content'] = data?['content'];
+            _messages[idx]['edited'] = true;
+          }
+        });
+        _scheduleCacheSave();
+      }
+    } else if (type == 'message_reaction') {
+      // Peer reacted or cleared a reaction → replace the message's reactions
+      // blob (a JSON string, or null when empty), matching what the API and the
+      // reconcile merge store, so _reactionsOf renders it identically.
+      final data = event['data'] as Map<String, dynamic>?;
+      final mid = data?['message_id'];
+      if (mid != null) {
+        setState(() {
+          final idx = _messages.indexWhere((m) => m['id'] == mid);
+          if (idx != -1) _messages[idx]['reactions'] = data?['reactions'];
+        });
+        _scheduleCacheSave();
       }
     } else if (type == 'delete' || type == 'message_deleted') {
       // Delete-for-everyone now leaves a tombstone; mark it rather than remove.
@@ -569,6 +732,34 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           _messages[idx]['reactions'] = null;
         }
       });
+      _scheduleCacheSave();
+    } else if (type == 'message_pinned') {
+      // The other participant pinned a message. Single active pin per
+      // conversation, so clear any others, then mark this one.
+      final data = event['data'] as Map<String, dynamic>?;
+      final mid = data?['id'];
+      if (mid != null) {
+        setState(() {
+          for (final m in _messages) {
+            m['pinned_until'] = null;
+          }
+          final idx = _messages.indexWhere((m) => m['id'] == mid);
+          if (idx != -1) {
+            _messages[idx]['pinned_until'] = data?['pinned_until'];
+          }
+        });
+        _scheduleCacheSave();
+      }
+    } else if (type == 'message_unpinned') {
+      final data = event['data'] as Map<String, dynamic>?;
+      final mid = data?['message_id'];
+      if (mid != null) {
+        setState(() {
+          final idx = _messages.indexWhere((m) => m['id'] == mid);
+          if (idx != -1) _messages[idx]['pinned_until'] = null;
+        });
+        _scheduleCacheSave();
+      }
     } else if (type == 'typing') {
       if (event['user_id'].toString() == widget.friendId.toString()) {
         setState(() => _friendTyping = true);
@@ -904,6 +1095,100 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
   }
 
+  /// Ask whether to call over the internet (Aluta) or via the device dialer.
+  void _showCallChoice() {
+    final scheme = Theme.of(context).colorScheme;
+    final online = ConnectionStatus.instance.isOnline;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 10),
+                width: 36,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: scheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                child: Text('Call ${widget.friendName}',
+                    style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface)),
+              ),
+              const Divider(height: 1),
+              _ActionTile(
+                icon: Icons.wifi_calling_3_rounded,
+                label: online
+                    ? 'Aluta call (over the internet)'
+                    : 'Aluta call — you’re offline',
+                color: online ? scheme.primary : scheme.onSurfaceVariant,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _startAlutaCall();
+                },
+              ),
+              _ActionTile(
+                icon: Icons.phone_rounded,
+                label: 'Phone call (uses your carrier)',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _callFriend();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Start an in-app WebRTC voice call. If we're offline, fall back to the
+  /// device dialer, honouring "out of service → normal call".
+  Future<void> _startAlutaCall() async {
+    if (!ConnectionStatus.instance.isOnline) {
+      if (mounted) {
+        showToast(context, 'No internet — starting a phone call instead',
+            type: ToastType.info);
+      }
+      _callFriend();
+      return;
+    }
+    final myId = int.tryParse(_myId ?? '');
+    if (myId == null) {
+      if (mounted) {
+        showToast(context, 'Please wait — still signing you in…',
+            type: ToastType.error);
+      }
+      return;
+    }
+    final ok = await CallService.instance.startCall(
+      peerId: widget.friendId,
+      peerName: widget.friendName,
+      peerAvatar: _friendAvatar,
+      myName: _myName.isNotEmpty ? _myName : 'Aluta user',
+      myAvatar: _myAvatar,
+      fallbackPhone: _friendPhone,
+    );
+    if (!ok && mounted) {
+      showToast(context, 'You’re already in a call', type: ToastType.info);
+    }
+  }
+
   // Direct call to the friend's saved phone number (tel: dialer).
   Future<void> _callFriend() async {
     final phone = _friendPhone.trim();
@@ -919,6 +1204,144 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     } catch (_) {
       if (mounted) {
         showToast(context, 'Could not start the call', type: ToastType.error);
+      }
+    }
+  }
+
+  // ── Forward a message to another contact ──────────────────────────────────
+  Future<void> _showForwardPicker(Map<String, dynamic> msg) async {
+    List<Map<String, dynamic>> friends;
+    try {
+      friends = await ApiService().getFriends();
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not load contacts', type: ToastType.error);
+      }
+      return;
+    }
+    // Don't offer to forward to yourself.
+    friends =
+        friends.where((f) => f['id'].toString() != _myId).toList();
+    if (!mounted) return;
+    if (friends.isEmpty) {
+      showToast(context, 'No contacts to forward to', type: ToastType.info);
+      return;
+    }
+    final scheme = Theme.of(context).colorScheme;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.all(10),
+        constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.6),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 10),
+                width: 36,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: scheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Forward to',
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface)),
+                ),
+              ),
+              const Divider(height: 1),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: friends.length,
+                  itemBuilder: (_, i) {
+                    final f = friends[i];
+                    final name = (f['username'] ?? 'Friend').toString();
+                    final rawA = f['avatar_url'] as String?;
+                    final avatarUrl =
+                        (rawA != null && rawA.isNotEmpty) ? fullMediaUrl(rawA) : null;
+                    return ListTile(
+                      leading: CircleAvatar(
+                        radius: 20,
+                        backgroundColor: scheme.primary.withAlpha(38),
+                        backgroundImage: avatarUrl != null
+                            ? CachedNetworkImageProvider(avatarUrl)
+                            : null,
+                        child: avatarUrl == null
+                            ? Text(
+                                name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                style: TextStyle(color: scheme.primary))
+                            : null,
+                      ),
+                      title: Text(name),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _forwardTo(msg, f);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _forwardTo(
+      Map<String, dynamic> msg, Map<String, dynamic> friend) async {
+    final fid = friend['id'];
+    final fidInt = fid is int ? fid : int.tryParse(fid.toString());
+    if (fidInt == null) return;
+    final type = (msg['message_type'] as String?) ?? 'text';
+    final content = _stripQuote((msg['content'] as String?) ?? '');
+    try {
+      final sent = await ApiService().sendMessage(
+        fidInt,
+        content,
+        messageType: type,
+        mediaUrl: msg['media_url'] as String?,
+        mediaName: msg['media_name'] as String?,
+        mediaMime: msg['media_mime'] as String?,
+        mediaSize: (msg['media_size'] as num?)?.toInt(),
+        mediaDuration: (msg['media_duration'] as num?)?.toInt(),
+      );
+      if (!mounted) return;
+      if (sent != null) {
+        showToast(context, 'Forwarded to ${friend['username'] ?? 'contact'}',
+            type: ToastType.success);
+        // If forwarding into the currently-open thread, show it immediately.
+        if (fidInt == widget.friendId) {
+          setState(() {
+            if (!_messages.any((m) => m['id'] == sent['id'])) {
+              _messages.insert(0, sent);
+            }
+          });
+          _scrollToBottom();
+          _saveMessagesCache();
+        }
+      } else {
+        showToast(context, 'Could not forward', type: ToastType.error);
+      }
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not forward', type: ToastType.error);
       }
     }
   }
@@ -1003,7 +1426,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       showToast(context, msg, type: ToastType.error);
 
   // ── Media sharing ───────────────────────────────────────────────────────
-  /// Build a full URL from a relative attachment path (/attachments/<id>).
+  /// Build a full URL from a relative attachment path (`/attachments/<id>`).
   String fullMediaUrl(String rel) =>
       rel.startsWith('http') ? rel : '$_apiBase$rel';
 
@@ -1057,37 +1480,109 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     );
   }
 
+  /// Send a GIF sticker chosen from the GIF tab. The GIF lives on GIPHY's CDN,
+  /// so we send its remote URL as an image message — no upload needed, and the
+  /// bubble's CachedNetworkImage animates it. Closes the panel afterwards.
+  Future<void> _sendGif(String url) async {
+    setState(() => _showEmoji = false);
+    try {
+      final sent = await ApiService().sendMessage(
+        widget.friendId,
+        '',
+        messageType: 'image',
+        mediaUrl: url,
+        mediaName: 'sticker.gif',
+        mediaMime: 'image/gif',
+      );
+      if (sent != null && mounted) {
+        setState(() {
+          if (!_messages.any((m) => m['id'] == sent['id'])) {
+            _messages.insert(0, sent);
+          }
+        });
+        _scrollToBottom();
+        _saveMessagesCache();
+      } else if (mounted) {
+        showToast(context, 'Could not send GIF', type: ToastType.error);
+      }
+    } catch (_) {
+      if (mounted) showToast(context, 'Could not send GIF', type: ToastType.error);
+    }
+  }
+
   Future<void> _pickImage(ImageSource source) async {
     try {
       final x = await ImagePicker()
           .pickImage(source: source, imageQuality: 74, maxWidth: 1600);
       if (x == null) return;
       final bytes = await x.readAsBytes();
-      await _uploadAndSend(
-          bytes: bytes, filename: x.name, mime: 'image/jpeg', type: 'image');
+      await _previewAndSendImage(bytes, x.name, 'image/jpeg');
     } catch (_) {
       if (mounted) showToast(context, 'Could not pick image', type: ToastType.error);
     }
   }
 
+  /// Show a full-screen preview of the picked image with a caption box, so the
+  /// user can add a message and send image + text as ONE bubble. Returns
+  /// without sending if the user backs out of the preview.
+  Future<void> _previewAndSendImage(
+      Uint8List bytes, String filename, String mime) async {
+    if (!mounted) return;
+    final result = await Navigator.of(context).push<Map<String, dynamic>?>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _ImagePreviewScreen(
+          imageBytes: bytes,
+          friendName: widget.friendName,
+        ),
+      ),
+    );
+    // null → the user cancelled/backed out. Otherwise the map carries the
+    // (possibly annotated) bytes, its mime, and the caption.
+    if (result == null || !mounted) return;
+    final outBytes = (result['bytes'] as Uint8List?) ?? bytes;
+    final outMime = (result['mime'] as String?) ?? mime;
+    final caption = ((result['caption'] as String?) ?? '').trim();
+    // If the editor flattened to PNG, make the filename match so the server
+    // stores the right extension/content-type.
+    var outName = filename;
+    if (outMime == 'image/png' && !outName.toLowerCase().endsWith('.png')) {
+      final dot = outName.lastIndexOf('.');
+      outName = '${dot > 0 ? outName.substring(0, dot) : outName}.png';
+    }
+    await _uploadAndSend(
+      bytes: outBytes,
+      filename: outName,
+      mime: outMime,
+      type: 'image',
+      caption: caption,
+    );
+  }
+
   Future<void> _pickDocument() async {
     try {
-      final res = await FilePicker.pickFiles(withData: true);
+      final res = await FilePicker.pickFiles();
       if (res == null || res.files.isEmpty) return;
       final f = res.files.first;
-      final bytes = f.bytes;
-      if (bytes == null) {
-        if (mounted) showToast(context, 'Could not read file', type: ToastType.error);
-        return;
-      }
+      // readAsBytes() supersedes the deprecated withData/.bytes pair: it reads
+      // from the file path on native (no eager whole-file load) while still
+      // returning the in-memory bytes on web. A read failure throws and is
+      // caught by the surrounding try/catch below.
+      final bytes = await f.readAsBytes();
       final ext = (f.extension ?? '').toLowerCase();
       const imgExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-      await _uploadAndSend(
-        bytes: bytes,
-        filename: f.name,
-        mime: _mimeForExt(ext),
-        type: imgExt.contains(ext) ? 'image' : 'file',
-      );
+      if (imgExt.contains(ext)) {
+        // Images get the caption preview too, so a document-picked photo can
+        // still be sent with a message in a single bubble.
+        await _previewAndSendImage(bytes, f.name, _mimeForExt(ext));
+      } else {
+        await _uploadAndSend(
+          bytes: bytes,
+          filename: f.name,
+          mime: _mimeForExt(ext),
+          type: 'file',
+        );
+      }
     } catch (_) {
       if (mounted) showToast(context, 'Could not pick file', type: ToastType.error);
     }
@@ -1158,10 +1653,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         } catch (_) {}
       }
     } catch (_) {}
-    if (mounted) setState(() {
+    if (mounted) {
+      setState(() {
       _isRecording = false;
       _recordMs = 0;
     });
+    }
   }
 
   Future<void> _stopAndSendRecording() async {
@@ -1199,6 +1696,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     required String mime,
     required String type,
     int? durationMs,
+    String caption = '',
   }) async {
     setState(() => _uploadingMedia = true);
     try {
@@ -1210,7 +1708,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       }
       final sent = await ApiService().sendMessage(
         widget.friendId,
-        '',
+        // Caption travels as the message content, so an image + text render in
+        // ONE bubble (the bubble builder shows the image, then this text below).
+        caption,
         messageType: type,
         mediaUrl: up['url'] as String,
         mediaName: (up['name'] ?? filename) as String?,
@@ -1333,7 +1833,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           child: CachedNetworkImage(
             imageUrl: url,
             fit: BoxFit.cover,
-            placeholder: (_, __) => Container(
+            placeholder: (_, _) => Container(
               width: 200,
               height: 150,
               color: Colors.black.withAlpha(20),
@@ -1344,7 +1844,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     child: CircularProgressIndicator(strokeWidth: 2)),
               ),
             ),
-            errorWidget: (_, __, ___) => Container(
+            errorWidget: (_, _, _) => Container(
               width: 180,
               height: 120,
               color: Colors.black.withAlpha(20),
@@ -1376,8 +1876,25 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             top: 40,
             right: 12,
             child: IconButton(
+              // Dark translucent disc behind the icon so it stays visible over
+              // light/white images (a bare white icon vanished on them).
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.black.withAlpha(115),
+              ),
               icon: const Icon(Icons.close_rounded, color: Colors.white),
               onPressed: () => Navigator.pop(ctx),
+            ),
+          ),
+          Positioned(
+            top: 40,
+            left: 12,
+            child: IconButton(
+              tooltip: 'Save image',
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.black.withAlpha(115),
+              ),
+              icon: const Icon(Icons.download_rounded, color: Colors.white),
+              onPressed: () => _saveImage(url),
             ),
           ),
         ],
@@ -1468,12 +1985,42 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
   }
 
+  /// Download a shared image and hand it to the system sheet so the user can
+  /// save it to their gallery / Files. Reused by the image viewer's Save button.
+  Future<void> _saveImage(String url) async {
+    try {
+      if (mounted) showToast(context, 'Downloading…');
+      final res = await http.get(Uri.parse(url));
+      if (res.statusCode != 200) {
+        if (mounted) showToast(context, 'Download failed', type: ToastType.error);
+        return;
+      }
+      // Derive a sensible filename + extension from the URL.
+      var name = Uri.parse(url).pathSegments.isNotEmpty
+          ? Uri.parse(url).pathSegments.last
+          : '';
+      if (name.isEmpty || !name.contains('.')) {
+        name = 'aluta_image_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      }
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/$name');
+      await file.writeAsBytes(res.bodyBytes, flush: true);
+      await SharePlus.instance
+          .share(ShareParams(files: [XFile(file.path)]));
+    } catch (_) {
+      if (mounted) showToast(context, 'Could not save image', type: ToastType.error);
+    }
+  }
+
   // ── Message actions ───────────────────────────────────────────────────────
 
   void _showMessageMenu(BuildContext context, Map<String, dynamic> msg) {
     final isMe = msg['sender_id'].toString() == _myId;
     final content = msg['content'] as String? ?? '';
     final scheme = Theme.of(context).colorScheme;
+    // A tombstone (deleted for everyone, or locally deleted for me) has no
+    // content to react to / reply to / edit — gate those actions off.
+    final deleted = msg['is_deleted'] == true || msg['deleted_for_me'] == true;
 
     showModalBottomSheet(
       context: context,
@@ -1497,24 +2044,45 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              // Quick emoji reactions
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: ['👍', '❤️', '😂', '😮', '😢', '🙏'].map((e) {
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _addReaction(msg, e);
-                      },
-                      child: Text(e, style: const TextStyle(fontSize: 28)),
-                    );
-                  }).toList(),
+              // Quick emoji reactions + a "+" that opens the FULL emoji picker
+              // so any emoji can be used as a reaction, not just these six.
+              if (!deleted)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      ...['👍', '❤️', '😂', '😮', '😢', '🙏'].map((e) {
+                        return GestureDetector(
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _addReaction(msg, e);
+                          },
+                          child: Text(e, style: const TextStyle(fontSize: 28)),
+                        );
+                      }),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _showReactionEmojiPicker(msg);
+                        },
+                        child: Container(
+                          width: 38,
+                          height: 38,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: scheme.surfaceContainerHighest,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.add_rounded,
+                              size: 22, color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const Divider(height: 1),
+              if (!deleted) const Divider(height: 1),
               _ActionTile(
                 icon: Icons.reply_rounded,
                 label: 'Reply',
@@ -1524,6 +2092,21 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   FocusScope.of(context).requestFocus(FocusNode());
                 },
               ),
+              if (!deleted)
+                _ActionTile(
+                  icon: _isPinned(msg)
+                      ? Icons.push_pin
+                      : Icons.push_pin_outlined,
+                  label: _isPinned(msg) ? 'Unpin message' : 'Pin message',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    if (_isPinned(msg)) {
+                      _unpinMessage(msg);
+                    } else {
+                      _showPinDurationSheet(msg);
+                    }
+                  },
+                ),
               _ActionTile(
                 icon: Icons.copy_rounded,
                 label: 'Copy',
@@ -1533,17 +2116,17 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   showToast(context, 'Copied');
                 },
               ),
-              _ActionTile(
-                icon: Icons.forward_rounded,
-                label: 'Forward',
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _ctrl.text = _stripQuote(content);
-                },
-              ),
+              if (!deleted)
+                _ActionTile(
+                  icon: Icons.forward_rounded,
+                  label: 'Forward',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showForwardPicker(msg);
+                  },
+                ),
               if (isMe) ...[
-                if ((msg['message_type'] ?? 'text') == 'text' &&
-                    msg['is_deleted'] != true)
+                if ((msg['message_type'] ?? 'text') == 'text' && !deleted)
                   _ActionTile(
                     icon: Icons.edit_rounded,
                     label: 'Edit',
@@ -1572,6 +2155,62 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               ],
               const SizedBox(height: 8),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Full emoji picker for reactions — react with ANY emoji, not just the six
+  // quick ones. Opens as its own sheet; picking one adds the reaction.
+  void _showReactionEmojiPicker(Map<String, dynamic> msg) {
+    final scheme = Theme.of(context).colorScheme;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: SizedBox(
+          height: 320,
+          child: EmojiPicker(
+            // No textEditingController → the tapped emoji comes back here so we
+            // add it as a reaction instead of inserting it into the composer.
+            onEmojiSelected: (category, emoji) {
+              Navigator.pop(ctx);
+              _addReaction(msg, emoji.emoji);
+            },
+            config: Config(
+              height: 320,
+              emojiViewConfig: EmojiViewConfig(
+                emojiSizeMax: 26,
+                columns: 8,
+                backgroundColor: scheme.surface,
+                gridPadding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                recentsLimit: 40,
+                buttonMode: ButtonMode.MATERIAL,
+                noRecents: Text(
+                  'No recent emoji yet',
+                  style:
+                      TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+                ),
+              ),
+              categoryViewConfig: CategoryViewConfig(
+                backgroundColor: scheme.surfaceContainerHighest,
+                indicatorColor: scheme.primary,
+                iconColor: scheme.onSurfaceVariant,
+                iconColorSelected: scheme.primary,
+                dividerColor: scheme.outlineVariant.withAlpha(80),
+              ),
+              searchViewConfig: SearchViewConfig(
+                backgroundColor: scheme.surfaceContainerHighest,
+                buttonIconColor: scheme.primary,
+                hintText: 'Search emoji',
+              ),
+            ),
           ),
         ),
       ),
@@ -1694,6 +2333,19 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     return null;
   }
 
+  /// The name to show on a reply-quote header — the author of the ORIGINAL
+  /// quoted message, not of the reply. (Previously it used the reply's own
+  /// sender, so a friend replying to your message showed her name instead of
+  /// "You".) [replyIsMe] is only used as a fallback if the original isn't
+  /// loaded, where a reply almost always quotes the other person.
+  String _quotedAuthor(String quotedText, bool replyIsMe) {
+    final orig = _findQuotedMessage(quotedText);
+    if (orig != null) {
+      return orig['sender_id'].toString() == _myId ? 'You' : widget.friendName;
+    }
+    return replyIsMe ? widget.friendName : 'You';
+  }
+
   void _jumpToQuoted(String quoted) {
     final target = _findQuotedMessage(quoted);
     if (target == null) return;
@@ -1742,18 +2394,256 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       }
       return;
     }
-    // Delete for me: remove locally.
+    // Delete for me: leave a LOCAL tombstone ("You deleted this message") so I
+    // can see I deleted it, instead of the bubble silently vanishing. The
+    // backend hides the message from my future fetches (visible_to_* = false),
+    // and _merge keeps this local entry (it's never in a fetch again), so the
+    // tombstone persists across reconciles and restarts (it's cached too).
     final backup = Map<String, dynamic>.from(
         _messages.firstWhere((m) => m['id'] == id));
-    setState(() => _messages.removeWhere((m) => m['id'] == id));
+    setState(() {
+      final idx = _messages.indexWhere((m) => m['id'] == id);
+      if (idx != -1) {
+        _messages[idx]['deleted_for_me'] = true;
+        _messages[idx]['content'] = '';
+        _messages[idx]['message_type'] = 'text';
+        _messages[idx]['media_url'] = null;
+        _messages[idx]['reactions'] = null;
+      }
+    });
+    _scheduleCacheSave();
     try {
       await ApiService().deleteSingleMessage(id, deleteForAll: false);
       if (mounted) {
         showToast(context, 'Deleted for you', type: ToastType.info);
       }
     } catch (_) {
-      if (mounted) setState(() => _messages.insert(0, backup));
+      // Revert the tombstone if the server rejected the delete.
+      if (mounted) {
+        setState(() {
+          final idx = _messages.indexWhere((m) => m['id'] == id);
+          if (idx != -1) _messages[idx] = backup;
+        });
+      }
     }
+  }
+
+  // ── Pin a message (for a duration) ────────────────────────────────────────
+
+  /// True if [msg] is currently pinned (pinned_until is in the future).
+  bool _isPinned(Map<String, dynamic> msg) {
+    final p = msg['pinned_until'];
+    if (p == null) return false;
+    final dt = DateTime.tryParse(p.toString());
+    return dt != null && dt.isAfter(DateTime.now());
+  }
+
+  /// The message that should show in the pinned banner: the one with the
+  /// latest still-active pin (single-pin-per-conversation), or null.
+  Map<String, dynamic>? _activePinned() {
+    Map<String, dynamic>? best;
+    DateTime? bestUntil;
+    for (final m in _messages) {
+      if (m['is_deleted'] == true) continue;
+      final p = m['pinned_until'];
+      if (p == null) continue;
+      final dt = DateTime.tryParse(p.toString());
+      if (dt == null || !dt.isAfter(DateTime.now())) continue;
+      if (bestUntil == null || dt.isAfter(bestUntil)) {
+        best = m;
+        bestUntil = dt;
+      }
+    }
+    return best;
+  }
+
+  int _asId(dynamic id) => id is int ? id : int.tryParse(id.toString()) ?? -1;
+
+  /// WhatsApp-style duration chooser, then pins for the chosen span.
+  void _showPinDurationSheet(Map<String, dynamic> msg) {
+    final scheme = Theme.of(context).colorScheme;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 10),
+                width: 36,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: scheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding:
+                    const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                child: Row(
+                  children: [
+                    Icon(Icons.push_pin_rounded,
+                        size: 20, color: scheme.primary),
+                    const SizedBox(width: 10),
+                    Text('Pin this message for…',
+                        style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface)),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              _ActionTile(
+                icon: Icons.schedule_rounded,
+                label: '24 hours',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pinMessage(msg, 24);
+                },
+              ),
+              _ActionTile(
+                icon: Icons.schedule_rounded,
+                label: '7 days',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pinMessage(msg, 24 * 7);
+                },
+              ),
+              _ActionTile(
+                icon: Icons.schedule_rounded,
+                label: '30 days',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pinMessage(msg, 24 * 30);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pinMessage(Map<String, dynamic> msg, int hours) async {
+    final id = msg['id'];
+    // Optimistic: single active pin, so clear any other local pins first.
+    final optimisticUntil =
+        DateTime.now().toUtc().add(Duration(hours: hours)).toIso8601String();
+    setState(() {
+      for (final m in _messages) {
+        m['pinned_until'] = null;
+      }
+      final idx = _messages.indexWhere((m) => m['id'] == id);
+      if (idx != -1) _messages[idx]['pinned_until'] = optimisticUntil;
+    });
+    final res = await ApiService().pinMessage(_asId(id), hours);
+    if (!mounted) return;
+    if (res != null && res['pinned_until'] != null) {
+      setState(() {
+        final idx = _messages.indexWhere((m) => m['id'] == id);
+        if (idx != -1) _messages[idx]['pinned_until'] = res['pinned_until'];
+      });
+      showToast(context, 'Message pinned');
+    } else {
+      showToast(context, 'Could not pin message', type: ToastType.error);
+    }
+    _saveMessagesCache();
+  }
+
+  Future<void> _unpinMessage(Map<String, dynamic> msg) async {
+    final id = msg['id'];
+    setState(() {
+      final idx = _messages.indexWhere((m) => m['id'] == id);
+      if (idx != -1) _messages[idx]['pinned_until'] = null;
+    });
+    final ok = await ApiService().unpinMessage(_asId(id));
+    if (mounted) {
+      showToast(context, ok ? 'Message unpinned' : 'Could not unpin',
+          type: ok ? ToastType.info : ToastType.error);
+    }
+    _saveMessagesCache();
+  }
+
+  /// Scroll to a message by id and briefly highlight it.
+  void _jumpToMessage(String id) {
+    final ctx = _msgKeys[id]?.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 320),
+      alignment: 0.3,
+      curve: Curves.easeInOut,
+    );
+    HapticFeedback.selectionClick();
+    setState(() => _highlightedId = id);
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _highlightedId = null);
+    });
+  }
+
+  /// The banner shown at the top of the thread for the active pinned message.
+  Widget _buildPinnedBanner() {
+    final pinned = _activePinned();
+    if (pinned == null) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surfaceContainerHighest,
+      child: InkWell(
+        onTap: () => _jumpToMessage(pinned['id'].toString()),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(color: scheme.primary, width: 3),
+              bottom:
+                  BorderSide(color: scheme.outlineVariant.withAlpha(80)),
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+          child: Row(
+            children: [
+              Icon(Icons.push_pin_rounded, size: 18, color: scheme.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Pinned message',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.primary)),
+                    const SizedBox(height: 2),
+                    Text(
+                      _replyQuoteText(pinned),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 13, color: scheme.onSurface),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Unpin',
+                icon: Icon(Icons.close_rounded,
+                    size: 18, color: scheme.onSurfaceVariant),
+                onPressed: () => _unpinMessage(pinned),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // ── Strip reply quote ─────────────────────────────────────────────────────
@@ -1816,8 +2706,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       mainText = lines.skip(quoteLines.length + 1).join('\n').trim();
     }
 
-    // Tombstone: delete-for-everyone keeps the row but blanks its content.
-    final tomb = msg['is_deleted'] == true;
+    // Tombstone: delete-for-everyone (is_deleted) or delete-for-me
+    // (deleted_for_me, local) keeps the row but blanks its content.
+    final deletedForMe = msg['deleted_for_me'] == true;
+    final tomb = msg['is_deleted'] == true || deletedForMe;
     final reactions = tomb ? const <String>[] : _reactionsOf(msg);
     // Media attachment?
     final msgType = (msg['message_type'] as String?) ?? 'text';
@@ -1970,7 +2862,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                   size: 15, color: textColor.withAlpha(120)),
                               const SizedBox(width: 6),
                               Text(
-                                'This message was deleted',
+                                deletedForMe
+                                    ? 'You deleted this message'
+                                    : 'This message was deleted',
                                 style: TextStyle(
                                   color: textColor.withAlpha(160),
                                   fontStyle: FontStyle.italic,
@@ -1999,7 +2893,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  isMe ? 'You' : widget.friendName,
+                                  _quotedAuthor(quotedText, isMe),
                                   style: TextStyle(
                                     color: quoteBarColor,
                                     fontSize: 11,
@@ -2024,7 +2918,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         // ── Message body (media and/or text) ──────────
                         if (isMedia)
                           _mediaContent(
-                              msgType, mediaRel!, msg, isMe, textColor, scheme),
+                              msgType, mediaRel, msg, isMe, textColor, scheme),
                         if (!tomb && mainText.trim().isNotEmpty)
                           Padding(
                             padding: EdgeInsets.only(top: isMedia ? 6 : 0),
@@ -2158,14 +3052,38 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   Widget _buildTypingIndicator() {
     return Padding(
-      padding: const EdgeInsets.only(left: 44, bottom: 4),
-      child: Row(
+      // Top gap gives the indicator room to breathe below the last bubble
+      // (the list is reversed, so this padding sits ABOVE the indicator,
+      // between it and the most recent message). Was tight before.
+      padding: const EdgeInsets.only(left: 44, top: 12, bottom: 6),
+      child: Builder(builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        // Match the incoming-message bubble: clean white on light, charcoal on
+        // dark, with the same soft drop-shadow — so the dots read as a real
+        // "received" bubble rather than a flat grey pill.
+        final recvBubble =
+            isDark ? const Color(0xFF241E20) : Colors.white;
+        return Row(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(18),
+              color: recvBubble,
+              // Rounded like a bubble, with a slightly tighter bottom-left
+              // corner echoing the received-bubble tail side.
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(18),
+                topRight: Radius.circular(18),
+                bottomRight: Radius.circular(18),
+                bottomLeft: Radius.circular(6),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(isDark ? 46 : 20),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -2185,7 +3103,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             ),
           ),
         ],
-      ),
+        );
+      }),
     );
   }
 
@@ -2253,13 +3172,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(6),
                 child: CachedNetworkImage(
-                  imageUrl: fullMediaUrl(mediaRel!),
+                  imageUrl: fullMediaUrl(mediaRel),
                   width: 36,
                   height: 36,
                   fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(
+                  placeholder: (_, _) => Container(
                       width: 36, height: 36, color: scheme.surfaceContainerHigh),
-                  errorWidget: (_, __, ___) => Container(
+                  errorWidget: (_, _, _) => Container(
                       width: 36,
                       height: 36,
                       color: scheme.surfaceContainerHigh,
@@ -2610,20 +3529,92 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           Offstage(
             offstage: !_showEmoji,
             child: Container(
-              height: 262,
+              height: 306,
               decoration: BoxDecoration(
                 color: scheme.surface,
                 border: Border(
                   top: BorderSide(color: scheme.outlineVariant.withAlpha(90)),
                 ),
               ),
-              child: EmojiPicker(
-                onEmojiSelected: (_, emoji) {
-                  _ctrl
-                    ..text += emoji.emoji
-                    ..selection = TextSelection.fromPosition(
-                        TextPosition(offset: _ctrl.text.length));
-                },
+              child: Column(
+                children: [
+                  // Emoji / GIFs switcher.
+                  _emojiTabBar(scheme),
+                  Expanded(
+                    child: _emojiTab == 0
+                        ? _buildEmojiPicker(scheme)
+                        : GifPicker(onSelected: (g) => _sendGif(g.fullUrl)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Segmented Emoji / GIFs header for the panel.
+  Widget _emojiTabBar(ColorScheme scheme) {
+    Widget tab(String label, IconData icon, int index) {
+      final selected = _emojiTab == index;
+      return Expanded(
+        child: InkWell(
+          onTap: () => setState(() => _emojiTab = index),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: selected ? scheme.primary : Colors.transparent,
+                  width: 2,
+                ),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon,
+                    size: 18,
+                    color: selected
+                        ? scheme.primary
+                        : scheme.onSurfaceVariant),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight:
+                        selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected
+                        ? scheme.primary
+                        : scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      color: scheme.surfaceContainerHighest,
+      child: Row(
+        children: [
+          tab('Emoji', Icons.emoji_emotions_rounded, 0),
+          tab('GIFs', Icons.gif_box_rounded, 1),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmojiPicker(ColorScheme scheme) {
+    return EmojiPicker(
+                // When `textEditingController` is provided, EmojiPicker already
+                // inserts the tapped emoji into it (at the cursor). Do NOT also
+                // append it here — doing both made every emoji appear twice.
+                onEmojiSelected: (_, _) {},
                 textEditingController: _ctrl,
                 config: Config(
                   height: 262,
@@ -2659,12 +3650,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     hintText: 'Search emoji',
                   ),
                 ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+              );
   }
 
   // ── Main build ────────────────────────────────────────────────────────────
@@ -2680,6 +3666,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
     final body = Column(
       children: [
+        // Pinned-message banner (empty widget when nothing is pinned).
+        _buildPinnedBanner(),
         // Message list
         Expanded(
           // Rounded, bordered conversation card — consistent with the app's
@@ -2883,7 +3871,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           IconButton(
             tooltip: 'Call ${widget.friendName}',
             icon: const Icon(Icons.call_rounded),
-            onPressed: _callFriend,
+            onPressed: _showCallChoice,
           ),
           IconButton(
             tooltip: 'Listen together',
@@ -3447,4 +4435,543 @@ class _SwipeToReplyState extends State<_SwipeToReply>
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Image preview + lightweight annotation editor.
+//
+// Shown before an image is sent so the user can (a) draw freehand, (b) circle
+// something, (c) draw a focus box, (d) drop draggable emoji stickers, and add a
+// caption. All marks are stored in FRACTIONAL (0..1) canvas coordinates so they
+// stay aligned when the editor is captured at high resolution. On send, if any
+// edit exists the annotated image is flattened via RepaintBoundary → PNG so the
+// recipient sees exactly what the sender drew; otherwise the original bytes are
+// sent untouched. Returns a map {caption, bytes, mime} (or null if cancelled).
+// ─────────────────────────────────────────────────────────────────────────────
+enum _EditTool { move, pen, circle, box }
+
+class _PenStroke {
+  _PenStroke(this.color, this.width);
+  final Color color;
+  final double width;
+  final List<Offset> points = []; // fractional (0..1)
+}
+
+class _ShapeMark {
+  _ShapeMark(this.color, this.width, this.oval, this.start, this.end);
+  final Color color;
+  final double width;
+  final bool oval; // true = circle/oval, false = rectangle focus box
+  Offset start; // fractional
+  Offset end; // fractional
+}
+
+class _EmojiMark {
+  _EmojiMark(this.emoji, this.pos, this.size);
+  final String emoji;
+  Offset pos; // fractional centre (0..1)
+  double size; // logical font size
+}
+
+class _ImagePreviewScreen extends StatefulWidget {
+  const _ImagePreviewScreen({
+    required this.imageBytes,
+    required this.friendName,
+  });
+  final Uint8List imageBytes;
+  final String friendName;
+
+  @override
+  State<_ImagePreviewScreen> createState() => _ImagePreviewScreenState();
+}
+
+class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
+  final GlobalKey _boundaryKey = GlobalKey();
+  final TextEditingController _captionCtrl = TextEditingController();
+  // The editor canvas's on-screen size, captured in the LayoutBuilder. Used to
+  // scale strokes/emoji from display units up to the ORIGINAL image resolution
+  // when flattening, so the sent image stays sharp (not a blurry screen grab).
+  double _canvasW = 1;
+
+  final List<_PenStroke> _strokes = [];
+  final List<_ShapeMark> _shapes = [];
+  final List<_EmojiMark> _emojis = [];
+  // Chronological undo stack: which list the last-added mark went to.
+  final List<String> _history = [];
+
+  _EditTool _tool = _EditTool.move;
+  Color _color = const Color(0xFFFF3B30);
+  double _aspect = 1;
+  bool _busy = false;
+  bool _showEmojiTray = false;
+  _ShapeMark? _drafting; // shape being dragged out right now
+
+  static const List<Color> _palette = [
+    Color(0xFFFF3B30), // red
+    Color(0xFFFFCC00), // yellow
+    Color(0xFF34C759), // green
+    Color(0xFF0A84FF), // blue
+    Color(0xFFFFFFFF), // white
+    Color(0xFF1C1C1E), // near-black
+  ];
+  static const List<String> _emojiTray = [
+    '😀', '😂', '😍', '😎', '🥳', '👍', '🙏', '🔥', '❤️', '⭐',
+    '✅', '❌', '❗', '➡️', '⬅️', '⬆️', '⬇️', '⚡', '💯', '🎯',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Learn the image's aspect ratio so the editor canvas matches it exactly
+    // (no letterbox baked into the flattened result).
+    ui.decodeImageFromList(widget.imageBytes, (img) {
+      if (!mounted) return;
+      setState(() => _aspect = img.width / img.height);
+    });
+  }
+
+  @override
+  void dispose() {
+    _captionCtrl.dispose();
+    super.dispose();
+  }
+
+  void _addEmoji(String e) {
+    setState(() {
+      _emojis.add(_EmojiMark(e, const Offset(0.5, 0.5), 44));
+      _history.add('emoji');
+      _showEmojiTray = false;
+    });
+  }
+
+  void _undo() {
+    if (_history.isEmpty) return;
+    setState(() {
+      final last = _history.removeLast();
+      if (last == 'pen' && _strokes.isNotEmpty) {
+        _strokes.removeLast();
+      } else if (last == 'shape' && _shapes.isNotEmpty) {
+        _shapes.removeLast();
+      } else if (last == 'emoji' && _emojis.isNotEmpty) {
+        _emojis.removeLast();
+      }
+    });
+  }
+
+  bool get _hasEdits =>
+      _strokes.isNotEmpty || _shapes.isNotEmpty || _emojis.isNotEmpty;
+
+  Future<void> _send() async {
+    setState(() => _busy = true);
+    Uint8List outBytes = widget.imageBytes;
+    String mime = 'image/jpeg';
+    if (_hasEdits) {
+      final rendered = await _renderAnnotated();
+      if (rendered != null) {
+        outBytes = rendered;
+        mime = 'image/png';
+      }
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop(<String, dynamic>{
+      'caption': _captionCtrl.text,
+      'bytes': outBytes,
+      'mime': mime,
+    });
+  }
+
+  /// Flatten the annotations onto the ORIGINAL full-resolution image (rather
+  /// than screen-grabbing the small on-screen editor, which lost detail and
+  /// looked blurry). All marks are stored as fractional (0..1) coordinates, so
+  /// they map cleanly onto the real pixel dimensions; stroke/emoji sizes are
+  /// scaled by (imageWidth / canvasWidth) so the result matches what was drawn.
+  Future<Uint8List?> _renderAnnotated() async {
+    try {
+      final codec = await ui.instantiateImageCodec(widget.imageBytes);
+      final frame = await codec.getNextFrame();
+      final ui.Image src = frame.image;
+      final w = src.width.toDouble();
+      final h = src.height.toDouble();
+      final scale = _canvasW > 0 ? w / _canvasW : 1.0;
+
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, w, h));
+      canvas.drawImageRect(
+        src,
+        Rect.fromLTWH(0, 0, w, h),
+        Rect.fromLTWH(0, 0, w, h),
+        Paint(),
+      );
+
+      for (final st in _strokes) {
+        if (st.points.isEmpty) continue;
+        final paint = Paint()
+          ..color = st.color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = st.width * scale
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round;
+        final path = Path();
+        for (var i = 0; i < st.points.length; i++) {
+          final o = Offset(st.points[i].dx * w, st.points[i].dy * h);
+          if (i == 0) {
+            path.moveTo(o.dx, o.dy);
+          } else {
+            path.lineTo(o.dx, o.dy);
+          }
+        }
+        canvas.drawPath(path, paint);
+      }
+
+      void drawShape(_ShapeMark sh) {
+        final paint = Paint()
+          ..color = sh.color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = sh.width * scale;
+        final rect = Rect.fromPoints(
+          Offset(sh.start.dx * w, sh.start.dy * h),
+          Offset(sh.end.dx * w, sh.end.dy * h),
+        );
+        if (sh.oval) {
+          canvas.drawOval(rect, paint);
+        } else {
+          canvas.drawRRect(
+              RRect.fromRectAndRadius(rect, Radius.circular(8 * scale)), paint);
+        }
+      }
+
+      for (final sh in _shapes) {
+        drawShape(sh);
+      }
+
+      for (final em in _emojis) {
+        final tp = TextPainter(
+          text: TextSpan(
+              text: em.emoji, style: TextStyle(fontSize: em.size * scale)),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(canvas,
+            Offset(em.pos.dx * w - tp.width / 2, em.pos.dy * h - tp.height / 2));
+      }
+
+      final picture = recorder.endRecording();
+      final outImg = await picture.toImage(w.toInt(), h.toInt());
+      final bd = await outImg.toByteData(format: ui.ImageByteFormat.png);
+      return bd?.buffer.asUint8List();
+    } catch (_) {
+      return null; // fall back to the original bytes
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close_rounded),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Text('Send to ${widget.friendName}',
+            style: const TextStyle(fontSize: 16)),
+        actions: [
+          IconButton(
+            tooltip: 'Undo',
+            onPressed: _history.isEmpty ? null : _undo,
+            icon: Icon(Icons.undo_rounded,
+                color: _history.isEmpty ? Colors.white30 : Colors.white),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // ── Canvas ──────────────────────────────────────────────────────
+          Expanded(
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: _aspect,
+                child: RepaintBoundary(
+                  key: _boundaryKey,
+                  child: LayoutBuilder(builder: (ctx, c) {
+                    final w = c.maxWidth, h = c.maxHeight;
+                    _canvasW = w;
+                    Offset frac(Offset local) => Offset(
+                        (local.dx / w).clamp(0.0, 1.0),
+                        (local.dy / h).clamp(0.0, 1.0));
+                    final drawing = _tool != _EditTool.move;
+                    return Stack(
+                      children: [
+                        Positioned.fill(
+                          child: Image.memory(widget.imageBytes,
+                              fit: BoxFit.fill),
+                        ),
+                        // Drawing layer (pen / circle / box).
+                        Positioned.fill(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onPanStart: !drawing
+                                ? null
+                                : (d) {
+                                    final f = frac(d.localPosition);
+                                    setState(() {
+                                      if (_tool == _EditTool.pen) {
+                                        final st = _PenStroke(_color, 3);
+                                        st.points.add(f);
+                                        _strokes.add(st);
+                                        _history.add('pen');
+                                      } else {
+                                        _drafting = _ShapeMark(
+                                            _color,
+                                            3,
+                                            _tool == _EditTool.circle,
+                                            f,
+                                            f);
+                                      }
+                                    });
+                                  },
+                            onPanUpdate: !drawing
+                                ? null
+                                : (d) {
+                                    final f = frac(d.localPosition);
+                                    setState(() {
+                                      if (_tool == _EditTool.pen &&
+                                          _strokes.isNotEmpty) {
+                                        _strokes.last.points.add(f);
+                                      } else if (_drafting != null) {
+                                        _drafting!.end = f;
+                                      }
+                                    });
+                                  },
+                            onPanEnd: !drawing
+                                ? null
+                                : (_) {
+                                    setState(() {
+                                      if (_drafting != null) {
+                                        _shapes.add(_drafting!);
+                                        _history.add('shape');
+                                        _drafting = null;
+                                      }
+                                    });
+                                  },
+                            child: CustomPaint(
+                              painter: _AnnotationPainter(
+                                  _strokes, _shapes, _drafting),
+                            ),
+                          ),
+                        ),
+                        // Emoji stickers (draggable).
+                        ..._emojis.map((em) => Positioned(
+                              left: em.pos.dx * w - em.size / 2,
+                              top: em.pos.dy * h - em.size / 2,
+                              child: GestureDetector(
+                                onPanUpdate: (d) {
+                                  setState(() {
+                                    em.pos += Offset(
+                                        d.delta.dx / w, d.delta.dy / h);
+                                    em.pos = Offset(em.pos.dx.clamp(0.0, 1.0),
+                                        em.pos.dy.clamp(0.0, 1.0));
+                                  });
+                                },
+                                child: Text(em.emoji,
+                                    style: TextStyle(fontSize: em.size)),
+                              ),
+                            )),
+                      ],
+                    );
+                  }),
+                ),
+              ),
+            ),
+          ),
+          // ── Emoji tray (toggled) ────────────────────────────────────────
+          if (_showEmojiTray)
+            Container(
+              height: 52,
+              color: Colors.black,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                itemCount: _emojiTray.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 6),
+                itemBuilder: (_, i) => GestureDetector(
+                  onTap: () => _addEmoji(_emojiTray[i]),
+                  child: Center(
+                    child: Text(_emojiTray[i],
+                        style: const TextStyle(fontSize: 26)),
+                  ),
+                ),
+              ),
+            ),
+          // ── Tool + colour bar ───────────────────────────────────────────
+          Container(
+            color: Colors.black,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(
+              children: [
+                _toolBtn(Icons.pan_tool_alt_rounded, _EditTool.move, 'Move'),
+                _toolBtn(Icons.edit_rounded, _EditTool.pen, 'Draw'),
+                _toolBtn(Icons.circle_outlined, _EditTool.circle, 'Circle'),
+                _toolBtn(
+                    Icons.crop_square_rounded, _EditTool.box, 'Focus box'),
+                IconButton(
+                  tooltip: 'Emoji',
+                  onPressed: () =>
+                      setState(() => _showEmojiTray = !_showEmojiTray),
+                  icon: Icon(Icons.emoji_emotions_rounded,
+                      color: _showEmojiTray
+                          ? scheme.primary
+                          : Colors.white70),
+                ),
+                const Spacer(),
+                // Colour swatches.
+                for (final col in _palette)
+                  GestureDetector(
+                    onTap: () => setState(() => _color = col),
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      decoration: BoxDecoration(
+                        color: col,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: _color == col
+                              ? Colors.white
+                              : Colors.white24,
+                          width: _color == col ? 2.5 : 1,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // ── Caption + send ──────────────────────────────────────────────
+          Container(
+            color: Colors.black,
+            padding: EdgeInsets.only(
+              left: 12,
+              right: 12,
+              top: 6,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 10,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _captionCtrl,
+                    minLines: 1,
+                    maxLines: 4,
+                    style: const TextStyle(color: Colors.white),
+                    cursorColor: scheme.primary,
+                    decoration: InputDecoration(
+                      hintText: 'Add a caption…',
+                      hintStyle: const TextStyle(color: Colors.white54),
+                      filled: true,
+                      fillColor: Colors.white10,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: _busy ? null : _send,
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: scheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: _busy
+                        ? const Padding(
+                            padding: EdgeInsets.all(13),
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.send_rounded,
+                            color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _toolBtn(IconData icon, _EditTool tool, String tip) {
+    final selected = _tool == tool;
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      tooltip: tip,
+      onPressed: () => setState(() => _tool = tool),
+      icon: Icon(icon, color: selected ? scheme.primary : Colors.white70),
+    );
+  }
+}
+
+class _AnnotationPainter extends CustomPainter {
+  _AnnotationPainter(this.strokes, this.shapes, this.draft);
+  final List<_PenStroke> strokes;
+  final List<_ShapeMark> shapes;
+  final _ShapeMark? draft;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final st in strokes) {
+      if (st.points.isEmpty) continue;
+      final paint = Paint()
+        ..color = st.color
+        ..strokeWidth = st.width
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+      final path = Path();
+      for (var i = 0; i < st.points.length; i++) {
+        final o = Offset(
+            st.points[i].dx * size.width, st.points[i].dy * size.height);
+        if (i == 0) {
+          path.moveTo(o.dx, o.dy);
+        } else {
+          path.lineTo(o.dx, o.dy);
+        }
+      }
+      canvas.drawPath(path, paint);
+    }
+    void drawShape(_ShapeMark sh) {
+      final paint = Paint()
+        ..color = sh.color
+        ..strokeWidth = sh.width
+        ..style = PaintingStyle.stroke;
+      final rect = Rect.fromPoints(
+        Offset(sh.start.dx * size.width, sh.start.dy * size.height),
+        Offset(sh.end.dx * size.width, sh.end.dy * size.height),
+      );
+      if (sh.oval) {
+        canvas.drawOval(rect, paint);
+      } else {
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(rect, const Radius.circular(8)), paint);
+      }
+    }
+
+    for (final sh in shapes) {
+      drawShape(sh);
+    }
+    if (draft != null) drawShape(draft!);
+  }
+
+  @override
+  bool shouldRepaint(covariant _AnnotationPainter old) => true;
 }

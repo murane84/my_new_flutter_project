@@ -114,6 +114,27 @@ class LiveSessionScreen extends StatefulWidget {
 /// mounted to handle `onEnded`). Clearing the notifier hides the live banner.
 void _handleMinimizedEnd(String reason) {
   final s = activeLiveSession;
+  // A transport glitch while minimised should NOT kill the session — try to
+  // reconnect quietly in the background (host keeps playing locally; a listener
+  // rebuffers). Only a real end ('host_left' / 'host_ended' / 'ended') falls
+  // through to teardown. If the background reconnect fails, tear down then.
+  if (s != null && reason == 'disconnected') {
+    final c = s.controller;
+    final Future<void> attempt = s.role == LiveRole.host
+        ? c.reconnectAsHost(myUserId: s.myUserId, token: s.token)
+        : c.reconnectAsListener(
+            sessionId: c.sessionId ?? '',
+            myUserId: s.myUserId,
+            token: s.token,
+          );
+    attempt.catchError((_) => _finalizeMinimizedEnd());
+    return;
+  }
+  _finalizeMinimizedEnd();
+}
+
+void _finalizeMinimizedEnd() {
+  final s = activeLiveSession;
   activeLiveSession = null;
   liveSessionNotifier.stop();
   s?.controller.dispose();
@@ -131,6 +152,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   // True once the user intentionally leaves/ends (so a socket close doesn't
   // pop the reconnect prompt).
   bool _leaving = false;
+  // Host side: the listener announced a deliberate 'leaving', so a following
+  // 'peer_left' should NOT be relabelled as "lost connection".
+  bool _peerGoneGraceful = false;
 
   bool get _isHost => widget.role == LiveRole.host;
 
@@ -260,11 +284,28 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
       case 'peer_joined':
         setState(() {
           _lostConnection = false;
+          _peerGoneGraceful = false;
           _status = '${widget.peerName} joined — listening together';
         });
         break;
+      case 'leaving':
+        // Listener left on purpose (host side).
+        setState(() {
+          _peerGoneGraceful = true;
+          _status = '${widget.peerName} left the session';
+        });
+        break;
       case 'peer_left':
-        setState(() => _status = '${widget.peerName} left');
+        // Listener's socket dropped (host side). Only relabel as a connection
+        // loss if they didn't just announce a deliberate leave.
+        if (!_peerGoneGraceful) {
+          setState(() => _status = '${widget.peerName} lost connection');
+        }
+        break;
+      case 'host_reconnecting':
+        // Listener side: the host had a network glitch. Show a waiting state
+        // (playback was paused by the controller) until they come back.
+        setState(() => _status = '${widget.peerName} reconnecting…');
         break;
       case 'meta':
       case 'track_change':
@@ -291,14 +332,24 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
 
   void _onEnded(String reason) {
     if (!mounted || _leaving) return;
-    // A transport drop (not an explicit host end) → let a listener reconnect
-    // instead of closing the session on them.
-    if (!_isHost && reason == 'disconnected') {
-      setState(() {
-        _lostConnection = true;
-        _ready = false;
-        _status = 'Connection lost';
-      });
+    // A transport drop (not an explicit host end) → keep the session alive and
+    // reconnect instead of closing it. The host's local playback keeps going,
+    // so we auto-reconnect it silently; a listener stopped hearing audio, so we
+    // surface a "Connection lost" state with a Reconnect button.
+    if (reason == 'disconnected') {
+      if (_isHost) {
+        setState(() {
+          _ready = false;
+          _status = 'Reconnecting…';
+        });
+        _reconnect(); // auto-attempt; falls back to a manual button on failure
+      } else {
+        setState(() {
+          _lostConnection = true;
+          _ready = false;
+          _status = 'Connection lost';
+        });
+      }
       return;
     }
     final msg = reason == 'host_left' || reason == 'host_ended'
@@ -315,18 +366,29 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
       _status = 'Reconnecting…';
     });
     try {
-      await _c.reconnectAsListener(
-        // Prefer the controller's live session id so reconnect still works
-        // after the popup was minimised and reopened (widget.sessionId is null
-        // on a resumed screen).
-        sessionId: _c.sessionId ?? widget.sessionId ?? '',
-        myUserId: widget.myUserId,
-        token: widget.token,
-      );
+      if (_isHost) {
+        // Host keeps its local player/queue; just re-establish the pipe. The
+        // server re-drives the re-stream to the listener via `peer_joined`.
+        await _c.reconnectAsHost(
+          myUserId: widget.myUserId,
+          token: widget.token,
+        );
+      } else {
+        await _c.reconnectAsListener(
+          // Prefer the controller's live session id so reconnect still works
+          // after the popup was minimised and reopened (widget.sessionId is
+          // null on a resumed screen).
+          sessionId: _c.sessionId ?? widget.sessionId ?? '',
+          myUserId: widget.myUserId,
+          token: widget.token,
+        );
+      }
       if (mounted) {
         setState(() {
           _ready = true;
-          _status = 'Rejoining ${widget.peerName}…';
+          _status = _isHost
+              ? 'Reconnected — resuming with ${widget.peerName}…'
+              : 'Rejoining ${widget.peerName}…';
         });
       }
     } catch (_) {
@@ -349,9 +411,14 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     // popup. Teardown of the controller happens in this State's dispose();
     // for the host we also best-effort tell the server the session is over.
     _leaving = true;
-    _dismiss();
     if (_isHost) {
+      _dismiss();
       unawaited(_c.endSession(widget.token));
+    } else {
+      // Tell the host we're leaving on purpose BEFORE the socket closes, so
+      // they see "left the session" rather than "lost connection".
+      _c.notifyLeaving();
+      _dismiss();
     }
   }
 
@@ -764,7 +831,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     );
   }
 
-  // Shown when a listener's connection drops — offer to rejoin.
+  // Shown when the connection drops — offer to reconnect. For the host this
+  // only appears if the automatic reconnect couldn't get through; for the
+  // listener it's the normal "rejoin" prompt.
   Widget _buildReconnect(ColorScheme scheme) {
     return Padding(
       padding: const EdgeInsets.only(top: 20),
@@ -779,7 +848,10 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'If ${widget.peerName} is still live, you can rejoin.',
+            _isHost
+                ? 'Your session is still open — reconnect to keep sharing with '
+                    '${widget.peerName}.'
+                : 'If ${widget.peerName} is still live, you can rejoin.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),

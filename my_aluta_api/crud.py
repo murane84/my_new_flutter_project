@@ -252,7 +252,14 @@ def get_friends_with_unread_counts(db: Session, user_id: int):
                 username=friend.username,
                 is_online=friend.is_online and is_recently_active(friend.last_seen),
                 last_timestamp=last_message.timestamp.strftime('%Y-%m-%d %H:%M') if last_message else None,
-                last_message=last_message.content if last_message else "",
+                # A deleted-for-everyone message keeps its row (tombstone) but has
+                # blank content; show the tombstone text in the list preview so
+                # the receiver sees the deletion instead of an empty last line.
+                last_message=(
+                    "This message was deleted"
+                    if last_message and last_message.is_deleted
+                    else (last_message.content if last_message else "")
+                ),
                 unread_count=unread_count,
                 last_sender_id=last_message.sender_id if last_message else None,
                 last_message_delivered=last_message.delivered if last_message else None,

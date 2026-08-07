@@ -80,7 +80,7 @@ class AuthPage extends StatelessWidget {
                     fit: BoxFit.contain,
                     color: wmColor,
                     colorBlendMode: BlendMode.srcIn,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
                   ),
                 ),
               ),
@@ -114,7 +114,7 @@ class AuthPage extends StatelessWidget {
                         child: Image.asset(
                           'assets/images/logo.png',
                           fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => Icon(
+                          errorBuilder: (_, _, _) => Icon(
                             Icons.forum_rounded,
                             size: 48,
                             color: primary,

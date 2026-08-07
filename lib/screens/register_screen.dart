@@ -209,7 +209,7 @@ class RegisterPageState extends State<RegisterPage> {
                     fit: BoxFit.contain,
                     color: wmColor,
                     colorBlendMode: BlendMode.srcIn,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
                   ),
                 ),
               ),

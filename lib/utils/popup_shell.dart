@@ -13,8 +13,8 @@ Future<T?> showAppPopup<T>(BuildContext context, Widget child) async {
     barrierLabel: 'Dismiss',
     barrierColor: Colors.black.withAlpha(90),
     transitionDuration: const Duration(milliseconds: 240),
-    pageBuilder: (_, __, ___) => child,
-    transitionBuilder: (_, anim, __, c) {
+    pageBuilder: (_, _, _) => child,
+    transitionBuilder: (_, anim, _, c) {
       final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
       return FadeTransition(
         opacity: curved,
@@ -124,7 +124,7 @@ class AppPopupShell extends StatelessWidget {
                                 fontSize: 16.5, fontWeight: FontWeight.w700),
                           ),
                         ),
-                        if (headerAction != null) headerAction!,
+                        ?headerAction,
                         IconButton(
                           tooltip: 'Close',
                           icon: const Icon(Icons.close_rounded),

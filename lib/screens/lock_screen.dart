@@ -112,7 +112,7 @@ class _LockScreenState extends State<LockScreen> {
                         child: Image.asset(
                           'assets/images/logo.png',
                           fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) =>
+                          errorBuilder: (_, _, _) =>
                               Icon(Icons.forum_rounded, size: 40, color: primary),
                         ),
                       ),

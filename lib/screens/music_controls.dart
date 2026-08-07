@@ -113,6 +113,16 @@ class _MusicControlsState extends State<MusicControls>
       // Establish the media/foreground state immediately so the session is
       // protected from background-kill from the very start.
       _pushLiveToAmbient();
+    } else {
+      // The live session just ended (or was cleared). Control reverts to the
+      // local music player, so re-sync the ambient now-playing bar + media
+      // notification to its REAL state right now. Without this the last live
+      // update (playing: true) stays latched: the paused local player emits no
+      // fresh state event to correct it, so the footer play/pause button
+      // freezes showing the stopped live track as if it were still playing.
+      nowPlayingNotifier.update(
+          track: _trackName, artist: _artistName, playing: _player.playing);
+      _pushMediaState();
     }
     if (mounted) setState(() {});
   }
@@ -241,7 +251,6 @@ class _MusicControlsState extends State<MusicControls>
   final LayerLink _volumeLink = LayerLink();
   // True while the first-open device scan is running (drives the sheet loader).
   bool _scanning = false;
-  bool _scannedOnce = false;
 
   late AnimationController _discCtrl;
   late AnimationController _playlistCtrl;
@@ -984,7 +993,6 @@ class _MusicControlsState extends State<MusicControls>
     if (!_isMobile) {
       // Desktop/web: the file picker opens the sheet itself on success.
       await _pickDesktop();
-      _scannedOnce = true;
       return;
     }
     // Android first-open: show the sheet with a loading animation, then scan.
@@ -996,7 +1004,6 @@ class _MusicControlsState extends State<MusicControls>
     try {
       await _scanIntoPlaylist();
     } finally {
-      _scannedOnce = true;
       if (mounted) setState(() => _scanning = false);
       // If the scan found nothing, close the empty sheet again.
       if (mounted && _playlist.isEmpty) _closePlaylist();
@@ -2790,7 +2797,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                         key: _nowKey,
                         child: AnimatedBuilder(
                           animation: _pulseCtrl,
-                          builder: (_, __) => buildRow(),
+                          builder: (_, _) => buildRow(),
                         ),
                       );
                     },

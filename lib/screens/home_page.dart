@@ -2006,41 +2006,66 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         // Reserve just enough chat space for the now-playing bar (grab handle +
         // title + progress row) so it sits flush under the composer with no gap.
         final barSpace = 70.0;
-        final h = constraints.maxHeight;
 
         return Stack(
           children: [
-            // Chat surface — full width, leaving room only for the full bar.
+            // Chat surface — full width; reserve room for the collapsed bar.
+            // AnimatedPadding so the reflow eases in step with the bar's genie.
             Positioned.fill(
-              child: Padding(
+              child: AnimatedPadding(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
                 padding: EdgeInsets.only(
                     bottom: (_playerExpanded || !barVisible) ? 0 : barSpace),
                 child: _buildChatContent(context, phone: true),
               ),
             ),
 
-            // The one, always-mounted player. Off-screen (top = h) when
-            // collapsed → State (and the AudioPlayer) stay alive; slides to
-            // the top when expanded.
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 320),
-              curve: Curves.easeOutCubic,
-              left: 0,
-              right: 0,
-              height: h,
-              top: _playerExpanded ? 0 : h,
-              child: _buildPhonePlayerSheet(context),
+            // Full player — ALWAYS mounted (AudioPlayer stays alive). Instead of
+            // sliding from the top it now "genie" scales into / out of the
+            // footer-pill spot (bottom-centre anchor, smooth, no bounce), so it
+            // reads as being pulled out of the button and sucked back into it.
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: !_playerExpanded,
+                child: AnimatedScale(
+                  scale: _playerExpanded ? 1.0 : 0.0,
+                  alignment: Alignment.bottomCenter,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic,
+                  child: AnimatedOpacity(
+                    opacity: _playerExpanded ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOut,
+                    child: _buildPhonePlayerSheet(context),
+                  ),
+                ),
+              ),
             ),
 
-            // Collapsed now-playing bar (hidden while expanded or dismissed).
-            if (barVisible)
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 260),
-                curve: Curves.easeOut,
+            // Collapsed now-playing bar. Kept mounted while a track is loaded so
+            // it can genie-scale DOWN into the footer pill on dismiss and back
+            // OUT of it on resume (bottom-centre anchor, no bounce).
+            if (hasTrack && !_playerExpanded)
+              Positioned(
                 left: 0,
                 right: 0,
-                bottom: _playerExpanded ? -barSpace : 0,
-                child: _buildNowPlayingBar(context),
+                bottom: 0,
+                child: IgnorePointer(
+                  ignoring: _barDismissed,
+                  child: AnimatedScale(
+                    scale: _barDismissed ? 0.0 : 1.0,
+                    alignment: Alignment.bottomCenter,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOutCubic,
+                    child: AnimatedOpacity(
+                      opacity: _barDismissed ? 0.0 : 1.0,
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOut,
+                      child: _buildNowPlayingBar(context),
+                    ),
+                  ),
+                ),
               ),
 
             // When collapsed the entry point is a compact chip docked in the

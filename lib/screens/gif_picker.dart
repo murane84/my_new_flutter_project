@@ -51,6 +51,9 @@ class _GifPickerState extends State<GifPicker> {
   // Human-readable reason for the last failure (bad key, rate limit, network),
   // shown under the error state so issues like a rejected key are obvious.
   String? _errorDetail;
+  // false = GIFs, true = Stickers (GIPHY serves them from a separate endpoint;
+  // stickers are transparent animated GIFs). Toggled by the header switch.
+  bool _stickers = false;
 
   @override
   void initState() {
@@ -81,15 +84,19 @@ class _GifPickerState extends State<GifPicker> {
     });
     }
     try {
+      // GIFs and stickers share the same API/key but live on different paths.
+      final kind = _stickers ? 'stickers' : 'gifs';
       final endpoint = query.isEmpty
-          ? 'https://api.giphy.com/v1/gifs/trending'
-          : 'https://api.giphy.com/v1/gifs/search';
+          ? 'https://api.giphy.com/v1/$kind/trending'
+          : 'https://api.giphy.com/v1/$kind/search';
       final uri = Uri.parse(endpoint).replace(queryParameters: {
         'api_key': kGiphyApiKey,
         if (query.isNotEmpty) 'q': query,
         'limit': '30',
         'rating': 'pg-13',
-        'bundle': 'messaging_non_clips',
+        // messaging_non_clips is a GIF messaging rendition bundle; it doesn't
+        // apply to stickers, so only send it in GIF mode.
+        if (!_stickers) 'bundle': 'messaging_non_clips',
       });
       final res = await http.get(uri).timeout(const Duration(seconds: 12));
       if (res.statusCode != 200) {
@@ -153,7 +160,7 @@ class _GifPickerState extends State<GifPicker> {
               decoration: InputDecoration(
                 isDense: true,
                 prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                hintText: 'Search GIFs',
+                hintText: _stickers ? 'Search stickers' : 'Search GIFs',
                 hintStyle: TextStyle(color: scheme.onSurfaceVariant),
                 filled: true,
                 fillColor: scheme.surfaceContainerHighest,
@@ -175,6 +182,7 @@ class _GifPickerState extends State<GifPicker> {
             ),
           ),
         ),
+        _modeToggle(scheme),
         Expanded(child: _buildGrid(scheme)),
         // GIPHY attribution (required by their terms).
         Padding(
@@ -188,6 +196,47 @@ class _GifPickerState extends State<GifPicker> {
           ),
         ),
       ],
+    );
+  }
+
+  /// Compact GIFs / Stickers switch. Selecting the other mode re-fetches with
+  /// the current search query.
+  Widget _modeToggle(ColorScheme scheme) {
+    Widget pill(String label, bool stickers) {
+      final selected = _stickers == stickers;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () {
+            if (_stickers == stickers) return;
+            setState(() => _stickers = stickers);
+            _fetch(_searchCtrl.text.trim());
+          },
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            decoration: BoxDecoration(
+              color: selected
+                  ? scheme.primary
+                  : scheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+      child: Row(children: [pill('GIFs', false), pill('Stickers', true)]),
     );
   }
 
@@ -236,7 +285,7 @@ class _GifPickerState extends State<GifPicker> {
     }
     if (_gifs.isEmpty) {
       return Center(
-        child: Text('No GIFs found',
+        child: Text(_stickers ? 'No stickers found' : 'No GIFs found',
             style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
       );
     }

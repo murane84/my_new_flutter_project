@@ -2254,11 +2254,24 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // message bubbles. Tap to bring the player back.
   Widget _footerMusicChip(ColorScheme scheme) {
     final title = nowPlayingNotifier.track;
+    final style = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: scheme.primary,
+    );
+    // Bring the collapsed now-playing bar back above the footer (no full panel).
+    void resumeBar() => setState(() => _barDismissed = false);
+    // Jump straight to the full player panel.
+    void openPanel() => setState(() {
+          _barDismissed = false;
+          _playerExpanded = true;
+        });
     return GestureDetector(
-      onTap: () => setState(() {
-        _barDismissed = false;
-        _playerExpanded = true;
-      }),
+      // Single tap only resurfaces the bar; long-press OR double-tap opens the
+      // full music panel (the bar's swipe-up handle still opens it too).
+      onTap: resumeBar,
+      onDoubleTap: openPanel,
+      onLongPress: openPanel,
       behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -2272,17 +2285,14 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           children: [
             Icon(Icons.music_note_rounded, size: 15, color: scheme.primary),
             const SizedBox(width: 5),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 120),
-              child: Text(
-                title.isEmpty ? 'Music' : title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: scheme.primary,
-                ),
+            // Marquee the title (only scrolls when it overflows) so long song
+            // names stay readable inside the compact pill.
+            SizedBox(
+              width: 120,
+              height: 16,
+              child: _ScrollingText(
+                text: title.isEmpty ? 'Music' : title,
+                style: style,
               ),
             ),
           ],

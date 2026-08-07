@@ -20,6 +20,7 @@ import '../utils/time_utils.dart';
 import '../utils/file_bytes.dart';
 import '../utils/marquee_text.dart';
 import 'live_session_screen.dart';
+import '../services/live_session_service.dart' show activeLiveSession;
 import 'gif_picker.dart';
 import '../services/call_service.dart';
 import 'home_page.dart' show playlistNotifier, playbackBus;
@@ -778,6 +779,43 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   /// music player's already-loaded playlist (falling back to the file browser
   /// only when nothing is loaded yet).
   Future<void> _startListenTogether() async {
+    // Only ONE live session can run at a time (single global controller +
+    // player). Starting a second one would clobber the first — its UI would
+    // vanish and it couldn't be resurfaced. So if a session is already active,
+    // don't start a new one; offer to reopen the existing one instead.
+    final existing = activeLiveSession;
+    if (existing != null) {
+      final open = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Already listening together'),
+          content: Text(
+            "You're already in a Listen Together session with "
+            "${existing.peerName}. End that one before starting a new session.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('Open ${existing.peerName}'),
+            ),
+          ],
+        ),
+      );
+      if (open == true && mounted) {
+        // Resurface the existing (possibly minimised) session's UI.
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => LiveSessionScreen.resume(),
+        );
+      }
+      return;
+    }
+
     final token = await getToken();
     final myUserId = int.tryParse(_myId ?? '');
     if (token == null || myUserId == null) {
@@ -1280,7 +1318,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         radius: 20,
                         backgroundColor: scheme.primary.withAlpha(38),
                         backgroundImage: avatarUrl != null
-                            ? CachedNetworkImageProvider(avatarUrl)
+                            ? CachedNetworkImageProvider(avatarUrl,
+                                headers: mediaAuthHeaders(avatarUrl))
                             : null,
                         child: avatarUrl == null
                             ? Text(
@@ -1832,6 +1871,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               maxWidth: 240, maxHeight: 300, minWidth: 120, minHeight: 80),
           child: CachedNetworkImage(
             imageUrl: url,
+            httpHeaders: mediaAuthHeaders(url),
             fit: BoxFit.cover,
             placeholder: (_, _) => Container(
               width: 200,
@@ -1868,7 +1908,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               child: InteractiveViewer(
                 minScale: 0.8,
                 maxScale: 4,
-                child: CachedNetworkImage(imageUrl: url, fit: BoxFit.contain),
+                child: CachedNetworkImage(
+                    imageUrl: url,
+                    httpHeaders: mediaAuthHeaders(url),
+                    fit: BoxFit.contain),
               ),
             ),
           ),
@@ -1974,12 +2017,28 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   Future<void> _openUrl(String url) async {
+    // Attachments are auth-protected now, so an external browser can't fetch
+    // them. Download the bytes WITH our token, then hand the file to the system
+    // sheet (open / save / share) — same pattern as saving an image.
     try {
-      final ok = await launchUrl(Uri.parse(url),
-          mode: LaunchMode.externalApplication);
-      if (!ok && mounted) {
-        showToast(context, 'Could not open file', type: ToastType.error);
+      if (mounted) showToast(context, 'Opening…');
+      final res = await http.get(Uri.parse(url), headers: mediaAuthHeaders(url));
+      if (res.statusCode != 200) {
+        if (mounted) {
+          showToast(context, 'Could not open file', type: ToastType.error);
+        }
+        return;
       }
+      var name = Uri.parse(url).pathSegments.isNotEmpty
+          ? Uri.parse(url).pathSegments.last
+          : '';
+      if (name.isEmpty) {
+        name = 'aluta_file_${DateTime.now().millisecondsSinceEpoch}';
+      }
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/$name');
+      await file.writeAsBytes(res.bodyBytes, flush: true);
+      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
     } catch (_) {
       if (mounted) showToast(context, 'Could not open file', type: ToastType.error);
     }
@@ -1990,7 +2049,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   Future<void> _saveImage(String url) async {
     try {
       if (mounted) showToast(context, 'Downloading…');
-      final res = await http.get(Uri.parse(url));
+      final res = await http.get(Uri.parse(url), headers: mediaAuthHeaders(url));
       if (res.statusCode != 200) {
         if (mounted) showToast(context, 'Download failed', type: ToastType.error);
         return;
@@ -2349,19 +2408,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   void _jumpToQuoted(String quoted) {
     final target = _findQuotedMessage(quoted);
     if (target == null) return;
-    final ctx = _msgKeys[target['id'].toString()]?.currentContext;
-    if (ctx == null) return;
-    Scrollable.ensureVisible(
-      ctx,
-      duration: const Duration(milliseconds: 320),
-      alignment: 0.3,
-      curve: Curves.easeInOut,
-    );
-    HapticFeedback.selectionClick();
-    setState(() => _highlightedId = target['id'].toString());
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      if (mounted) setState(() => _highlightedId = null);
-    });
+    // Reuse the robust scroll-until-built logic so tapping a reply quote also
+    // reaches messages that aren't currently on screen.
+    _jumpToMessage(target['id'].toString());
   }
 
   Future<void> _deleteMessage(int id, bool forAll) async {
@@ -2574,18 +2623,56 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   /// Scroll to a message by id and briefly highlight it.
-  void _jumpToMessage(String id) {
-    final ctx = _msgKeys[id]?.currentContext;
-    if (ctx == null) return;
-    Scrollable.ensureVisible(
-      ctx,
-      duration: const Duration(milliseconds: 320),
-      alignment: 0.3,
-      curve: Curves.easeInOut,
-    );
+  ///
+  /// The thread is a lazy `reverse: true` ListView.builder, so a pinned or
+  /// quoted message that's currently off-screen has NO built element and its
+  /// GlobalKey.currentContext is null — the old `if (ctx == null) return;`
+  /// silently did nothing, which is why tapping the pin banner didn't move.
+  /// Instead we walk the scroll offset toward the target's position (index 0 is
+  /// the newest at minScrollExtent/bottom; older messages lie toward
+  /// maxScrollExtent), letting intervening items build, until the target's
+  /// bubble mounts — then ensureVisible lands on it exactly.
+  Future<void> _jumpToMessage(String id) async {
+    final msgIdx = _messages.indexWhere((m) => m['id'].toString() == id);
+    if (msgIdx == -1) return;
+
+    Future<bool> tryEnsure() async {
+      final ctx = _msgKeys[id]?.currentContext;
+      if (ctx == null) return false;
+      await Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 300),
+        alignment: 0.35,
+        curve: Curves.easeInOut,
+      );
+      return true;
+    }
+
+    if (!await tryEnsure()) {
+      for (int attempt = 0; attempt < 14; attempt++) {
+        if (!mounted || !_scrollCtrl.hasClients) return;
+        final pos = _scrollCtrl.position;
+        final frac = _messages.isEmpty
+            ? 0.0
+            : (msgIdx / _messages.length).clamp(0.0, 1.0);
+        final target = (pos.minScrollExtent +
+                frac * (pos.maxScrollExtent - pos.minScrollExtent))
+            .clamp(pos.minScrollExtent, pos.maxScrollExtent);
+        await _scrollCtrl.animateTo(
+          target,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+        );
+        // Give the newly-revealed items a frame to build, then retry.
+        await Future.delayed(const Duration(milliseconds: 40));
+        if (await tryEnsure()) break;
+      }
+    }
+
     HapticFeedback.selectionClick();
+    if (!mounted) return;
     setState(() => _highlightedId = id);
-    Future.delayed(const Duration(milliseconds: 1500), () {
+    Future.delayed(const Duration(milliseconds: 1600), () {
       if (mounted) setState(() => _highlightedId = null);
     });
   }
@@ -2803,7 +2890,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             backgroundColor: scheme.primaryContainer,
                             backgroundImage: _friendAvatar.isNotEmpty
                                 ? CachedNetworkImageProvider(
-                                    fullMediaUrl(_friendAvatar))
+                                    fullMediaUrl(_friendAvatar),
+                                    headers: mediaAuthHeaders(
+                                        fullMediaUrl(_friendAvatar)))
                                 : null,
                             child: _friendAvatar.isNotEmpty
                                 ? null
@@ -3173,6 +3262,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                 borderRadius: BorderRadius.circular(6),
                 child: CachedNetworkImage(
                   imageUrl: fullMediaUrl(mediaRel),
+                  httpHeaders: mediaAuthHeaders(fullMediaUrl(mediaRel)),
                   width: 36,
                   height: 36,
                   fit: BoxFit.cover,
@@ -3827,7 +3917,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               backgroundColor:
                   Theme.of(context).colorScheme.primaryContainer,
               backgroundImage: _friendAvatar.isNotEmpty
-                  ? CachedNetworkImageProvider(fullMediaUrl(_friendAvatar))
+                  ? CachedNetworkImageProvider(fullMediaUrl(_friendAvatar),
+                      headers: mediaAuthHeaders(fullMediaUrl(_friendAvatar)))
                   : null,
               child: _friendAvatar.isNotEmpty
                   ? null
@@ -4211,7 +4302,8 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
     if (!_prepared) {
       setState(() => _loading = true);
       try {
-        final d = await _player.setUrl(widget.url);
+        final d = await _player.setUrl(widget.url,
+            headers: mediaAuthHeaders(widget.url));
         if (d != null && mounted) _dur = d;
         _prepared = true;
       } catch (_) {

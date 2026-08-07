@@ -65,9 +65,9 @@ void _open(BuildContext ctx, String title, IconData icon, String body) {
     barrierLabel: 'Dismiss',
     barrierColor: Colors.black.withAlpha(90),
     transitionDuration: const Duration(milliseconds: 240),
-    pageBuilder: (_, __, ___) =>
+    pageBuilder: (_, _, _) =>
         _LegalPopup(title: title, icon: icon, body: body),
-    transitionBuilder: (_, anim, __, child) {
+    transitionBuilder: (_, anim, _, child) {
       final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
       return FadeTransition(
         opacity: curved,

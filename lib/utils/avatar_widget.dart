@@ -63,8 +63,8 @@ class InitialsAvatar extends StatelessWidget {
               width: radius * 2,
               height: radius * 2,
               fit: BoxFit.cover,
-              placeholder: (_, __) => _initialsCircle(),
-              errorWidget: (_, __, ___) => _initialsCircle(),
+              placeholder: (_, _) => _initialsCircle(),
+              errorWidget: (_, _, _) => _initialsCircle(),
             ),
           )
         : _initialsCircle();

@@ -1,7 +1,14 @@
 # websocket_routes.py
 import json
+from typing import Optional
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from websocket_manager import connect_user, disconnect_user, notify_user
+from jose import JWTError, jwt
+
+from config import SECRET_KEY, ALGORITHM
+from database import SessionLocal
+from models import User
+from websocket_manager import connected_users, disconnect_user, notify_user
 
 router = APIRouter()
 
@@ -17,9 +24,55 @@ _CALL_SIGNALS = {
 }
 
 
+def _authenticate_ws(token: Optional[str], user_id: int) -> Optional[User]:
+    """Verify the JWT from the socket's query string and confirm it belongs to
+    {user_id}.
+
+    Mirrors the /live socket's auth exactly: decode the token with
+    SECRET_KEY/ALGORITHM, load the user by the token's `sub` (email), and only
+    accept the connection if that user's id matches the {user_id} in the path.
+    Returns None on any failure (missing/invalid token, unknown user, or id
+    mismatch) so the caller can close the socket with 4401.
+    """
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        return None
+    email = payload.get("sub")
+    if not isinstance(email, str):
+        return None
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+    finally:
+        db.close()
+    if not user or user.id != user_id:
+        return None
+    return user
+
+
 @router.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: int):
-    await connect_user(user_id, websocket)
+async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""):
+    # Accept the handshake first so we can deliver a proper 4401 close frame to
+    # the client when auth fails (closing *before* accept surfaces as a generic
+    # handshake error, not a 4401). This mirrors the /live socket.
+    await websocket.accept()
+
+    # 🔒 This socket used to trust the {user_id} in the path blindly, so anyone
+    # could subscribe as anyone. Require a valid JWT (passed as ?token=<jwt>)
+    # whose user matches {user_id}, exactly like /live/ws.
+    if _authenticate_ws(token, user_id) is None:
+        await websocket.close(code=4401)  # unauthorized
+        return
+
+    # Register the now-authenticated socket. (We register here rather than via
+    # connect_user() because that helper also calls websocket.accept(), and we
+    # already accepted above to run the auth check.)
+    uid = int(user_id)
+    connected_users[uid].append(websocket)
+    print(f"✅ User {uid} connected. Total sockets: {len(connected_users[uid])}")
 
     try:
         while True:

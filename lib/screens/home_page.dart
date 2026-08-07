@@ -31,6 +31,9 @@ import '../services/notif_service.dart';
 import 'token_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
+import '../services/call_service.dart';
+import 'call_screen.dart';
+import '../main.dart' show navigatorKey;
 import '../utils/time_utils.dart';
 
 String _formatFriendTimestamp(String raw) {
@@ -166,6 +169,7 @@ class HomePage extends StatefulWidget {
 
 class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String _username = '';
+  String? _myAvatar;
   int _onlineFriendsCount = 0;
   List<Map<String, dynamic>> _allFriends = [];
 
@@ -184,6 +188,11 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // Whether the app is currently in the foreground (drives whether an incoming
   // message pops a local notification).
   bool _appForeground = true;
+  // Friends currently typing (by id, as string), surfaced as "typing…" in the
+  // list. Each gets an expiry timer so the indicator clears if the peer stops
+  // typing without a final event.
+  final Set<String> _typingFriendIds = {};
+  final Map<String, Timer> _typingTimers = {};
   List<Map<String, dynamic>> _filteredFriends = [];
   bool _isLoadingFriends = false;
 
@@ -286,6 +295,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _refreshTimer?.cancel();
     _heartbeatTimer?.cancel();
     _connectivitySub?.cancel();
+    for (final t in _typingTimers.values) {
+      t.cancel();
+    }
+    _typingTimers.clear();
     _notifyWs?.close();
     super.dispose();
   }
@@ -702,13 +715,66 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       onDisconnected: () {},
     );
     _notifyWs!.connect();
+
+    // Wire the voice-call service to this always-on socket: it sends call
+    // signaling out through here, and asks us to surface the call screen.
+    CallService.instance.sendSignal = (msg) => _notifyWs?.sendEvent(msg);
+    CallService.instance.onShowCallUI = _openCallScreen;
+  }
+
+  bool _callScreenOpen = false;
+
+  /// Show the full-screen call UI (for an incoming ring or an outgoing call).
+  void _openCallScreen() {
+    if (_callScreenOpen) return;
+    final nav = navigatorKey.currentState;
+    if (nav == null) return;
+    _callScreenOpen = true;
+    nav
+        .push(MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => const CallScreen(),
+        ))
+        .then((_) => _callScreenOpen = false);
   }
 
   void _handleNotification(Map<String, dynamic> event) {
     if (!mounted) return;
     final type = event['type']?.toString();
+    // Aluta voice-call signaling — hand every call_* event to the call service.
+    // (call_offer makes it ask us to open the ring screen via onShowCallUI.)
+    if (type != null && type.startsWith('call_')) {
+      CallService.instance.onSignal(event);
+      return;
+    }
     if (type == 'live_invite') {
       _showLiveInvite(event);
+      return;
+    }
+    // A friend is typing to us — surface "typing…" on their row in the list.
+    // Server relays {type:'typing', user_id:<the typing friend>}.
+    if (type == 'typing') {
+      final uid = event['user_id']?.toString();
+      if (uid != null) {
+        _typingTimers[uid]?.cancel();
+        if (!_typingFriendIds.contains(uid)) {
+          setState(() => _typingFriendIds.add(uid));
+        }
+        // Clear the indicator if no further typing event arrives in time (the
+        // sender throttles them to ~every 2s while actively typing).
+        _typingTimers[uid] = Timer(const Duration(seconds: 4), () {
+          _typingTimers.remove(uid);
+          if (mounted) setState(() => _typingFriendIds.remove(uid));
+        });
+      }
+      return;
+    }
+    // A message was edited or deleted-for-everyone → refresh the list so the
+    // last-message preview reflects it (e.g. shows "This message was deleted").
+    if (type == 'message_deleted' ||
+        type == 'delete' ||
+        type == 'message_edited') {
+      _fetchFriends();
       return;
     }
     // A new chat message arriving on the per-user notify socket. When the app
@@ -718,6 +784,21 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (type == 'new_message' || type == 'message' || type == 'chat_message') {
       final data =
           (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      // Mark delivered the moment our device receives the message — on ANY
+      // screen — so the sender's tick turns to a gray double without us having
+      // to open the chat. (Read is only marked when we actually view it.)
+      final mid = data['id'];
+      if (mid != null &&
+          data['receiver_id']?.toString() == _myUserId?.toString() &&
+          data['delivered'] == false) {
+        ApiService().markMessageAsDelivered(mid);
+      }
+      // A message from a friend means they've stopped typing — clear it.
+      final fromId = data['sender_id']?.toString();
+      if (fromId != null && _typingFriendIds.contains(fromId)) {
+        _typingTimers.remove(fromId)?.cancel();
+        if (mounted) setState(() => _typingFriendIds.remove(fromId));
+      }
       // Backend payload is a MessageWithSender: sender is a nested user object
       // and the text lives in `content`.
       final senderObj = (data['sender'] as Map?)?.cast<String, dynamic>();
@@ -754,11 +835,11 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       barrierLabel: 'Dismiss',
       barrierColor: Colors.black.withAlpha(120),
       transitionDuration: const Duration(milliseconds: 260),
-      pageBuilder: (_, __, ___) => _LiveInviteDialog(
+      pageBuilder: (_, _, _) => _LiveInviteDialog(
         hostName: hostName,
         trackTitle: (track['title'] ?? 'a song').toString(),
       ),
-      transitionBuilder: (_, anim, __, child) => FadeTransition(
+      transitionBuilder: (_, anim, _, child) => FadeTransition(
         opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
         child: ScaleTransition(
           scale: Tween<double>(begin: 0.9, end: 1.0).animate(
@@ -796,6 +877,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _myUserId = int.tryParse(id.toString());
         _startNotifyWs();
       }
+      _myAvatar = data['avatar_url'] as String?;
       if (data.isNotEmpty && data['username'] != null) {
         await prefs.setString('username', data['username']);
         if (mounted) setState(() => _username = data['username']);
@@ -970,6 +1052,102 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (mounted) {
         showToast(context, 'Could not start the call', type: ToastType.error);
       }
+    }
+  }
+
+  /// Ask whether to call over the internet (Aluta) or the device dialer, then
+  /// route accordingly. Same chooser the chat screen uses, so every call button
+  /// in the app offers the choice.
+  void _showCallChoice({
+    required int friendId,
+    required String name,
+    String? avatar,
+    String? phone,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final online = ConnectionStatus.instance.isOnline;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 10),
+                width: 36,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: scheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Call $name',
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface)),
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Icon(Icons.wifi_calling_3_rounded,
+                    color: online ? scheme.primary : scheme.onSurfaceVariant),
+                title: Text(online
+                    ? 'Aluta call (over the internet)'
+                    : 'Aluta call — you’re offline'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _startAlutaCall(friendId, name, avatar, phone);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.phone_rounded, color: scheme.onSurface),
+                title: const Text('Phone call (uses your carrier)'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _callNumber(phone, name);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _startAlutaCall(
+      int friendId, String name, String? avatar, String? phone) async {
+    if (!ConnectionStatus.instance.isOnline) {
+      if (mounted) {
+        showToast(context, 'No internet — starting a phone call instead',
+            type: ToastType.info);
+      }
+      _callNumber(phone, name);
+      return;
+    }
+    if (friendId <= 0) return;
+    final ok = await CallService.instance.startCall(
+      peerId: friendId,
+      peerName: name,
+      peerAvatar: avatar,
+      myName: _username.isNotEmpty ? _username : 'Aluta user',
+      myAvatar: _myAvatar,
+      fallbackPhone: phone,
+    );
+    if (!ok && mounted) {
+      showToast(context, 'You’re already in a call', type: ToastType.info);
     }
   }
 
@@ -1269,8 +1447,12 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           IconButton(
             tooltip: 'Call ${_activeFriendName ?? ''}',
             icon: const Icon(Icons.call_rounded),
-            onPressed: () => _callNumber(
-                _activeFriendPhone, _activeFriendName ?? 'This user'),
+            onPressed: () => _showCallChoice(
+              friendId: int.tryParse(_activeFriendId ?? '') ?? -1,
+              name: _activeFriendName ?? 'This user',
+              avatar: _activeFriendAvatar,
+              phone: _activeFriendPhone,
+            ),
           ),
         ],
       );
@@ -1301,14 +1483,60 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
           const SizedBox(width: 10),
         ],
-        Icon(Icons.chat_bubble_outline_rounded,
-            color: scheme.primary, size: 20),
-        const SizedBox(width: 6),
+        // App logo as the brand mark leading the Messages header.
+        SizedBox(
+          width: 24,
+          height: 24,
+          child: Image.asset(
+            'assets/images/logo.png',
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) => Icon(
+              Icons.chat_bubble_outline_rounded,
+              color: scheme.primary,
+              size: 20,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
         const Text(
           'Messages',
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
         ),
         const Spacer(),
+        // Right side status: when online, a green "N online" chip (moved up
+        // from the status strip) balances the logo+title on the left; when
+        // offline, the tap-to-reconnect badge takes its place.
+        if (_serverReachable)
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.green.withAlpha(28),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color(0xFF2FA84F),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '$_onlineFriendsCount online',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface.withAlpha(200),
+                  ),
+                ),
+              ],
+            ),
+          ),
         // Online/offline badge — reads the SAME server-side signal as the
         // footer status dot (_serverReachable), so the two never disagree.
         if (!_serverReachable)
@@ -1493,6 +1721,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final lastTime = f['last_timestamp'] as String? ?? '';
     final unread = (f['unread_count'] as num?)?.toInt() ?? 0;
     final hasUnread = unread > 0;
+    final isTyping = _typingFriendIds.contains(f['id']?.toString());
 
     return InkWell(
       onTap: () => openChat(f),
@@ -1522,20 +1751,32 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    lastMsg,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: hasUnread
-                          ? textColor.withAlpha(200)
-                          : textColor.withAlpha(110),
-                      fontWeight: hasUnread
-                          ? FontWeight.w500
-                          : FontWeight.normal,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
+                  isTyping
+                      ? Text(
+                          'typing…',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: scheme.primary,
+                            fontStyle: FontStyle.italic,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        )
+                      : Text(
+                          lastMsg,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: hasUnread
+                                ? textColor.withAlpha(200)
+                                : textColor.withAlpha(110),
+                            fontWeight: hasUnread
+                                ? FontWeight.w500
+                                : FontWeight.normal,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
                 ],
               ),
             ),
@@ -1580,7 +1821,12 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
               tooltip: 'Call $name',
               icon: Icon(Icons.call_rounded, color: scheme.primary, size: 20),
               visualDensity: VisualDensity.compact,
-              onPressed: () => _callNumber(f['phone'] as String?, name),
+              onPressed: () => _showCallChoice(
+                friendId: int.tryParse(f['id'].toString()) ?? -1,
+                name: name,
+                avatar: f['avatar_url'] as String?,
+                phone: f['phone'] as String?,
+              ),
             ),
           ],
         ),
@@ -2041,45 +2287,11 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
               padding: const EdgeInsets.fromLTRB(10, 0, 8, 8),
               child: Row(
                 children: [
-                  // App logo — replaces the old glowing music-note disc. Kept
-                  // flat (no circle/glow) so the play button is the only accent
-                  // circle in the bar: cleaner, less busy.
-                  SizedBox(
-                    width: 32,
-                    height: 32,
-                    child: Image.asset(
-                      'assets/images/logo.png',
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => Icon(
-                        Icons.music_note_rounded,
-                        size: 20,
-                        color: scheme.primary,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Transport controls now sit on the LEFT so the play button is
-                  // far from the composer's Send button (stops mis-taps while
-                  // typing). Favourite · Previous · Play · Next.
-                  ValueListenableBuilder<bool>(
-                    valueListenable: favoriteNotifier,
-                    builder: (_, fav, __) => GestureDetector(
-                      onTap: () => playbackBus.onToggleFavorite?.call(),
-                      behavior: HitTestBehavior.opaque,
-                      child: Padding(
-                        padding: const EdgeInsets.all(5),
-                        child: Icon(
-                          fav
-                              ? Icons.favorite_rounded
-                              : Icons.favorite_border_rounded,
-                          size: 20,
-                          color: fav
-                              ? scheme.primary
-                              : scheme.onSurface.withAlpha(150),
-                        ),
-                      ),
-                    ),
-                  ),
+                  const SizedBox(width: 2),
+                  // Transport leads the bar now (logo moved to the status
+                  // strip): Previous · Play · Next. The favourite heart is by
+                  // the seek
+                  // bar so the controls nudge left and the space balances out.
                   _barBtn(
                     context,
                     Icons.skip_previous_rounded,
@@ -2125,7 +2337,29 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
+                  // Favourite heart — moved here (beside the seek bar) so the
+                  // transport can nudge left and the row balances out.
+                  ValueListenableBuilder<bool>(
+                    valueListenable: favoriteNotifier,
+                    builder: (_, fav, _) => GestureDetector(
+                      onTap: () => playbackBus.onToggleFavorite?.call(),
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: const EdgeInsets.all(5),
+                        child: Icon(
+                          fav
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
+                          size: 20,
+                          color: fav
+                              ? scheme.primary
+                              : scheme.onSurface.withAlpha(150),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
                   // Close the bar entirely → collapses to the floating button,
                   // freshly reset to the bottom-right anchor.
                   GestureDetector(
@@ -2163,7 +2397,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
     return ValueListenableBuilder<PlayClock>(
       valueListenable: playClockNotifier,
-      builder: (_, clock, __) {
+      builder: (_, clock, _) {
         final durMs = clock.duration.inMilliseconds;
         final frac =
             durMs > 0 ? (clock.position.inMilliseconds / durMs).clamp(0.0, 1.0) : 0.0;
@@ -2342,19 +2576,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                 ],
                               ),
                             ),
-                      // Online-friends count sits right next to the dot (only
-                      // when actually online). No redundant status word.
-                      if (_serverReachable && !_isDiscovering) ...[
-                        const SizedBox(width: 7),
-                        Text(
-                          '$_onlineFriendsCount online',
-                          style: TextStyle(
-                            color: scheme.onSurface.withAlpha(180),
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
+                      // (Online-friends count moved to the Messages header.)
                     ],
                   ),
                 ),
@@ -2697,14 +2919,13 @@ class _ScrollingText extends StatelessWidget {
 /// gliding out through the opening. Lighter and more elegant than the stock
 /// filled Material "exit" glyph.
 class _LogoutGlyph extends StatelessWidget {
-  const _LogoutGlyph({required this.color, this.size = 22});
+  const _LogoutGlyph({required this.color});
 
   final Color color;
-  final double size;
 
   @override
   Widget build(BuildContext context) => CustomPaint(
-        size: Size.square(size),
+        size: const Size.square(22),
         painter: _LogoutPainter(color),
       );
 }

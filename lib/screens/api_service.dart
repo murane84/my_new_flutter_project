@@ -261,9 +261,9 @@ class ApiService {
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
-          if (username != null) 'username': username,
-          if (phone != null) 'phone': phone,
-          if (avatarUrl != null) 'avatar_url': avatarUrl,
+          'username': ?username,
+          'phone': ?phone,
+          'avatar_url': ?avatarUrl,
           if (currentPassword != null && currentPassword.isNotEmpty)
             'current_password': currentPassword,
           if (newPassword != null && newPassword.isNotEmpty)
@@ -359,6 +359,36 @@ class ApiService {
   }
 
   // FETCH MESSAGES
+  /// Pin a message for [hours] hours. Returns the updated message map (with
+  /// its new `pinned_until`) on success, or null on failure.
+  Future<Map<String, dynamic>?> pinMessage(int messageId, int hours) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final uri = Uri.parse('${await _baseUrl}/messages/$messageId/pin')
+          .replace(queryParameters: {'hours': hours.toString()});
+      final res = await http.post(uri, headers: _authHeaders(token));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final body = jsonDecode(res.body);
+        if (body is Map<String, dynamic>) return body;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Remove the pin from a message. Returns true on success.
+  Future<bool> unpinMessage(int messageId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final uri = Uri.parse('${await _baseUrl}/messages/$messageId/unpin');
+      final res = await http.post(uri, headers: _authHeaders(token));
+      return res.statusCode >= 200 && res.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchMessagesBetween(
     int userId,
     int friendId, {
@@ -444,12 +474,12 @@ class ApiService {
         body: jsonEncode({
           'receiver_id': receiverId,
           'content': content,
-          if (messageType != null) 'message_type': messageType,
-          if (mediaUrl != null) 'media_url': mediaUrl,
-          if (mediaName != null) 'media_name': mediaName,
-          if (mediaMime != null) 'media_mime': mediaMime,
-          if (mediaSize != null) 'media_size': mediaSize,
-          if (mediaDuration != null) 'media_duration': mediaDuration,
+          'message_type': ?messageType,
+          'media_url': ?mediaUrl,
+          'media_name': ?mediaName,
+          'media_mime': ?mediaMime,
+          'media_size': ?mediaSize,
+          'media_duration': ?mediaDuration,
         }),
       );
 
@@ -466,7 +496,7 @@ class ApiService {
   }
 
   /// Upload a chat attachment (image / file / voice note). Returns the server's
-  /// response: {url: /attachments/<id>, name, mime, size}, or null on failure.
+  /// response: `{url: /attachments/<id>, name, mime, size}`, or null on failure.
   Future<Map<String, dynamic>?> uploadMedia({
     required List<int> bytes,
     required String filename,

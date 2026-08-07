@@ -54,6 +54,12 @@ class ActiveLiveSession {
 /// Non-null while a live session is active (foreground or minimised).
 ActiveLiveSession? activeLiveSession;
 
+/// Set once by the UI layer (see main.dart). Shows a host-facing notification
+/// (e.g. "X left the session") that works even when the live popup is minimised,
+/// because it routes through the app's global overlay rather than the popup's
+/// own context. Left as a global so it survives the screen being disposed.
+void Function(String message)? liveHostNotify;
+
 /// Tears down and clears the active session (used by the persistent banner's
 /// "End" action, and when a session ends remotely while minimised). Callers in
 /// the UI layer should also call `liveSessionNotifier.stop()` afterwards.
@@ -140,6 +146,8 @@ class LiveSessionController {
   final List<LiveTrack> queue = [];
   int currentIndex = 0;
   bool _peerPresent = false; // a listener has joined → stream track changes now
+  bool _peerEverPresent = false; // has a listener ever joined? (rejoin detect)
+  bool _peerGraceful = false; // listener announced 'leaving' (vs a silent drop)
   bool _switchingTrack = false; // guards auto-advance during a source swap
   StreamSubscription? _completeSub;
   /// Fired whenever the queue or current index changes (host UI refresh, and —
@@ -302,8 +310,8 @@ class LiveSessionController {
     _sendControl({
       'type': 'ctl',
       'action': action,
-      if (positionMs != null) 'position_ms': positionMs,
-      if (index != null) 'index': index,
+      'position_ms': ?positionMs,
+      'index': ?index,
     });
   }
 
@@ -472,11 +480,50 @@ class LiveSessionController {
     await _openSocket(sessionId, myUserId, token);
   }
 
+  /// Re-open the socket after the HOST's transport dropped (a network glitch),
+  /// WITHOUT restarting the session. The host's LOCAL playback never stopped —
+  /// only the socket died — so we keep the player and queue exactly as they are
+  /// and just re-establish the pipe. The server kept the session alive during
+  /// the grace window and, on reconnect, delivers a `peer_joined` for the
+  /// listener who is still there, which drives the existing re-stream path so
+  /// the listener catches back up. Throws if the session is already gone.
+  Future<void> reconnectAsHost({
+    required int myUserId,
+    required String token,
+  }) async {
+    final sid = sessionId;
+    if (sid == null) {
+      throw StateError('No active session to reconnect to');
+    }
+    // Drop the dead socket. Do NOT touch the player, queue, _hostBytes or the
+    // play/pause/position mirror subscriptions — they survive the reconnect
+    // and immediately start feeding the new channel once it's open.
+    try {
+      await _socketSub?.cancel();
+    } catch (_) {}
+    try {
+      await _channel?.sink.close();
+    } catch (_) {}
+    _channel = null;
+    role = LiveRole.host;
+    await _openSocket(sid, myUserId, token);
+    // The re-stream to the listener is triggered by the server's `peer_joined`
+    // (handled below). Re-announce metadata now so the listener's title/mime is
+    // refreshed even before the bytes arrive.
+    final meta = _hostMeta;
+    if (meta != null) _sendControl(meta);
+  }
+
   Future<void> _startListenerPlayback({bool autoplay = true}) async {
     if (_listenerStarted) return;
-    _listenerStarted = true;
     final bytes = _incoming.toBytes();
+    // Check for an empty buffer BEFORE claiming _listenerStarted. If an early
+    // (empty) eos arrives — e.g. right after a reconnect, before the host has
+    // re-streamed any bytes — we must NOT latch _listenerStarted, or the real
+    // eos that follows the re-stream would be ignored and playback would jam
+    // at 00:00 forever.
     if (bytes.isEmpty) return;
+    _listenerStarted = true;
     await player.setAudioSource(BytesAudioSource(bytes, contentType: _incomingMime));
     if (autoplay) await player.play();
   }
@@ -524,9 +571,30 @@ class LiveSessionController {
     // it (re)sends metadata and streams the song, so join timing doesn't matter.
     if (role == LiveRole.host) {
       if (type == 'peer_joined') {
+        // Notify the host only on a genuine REJOIN (they were here before and
+        // had dropped), not on the very first join.
+        final rejoined = _peerEverPresent && !_peerPresent;
         _peerPresent = true;
+        _peerEverPresent = true;
+        _peerGraceful = false;
+        if (rejoined) {
+          final name = activeLiveSession?.peerName ?? 'Your friend';
+          liveHostNotify?.call('$name reconnected');
+        }
+        // Announce the current track as a `track_change` (NOT a plain `meta`).
+        // A reconnecting listener needs its buffer/player fully reset before
+        // the host re-streams the bytes; only `track_change` does that reset
+        // (and also clears the listener screen's "Connection lost" state).
+        // Sending `meta` here left a reconnecting listener jammed at 00:00
+        // because its stale buffer/started-flag were never cleared.
         final meta = _hostMeta;
-        if (meta != null) _sendControl(meta);
+        if (meta != null) {
+          final track = meta['track'];
+          _sendControl({
+            'type': 'track_change',
+            'track': ?track,
+          });
+        }
         // Re-send the equalizer settings so a late joiner hears the same shape.
         final eq = _hostEq;
         if (eq != null) _sendControl(eq);
@@ -571,6 +639,23 @@ class LiveSessionController {
             if (idx is int) playIndex(idx);
             break;
         }
+      } else if (type == 'leaving') {
+        // The listener chose to leave (sent right before they close). Mark it
+        // graceful so the follow-up 'peer_left' isn't reported as a glitch.
+        _peerGraceful = true;
+        _peerPresent = false;
+        final name = activeLiveSession?.peerName ?? 'Your friend';
+        liveHostNotify?.call('$name left the session');
+      } else if (type == 'peer_left') {
+        // The listener's socket dropped. If they didn't announce 'leaving'
+        // first, it's an unexpected disconnect (e.g. a WiFi glitch) — tell the
+        // host they may rejoin.
+        _peerPresent = false;
+        if (!_peerGraceful) {
+          final name = activeLiveSession?.peerName ?? 'Your friend';
+          liveHostNotify?.call('$name lost connection — they may rejoin');
+        }
+        _peerGraceful = false;
       }
       return;
     }
@@ -579,6 +664,15 @@ class LiveSessionController {
       case 'session_state':
         final track = (msg['data']?['track']) as Map<String, dynamic>?;
         if (track?['mime'] is String) _incomingMime = track!['mime'] as String;
+        break;
+      case 'host_reconnecting':
+        // The host's socket dropped (likely a glitch). Hold playback where it
+        // is and wait — the host has a grace window to come back, after which
+        // a fresh track re-stream ('track_change' → 'eos') resumes us. If the
+        // host never returns the server sends 'end'.
+        try {
+          await player.pause();
+        } catch (_) {}
         break;
       case 'meta':
         final track = msg['track'] as Map<String, dynamic>?;
@@ -655,6 +749,13 @@ class LiveSessionController {
     } catch (e) {
       onError?.call(e);
     }
+  }
+
+  /// Listener → host: announce an intentional leave just before tearing down,
+  /// so the host can tell "left on purpose" apart from a silent connection drop
+  /// (the server still relays this like any control message). Best-effort.
+  void notifyLeaving() {
+    if (role == LiveRole.listener) _sendControl({'type': 'leaving'});
   }
 
   // ---------------------------------------------------------------------------

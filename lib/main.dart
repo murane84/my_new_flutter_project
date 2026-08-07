@@ -15,6 +15,8 @@ import 'screens/music_controls.dart';
 import 'services/audio_handler.dart';
 import 'services/notif_service.dart';
 import 'services/metadata_overrides.dart';
+import 'services/live_session_service.dart' show liveHostNotify;
+import 'utils/toast_helper.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -292,6 +294,13 @@ class SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
+    // Route host-facing live-session notifications (e.g. "X left the session")
+    // through the app's global overlay, so they show even when the Listen
+    // Together popup is minimised. Set once; survives this screen's disposal.
+    liveHostNotify = (message) {
+      final ctx = navigatorKey.currentContext;
+      if (ctx != null) showToast(ctx, message, type: ToastType.info);
+    };
     _checkLoginStatus();
   }
 
@@ -325,7 +334,7 @@ class SplashScreenState extends State<SplashScreen> {
               'assets/images/logo.png',
               width: 120,
               height: 120,
-              errorBuilder: (_, __, ___) => Icon(
+              errorBuilder: (_, _, _) => Icon(
                 Icons.forum_rounded,
                 size: 72,
                 color: scheme.primary,

@@ -133,6 +133,20 @@ class LiveSessionManager:
             except Exception:
                 pass
 
+    async def relay_to(self, session_id: str, target_user_id: int, message: str) -> None:
+        """Deliver a text message to ONE participant (peer-addressed WebRTC
+        signaling). The broadcast sync clock still goes through relay_text.
+        Keyed by user id, so it fans out cleanly to a room later."""
+        session = self.sessions.get(session_id)
+        if session is None:
+            return
+        ws = session.connections.get(target_user_id)
+        if ws is not None:
+            try:
+                await ws.send_text(message)
+            except Exception:
+                pass
+
     async def relay_bytes(self, session_id: str, sender_id: int, data: bytes) -> None:
         session = self.sessions.get(session_id)
         if session is None:

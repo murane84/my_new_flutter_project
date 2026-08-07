@@ -3,11 +3,15 @@ Live "listen together" session routes.
 
 - POST /live/sessions            -> host creates a session, invites a receiver (DM)
 - POST /live/sessions/{id}/end   -> host ends the session
-- WS   /ws/live/{session_id}     -> host + listener(s) exchange control + audio
+- WS   /ws/live/{session_id}     -> host + listener(s) exchange signaling + control
 
-Audio bytes flow host -> server -> listener entirely in memory. Nothing is ever
-written to disk or the database. Ending the session (or the host disconnecting)
-tears everything down.
+Audio does NOT pass through the server: peers stream it directly over a WebRTC
+data channel. This socket carries only WebRTC signaling (SDP/ICE) and the sync
+clock (play/pause/seek/position/meta/queue/eq + session lifecycle). Signaling is
+peer-addressed (a `to` user id) so it routes to a single participant — the same
+socket therefore extends from 1:1 to a room; the sync clock broadcasts to all.
+Nothing is ever written to disk or the database. Ending the session (or the host
+disconnecting) tears everything down.
 """
 import json
 import uuid
@@ -185,8 +189,18 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
             if text is not None:
                 # Track last known playback state for late joiners.
                 _update_state_from_control(session, text)
-                await MANAGER.relay_text(session_id, user.id, text)
+                to_id = _extract_to(text)
+                if to_id is not None:
+                    # Peer-addressed (WebRTC signaling: rtc_offer/answer/ice) →
+                    # deliver to just that participant. Room-ready.
+                    await MANAGER.relay_to(session_id, to_id, text)
+                else:
+                    # Broadcast the sync clock (play/pause/seek/meta/queue/eq)
+                    # to the other participant(s).
+                    await MANAGER.relay_text(session_id, user.id, text)
             elif data is not None:
+                # Audio no longer flows over the socket (it's peer-to-peer via a
+                # WebRTC data channel now). Relay any stray binary defensively.
                 await MANAGER.relay_bytes(session_id, user.id, data)
 
     except WebSocketDisconnect:
@@ -232,3 +246,22 @@ def _update_state_from_control(session, text: str) -> None:
         track = msg.get("track")
         if isinstance(track, dict):
             session.track = track
+
+
+def _extract_to(text: str) -> Optional[int]:
+    """Return a control message's `to` user id, or None if it's a broadcast.
+
+    Peer-addressed messages (WebRTC signaling — rtc_offer/rtc_answer/rtc_ice)
+    carry `to`; the sync-clock/control messages don't. Kept tiny and defensive
+    so a malformed frame just falls back to a broadcast rather than erroring.
+    """
+    try:
+        to = json.loads(text).get("to")
+    except Exception:
+        return None
+    if to is None:
+        return None
+    try:
+        return int(to)
+    except (TypeError, ValueError):
+        return None

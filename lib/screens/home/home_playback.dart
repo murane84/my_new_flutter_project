@@ -1,58 +1,13 @@
 part of '../home_page.dart';
 
-// Playback plumbing shared across the app, pulled out of home_page.dart
-// unchanged: the now-playing + live-session notifiers, the lightweight
-// command bus the ambient controls use to drive the single mounted player,
-// and the value-notifiers the now-playing bar listens to.
-
-// Persists now-playing info from MusicControls → footer
-class NowPlayingNotifier extends ChangeNotifier {
-  String _track = '';
-  String _artist = '';
-  bool _playing = false;
-
-  String get track => _track;
-  String get artist => _artist;
-  bool get playing => _playing;
-
-  void update({required String track, required String artist, required bool playing}) {
-    if (_track == track && _artist == artist && _playing == playing) return;
-    _track = track;
-    _artist = artist;
-    _playing = playing;
-    notifyListeners();
-  }
-}
-
-final nowPlayingNotifier = NowPlayingNotifier();
-
-// Tracks an active live "Listen Together" session so ambient UI (like the
-// phone now-playing bar) can highlight who you're streaming with.
-class LiveSessionNotifier extends ChangeNotifier {
-  bool _active = false;
-  String _peer = '';
-  bool _asHost = false;
-
-  bool get active => _active;
-  String get peer => _peer;
-  bool get asHost => _asHost;
-
-  void start({required String peer, required bool asHost}) {
-    _active = true;
-    _peer = peer;
-    _asHost = asHost;
-    notifyListeners();
-  }
-
-  void stop() {
-    if (!_active) return;
-    _active = false;
-    _peer = '';
-    notifyListeners();
-  }
-}
-
-final liveSessionNotifier = LiveSessionNotifier();
+// Playback plumbing shared across the app: the lightweight command bus the
+// ambient controls use to drive the single mounted player, and the
+// value-notifiers the now-playing bar listens to.
+//
+// NOTE: now-playing + live-session STATE moved to Riverpod —
+// see lib/state/playback_state.dart (nowPlayingProvider / liveSessionProvider).
+// The PlaybackBus below is a command channel (imperative callbacks), not state,
+// so it deliberately stays a plain object.
 
 // A tiny command bus so lightweight ambient controls (e.g. the collapsed
 // now-playing bar) can drive the ONE mounted player without owning the

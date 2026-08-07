@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+// Prefixed: package:provider also exports Consumer/ChangeNotifierProvider.
+import 'package:flutter_riverpod/flutter_riverpod.dart' as rp;
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,6 +24,7 @@ import 'services/metadata_overrides.dart';
 import 'services/live_session_service.dart' show liveHostNotify;
 import 'utils/toast_helper.dart';
 import 'screens/token_helper.dart' show warmMediaAuth;
+import 'state/playback_state.dart' show providerContainer;
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -86,9 +89,16 @@ void main() async {
   // iOS only; a no-op elsewhere).
   _listenForSharedMedia();
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ThemeProvider(),
-      child: const MyApp(),
+    // Riverpod's scope wraps everything. We pass OUR container (the same one
+    // non-widget code uses via `providerContainer`) so widget `ref` and that
+    // container share a single state tree. The existing provider-package
+    // ThemeProvider stays untouched inside it.
+    rp.UncontrolledProviderScope(
+      container: providerContainer,
+      child: ChangeNotifierProvider(
+        create: (_) => ThemeProvider(),
+        child: const MyApp(),
+      ),
     ),
   );
 }

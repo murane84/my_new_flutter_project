@@ -10,14 +10,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:audio_session/audio_session.dart';
 import '../screens/home_page.dart'
     show
-        nowPlayingNotifier,
         playbackBus,
         playlistNotifier,
         playProgressNotifier,
         playClockNotifier,
         PlayClock,
-        favoriteNotifier,
-        liveSessionNotifier;
+        favoriteNotifier;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../state/playback_state.dart';
 import '../services/live_session_service.dart';
 import '../utils/toast_helper.dart';
 import 'equalizer_screen.dart';
@@ -64,18 +64,20 @@ String _cleanTrackName(String raw) {
 
 // =============================================================================
 
-class MusicControls extends StatefulWidget {
+class MusicControls extends ConsumerStatefulWidget {
   static const routeName = '/music';
   final Color textColor;
   const MusicControls({super.key, required this.textColor});
 
   @override
-  State<MusicControls> createState() => _MusicControlsState();
+  ConsumerState<MusicControls> createState() => _MusicControlsState();
 }
 
-class _MusicControlsState extends State<MusicControls>
+class _MusicControlsState extends ConsumerState<MusicControls>
     with TickerProviderStateMixin {
   late final AudioPlayer _player;
+  // Riverpod subscription that replaces liveSessionNotifier.addListener.
+  ProviderSubscription<LiveSession>? _liveSub;
 
   // Native audio effects (Android only). Null on other platforms.
   AndroidEqualizer? _equalizer;
@@ -93,7 +95,7 @@ class _MusicControlsState extends State<MusicControls>
   StreamSubscription? _livePosSub;
 
   bool get _liveActive =>
-      liveSessionNotifier.active && activeLiveSession != null;
+      ref.read(liveSessionProvider).active && activeLiveSession != null;
   LiveSessionController? get _live => activeLiveSession?.controller;
   bool get _isLiveHost => activeLiveSession?.role == LiveRole.host;
 
@@ -103,7 +105,7 @@ class _MusicControlsState extends State<MusicControls>
     _livePosSub?.cancel();
     _livePosSub = null;
     final live = _live;
-    if (liveSessionNotifier.active && live != null) {
+    if (ref.read(liveSessionProvider).active && live != null) {
       // Mirror the live player's state into the panel + ambient bars.
       _liveStateSub = live.player.playerStateStream.listen((_) {
         _pushLiveToAmbient();
@@ -123,7 +125,7 @@ class _MusicControlsState extends State<MusicControls>
       // update (playing: true) stays latched: the paused local player emits no
       // fresh state event to correct it, so the footer play/pause button
       // freezes showing the stopped live track as if it were still playing.
-      nowPlayingNotifier.update(
+      ref.read(nowPlayingProvider.notifier).update(
           track: _trackName, artist: _artistName, playing: _player.playing);
       _pushMediaState();
     }
@@ -151,7 +153,7 @@ class _MusicControlsState extends State<MusicControls>
     final live = _live;
     if (!_liveActive || live == null) return;
     final playing = live.player.playing;
-    nowPlayingNotifier.update(
+    ref.read(nowPlayingProvider.notifier).update(
         track: _liveTitle(), artist: 'Live', playing: playing);
     final dur = live.player.duration;
     final pos = live.player.position;
@@ -321,7 +323,10 @@ class _MusicControlsState extends State<MusicControls>
     playbackBus.onSeekTo = _transportSeek;
 
     // Re-bind / refresh when a live session starts or ends.
-    liveSessionNotifier.addListener(_onLiveChanged);
+    // (Was: liveSessionNotifier.addListener(_onLiveChanged). listenManual is the
+    // Riverpod equivalent for listening outside build; closed in dispose.)
+    _liveSub = ref.listenManual(
+        liveSessionProvider, (_, _) => _onLiveChanged());
     playbackBus.currentPath = () =>
         (_currentIndex >= 0 && _currentIndex < _playlist.length)
             ? _playlist[_currentIndex]
@@ -388,7 +393,7 @@ class _MusicControlsState extends State<MusicControls>
       playbackBus.isPlaying = null;
       playbackBus.onToggleFavorite = null;
     }
-    liveSessionNotifier.removeListener(_onLiveChanged);
+    _liveSub?.close();
     _liveStateSub?.cancel();
     _livePosSub?.cancel();
     _volumeHideTimer?.cancel();
@@ -448,7 +453,7 @@ class _MusicControlsState extends State<MusicControls>
       // While a live session owns the ambient bar/notification, don't let the
       // (paused) local player overwrite the live play/pause state.
       if (!_liveActive) {
-        nowPlayingNotifier.update(
+        ref.read(nowPlayingProvider.notifier).update(
             track: _trackName, artist: _artistName, playing: s.playing);
         _pushMediaState(
             buffering: s.processingState == ProcessingState.loading ||
@@ -514,7 +519,7 @@ class _MusicControlsState extends State<MusicControls>
       _trackName = initTitle;
       _artistName = initArtist;
     });
-    nowPlayingNotifier.update(
+    ref.read(nowPlayingProvider.notifier).update(
         track: initTitle, artist: initArtist, playing: true);
     _syncFavoriteAmbient();
 
@@ -558,7 +563,7 @@ class _MusicControlsState extends State<MusicControls>
         });
         // Use the real player state — a late metadata fetch must not re-mark a
         // paused track as playing.
-        nowPlayingNotifier.update(track: t, artist: a, playing: _player.playing);
+        ref.read(nowPlayingProvider.notifier).update(track: t, artist: a, playing: _player.playing);
       }
     } catch (_) {}
   }
@@ -575,7 +580,7 @@ class _MusicControlsState extends State<MusicControls>
       _play(_currentIndex + 1);
     } else {
       // End of playlist, no repeat
-      nowPlayingNotifier.update(
+      ref.read(nowPlayingProvider.notifier).update(
           track: _trackName, artist: _artistName, playing: false);
       if (mounted) setState(() {});
     }

@@ -28,6 +28,7 @@ import 'legal_screen.dart';
 import '../services/live_session_service.dart'
     show activeLiveSession, endActiveLiveSession;
 import '../services/notif_service.dart';
+import '../services/share_inbox.dart';
 import 'token_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
@@ -188,11 +189,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // Whether the app is currently in the foreground (drives whether an incoming
   // message pops a local notification).
   bool _appForeground = true;
-  // Friends currently typing (by id, as string), surfaced as "typing…" in the
-  // list. Each gets an expiry timer so the indicator clears if the peer stops
-  // typing without a final event.
-  final Set<String> _typingFriendIds = {};
-  final Map<String, Timer> _typingTimers = {};
   List<Map<String, dynamic>> _filteredFriends = [];
   bool _isLoadingFriends = false;
 
@@ -239,6 +235,12 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // If an image was shared into Aluta (from another app) before the user was
+    // signed in, this is the point we're authenticated and can present the
+    // "Share to…" recipient picker. Idempotent — no-op when nothing's pending.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ShareInbox.instance.maybePresent(Navigator.of(context));
+    });
     AppConfig.baseUrl.then((b) {
       if (mounted) setState(() => _apiBase = b);
     });
@@ -295,10 +297,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _refreshTimer?.cancel();
     _heartbeatTimer?.cancel();
     _connectivitySub?.cancel();
-    for (final t in _typingTimers.values) {
-      t.cancel();
-    }
-    _typingTimers.clear();
     _notifyWs?.close();
     super.dispose();
   }
@@ -751,32 +749,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _showLiveInvite(event);
       return;
     }
-    // A friend is typing to us — surface "typing…" on their row in the list.
-    // Server relays {type:'typing', user_id:<the typing friend>}.
-    if (type == 'typing') {
-      final uid = event['user_id']?.toString();
-      if (uid != null) {
-        _typingTimers[uid]?.cancel();
-        if (!_typingFriendIds.contains(uid)) {
-          setState(() => _typingFriendIds.add(uid));
-        }
-        // Clear the indicator if no further typing event arrives in time (the
-        // sender throttles them to ~every 2s while actively typing).
-        _typingTimers[uid] = Timer(const Duration(seconds: 4), () {
-          _typingTimers.remove(uid);
-          if (mounted) setState(() => _typingFriendIds.remove(uid));
-        });
-      }
-      return;
-    }
-    // A message was edited or deleted-for-everyone → refresh the list so the
-    // last-message preview reflects it (e.g. shows "This message was deleted").
-    if (type == 'message_deleted' ||
-        type == 'delete' ||
-        type == 'message_edited') {
-      _fetchFriends();
-      return;
-    }
     // A new chat message arriving on the per-user notify socket. When the app
     // is backgrounded (e.g. music playing in the car), pop a local
     // notification so the user is prompted back. Requires the backend to emit
@@ -784,21 +756,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (type == 'new_message' || type == 'message' || type == 'chat_message') {
       final data =
           (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
-      // Mark delivered the moment our device receives the message — on ANY
-      // screen — so the sender's tick turns to a gray double without us having
-      // to open the chat. (Read is only marked when we actually view it.)
-      final mid = data['id'];
-      if (mid != null &&
-          data['receiver_id']?.toString() == _myUserId?.toString() &&
-          data['delivered'] == false) {
-        ApiService().markMessageAsDelivered(mid);
-      }
-      // A message from a friend means they've stopped typing — clear it.
-      final fromId = data['sender_id']?.toString();
-      if (fromId != null && _typingFriendIds.contains(fromId)) {
-        _typingTimers.remove(fromId)?.cancel();
-        if (mounted) setState(() => _typingFriendIds.remove(fromId));
-      }
       // Backend payload is a MessageWithSender: sender is a nested user object
       // and the text lives in `content`.
       final senderObj = (data['sender'] as Map?)?.cast<String, dynamic>();
@@ -835,11 +792,11 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       barrierLabel: 'Dismiss',
       barrierColor: Colors.black.withAlpha(120),
       transitionDuration: const Duration(milliseconds: 260),
-      pageBuilder: (_, _, _) => _LiveInviteDialog(
+      pageBuilder: (_, __, ___) => _LiveInviteDialog(
         hostName: hostName,
         trackTitle: (track['title'] ?? 'a song').toString(),
       ),
-      transitionBuilder: (_, anim, _, child) => FadeTransition(
+      transitionBuilder: (_, anim, __, child) => FadeTransition(
         opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
         child: ScaleTransition(
           scale: Tween<double>(begin: 0.9, end: 1.0).animate(
@@ -1490,7 +1447,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           child: Image.asset(
             'assets/images/logo.png',
             fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => Icon(
+            errorBuilder: (_, __, ___) => Icon(
               Icons.chat_bubble_outline_rounded,
               color: scheme.primary,
               size: 20,
@@ -1721,7 +1678,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final lastTime = f['last_timestamp'] as String? ?? '';
     final unread = (f['unread_count'] as num?)?.toInt() ?? 0;
     final hasUnread = unread > 0;
-    final isTyping = _typingFriendIds.contains(f['id']?.toString());
 
     return InkWell(
       onTap: () => openChat(f),
@@ -1751,32 +1707,20 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
-                  isTyping
-                      ? Text(
-                          'typing…',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: scheme.primary,
-                            fontStyle: FontStyle.italic,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        )
-                      : Text(
-                          lastMsg,
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: hasUnread
-                                ? textColor.withAlpha(200)
-                                : textColor.withAlpha(110),
-                            fontWeight: hasUnread
-                                ? FontWeight.w500
-                                : FontWeight.normal,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
+                  Text(
+                    lastMsg,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: hasUnread
+                          ? textColor.withAlpha(200)
+                          : textColor.withAlpha(110),
+                      fontWeight: hasUnread
+                          ? FontWeight.w500
+                          : FontWeight.normal,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
                 ],
               ),
             ),
@@ -2342,7 +2286,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   // transport can nudge left and the row balances out.
                   ValueListenableBuilder<bool>(
                     valueListenable: favoriteNotifier,
-                    builder: (_, fav, _) => GestureDetector(
+                    builder: (_, fav, __) => GestureDetector(
                       onTap: () => playbackBus.onToggleFavorite?.call(),
                       behavior: HitTestBehavior.opaque,
                       child: Padding(
@@ -2397,7 +2341,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
     return ValueListenableBuilder<PlayClock>(
       valueListenable: playClockNotifier,
-      builder: (_, clock, _) {
+      builder: (_, clock, __) {
         final durMs = clock.duration.inMilliseconds;
         final frac =
             durMs > 0 ? (clock.position.inMilliseconds / durMs).clamp(0.0, 1.0) : 0.0;
@@ -2919,13 +2863,14 @@ class _ScrollingText extends StatelessWidget {
 /// gliding out through the opening. Lighter and more elegant than the stock
 /// filled Material "exit" glyph.
 class _LogoutGlyph extends StatelessWidget {
-  const _LogoutGlyph({required this.color});
+  const _LogoutGlyph({required this.color, this.size = 22});
 
   final Color color;
+  final double size;
 
   @override
   Widget build(BuildContext context) => CustomPaint(
-        size: const Size.square(22),
+        size: Size.square(size),
         painter: _LogoutPainter(color),
       );
 }

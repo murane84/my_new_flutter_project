@@ -54,6 +54,9 @@ dependencies:
   # broken record_linux/record_platform_interface pair that failed to compile).
   record: ^7.0.0
   http_parser: ^4.0.2
+  # Receive images shared INTO Aluta from other apps (screenshot → Share →
+  # Aluta). Android/iOS only; guarded off at runtime on web/Windows.
+  receive_sharing_intent: ^1.9.0
 
   # In-app voice/video calling (WebRTC). Voice-only for now; video later.
   # Kept on the 0.12 line the call code was written/built against (1.x is a

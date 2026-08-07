@@ -1,7 +1,11 @@
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'services/share_inbox.dart';
 import 'screens/theme_provider.dart';
 import 'screens/home_page.dart';
 import 'screens/login_screen.dart';
@@ -21,6 +25,48 @@ import 'screens/token_helper.dart' show warmMediaAuth;
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+// ── Share-into-Aluta (receive images shared from other apps) ─────────────────
+// Android/iOS only. The plugin has no web/Windows implementation, so guard every
+// call — invoking it there would throw MissingPluginException.
+bool get _shareIntakeSupported =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS);
+
+/// Listen for images shared in while the app is already running.
+void _listenForSharedMedia() {
+  if (!_shareIntakeSupported) return;
+  try {
+    ReceiveSharingIntent.instance.getMediaStream().listen((files) {
+      final imgs = files
+          .where((f) => f.type == SharedMediaType.image)
+          .map((f) => f.path)
+          .toList();
+      if (imgs.isEmpty) return;
+      ShareInbox.instance.add(imgs);
+      ShareInbox.instance.maybePresent(navigatorKey.currentState);
+      ReceiveSharingIntent.instance.reset();
+    }, onError: (_) {});
+  } catch (_) {/* platform without the plugin */}
+}
+
+/// Consume any image the app was COLD-LAUNCHED with (shared while it was closed)
+/// and stash it for the recipient picker to present once we're signed in.
+Future<void> consumeInitialSharedMedia() async {
+  if (!_shareIntakeSupported) return;
+  try {
+    final files = await ReceiveSharingIntent.instance.getInitialMedia();
+    final imgs = files
+        .where((f) => f.type == SharedMediaType.image)
+        .map((f) => f.path)
+        .toList();
+    if (imgs.isNotEmpty) {
+      ShareInbox.instance.add(imgs);
+      ReceiveSharingIntent.instance.reset();
+    }
+  } catch (_) {/* platform without the plugin */}
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Media session (car / Bluetooth / lock-screen controls + a foreground
@@ -34,6 +80,9 @@ void main() async {
   // our now-protected media endpoints (otherwise a cold-start frame could 401),
   // and so the header is correctly scoped to our host (never leaked to GIF CDNs).
   await warmMediaAuth();
+  // Start listening for images shared into Aluta while it's running (Android/
+  // iOS only; a no-op elsewhere).
+  _listenForSharedMedia();
   runApp(
     ChangeNotifierProvider(
       create: (_) => ThemeProvider(),
@@ -311,6 +360,9 @@ class SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkLoginStatus() async {
+    // If the app was cold-launched from another app's Share sheet, grab the
+    // shared image(s) now; HomePage presents the recipient picker once signed in.
+    await consumeInitialSharedMedia();
     await Future.delayed(const Duration(milliseconds: 800));
     if (!mounted) return;
     final prefs = await SharedPreferences.getInstance();

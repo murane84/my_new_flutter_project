@@ -29,6 +29,7 @@ import '../services/live_session_service.dart'
     show activeLiveSession, endActiveLiveSession;
 import '../services/notif_service.dart';
 import '../services/share_inbox.dart';
+import '../utils/file_bytes.dart';
 import 'token_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
@@ -235,12 +236,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // If an image was shared into Aluta (from another app) before the user was
-    // signed in, this is the point we're authenticated and can present the
-    // "Share to…" recipient picker. Idempotent — no-op when nothing's pending.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) ShareInbox.instance.maybePresent(Navigator.of(context));
-    });
+    // Images shared INTO Aluta (from another app) surface as a banner over this
+    // friend list — the user picks the recipient right here, no separate page.
+    // Listen so a share that arrives while we're already on Home shows up.
+    ShareInbox.instance.addListener(_onShareChanged);
     AppConfig.baseUrl.then((b) {
       if (mounted) setState(() => _apiBase = b);
     });
@@ -292,6 +291,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    ShareInbox.instance.removeListener(_onShareChanged);
     ConnectionStatus.instance.online.removeListener(_onGlobalConnChanged);
     SessionEvents.instance.expired.removeListener(_onSessionExpired);
     _refreshTimer?.cancel();
@@ -993,6 +993,114 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     ApiService().markMessagesAsReadPatch(friend['id'] as int);
   }
 
+  // ── Share into Aluta (images shared from other apps) ──────────────────────
+  bool _sharingSending = false;
+
+  void _onShareChanged() {
+    if (mounted) setState(() {});
+  }
+
+  String _shareMime(String path) {
+    final p = path.toLowerCase();
+    if (p.endsWith('.png')) return 'image/png';
+    if (p.endsWith('.gif')) return 'image/gif';
+    if (p.endsWith('.webp')) return 'image/webp';
+    return 'image/jpeg';
+  }
+
+  /// Banner shown over the friend list while an inbound shared image is waiting
+  /// for a recipient. Tapping any contact sends it (see [_shareToFriend]).
+  Widget _shareBanner(ColorScheme scheme) {
+    final n = ShareInbox.instance.pending.length;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(10, 4, 10, 2),
+      padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.primary.withAlpha(120)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.image_rounded, color: scheme.primary, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _sharingSending
+                  ? 'Sending…'
+                  : (n > 1
+                      ? 'Tap a contact to send $n images'
+                      : 'Tap a contact to send the image'),
+              style: TextStyle(
+                color: scheme.onPrimaryContainer,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          if (_sharingSending)
+            const Padding(
+              padding: EdgeInsets.only(right: 10),
+              child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.close_rounded, size: 18),
+              tooltip: 'Cancel',
+              onPressed: () => ShareInbox.instance.clear(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Upload + send every pending shared image to [friend], then open that chat.
+  Future<void> _shareToFriend(Map<String, dynamic> friend) async {
+    if (_sharingSending) return;
+    final fid = friend['id'];
+    final friendId = fid is int ? fid : int.tryParse(fid.toString());
+    if (friendId == null) return;
+    final paths = ShareInbox.instance.pending;
+    if (paths.isEmpty) return;
+
+    setState(() => _sharingSending = true);
+    var ok = 0;
+    final api = ApiService();
+    for (final path in paths) {
+      try {
+        final bytes = await readFileBytes(path);
+        if (bytes.isEmpty) continue;
+        var name = path.split('/').last.split('\\').last;
+        if (name.isEmpty) name = 'shared_image.jpg';
+        final mime = _shareMime(path);
+        final up =
+            await api.uploadMedia(bytes: bytes, filename: name, mime: mime);
+        if (up == null || up['url'] == null) continue;
+        final sent = await api.sendMessage(
+          friendId,
+          '',
+          messageType: 'image',
+          mediaUrl: up['url'] as String,
+          mediaName: (up['name'] as String?) ?? name,
+          mediaMime: (up['mime'] as String?) ?? mime,
+          mediaSize: (up['size'] as num?)?.toInt(),
+        );
+        if (sent != null) ok++;
+      } catch (_) {/* skip this image, keep going */}
+    }
+    ShareInbox.instance.clear();
+    if (!mounted) return;
+    setState(() => _sharingSending = false);
+    if (ok == 0) {
+      showToast(context, 'Couldn’t send the image', type: ToastType.error);
+      return;
+    }
+    openChat(friend); // land in the conversation showing the sent image
+  }
+
   // Direct call to a friend's saved phone number (tel: dialer).
   Future<void> _callNumber(String? phone, String name) async {
     final p = (phone ?? '').trim();
@@ -1617,6 +1725,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
         const SizedBox(height: 10),
+        if (ShareInbox.instance.hasPending) _shareBanner(scheme),
         Expanded(
           child: _isLoadingFriends
               ? const Center(child: CircularProgressIndicator())
@@ -1680,7 +1789,8 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final hasUnread = unread > 0;
 
     return InkWell(
-      onTap: () => openChat(f),
+      onTap: () =>
+          ShareInbox.instance.hasPending ? _shareToFriend(f) : openChat(f),
       borderRadius: BorderRadius.circular(10),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),

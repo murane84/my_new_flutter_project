@@ -44,7 +44,9 @@ void _listenForSharedMedia() {
           .toList();
       if (imgs.isEmpty) return;
       ShareInbox.instance.add(imgs);
-      ShareInbox.instance.maybePresent(navigatorKey.currentState);
+      // Surface the friend list (with its "tap a contact to send" banner) in
+      // case the share arrived while the user was in a chat or sub-screen.
+      navigatorKey.currentState?.popUntil((r) => r.isFirst);
       ReceiveSharingIntent.instance.reset();
     }, onError: (_) {});
   } catch (_) {/* platform without the plugin */}

@@ -13,6 +13,10 @@ router = APIRouter(
     tags=["Messages"]
 )
 
+# How long after posting a text message it can still be edited. Past this, the
+# edit endpoint returns 403 and the client hides the Edit action.
+EDIT_WINDOW = timedelta(hours=1)
+
 # 🔒 General: User and friend helper routes
 @router.get("/users/all", response_model=List[schemas.UserOut], operation_id="messages_get_all_users")
 def get_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -265,6 +269,17 @@ def edit_message(
         raise HTTPException(status_code=400, detail="Cannot edit a deleted message")
     if (message.message_type or "text") != "text":
         raise HTTPException(status_code=400, detail="Only text messages can be edited")
+    # Editing is locked once a message is older than EDIT_WINDOW (WhatsApp-style).
+    # Enforced server-side so the client's own gate can't be bypassed.
+    ts = message.timestamp
+    if ts is not None:
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - ts > EDIT_WINDOW:
+            raise HTTPException(
+                status_code=403,
+                detail="This message is too old to edit",
+            )
 
     message.content = payload.content or ""
     message.edited = True

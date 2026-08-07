@@ -20,7 +20,6 @@ import '../utils/time_utils.dart';
 import '../utils/file_bytes.dart';
 import '../utils/marquee_text.dart';
 import 'live_session_screen.dart';
-import '../services/live_session_service.dart' show activeLiveSession;
 import 'gif_picker.dart';
 import '../services/call_service.dart';
 import 'home_page.dart' show playlistNotifier, playbackBus;
@@ -136,9 +135,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   bool _hasNewMsg = false;
 
   Timer? _statusTimer;
-  // Debounces persisting the message cache after bursts of realtime WS updates
-  // (delivered/read ticks, reactions) so we don't hammer storage on every event.
-  Timer? _cacheSaveTimer;
+  Timer? _pollTimer;
   Timer? _typingTimer;
   Timer? _keepAliveTimer;
   StreamSubscription? _connectivitySub;
@@ -186,8 +183,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _ws = WebSocketManager(
       userId: '',
       onEventReceived: _handleWsEvent,
-      onConnected: _onWsConnected,
-      onDisconnected: _onWsGaveUp,
+      onDisconnected: () => _startPolling(),
     );
   }
 
@@ -202,7 +198,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     ConnectionStatus.instance.online.removeListener(_onConnStatusChanged);
     _statusTimer?.cancel();
-    _cacheSaveTimer?.cancel();
+    _pollTimer?.cancel();
     _typingTimer?.cancel();
     _keepAliveTimer?.cancel();
     _connectivitySub?.cancel();
@@ -219,22 +215,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   void didChangeMetrics() {
     if (View.of(context).viewInsets.bottom > 0 && _showEmoji) {
       setState(() => _showEmoji = false);
-    }
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) return;
-    // Coming back to the foreground: the OS may have frozen or dropped the
-    // socket while backgrounded, so any events in that window were missed.
-    _markActivity();
-    if (_ws.isConnected) {
-      // Socket survived → just catch up.
-      _reconcile();
-    } else {
-      // Socket is down → revive it; its onConnected fires _reconcile for us,
-      // so we don't double-fetch here.
-      _ws.ensureConnected();
     }
   }
 
@@ -264,21 +244,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     await _loadCachedMessages(); // show cached messages instantly
     await _loadMessages();        // then fetch fresh from network
     _checkOnlineStatus();
+    _startPolling();
     _startKeepAlive();
     _startConnectivityWatch();
 
     if (_myId?.isNotEmpty == true) {
-      // Close any prior socket (the initState placeholder, or the previous
-      // friend's socket when the thread changes) so we never leave a stray
-      // connection alive in the background.
-      _ws.close();
       _ws = WebSocketManager(
         userId: _myId!,
         onEventReceived: _handleWsEvent,
-        // On every (re)connect, run one reconciliation fetch to close any gap
-        // between the last event we saw and the socket coming (back) up.
-        onConnected: _onWsConnected,
-        onDisconnected: _onWsGaveUp,
+        onDisconnected: () => _startPolling(),
       );
       _ws.connect();
     }
@@ -293,7 +267,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     try {
       final msgs = await ApiService().fetchMessagesBetween(
         uid, widget.friendId,
-        skip: 0, limit: _reconcileLimit,
+        skip: 0, limit: 60,
       );
 
       final unread = msgs.any((m) =>
@@ -319,32 +293,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
   }
 
-  // ── Realtime lifecycle ────────────────────────────────────────────────────
-  //
-  // The WebSocket is the single source of truth for live updates. We no longer
-  // poll every 2s; instead we run ONE reconciliation fetch whenever the realtime
-  // link is (re)established or the app returns to the foreground. See _reconcile.
-
-  void _onWsConnected() {
-    // The socket just came (back) up. Events that fired while it was down were
-    // never delivered, so do a single catch-up fetch, then trust WS events.
-    _reconcile();
-  }
-
-  void _onWsGaveUp() {
-    // The manager exhausted its internal retries (a prolonged outage). Don't
-    // fall back to tight polling — the 60s keepalive, the connectivity watcher,
-    // and app-resume all call _ws.ensureConnected() to revive the socket, and
-    // each successful revive triggers _onWsConnected → _reconcile.
-    if (mounted) setState(() => _isReconnecting = false);
-  }
-
-  // Persist the cache shortly after a burst of WS updates settles, instead of
-  // writing on every single delivered/read/reaction event.
-  void _scheduleCacheSave() {
-    _cacheSaveTimer?.cancel();
-    _cacheSaveTimer =
-        Timer(const Duration(milliseconds: 500), _saveMessagesCache);
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) => _poll());
   }
 
   // ── Keepalive: ping the server every 60s while chat is open and active ──
@@ -352,10 +303,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _keepAliveTimer?.cancel();
     _keepAliveTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
       if (!mounted) return;
-      // Cheap no-op if the socket is healthy; revives it if a prolonged outage
-      // made the manager give up. This is the safety net that keeps realtime
-      // alive without a 2s poll.
-      _ws.ensureConnected();
       final secsSinceActivity =
           DateTime.now().difference(_lastActivityTime).inSeconds;
       if (secsSinceActivity < 180) {
@@ -429,16 +376,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       final wasOffline = _isUserOffline;
       ConnectionStatus.instance.set(true);
       setState(() => _isReconnecting = false);
-      // Bring the realtime socket back if it had given up; a successful revive
-      // also fires _onWsConnected → _reconcile. We still do an explicit fetch
-      // below so the "N new messages" toast is accurate on this manual path.
-      _ws.ensureConnected();
+      _startPolling();
 
       // Fetch any messages that arrived while offline
       final uid = int.tryParse(_myId ?? '');
       if (uid != null) {
         final fresh = await ApiService().fetchMessagesBetween(
-          uid, widget.friendId, skip: 0, limit: _reconcileLimit);
+          uid, widget.friendId, skip: 0, limit: 60);
         if (!mounted) return;
         final before = _messages.length;
         final merged = _merge(_messages, fresh, markRead: _isAtBottom);
@@ -470,64 +414,27 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   // Manual reconnect (tap "Go Online" banner)
   Future<void> _reconnect() => _autoReconnect();
 
-  // How many recent messages a reconciliation fetch pulls. Sized to the WHOLE
-  // currently-loaded window rather than a fixed 60, so status changes (edited /
-  // reaction / read / delivered / tombstone) on ANY loaded message reconcile
-  // after the socket was down — not just the newest 60. Safe because the
-  // endpoint returns newest-first and the loaded list is always the newest
-  // contiguous run: fetching this many refreshes exactly what's already loaded
-  // (plus any brand-new messages) and never pulls older history into view.
-  // Floored at 60 (initial page size) and capped so a marathon session can't
-  // trigger a pathologically large fetch.
-  int get _reconcileLimit {
-    final n = _messages.length;
-    if (n < 60) return 60;
-    if (n > 300) return 300;
-    return n;
-  }
-
-  // Reconciliation fetch. Runs on (re)connect and app-resume — NOT on a timer.
-  //
-  // Usually a SINGLE fetch: pull the loaded window, merge it over the current
-  // list (so status changes — is_read/delivered/edited/reactions/tombstones —
-  // are picked up) and mark anything freshly received as delivered/read.
-  //
-  // The one wrinkle: if messages arrived while the socket was down, that first
-  // fetch spends part of its window on those new arrivals and may not reach the
-  // oldest loaded messages, leaving their status stale for a cycle. So when a
-  // pass ADDS messages (the window shifted), we run one more — the window is now
-  // sized to include them, so the stragglers get refreshed immediately instead
-  // of waiting for the next reconnect. Bounded so a burst of live traffic during
-  // reconnect can't loop us indefinitely; the WS delivers the rest live anyway.
-  Future<void> _reconcile() async {
-    for (var pass = 0; pass < 3; pass++) {
-      final addedNew = await _reconcileOnce();
-      if (!addedNew) break; // window fully covered → nothing left to catch up
-    }
-  }
-
-  // A single reconciliation fetch+merge+mark. Returns true iff it ADDED new
-  // messages to the list (which means the window shifted and a follow-up pass
-  // should refresh any now-uncovered stragglers).
-  Future<bool> _reconcileOnce() async {
+  Future<void> _poll() async {
     final uid = int.tryParse(_myId ?? '');
-    if (uid == null) return false;
+    if (uid == null) return;
 
+    // Always fetch without lastTimestamp so status changes (is_read, delivered)
+    // on already-visible messages are captured every cycle — no manual refresh needed.
     List<Map<String, dynamic>> fetched;
     try {
       fetched = await ApiService().fetchMessagesBetween(
         uid, widget.friendId,
-        skip: 0, limit: _reconcileLimit,
+        skip: 0, limit: 60,
       );
     } catch (_) {
-      // A single fetch failure is not proof the whole server is down — leave the
+      // A single poll failure is not proof the whole server is down — leave the
       // connection status to the app-wide heartbeat so indicators stay in sync.
-      return false;
+      return;
     }
-    if (fetched.isEmpty || !mounted) return false;
+    if (fetched.isEmpty) return;
 
-    final before = _messages.length;
     final merged = _merge(_messages, fetched, markRead: _isAtBottom);
+    if (!mounted) return;
     if (!_listEq(_messages, merged)) {
       setState(() => _messages = merged);
       _saveMessagesCache();
@@ -550,8 +457,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           m['receiver_id'].toString() == _myId && m['is_read'] == false);
       if (needsRead) ApiService().markMessagesAsReadPatch(widget.friendId);
     }
-
-    return _messages.length > before;
   }
 
   List<Map<String, dynamic>> _merge(
@@ -618,48 +523,22 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final type = event['type'];
     if (!mounted) return;
 
-    if (type == 'new_message' || type == 'message_sent') {
-      // The server sends the serialized message under 'data' (older builds used
-      // 'message' — accept either so a version skew never drops messages).
-      // 'new_message' is the peer's message to us; 'message_sent' is our own
-      // copy echoed back, normally already inserted optimistically by the send
-      // path, so the upsert below just dedupes it.
-      final msg = (event['data'] ?? event['message']) as Map<String, dynamic>?;
-      if (msg == null) return;
-
-      // Scope to THIS conversation. The per-user socket also carries events for
-      // our OTHER threads, and these two types INSERT, so without this guard a
-      // message from a different chat would leak into this list.
-      final sender = msg['sender_id']?.toString();
-      final receiver = msg['receiver_id']?.toString();
-      final fid = widget.friendId.toString();
-      final inThisThread = (sender == fid && receiver == _myId) ||
-          (sender == _myId && receiver == fid);
-      if (!inThisThread) return;
-
-      final id = msg['id'].toString();
-      final incoming = type == 'new_message';
-      final existed = _messages.any((m) => m['id'].toString() == id);
-      if (!existed) {
-        setState(() => _messages.insert(0, msg));
+    if (type == 'new_message') {
+      final msg = event['message'] as Map<String, dynamic>?;
+      if (msg != null) {
+        setState(() {
+          final id = msg['id'].toString();
+          if (!_messages.any((m) => m['id'].toString() == id)) {
+            _messages.insert(0, msg);
+          }
+        });
+        if (_isAtBottom) {
+          _scrollToBottom();
+          ApiService().markMessagesAsReadPatch(widget.friendId);
+        } else {
+          setState(() => _hasNewMsg = true);
+        }
       }
-
-      if (incoming && !existed &&
-          msg['receiver_id'].toString() == _myId &&
-          msg['delivered'] == false) {
-        // We now hold the message without ever hitting the fetch endpoint that
-        // auto-marks delivery, so mark it explicitly. The server then emits
-        // message_delivered back to the sender → their tick turns double.
-        ApiService().markMessageAsDelivered(msg['id']);
-      }
-
-      if (_isAtBottom) {
-        _scrollToBottom();
-        if (incoming) ApiService().markMessagesAsReadPatch(widget.friendId);
-      } else if (incoming) {
-        setState(() => _hasNewMsg = true);
-      }
-      _scheduleCacheSave();
     } else if (type == 'message_delivered') {
       // Server marks our message delivered once the friend fetches it → the
       // single tick becomes a double (gray) tick.
@@ -670,7 +549,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           final idx = _messages.indexWhere((m) => m['id'] == mid);
           if (idx != -1) _messages[idx]['delivered'] = true;
         });
-        _scheduleCacheSave();
       }
     } else if (type == 'messages_read') {
       // Friend opened the thread and read our messages → flip the double ticks
@@ -689,35 +567,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             }
           }
         });
-        _scheduleCacheSave();
-      }
-    } else if (type == 'message_edited') {
-      // Sender edited a text message → update the body in place and flag it
-      // edited. Payload is the full serialized message under 'data'.
-      final data = event['data'] as Map<String, dynamic>?;
-      final id = data?['id'];
-      if (id != null) {
-        setState(() {
-          final idx = _messages.indexWhere((m) => m['id'] == id);
-          if (idx != -1) {
-            _messages[idx]['content'] = data?['content'];
-            _messages[idx]['edited'] = true;
-          }
-        });
-        _scheduleCacheSave();
-      }
-    } else if (type == 'message_reaction') {
-      // Peer reacted or cleared a reaction → replace the message's reactions
-      // blob (a JSON string, or null when empty), matching what the API and the
-      // reconcile merge store, so _reactionsOf renders it identically.
-      final data = event['data'] as Map<String, dynamic>?;
-      final mid = data?['message_id'];
-      if (mid != null) {
-        setState(() {
-          final idx = _messages.indexWhere((m) => m['id'] == mid);
-          if (idx != -1) _messages[idx]['reactions'] = data?['reactions'];
-        });
-        _scheduleCacheSave();
       }
     } else if (type == 'delete' || type == 'message_deleted') {
       // Delete-for-everyone now leaves a tombstone; mark it rather than remove.
@@ -733,7 +582,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           _messages[idx]['reactions'] = null;
         }
       });
-      _scheduleCacheSave();
     } else if (type == 'message_pinned') {
       // The other participant pinned a message. Single active pin per
       // conversation, so clear any others, then mark this one.
@@ -749,7 +597,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             _messages[idx]['pinned_until'] = data?['pinned_until'];
           }
         });
-        _scheduleCacheSave();
       }
     } else if (type == 'message_unpinned') {
       final data = event['data'] as Map<String, dynamic>?;
@@ -759,7 +606,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           final idx = _messages.indexWhere((m) => m['id'] == mid);
           if (idx != -1) _messages[idx]['pinned_until'] = null;
         });
-        _scheduleCacheSave();
       }
     } else if (type == 'typing') {
       if (event['user_id'].toString() == widget.friendId.toString()) {
@@ -779,43 +625,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   /// music player's already-loaded playlist (falling back to the file browser
   /// only when nothing is loaded yet).
   Future<void> _startListenTogether() async {
-    // Only ONE live session can run at a time (single global controller +
-    // player). Starting a second one would clobber the first — its UI would
-    // vanish and it couldn't be resurfaced. So if a session is already active,
-    // don't start a new one; offer to reopen the existing one instead.
-    final existing = activeLiveSession;
-    if (existing != null) {
-      final open = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Already listening together'),
-          content: Text(
-            "You're already in a Listen Together session with "
-            "${existing.peerName}. End that one before starting a new session.",
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text('Open ${existing.peerName}'),
-            ),
-          ],
-        ),
-      );
-      if (open == true && mounted) {
-        // Resurface the existing (possibly minimised) session's UI.
-        showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) => LiveSessionScreen.resume(),
-        );
-      }
-      return;
-    }
-
     final token = await getToken();
     final myUserId = int.tryParse(_myId ?? '');
     if (token == null || myUserId == null) {
@@ -1318,8 +1127,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         radius: 20,
                         backgroundColor: scheme.primary.withAlpha(38),
                         backgroundImage: avatarUrl != null
-                            ? CachedNetworkImageProvider(avatarUrl,
-                                headers: mediaAuthHeaders(avatarUrl))
+                            ? CachedNetworkImageProvider(avatarUrl)
                             : null,
                         child: avatarUrl == null
                             ? Text(
@@ -1465,7 +1273,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       showToast(context, msg, type: ToastType.error);
 
   // ── Media sharing ───────────────────────────────────────────────────────
-  /// Build a full URL from a relative attachment path (`/attachments/<id>`).
+  /// Build a full URL from a relative attachment path (/attachments/<id>).
   String fullMediaUrl(String rel) =>
       rel.startsWith('http') ? rel : '$_apiBase$rel';
 
@@ -1587,7 +1395,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     var outName = filename;
     if (outMime == 'image/png' && !outName.toLowerCase().endsWith('.png')) {
       final dot = outName.lastIndexOf('.');
-      outName = '${dot > 0 ? outName.substring(0, dot) : outName}.png';
+      outName = (dot > 0 ? outName.substring(0, dot) : outName) + '.png';
     }
     await _uploadAndSend(
       bytes: outBytes,
@@ -1600,14 +1408,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   Future<void> _pickDocument() async {
     try {
-      final res = await FilePicker.pickFiles();
+      final res = await FilePicker.pickFiles(withData: true);
       if (res == null || res.files.isEmpty) return;
       final f = res.files.first;
-      // readAsBytes() supersedes the deprecated withData/.bytes pair: it reads
-      // from the file path on native (no eager whole-file load) while still
-      // returning the in-memory bytes on web. A read failure throws and is
-      // caught by the surrounding try/catch below.
-      final bytes = await f.readAsBytes();
+      final bytes = f.bytes;
+      if (bytes == null) {
+        if (mounted) showToast(context, 'Could not read file', type: ToastType.error);
+        return;
+      }
       final ext = (f.extension ?? '').toLowerCase();
       const imgExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
       if (imgExt.contains(ext)) {
@@ -1692,12 +1500,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         } catch (_) {}
       }
     } catch (_) {}
-    if (mounted) {
-      setState(() {
+    if (mounted) setState(() {
       _isRecording = false;
       _recordMs = 0;
     });
-    }
   }
 
   Future<void> _stopAndSendRecording() async {
@@ -1871,9 +1677,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               maxWidth: 240, maxHeight: 300, minWidth: 120, minHeight: 80),
           child: CachedNetworkImage(
             imageUrl: url,
-            httpHeaders: mediaAuthHeaders(url),
             fit: BoxFit.cover,
-            placeholder: (_, _) => Container(
+            placeholder: (_, __) => Container(
               width: 200,
               height: 150,
               color: Colors.black.withAlpha(20),
@@ -1884,7 +1689,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     child: CircularProgressIndicator(strokeWidth: 2)),
               ),
             ),
-            errorWidget: (_, _, _) => Container(
+            errorWidget: (_, __, ___) => Container(
               width: 180,
               height: 120,
               color: Colors.black.withAlpha(20),
@@ -1908,10 +1713,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               child: InteractiveViewer(
                 minScale: 0.8,
                 maxScale: 4,
-                child: CachedNetworkImage(
-                    imageUrl: url,
-                    httpHeaders: mediaAuthHeaders(url),
-                    fit: BoxFit.contain),
+                child: CachedNetworkImage(imageUrl: url, fit: BoxFit.contain),
               ),
             ),
           ),
@@ -2017,28 +1819,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   Future<void> _openUrl(String url) async {
-    // Attachments are auth-protected now, so an external browser can't fetch
-    // them. Download the bytes WITH our token, then hand the file to the system
-    // sheet (open / save / share) — same pattern as saving an image.
     try {
-      if (mounted) showToast(context, 'Opening…');
-      final res = await http.get(Uri.parse(url), headers: mediaAuthHeaders(url));
-      if (res.statusCode != 200) {
-        if (mounted) {
-          showToast(context, 'Could not open file', type: ToastType.error);
-        }
-        return;
+      final ok = await launchUrl(Uri.parse(url),
+          mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        showToast(context, 'Could not open file', type: ToastType.error);
       }
-      var name = Uri.parse(url).pathSegments.isNotEmpty
-          ? Uri.parse(url).pathSegments.last
-          : '';
-      if (name.isEmpty) {
-        name = 'aluta_file_${DateTime.now().millisecondsSinceEpoch}';
-      }
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/$name');
-      await file.writeAsBytes(res.bodyBytes, flush: true);
-      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
     } catch (_) {
       if (mounted) showToast(context, 'Could not open file', type: ToastType.error);
     }
@@ -2049,7 +1835,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   Future<void> _saveImage(String url) async {
     try {
       if (mounted) showToast(context, 'Downloading…');
-      final res = await http.get(Uri.parse(url), headers: mediaAuthHeaders(url));
+      final res = await http.get(Uri.parse(url));
       if (res.statusCode != 200) {
         if (mounted) showToast(context, 'Download failed', type: ToastType.error);
         return;
@@ -2077,9 +1863,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final isMe = msg['sender_id'].toString() == _myId;
     final content = msg['content'] as String? ?? '';
     final scheme = Theme.of(context).colorScheme;
-    // A tombstone (deleted for everyone, or locally deleted for me) has no
-    // content to react to / reply to / edit — gate those actions off.
-    final deleted = msg['is_deleted'] == true || msg['deleted_for_me'] == true;
 
     showModalBottomSheet(
       context: context,
@@ -2103,45 +1886,24 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              // Quick emoji reactions + a "+" that opens the FULL emoji picker
-              // so any emoji can be used as a reaction, not just these six.
-              if (!deleted)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      ...['👍', '❤️', '😂', '😮', '😢', '🙏'].map((e) {
-                        return GestureDetector(
-                          onTap: () {
-                            Navigator.pop(ctx);
-                            _addReaction(msg, e);
-                          },
-                          child: Text(e, style: const TextStyle(fontSize: 28)),
-                        );
-                      }),
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.pop(ctx);
-                          _showReactionEmojiPicker(msg);
-                        },
-                        child: Container(
-                          width: 38,
-                          height: 38,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: scheme.surfaceContainerHighest,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(Icons.add_rounded,
-                              size: 22, color: scheme.onSurfaceVariant),
-                        ),
-                      ),
-                    ],
-                  ),
+              // Quick emoji reactions
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: ['👍', '❤️', '😂', '😮', '😢', '🙏'].map((e) {
+                    return GestureDetector(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _addReaction(msg, e);
+                      },
+                      child: Text(e, style: const TextStyle(fontSize: 28)),
+                    );
+                  }).toList(),
                 ),
-              if (!deleted) const Divider(height: 1),
+              ),
+              const Divider(height: 1),
               _ActionTile(
                 icon: Icons.reply_rounded,
                 label: 'Reply',
@@ -2151,7 +1913,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   FocusScope.of(context).requestFocus(FocusNode());
                 },
               ),
-              if (!deleted)
+              if (msg['is_deleted'] != true)
                 _ActionTile(
                   icon: _isPinned(msg)
                       ? Icons.push_pin
@@ -2175,7 +1937,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   showToast(context, 'Copied');
                 },
               ),
-              if (!deleted)
+              if (msg['is_deleted'] != true)
                 _ActionTile(
                   icon: Icons.forward_rounded,
                   label: 'Forward',
@@ -2185,7 +1947,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   },
                 ),
               if (isMe) ...[
-                if ((msg['message_type'] ?? 'text') == 'text' && !deleted)
+                if ((msg['message_type'] ?? 'text') == 'text' &&
+                    msg['is_deleted'] != true &&
+                    _withinEditWindow(msg))
                   _ActionTile(
                     icon: Icons.edit_rounded,
                     label: 'Edit',
@@ -2214,62 +1978,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               ],
               const SizedBox(height: 8),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Full emoji picker for reactions — react with ANY emoji, not just the six
-  // quick ones. Opens as its own sheet; picking one adds the reaction.
-  void _showReactionEmojiPicker(Map<String, dynamic> msg) {
-    final scheme = Theme.of(context).colorScheme;
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: scheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: SizedBox(
-          height: 320,
-          child: EmojiPicker(
-            // No textEditingController → the tapped emoji comes back here so we
-            // add it as a reaction instead of inserting it into the composer.
-            onEmojiSelected: (category, emoji) {
-              Navigator.pop(ctx);
-              _addReaction(msg, emoji.emoji);
-            },
-            config: Config(
-              height: 320,
-              emojiViewConfig: EmojiViewConfig(
-                emojiSizeMax: 26,
-                columns: 8,
-                backgroundColor: scheme.surface,
-                gridPadding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                recentsLimit: 40,
-                buttonMode: ButtonMode.MATERIAL,
-                noRecents: Text(
-                  'No recent emoji yet',
-                  style:
-                      TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
-                ),
-              ),
-              categoryViewConfig: CategoryViewConfig(
-                backgroundColor: scheme.surfaceContainerHighest,
-                indicatorColor: scheme.primary,
-                iconColor: scheme.onSurfaceVariant,
-                iconColorSelected: scheme.primary,
-                dividerColor: scheme.outlineVariant.withAlpha(80),
-              ),
-              searchViewConfig: SearchViewConfig(
-                backgroundColor: scheme.surfaceContainerHighest,
-                buttonIconColor: scheme.primary,
-                hintText: 'Search emoji',
-              ),
-            ),
           ),
         ),
       ),
@@ -2325,6 +2033,20 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   // ── Edit in place ──────────────────────────────────────────────────────────
+
+  // Editing is only allowed within this window after a message is posted; the
+  // server enforces the same limit (returns 403 past it).
+  static const Duration _editWindow = Duration(hours: 1);
+
+  /// Whether [msg] is still within the edit window. Falls back to allowing the
+  /// action when the timestamp can't be parsed, so the server has the final say.
+  bool _withinEditWindow(Map<String, dynamic> msg) {
+    final ts = msg['timestamp']?.toString();
+    if (ts == null || ts.isEmpty) return true;
+    final t = DateTime.tryParse(ts);
+    if (t == null) return true;
+    return DateTime.now().toUtc().difference(t.toUtc()) <= _editWindow;
+  }
 
   void _startEditing(Map<String, dynamic> msg) {
     final raw = (msg['content'] as String?) ?? '';
@@ -2408,9 +2130,19 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   void _jumpToQuoted(String quoted) {
     final target = _findQuotedMessage(quoted);
     if (target == null) return;
-    // Reuse the robust scroll-until-built logic so tapping a reply quote also
-    // reaches messages that aren't currently on screen.
-    _jumpToMessage(target['id'].toString());
+    final ctx = _msgKeys[target['id'].toString()]?.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 320),
+      alignment: 0.3,
+      curve: Curves.easeInOut,
+    );
+    HapticFeedback.selectionClick();
+    setState(() => _highlightedId = target['id'].toString());
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _highlightedId = null);
+    });
   }
 
   Future<void> _deleteMessage(int id, bool forAll) async {
@@ -2443,37 +2175,17 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       }
       return;
     }
-    // Delete for me: leave a LOCAL tombstone ("You deleted this message") so I
-    // can see I deleted it, instead of the bubble silently vanishing. The
-    // backend hides the message from my future fetches (visible_to_* = false),
-    // and _merge keeps this local entry (it's never in a fetch again), so the
-    // tombstone persists across reconciles and restarts (it's cached too).
+    // Delete for me: remove locally.
     final backup = Map<String, dynamic>.from(
         _messages.firstWhere((m) => m['id'] == id));
-    setState(() {
-      final idx = _messages.indexWhere((m) => m['id'] == id);
-      if (idx != -1) {
-        _messages[idx]['deleted_for_me'] = true;
-        _messages[idx]['content'] = '';
-        _messages[idx]['message_type'] = 'text';
-        _messages[idx]['media_url'] = null;
-        _messages[idx]['reactions'] = null;
-      }
-    });
-    _scheduleCacheSave();
+    setState(() => _messages.removeWhere((m) => m['id'] == id));
     try {
       await ApiService().deleteSingleMessage(id, deleteForAll: false);
       if (mounted) {
         showToast(context, 'Deleted for you', type: ToastType.info);
       }
     } catch (_) {
-      // Revert the tombstone if the server rejected the delete.
-      if (mounted) {
-        setState(() {
-          final idx = _messages.indexWhere((m) => m['id'] == id);
-          if (idx != -1) _messages[idx] = backup;
-        });
-      }
+      if (mounted) setState(() => _messages.insert(0, backup));
     }
   }
 
@@ -2623,56 +2335,18 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   /// Scroll to a message by id and briefly highlight it.
-  ///
-  /// The thread is a lazy `reverse: true` ListView.builder, so a pinned or
-  /// quoted message that's currently off-screen has NO built element and its
-  /// GlobalKey.currentContext is null — the old `if (ctx == null) return;`
-  /// silently did nothing, which is why tapping the pin banner didn't move.
-  /// Instead we walk the scroll offset toward the target's position (index 0 is
-  /// the newest at minScrollExtent/bottom; older messages lie toward
-  /// maxScrollExtent), letting intervening items build, until the target's
-  /// bubble mounts — then ensureVisible lands on it exactly.
-  Future<void> _jumpToMessage(String id) async {
-    final msgIdx = _messages.indexWhere((m) => m['id'].toString() == id);
-    if (msgIdx == -1) return;
-
-    Future<bool> tryEnsure() async {
-      final ctx = _msgKeys[id]?.currentContext;
-      if (ctx == null) return false;
-      await Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 300),
-        alignment: 0.35,
-        curve: Curves.easeInOut,
-      );
-      return true;
-    }
-
-    if (!await tryEnsure()) {
-      for (int attempt = 0; attempt < 14; attempt++) {
-        if (!mounted || !_scrollCtrl.hasClients) return;
-        final pos = _scrollCtrl.position;
-        final frac = _messages.isEmpty
-            ? 0.0
-            : (msgIdx / _messages.length).clamp(0.0, 1.0);
-        final target = (pos.minScrollExtent +
-                frac * (pos.maxScrollExtent - pos.minScrollExtent))
-            .clamp(pos.minScrollExtent, pos.maxScrollExtent);
-        await _scrollCtrl.animateTo(
-          target,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-        );
-        // Give the newly-revealed items a frame to build, then retry.
-        await Future.delayed(const Duration(milliseconds: 40));
-        if (await tryEnsure()) break;
-      }
-    }
-
+  void _jumpToMessage(String id) {
+    final ctx = _msgKeys[id]?.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 320),
+      alignment: 0.3,
+      curve: Curves.easeInOut,
+    );
     HapticFeedback.selectionClick();
-    if (!mounted) return;
     setState(() => _highlightedId = id);
-    Future.delayed(const Duration(milliseconds: 1600), () {
+    Future.delayed(const Duration(milliseconds: 1500), () {
       if (mounted) setState(() => _highlightedId = null);
     });
   }
@@ -2793,10 +2467,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       mainText = lines.skip(quoteLines.length + 1).join('\n').trim();
     }
 
-    // Tombstone: delete-for-everyone (is_deleted) or delete-for-me
-    // (deleted_for_me, local) keeps the row but blanks its content.
-    final deletedForMe = msg['deleted_for_me'] == true;
-    final tomb = msg['is_deleted'] == true || deletedForMe;
+    // Tombstone: delete-for-everyone keeps the row but blanks its content.
+    final tomb = msg['is_deleted'] == true;
     final reactions = tomb ? const <String>[] : _reactionsOf(msg);
     // Media attachment?
     final msgType = (msg['message_type'] as String?) ?? 'text';
@@ -2890,9 +2562,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             backgroundColor: scheme.primaryContainer,
                             backgroundImage: _friendAvatar.isNotEmpty
                                 ? CachedNetworkImageProvider(
-                                    fullMediaUrl(_friendAvatar),
-                                    headers: mediaAuthHeaders(
-                                        fullMediaUrl(_friendAvatar)))
+                                    fullMediaUrl(_friendAvatar))
                                 : null,
                             child: _friendAvatar.isNotEmpty
                                 ? null
@@ -2951,9 +2621,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                   size: 15, color: textColor.withAlpha(120)),
                               const SizedBox(width: 6),
                               Text(
-                                deletedForMe
-                                    ? 'You deleted this message'
-                                    : 'This message was deleted',
+                                'This message was deleted',
                                 style: TextStyle(
                                   color: textColor.withAlpha(160),
                                   fontStyle: FontStyle.italic,
@@ -3007,7 +2675,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         // ── Message body (media and/or text) ──────────
                         if (isMedia)
                           _mediaContent(
-                              msgType, mediaRel, msg, isMe, textColor, scheme),
+                              msgType, mediaRel!, msg, isMe, textColor, scheme),
                         if (!tomb && mainText.trim().isNotEmpty)
                           Padding(
                             padding: EdgeInsets.only(top: isMedia ? 6 : 0),
@@ -3261,14 +2929,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(6),
                 child: CachedNetworkImage(
-                  imageUrl: fullMediaUrl(mediaRel),
-                  httpHeaders: mediaAuthHeaders(fullMediaUrl(mediaRel)),
+                  imageUrl: fullMediaUrl(mediaRel!),
                   width: 36,
                   height: 36,
                   fit: BoxFit.cover,
-                  placeholder: (_, _) => Container(
+                  placeholder: (_, __) => Container(
                       width: 36, height: 36, color: scheme.surfaceContainerHigh),
-                  errorWidget: (_, _, _) => Container(
+                  errorWidget: (_, __, ___) => Container(
                       width: 36,
                       height: 36,
                       color: scheme.surfaceContainerHigh,
@@ -3704,7 +3371,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                 // When `textEditingController` is provided, EmojiPicker already
                 // inserts the tapped emoji into it (at the cursor). Do NOT also
                 // append it here — doing both made every emoji appear twice.
-                onEmojiSelected: (_, _) {},
+                onEmojiSelected: (_, __) {},
                 textEditingController: _ctrl,
                 config: Config(
                   height: 262,
@@ -3917,8 +3584,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               backgroundColor:
                   Theme.of(context).colorScheme.primaryContainer,
               backgroundImage: _friendAvatar.isNotEmpty
-                  ? CachedNetworkImageProvider(fullMediaUrl(_friendAvatar),
-                      headers: mediaAuthHeaders(fullMediaUrl(_friendAvatar)))
+                  ? CachedNetworkImageProvider(fullMediaUrl(_friendAvatar))
                   : null,
               child: _friendAvatar.isNotEmpty
                   ? null
@@ -4302,8 +3968,7 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
     if (!_prepared) {
       setState(() => _loading = true);
       try {
-        final d = await _player.setUrl(widget.url,
-            headers: mediaAuthHeaders(widget.url));
+        final d = await _player.setUrl(widget.url);
         if (d != null && mounted) _dur = d;
         _prepared = true;
       } catch (_) {
@@ -4584,6 +4249,7 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
   // scale strokes/emoji from display units up to the ORIGINAL image resolution
   // when flattening, so the sent image stays sharp (not a blurry screen grab).
   double _canvasW = 1;
+  double _canvasH = 1;
 
   final List<_PenStroke> _strokes = [];
   final List<_ShapeMark> _shapes = [];
@@ -4791,6 +4457,7 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
                   child: LayoutBuilder(builder: (ctx, c) {
                     final w = c.maxWidth, h = c.maxHeight;
                     _canvasW = w;
+                    _canvasH = h;
                     Offset frac(Offset local) => Offset(
                         (local.dx / w).clamp(0.0, 1.0),
                         (local.dy / h).clamp(0.0, 1.0));
@@ -4888,7 +4555,7 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 itemCount: _emojiTray.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 6),
+                separatorBuilder: (_, __) => const SizedBox(width: 6),
                 itemBuilder: (_, i) => GestureDetector(
                   onTap: () => _addEmoji(_emojiTray[i]),
                   child: Center(

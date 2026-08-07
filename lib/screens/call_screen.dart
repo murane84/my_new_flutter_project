@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/call_service.dart';
 import '../utils/app_config.dart';
+import 'token_helper.dart' show mediaAuthHeaders;
 
 /// Full-screen UI for the single active Aluta voice call. It simply reflects
 /// [CallService]'s state — ring / calling / connected / ended — and drives the
@@ -155,6 +156,7 @@ class _CallScreenState extends State<CallScreen> {
       child: url != null
           ? CachedNetworkImage(
               imageUrl: url,
+              httpHeaders: mediaAuthHeaders(url),
               fit: BoxFit.cover,
               errorWidget: (_, _, _) => _initial(initial),
             )

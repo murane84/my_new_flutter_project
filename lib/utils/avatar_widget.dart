@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../screens/token_helper.dart' show mediaAuthHeaders;
 
 class InitialsAvatar extends StatelessWidget {
   final String name;
@@ -60,6 +61,7 @@ class InitialsAvatar extends StatelessWidget {
         ? ClipOval(
             child: CachedNetworkImage(
               imageUrl: imageUrl!,
+              httpHeaders: mediaAuthHeaders(imageUrl!),
               width: radius * 2,
               height: radius * 2,
               fit: BoxFit.cover,

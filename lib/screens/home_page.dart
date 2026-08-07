@@ -819,11 +819,11 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       barrierLabel: 'Dismiss',
       barrierColor: Colors.black.withAlpha(120),
       transitionDuration: const Duration(milliseconds: 260),
-      pageBuilder: (_, __, ___) => _LiveInviteDialog(
+      pageBuilder: (_, _, _) => _LiveInviteDialog(
         hostName: hostName,
         trackTitle: (track['title'] ?? 'a song').toString(),
       ),
-      transitionBuilder: (_, anim, __, child) => FadeTransition(
+      transitionBuilder: (_, anim, _, child) => FadeTransition(
         opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
         child: ScaleTransition(
           scale: Tween<double>(begin: 0.9, end: 1.0).animate(
@@ -1582,7 +1582,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           child: Image.asset(
             'assets/images/logo.png',
             fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => Icon(
+            errorBuilder: (_, _, _) => Icon(
               Icons.chat_bubble_outline_rounded,
               color: scheme.primary,
               size: 20,
@@ -2460,7 +2460,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   // transport can nudge left and the row balances out.
                   ValueListenableBuilder<bool>(
                     valueListenable: favoriteNotifier,
-                    builder: (_, fav, __) => GestureDetector(
+                    builder: (_, fav, _) => GestureDetector(
                       onTap: () => playbackBus.onToggleFavorite?.call(),
                       behavior: HitTestBehavior.opaque,
                       child: Padding(
@@ -2514,7 +2514,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
     return ValueListenableBuilder<PlayClock>(
       valueListenable: playClockNotifier,
-      builder: (_, clock, __) {
+      builder: (_, clock, _) {
         final durMs = clock.duration.inMilliseconds;
         final frac =
             durMs > 0 ? (clock.position.inMilliseconds / durMs).clamp(0.0, 1.0) : 0.0;
@@ -3046,14 +3046,13 @@ class _ScrollingText extends StatelessWidget {
 /// gliding out through the opening. Lighter and more elegant than the stock
 /// filled Material "exit" glyph.
 class _LogoutGlyph extends StatelessWidget {
-  const _LogoutGlyph({required this.color, this.size = 22});
+  const _LogoutGlyph({required this.color});
 
   final Color color;
-  final double size;
 
   @override
   Widget build(BuildContext context) => CustomPaint(
-        size: Size.square(size),
+        size: Size.square(22),
         painter: _LogoutPainter(color),
       );
 }

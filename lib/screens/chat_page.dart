@@ -1279,7 +1279,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       showToast(context, msg, type: ToastType.error);
 
   // ── Media sharing ───────────────────────────────────────────────────────
-  /// Build a full URL from a relative attachment path (/attachments/<id>).
+  /// Build a full URL from a relative attachment path (`/attachments/<id>`).
   String fullMediaUrl(String rel) =>
       rel.startsWith('http') ? rel : '$_apiBase$rel';
 
@@ -1401,7 +1401,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     var outName = filename;
     if (outMime == 'image/png' && !outName.toLowerCase().endsWith('.png')) {
       final dot = outName.lastIndexOf('.');
-      outName = (dot > 0 ? outName.substring(0, dot) : outName) + '.png';
+      outName = '${dot > 0 ? outName.substring(0, dot) : outName}.png';
     }
     await _uploadAndSend(
       bytes: outBytes,
@@ -1414,11 +1414,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   Future<void> _pickDocument() async {
     try {
-      final res = await FilePicker.pickFiles(withData: true);
+      final res = await FilePicker.pickFiles();
       if (res == null || res.files.isEmpty) return;
       final f = res.files.first;
-      final bytes = f.bytes;
-      if (bytes == null) {
+      // readAsBytes() supersedes the deprecated withData/.bytes pair: it reads
+      // from the file path on native (no eager whole-file load) while still
+      // returning the in-memory bytes on web. A read failure throws and is
+      // caught by the surrounding try/catch below.
+      final bytes = await f.readAsBytes();
+      if (bytes.isEmpty) {
         if (mounted) showToast(context, 'Could not read file', type: ToastType.error);
         return;
       }
@@ -1506,10 +1510,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         } catch (_) {}
       }
     } catch (_) {}
-    if (mounted) setState(() {
-      _isRecording = false;
-      _recordMs = 0;
-    });
+    if (mounted) {
+      setState(() {
+        _isRecording = false;
+        _recordMs = 0;
+      });
+    }
   }
 
   Future<void> _stopAndSendRecording() async {
@@ -1685,7 +1691,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             imageUrl: url,
             httpHeaders: mediaAuthHeaders(url),
             fit: BoxFit.cover,
-            placeholder: (_, __) => Container(
+            placeholder: (_, _) => Container(
               width: 200,
               height: 150,
               color: Colors.black.withAlpha(20),
@@ -1696,7 +1702,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     child: CircularProgressIndicator(strokeWidth: 2)),
               ),
             ),
-            errorWidget: (_, __, ___) => Container(
+            errorWidget: (_, _, _) => Container(
               width: 180,
               height: 120,
               color: Colors.black.withAlpha(20),
@@ -2765,7 +2771,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         if (isCall) _callLogContent(msg, isMe, textColor),
                         if (isMedia)
                           _mediaContent(
-                              msgType, mediaRel!, msg, isMe, textColor, scheme),
+                              msgType, mediaRel, msg, isMe, textColor, scheme),
                         if (!tomb && mainText.trim().isNotEmpty)
                           Padding(
                             padding: EdgeInsets.only(top: isMedia ? 6 : 0),
@@ -3029,14 +3035,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(6),
                 child: CachedNetworkImage(
-                  imageUrl: fullMediaUrl(mediaRel!),
-                  httpHeaders: mediaAuthHeaders(fullMediaUrl(mediaRel!)),
+                  imageUrl: fullMediaUrl(mediaRel),
+                  httpHeaders: mediaAuthHeaders(fullMediaUrl(mediaRel)),
                   width: 36,
                   height: 36,
                   fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(
+                  placeholder: (_, _) => Container(
                       width: 36, height: 36, color: scheme.surfaceContainerHigh),
-                  errorWidget: (_, __, ___) => Container(
+                  errorWidget: (_, _, _) => Container(
                       width: 36,
                       height: 36,
                       color: scheme.surfaceContainerHigh,
@@ -3477,7 +3483,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                 // When `textEditingController` is provided, EmojiPicker already
                 // inserts the tapped emoji into it (at the cursor). Do NOT also
                 // append it here — doing both made every emoji appear twice.
-                onEmojiSelected: (_, __) {},
+                onEmojiSelected: (_, _) {},
                 textEditingController: _ctrl,
                 config: Config(
                   height: 262,
@@ -4357,7 +4363,6 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
   // scale strokes/emoji from display units up to the ORIGINAL image resolution
   // when flattening, so the sent image stays sharp (not a blurry screen grab).
   double _canvasW = 1;
-  double _canvasH = 1;
 
   final List<_PenStroke> _strokes = [];
   final List<_ShapeMark> _shapes = [];
@@ -4565,7 +4570,6 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
                   child: LayoutBuilder(builder: (ctx, c) {
                     final w = c.maxWidth, h = c.maxHeight;
                     _canvasW = w;
-                    _canvasH = h;
                     Offset frac(Offset local) => Offset(
                         (local.dx / w).clamp(0.0, 1.0),
                         (local.dy / h).clamp(0.0, 1.0));
@@ -4663,7 +4667,7 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 itemCount: _emojiTray.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 6),
+                separatorBuilder: (_, _) => const SizedBox(width: 6),
                 itemBuilder: (_, i) => GestureDetector(
                   onTap: () => _addEmoji(_emojiTray[i]),
                   child: Center(

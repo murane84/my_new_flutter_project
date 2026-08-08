@@ -28,6 +28,7 @@ import '../services/audio_handler.dart';
 import '../services/metadata_overrides.dart';
 import '../utils/marquee_text.dart';
 import 'api_service.dart';
+import 'chat/song_cache.dart';
 
 part 'music/music_control_widgets.dart'; // _CtrlBtn, _CtrlChip, _SpeedPanel
 part 'music/music_playlist_overlay.dart'; // _PlaylistOverlay + state

@@ -73,13 +73,33 @@ class _ShareSheetState extends State<_ShareSheet> {
           return;
         }
         final bytes = await file.readAsBytes();
+        // Ephemeral: the server keeps these bytes only until the recipient has
+        // cached them locally (then purges, keeping a reference). See
+        // SongCache + routers/attachments.py.
         final up = await api.uploadMedia(
-            bytes: bytes, filename: _fileName(), mime: _guessMime());
+            bytes: bytes,
+            filename: _fileName(),
+            mime: _guessMime(),
+            ephemeral: true);
         if (up == null || up['url'] == null) throw Exception('upload failed');
+        // Seed OUR OWN cache from the bytes we already hold, so the sender can
+        // still play the song from its bubble after the server purges it.
+        final aid = SongCache.assetId(up['url'].toString());
+        if (aid != null) {
+          await SongCache.putBytes(aid, bytes,
+              filename: _fileName(), mime: _guessMime());
+        }
+        // Content carries the display label ("Title — Artist"); the bubble
+        // renders it as a song card. message_type 'song' drives the ephemeral
+        // cache-and-ack flow on the recipient side.
+        final artist = widget.artist.trim();
+        final label = artist.isEmpty
+            ? widget.title
+            : '${widget.title} — $artist';
         final ok = await api.sendMessage(
           id,
-          widget.title,
-          messageType: 'audio',
+          label,
+          messageType: 'song',
           mediaUrl: up['url'].toString(),
           mediaName: (up['name'] ?? _fileName()).toString(),
           mediaMime: (up['mime'] ?? _guessMime()).toString(),

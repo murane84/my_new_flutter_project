@@ -262,6 +262,8 @@ def list_preview(msg) -> str:
         return "🎞️ GIF" if "gif" in mime else "📷 Photo"
     if mtype == "audio":
         return "🎤 Voice note"
+    if mtype == "song":
+        return "🎵 Song"
     if mtype == "video":
         return "🎬 Video"
     if mtype == "call":

@@ -27,9 +27,12 @@ import 'package:on_audio_query/on_audio_query.dart';
 import '../services/audio_handler.dart';
 import '../services/metadata_overrides.dart';
 import '../utils/marquee_text.dart';
+import 'api_service.dart';
 
 part 'music/music_control_widgets.dart'; // _CtrlBtn, _CtrlChip, _SpeedPanel
 part 'music/music_playlist_overlay.dart'; // _PlaylistOverlay + state
+part 'music/music_lyrics_view.dart'; // _LyricsView (synced/plain lyrics sheet)
+part 'music/music_share_sheet.dart'; // _ShareSheet (send song file / recommend)
 
 bool get _isMobile => Platform.isAndroid || Platform.isIOS;
 
@@ -234,6 +237,15 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // User-defined groups: name -> ordered list of song paths. Persisted locally
   // (the songs are device-local files, so groups are too).
   Map<String, List<String>> _groups = {};
+  // Listening stats for the "smart" auto-lists (Most played / Recently played).
+  Map<String, int> _playCounts = {}; // path -> times played
+  Map<String, int> _lastPlayed = {}; // path -> last-played epoch ms
+  // MediaStore id of the current track (Android), for embedded album-art lookup
+  // via QueryArtworkWidget. null = no art (file-picker song / non-mobile).
+  int? _currentArtId;
+  // In-app lyrics the user pasted, path -> raw text (LRC or plain). Persisted.
+  // A `.lrc`/`.txt` file sitting next to the song is used as a fallback source.
+  Map<String, String> _lyrics = {};
   // When non-null, transport (next/prev/auto-advance) cycles ONLY within this
   // ordered subset of paths — e.g. "play all gospels". null = the whole library
   // (default behaviour, unchanged).
@@ -307,6 +319,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _configSession();
     _loadFavorites();
     _loadGroups();
+    _loadStats();
+    _loadLyrics();
     _restorePlaylist();
     _listenPlayer();
     if (Platform.isAndroid) _restoreEqualizer();
@@ -455,6 +469,148 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       final p = await SharedPreferences.getInstance();
       await p.setString('music_groups', jsonEncode(_groups));
     } catch (_) {}
+  }
+
+  // ── Listening stats (Most played / Recently played smart lists) ─────────────
+
+  Future<void> _loadStats() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final counts = p.getString('music_playcounts');
+      final last = p.getString('music_lastplayed');
+      final pc = <String, int>{};
+      final lp = <String, int>{};
+      if (counts != null && counts.isNotEmpty) {
+        (jsonDecode(counts) as Map<String, dynamic>)
+            .forEach((k, v) => pc[k] = (v as num).toInt());
+      }
+      if (last != null && last.isNotEmpty) {
+        (jsonDecode(last) as Map<String, dynamic>)
+            .forEach((k, v) => lp[k] = (v as num).toInt());
+      }
+      if (mounted) {
+        setState(() {
+          _playCounts = pc;
+          _lastPlayed = lp;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveStats() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString('music_playcounts', jsonEncode(_playCounts));
+      await p.setString('music_lastplayed', jsonEncode(_lastPlayed));
+    } catch (_) {}
+  }
+
+  // Count a play + stamp the time (drives the smart lists).
+  void _recordPlay(String path) {
+    _playCounts[path] = (_playCounts[path] ?? 0) + 1;
+    _lastPlayed[path] = DateTime.now().millisecondsSinceEpoch;
+    _saveStats();
+  }
+
+  // The centre of the spinning disc: real embedded album art when we know the
+  // track's MediaStore id (Android), else the music-note glyph. QueryArtworkWidget
+  // loads + caches the art itself and shows nullArtworkWidget when there's none.
+  Widget _discArt(bool isNarrow) {
+    final fallback = Icon(Icons.music_note_rounded,
+        size: isNarrow ? 28 : 38, color: Colors.white.withAlpha(220));
+    if (_currentArtId == null) return fallback;
+    final d = isNarrow ? 58.0 : 76.0;
+    return ClipOval(
+      child: QueryArtworkWidget(
+        id: _currentArtId!,
+        type: ArtworkType.AUDIO,
+        artworkWidth: d,
+        artworkHeight: d,
+        artworkFit: BoxFit.cover,
+        keepOldArtwork: true,
+        nullArtworkWidget: fallback,
+      ),
+    );
+  }
+
+  // ── Lyrics ──────────────────────────────────────────────────────────────────
+
+  Future<void> _loadLyrics() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final raw = p.getString('music_lyrics');
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final loaded = <String, String>{};
+      decoded.forEach((k, v) => loaded[k] = v.toString());
+      if (mounted) setState(() => _lyrics = loaded);
+    } catch (_) {}
+  }
+
+  Future<void> _saveLyrics() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString('music_lyrics', jsonEncode(_lyrics));
+    } catch (_) {}
+  }
+
+  void _setLyrics(String path, String text) {
+    setState(() {
+      if (text.trim().isEmpty) {
+        _lyrics.remove(path);
+      } else {
+        _lyrics[path] = text;
+      }
+    });
+    _saveLyrics();
+  }
+
+  // Best-available lyrics for a song: the in-app text if set, else a `.lrc`/`.txt`
+  // file sitting next to the audio file. Returns '' if none.
+  String _lyricsRaw(String path) {
+    final stored = _lyrics[path];
+    if (stored != null && stored.trim().isNotEmpty) return stored;
+    try {
+      final dot = path.lastIndexOf('.');
+      final base = dot > 0 ? path.substring(0, dot) : path;
+      for (final ext in const ['.lrc', '.txt']) {
+        final f = File('$base$ext');
+        if (f.existsSync()) return f.readAsStringSync();
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  void _openLyrics() {
+    if (_currentIndex < 0 || _currentIndex >= _playlist.length) {
+      _snack('Play a song to see its lyrics');
+      return;
+    }
+    final path = _playlist[_currentIndex];
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _LyricsView(
+        title: _trackName,
+        artist: _artistName,
+        raw: _lyricsRaw(path),
+        onSave: (text) => _setLyrics(path, text),
+      ),
+    );
+  }
+
+  // ── Share a song into a chat (async attachment / recommendation) ────────────
+
+  void _shareSong(String path) {
+    final title = metadataStore.title(path, _nameFromPath(path));
+    final artist = metadataStore.artist(path, '');
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ShareSheet(path: path, title: title, artist: artist),
+    );
   }
 
   void _createGroup(String name) {
@@ -665,6 +821,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   Future<void> _play(int index) async {
     if (index < 0 || index >= _playlist.length) return;
     final path = _playlist[index];
+    _recordPlay(path); // stats for the smart lists
 
     // Suppress auto-advance while swapping the source (see _switching).
     _switching = true;
@@ -675,6 +832,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       _currentIndex = index;
       _trackName = initTitle;
       _artistName = initArtist;
+      _currentArtId = null; // resolved by _fetchMetadata once the song is found
     });
     ref.read(nowPlayingProvider.notifier).update(
         track: initTitle, artist: initArtist, playing: true);
@@ -717,6 +875,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         setState(() {
           _trackName = t;
           _artistName = a;
+          _currentArtId = m.id; // enables embedded album art on the disc
         });
         // Use the real player state — a late metadata fetch must not re-mark a
         // paused track as playing.
@@ -1439,6 +1598,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                   currentIndex: _currentIndex,
                   favorites: _favorites,
                   groups: _groups,
+                  playCounts: _playCounts,
+                  lastPlayed: _lastPlayed,
                   loading: _scanning,
                   player: _player,
                   currentTitle: _trackName,
@@ -1467,6 +1628,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                     _publishPlaylist();
                   },
                   onFavorite: _toggleFavorite,
+                  onShare: _shareSong,
                   onAdd: _pickMusic,
                   onCreateGroup: _createGroup,
                   onDeleteGroup: _deleteGroup,
@@ -1664,9 +1826,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                                 strokeWidth: 2,
                               ),
                             )
-                          : Icon(Icons.music_note_rounded,
-                              size: isNarrow ? 28 : 38,
-                              color: Colors.white.withAlpha(220)),
+                          : _discArt(isNarrow),
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -1943,6 +2103,14 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                   label: 'Equalizer',
                   color: accent,
                   onTap: _openEqualizer,
+                ),
+                _utility(
+                  scheme,
+                  onSurface,
+                  icon: Icons.lyrics_rounded,
+                  label: 'Lyrics',
+                  color: accent,
+                  onTap: _openLyrics,
                 ),
               ],
             ),

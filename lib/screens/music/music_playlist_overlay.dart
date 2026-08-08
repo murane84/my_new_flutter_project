@@ -9,11 +9,16 @@ part of '../music_controls.dart';
 // Sort modes for the track list.
 enum _PlSort { manual, az, za, artist, recent }
 
+// Smart auto-lists driven by listening stats.
+enum _Smart { none, recent, most }
+
 class _PlaylistOverlay extends StatefulWidget {
   final List<String> playlist;
   final int currentIndex;
   final Set<String> favorites;
   final Map<String, List<String>> groups;
+  final Map<String, int> playCounts;
+  final Map<String, int> lastPlayed;
   final bool loading;
 
   // Inline transport strip.
@@ -30,6 +35,7 @@ class _PlaylistOverlay extends StatefulWidget {
   // List ops.
   final void Function(int) onRemove;
   final void Function(String) onFavorite;
+  final void Function(String) onShare;
   final VoidCallback onClose;
   final VoidCallback onAdd;
 
@@ -49,6 +55,8 @@ class _PlaylistOverlay extends StatefulWidget {
     required this.currentIndex,
     required this.favorites,
     required this.groups,
+    required this.playCounts,
+    required this.lastPlayed,
     required this.player,
     required this.currentTitle,
     required this.hasTrack,
@@ -59,6 +67,7 @@ class _PlaylistOverlay extends StatefulWidget {
     required this.onSeekFraction,
     required this.onRemove,
     required this.onFavorite,
+    required this.onShare,
     required this.onClose,
     required this.onAdd,
     required this.onCreateGroup,
@@ -80,6 +89,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   String _search = '';
   bool _favOnly = false;
   String? _activeGroup; // null = no group filter
+  _Smart _smart = _Smart.none; // Recent / Most-played auto-list
   _PlSort _sort = _PlSort.manual;
 
   // Multi-select mode.
@@ -166,10 +176,29 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           !_effArtist(e.value).toLowerCase().contains(q)) {
         return false;
       }
+      // Smart lists override the favourite/group filter with a stats filter.
+      if (_smart == _Smart.recent) {
+        return (widget.lastPlayed[e.value] ?? 0) > 0;
+      }
+      if (_smart == _Smart.most) {
+        return (widget.playCounts[e.value] ?? 0) > 0;
+      }
       if (_favOnly && !widget.favorites.contains(e.value)) return false;
       if (groupMembers != null && !groupMembers.contains(e.value)) return false;
       return true;
     }).toList();
+
+    // Smart lists carry their own ordering (most-recent / most-played first).
+    if (_smart == _Smart.recent) {
+      entries.sort((a, b) => (widget.lastPlayed[b.value] ?? 0)
+          .compareTo(widget.lastPlayed[a.value] ?? 0));
+      return entries;
+    }
+    if (_smart == _Smart.most) {
+      entries.sort((a, b) => (widget.playCounts[b.value] ?? 0)
+          .compareTo(widget.playCounts[a.value] ?? 0));
+      return entries;
+    }
 
     switch (_sort) {
       case _PlSort.az:
@@ -591,6 +620,10 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 Navigator.pop(ctx);
                 _showAddToGroups(context, path);
               }),
+              _optionTile(scheme, Icons.share_rounded, 'Share to chat', () {
+                Navigator.pop(ctx);
+                widget.onShare(path);
+              }),
               _optionTile(scheme, Icons.edit_rounded, 'Edit details', () {
                 Navigator.pop(ctx);
                 _showEditDetails(context, path);
@@ -633,6 +666,14 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       title: Text(label, style: TextStyle(color: c, fontSize: 14)),
       onTap: onTap,
     );
+  }
+
+  String _currentViewLabel() {
+    if (_smart == _Smart.recent) return 'Recent';
+    if (_smart == _Smart.most) return 'Most played';
+    if (_activeGroup != null) return _activeGroup!;
+    if (_favOnly) return 'Favourites';
+    return 'Play all';
   }
 
   void _playPath(String path) {
@@ -862,7 +903,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                       onPressed: () =>
                           widget.onPlayScope(displayedPaths, 0, false),
                       icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                      label: Text(_activeGroup ?? (_favOnly ? 'Favourites' : 'Play all')),
+                      label: Text(_currentViewLabel()),
                       style: OutlinedButton.styleFrom(
                         visualDensity: VisualDensity.compact,
                         foregroundColor: scheme.primary,
@@ -938,7 +979,10 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             'Favourites',
             () => setState(() {
               _favOnly = !_favOnly;
-              if (_favOnly) _activeGroup = null;
+              if (_favOnly) {
+                _activeGroup = null;
+                _smart = _Smart.none;
+              }
             }),
             color: _favOnly ? Colors.pinkAccent : null,
           ),
@@ -1060,12 +1104,29 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         children: [
-          chip('All', _activeGroup == null && !_favOnly, () {
+          chip('All', _activeGroup == null && !_favOnly && _smart == _Smart.none,
+              () {
             setState(() {
               _activeGroup = null;
               _favOnly = false;
+              _smart = _Smart.none;
             });
           }, icon: Icons.library_music_rounded),
+          // Smart auto-lists (from listening stats).
+          chip('Recent', _smart == _Smart.recent, () {
+            setState(() {
+              _smart = _smart == _Smart.recent ? _Smart.none : _Smart.recent;
+              _activeGroup = null;
+              _favOnly = false;
+            });
+          }, icon: Icons.history_rounded),
+          chip('Most played', _smart == _Smart.most, () {
+            setState(() {
+              _smart = _smart == _Smart.most ? _Smart.none : _Smart.most;
+              _activeGroup = null;
+              _favOnly = false;
+            });
+          }, icon: Icons.trending_up_rounded),
           for (final g in widget.groups.keys)
             chip(
               '$g (${widget.groups[g]?.length ?? 0})',
@@ -1073,6 +1134,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
               () => setState(() {
                 _activeGroup = _activeGroup == g ? null : g;
                 _favOnly = false;
+                _smart = _Smart.none;
               }),
               onLong: () => _manageGroup(context, g),
               icon: Icons.folder_rounded,
@@ -1109,16 +1171,23 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         ),
       );
 
-  Widget _emptyView(ColorScheme scheme) => Center(
-        child: Text(
-          _activeGroup != null
-              ? 'No songs in "$_activeGroup" yet'
-              : _favOnly
-                  ? 'No favourites yet'
-                  : 'No tracks match',
-          style: TextStyle(color: scheme.onSurfaceVariant),
-        ),
-      );
+  Widget _emptyView(ColorScheme scheme) {
+    String msg;
+    if (_smart == _Smart.recent) {
+      msg = 'Nothing played yet';
+    } else if (_smart == _Smart.most) {
+      msg = 'No play history yet';
+    } else if (_activeGroup != null) {
+      msg = 'No songs in "$_activeGroup" yet';
+    } else if (_favOnly) {
+      msg = 'No favourites yet';
+    } else {
+      msg = 'No tracks match';
+    }
+    return Center(
+      child: Text(msg, style: TextStyle(color: scheme.onSurfaceVariant)),
+    );
+  }
 
   // ── Track row ─────────────────────────────────────────────────────────────
 
@@ -1259,7 +1328,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           // Seek bar + time labels (driven by the shared play clock).
           ValueListenableBuilder<PlayClock>(
             valueListenable: playClockNotifier,
-            builder: (_, clock, __) {
+            builder: (_, clock, _) {
               final total = clock.duration.inMilliseconds;
               final pos = clock.position.inMilliseconds;
               final frac =

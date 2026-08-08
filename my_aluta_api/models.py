@@ -148,7 +148,11 @@ class MediaAsset(Base):
     __tablename__ = "media_assets"
 
     id = Column(String, primary_key=True, index=True)   # uuid hex
-    data = Column(LargeBinary, nullable=False)          # raw bytes
+    # Nullable: for EPHEMERAL assets (shared songs) the bytes are purged from
+    # the server once the recipient has cached them locally (or after the TTL),
+    # leaving this row as a lightweight reference. Non-ephemeral assets keep
+    # their bytes for the life of the row.
+    data = Column(LargeBinary, nullable=True)           # raw bytes (None once purged)
     mime = Column(String, nullable=True)
     name = Column(String, nullable=True)
     size = Column(Integer, nullable=True)
@@ -158,6 +162,17 @@ class MediaAsset(Base):
     # rows uploaded before this column existed.
     uploader_id = Column(Integer, index=True, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # ── Ephemeral songs (server-storage minimisation) ───────────────────────
+    # An ephemeral asset is a shared song whose bytes should NOT live on the
+    # server long-term. The recipient downloads + caches it locally, then acks
+    # (POST /attachments/<id>/cached), which purges the bytes here. A 7-day TTL
+    # is the fallback purge for songs the recipient never fetched. The row stays
+    # so the chat message keeps a valid reference; playback then uses the local
+    # cache on both ends.
+    ephemeral = Column(Boolean, default=False, nullable=False)
+    cached_at = Column(DateTime(timezone=True), nullable=True)   # recipient acked
+    purged_at = Column(DateTime(timezone=True), nullable=True)   # bytes nulled
 
     def __repr__(self):
         return f"<MediaAsset(id={self.id}, mime='{self.mime}', size={self.size})>"

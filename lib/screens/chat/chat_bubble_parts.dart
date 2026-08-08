@@ -439,6 +439,292 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
   }
 }
 
+// ─── Shared-song bubble ──────────────────────────────────────────────────────
+/// Renders a song shared into the chat. Shared songs are EPHEMERAL: the sender
+/// uploads the audio only long enough for the recipient to cache it locally,
+/// after which the server purges its copy (see [SongCache] and the attachments
+/// router). This widget therefore:
+///   • plays from the on-device cache whenever it exists (both ends);
+///   • on the RECIPIENT side, downloads → caches → acks the server on first
+///     appearance (within the 7-day window), which triggers the server purge;
+///   • falls back to streaming from the server only while the bytes still live
+///     there, and shows "No longer available" if they're gone and we never
+///     cached them.
+class _SongBubble extends StatefulWidget {
+  const _SongBubble({
+    required this.assetId,
+    required this.url,
+    required this.title,
+    required this.fileName,
+    required this.mime,
+    required this.isMe,
+    required this.accent,
+    required this.onColor,
+  });
+
+  final String? assetId;
+  final String url;
+  final String title;
+  final String? fileName;
+  final String? mime;
+  final bool isMe;
+  final Color accent;
+  final Color onColor;
+
+  @override
+  State<_SongBubble> createState() => _SongBubbleState();
+}
+
+class _SongBubbleState extends State<_SongBubble> {
+  final ja.AudioPlayer _player = ja.AudioPlayer();
+  bool _prepared = false;
+  bool _loading = false;
+  bool _unavailable = false;
+  String? _localPath;
+  Duration _pos = Duration.zero;
+  Duration _dur = Duration.zero;
+  StreamSubscription? _posSub;
+  StreamSubscription? _stateSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _posSub = _player.positionStream.listen((p) {
+      if (mounted) setState(() => _pos = p);
+    });
+    _stateSub = _player.playerStateStream.listen((s) {
+      if (!mounted) return;
+      if (s.processingState == ja.ProcessingState.completed) {
+        _player.pause();
+        _player.seek(Duration.zero);
+      }
+      setState(() {});
+    });
+    _prime();
+  }
+
+  /// Resolve a local copy. The recipient downloads + caches + acks while the
+  /// server still holds the bytes; the sender relies on the copy it seeded at
+  /// send time and never fetches from the server here.
+  Future<void> _prime() async {
+    final id = widget.assetId;
+    if (id == null) return;
+    var path = await SongCache.cachedPath(id,
+        filename: widget.fileName, mime: widget.mime);
+    if (path == null && !widget.isMe) {
+      path = await SongCache.ensureCached(
+        id,
+        widget.url,
+        mediaAuthHeaders(widget.url),
+        filename: widget.fileName,
+        mime: widget.mime,
+      );
+      if (path != null && !SongCache.hasAcked(id)) {
+        SongCache.markAcked(id);
+        unawaited(ApiService().ackAttachmentCached(id));
+      }
+    }
+    if (mounted && path != null) setState(() => _localPath = path);
+  }
+
+  @override
+  void dispose() {
+    _posSub?.cancel();
+    _stateSub?.cancel();
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    if (_unavailable) return;
+    if (!_prepared) {
+      setState(() => _loading = true);
+      Duration? d;
+      try {
+        final id = widget.assetId;
+        var path = _localPath;
+        if (path == null && id != null) {
+          path = await SongCache.cachedPath(id,
+              filename: widget.fileName, mime: widget.mime);
+        }
+        if (path == null && !widget.isMe && id != null) {
+          path = await SongCache.ensureCached(
+            id,
+            widget.url,
+            mediaAuthHeaders(widget.url),
+            filename: widget.fileName,
+            mime: widget.mime,
+          );
+          if (path != null && !SongCache.hasAcked(id)) {
+            SongCache.markAcked(id);
+            unawaited(ApiService().ackAttachmentCached(id));
+          }
+        }
+        if (path != null) {
+          _localPath = path;
+          d = await _player.setFilePath(path);
+        } else {
+          // Last resort: stream from the server if it still has the bytes.
+          d = await _player.setUrl(widget.url,
+              headers: mediaAuthHeaders(widget.url));
+        }
+        if (d != null && mounted) _dur = d;
+        _prepared = true;
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _unavailable = true;
+          });
+        }
+        return;
+      }
+      if (mounted) setState(() => _loading = false);
+    }
+    if (_player.playing) {
+      await _player.pause();
+    } else {
+      if (_player.processingState == ja.ProcessingState.completed) {
+        await _player.seek(Duration.zero);
+      }
+      await _player.play();
+    }
+  }
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes;
+    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final playing = _player.playing;
+    final total = _dur.inMilliseconds;
+    final frac = total > 0 ? (_pos.inMilliseconds / total).clamp(0.0, 1.0) : 0.0;
+    // "Title — Artist" → two lines; a bare title stays one line.
+    final parts = widget.title.split(' — ');
+    final line1 = parts.first;
+    final line2 = parts.length > 1 ? parts.sublist(1).join(' — ') : null;
+    return SizedBox(
+      width: 232,
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: _toggle,
+            child: Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: widget.accent.withAlpha(isDark ? 48 : 30),
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: widget.accent.withAlpha(isDark ? 90 : 70), width: 1),
+              ),
+              child: _loading
+                  ? Padding(
+                      padding: const EdgeInsets.all(11),
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: widget.accent),
+                    )
+                  : Icon(
+                      _unavailable
+                          ? Icons.music_off_rounded
+                          : (playing
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded),
+                      color: isDark ? const Color(0xFFFF8A93) : widget.accent,
+                      size: 22),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.music_note_rounded,
+                        size: 13, color: widget.onColor.withAlpha(170)),
+                    const SizedBox(width: 3),
+                    Expanded(
+                      child: Text(line1,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              color: widget.onColor)),
+                    ),
+                  ],
+                ),
+                if (line2 != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 16, top: 1),
+                    child: Text(line2,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            color: widget.onColor.withAlpha(165))),
+                  ),
+                const SizedBox(height: 5),
+                if (_unavailable)
+                  Row(
+                    children: [
+                      Icon(Icons.cloud_off_rounded,
+                          size: 12, color: widget.onColor.withAlpha(150)),
+                      const SizedBox(width: 4),
+                      Text('No longer available',
+                          style: TextStyle(
+                              fontSize: 10.5,
+                              fontStyle: FontStyle.italic,
+                              color: widget.onColor.withAlpha(150))),
+                    ],
+                  )
+                else ...[
+                  Stack(
+                    alignment: Alignment.centerLeft,
+                    children: [
+                      Container(
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: widget.onColor.withAlpha(45),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      FractionallySizedBox(
+                        widthFactor: frac == 0 ? 0.001 : frac,
+                        child: Container(
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: widget.accent,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _prepared && total > 0
+                        ? '${_fmt(_pos)} / ${_fmt(_dur)}'
+                        : 'Tap to play',
+                    style: TextStyle(
+                        fontSize: 10, color: widget.onColor.withAlpha(150)),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// WhatsApp-style swipe-to-reply. The bubble follows the finger to the right,
 /// a reply glyph fades and scales in from the left edge, a single haptic fires
 /// when the trigger distance is crossed, and on release the bubble springs

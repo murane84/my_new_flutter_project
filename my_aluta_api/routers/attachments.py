@@ -1,5 +1,6 @@
 import os
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Response
 from fastapi.responses import FileResponse
@@ -15,9 +16,45 @@ router = APIRouter(tags=["Attachments"])
 # voice notes and compressed images are small; big files should be capped.
 MAX_BYTES = 15 * 1024 * 1024  # 15 MB
 
+# Ephemeral shared songs are purged from the server this long after upload even
+# if the recipient never fetched them (the normal case purges on cache-ack, far
+# sooner). This is the "leave a reference, don't hoard the bytes" TTL.
+EPHEMERAL_TTL = timedelta(days=7)
+
 # Root of on-disk media (legacy /media/audio/* voice notes). Resolved absolute
 # so we can reject path-traversal attempts.
 _MEDIA_DIR = os.path.abspath("media")
+
+
+def purge_expired_ephemeral(db: Session) -> int:
+    """Null out the bytes of ephemeral assets older than EPHEMERAL_TTL whose
+    data hasn't already been purged. Cheap set-based UPDATE, run opportunistically
+    on write activity (uploads / cache-acks). Best-effort: never raises into the
+    caller. Returns the number of rows purged."""
+    try:
+        cutoff = datetime.now(timezone.utc) - EPHEMERAL_TTL
+        now = datetime.now(timezone.utc)
+        n = (
+            db.query(MediaAsset)
+            .filter(
+                MediaAsset.ephemeral.is_(True),
+                MediaAsset.data.isnot(None),
+                MediaAsset.created_at < cutoff,
+            )
+            .update(
+                {MediaAsset.data: None, MediaAsset.purged_at: now},
+                synchronize_session=False,
+            )
+        )
+        db.commit()
+        return n or 0
+    except Exception as e:  # noqa: BLE001
+        print(f"⚠️ purge_expired_ephemeral failed: {e}")
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        return 0
 
 
 def _owner_of(db: Session, fragment: str, uploader_id):
@@ -117,16 +154,26 @@ def _can_access(
 @router.post("/upload/media")
 async def upload_media(
     file: UploadFile = File(...),
+    ephemeral: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Accept any chat attachment (image / file / voice note), store its bytes
-    in the database, and return a relative URL the client can reference."""
+    in the database, and return a relative URL the client can reference.
+
+    When `ephemeral=true` (a shared song), the bytes are marked for early purge:
+    the recipient caches the file locally and acks via /attachments/<id>/cached,
+    which empties the bytes here; a 7-day TTL is the fallback. This keeps big
+    audio files off the server long-term while the message keeps a reference."""
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="Empty file")
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="File too large (max 15 MB)")
+
+    # Opportunistic housekeeping: every new upload sweeps out expired ephemeral
+    # bytes so old shared songs don't accumulate even if no one re-fetched them.
+    purge_expired_ephemeral(db)
 
     asset_id = uuid.uuid4().hex
     mime = file.content_type or "application/octet-stream"
@@ -137,6 +184,7 @@ async def upload_media(
         name=file.filename or asset_id,
         size=len(data),
         uploader_id=current_user.id,
+        ephemeral=bool(ephemeral),
     )
     db.add(asset)
     db.commit()
@@ -146,6 +194,7 @@ async def upload_media(
         "name": file.filename,
         "mime": mime,
         "size": len(data),
+        "ephemeral": bool(ephemeral),
     }
 
 
@@ -165,6 +214,12 @@ def get_attachment(
         db, current_user.id, asset_id, asset.uploader_id, allow_avatar=True
     ):
         raise HTTPException(status_code=403, detail="Not authorized to view this file")
+    # Ephemeral song whose bytes were purged after delivery: the row survives as
+    # a reference but the file lives only in the participants' local caches now.
+    # 410 Gone tells the client to fall back to its cached copy (or show that the
+    # song is no longer available if it never cached it).
+    if asset.data is None:
+        raise HTTPException(status_code=410, detail="Attachment no longer on server")
     headers = {
         "Content-Disposition": f'inline; filename="{asset.name or asset_id}"',
         # Immutable, but PRIVATE now that access is per-user — shared proxies /
@@ -176,6 +231,55 @@ def get_attachment(
         media_type=asset.mime or "application/octet-stream",
         headers=headers,
     )
+
+
+@router.post("/attachments/{asset_id}/cached")
+def ack_cached(
+    asset_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The recipient of an ephemeral shared song acknowledges it's now cached on
+    their device. We record the ack and purge the bytes from the server (keeping
+    the row as a reference). Idempotent: acking an already-purged asset is a
+    no-op success.
+
+    Only the RECIPIENT may trigger the purge — verified by requiring a message
+    that carries this asset TO the caller. The sender must not purge (the
+    recipient may not have fetched yet); the sender keeps its own local copy from
+    send time. `sender_id`/`receiver_id` are server-set, so this can't be forged."""
+    asset = db.query(MediaAsset).filter(MediaAsset.id == asset_id).first()
+    if not asset:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    # Non-ephemeral assets are never purged this way — treat as a harmless no-op
+    # so an over-eager client can't delete ordinary attachments.
+    if not asset.ephemeral:
+        return {"ok": True, "purged": False}
+
+    is_recipient = (
+        db.query(Message.id)
+        .filter(
+            Message.media_url.contains(asset_id, autoescape=True),
+            Message.receiver_id == current_user.id,
+        )
+        .first()
+        is not None
+    )
+    if not is_recipient:
+        raise HTTPException(status_code=403, detail="Not a recipient of this song")
+
+    # Opportunistic TTL sweep while we're here (recipient activity).
+    purge_expired_ephemeral(db)
+
+    now = datetime.now(timezone.utc)
+    if asset.cached_at is None:
+        asset.cached_at = now
+    if asset.data is not None:
+        asset.data = None
+        asset.purged_at = now
+    db.commit()
+    return {"ok": True, "purged": True}
 
 
 @router.get("/media/{file_path:path}")

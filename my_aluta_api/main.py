@@ -86,6 +86,13 @@ def ensure_media_schema():
         # New uploads set this at upload time; pre-existing rows stay NULL and
         # are handled by the endpoint's legacy path (see routers/attachments.py).
         "ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS uploader_id INTEGER",
+        # Ephemeral shared songs: bytes are purged after the recipient caches
+        # them locally (or after a 7-day TTL), keeping the row as a reference.
+        # `data` must be nullable so it can be emptied on purge.
+        "ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS ephemeral BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS cached_at TIMESTAMPTZ",
+        "ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS purged_at TIMESTAMPTZ",
+        "ALTER TABLE media_assets ALTER COLUMN data DROP NOT NULL",
     ]
     try:
         with engine.begin() as conn:

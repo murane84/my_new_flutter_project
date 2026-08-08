@@ -2,8 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, compute;
 import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
 // Hide intl's TextDirection so the unprefixed name resolves to dart:ui's
 // (needed by the ShapeBorder overrides below).
 import 'package:intl/intl.dart' hide TextDirection;
@@ -12,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'api_service.dart';
+import 'chat/song_cache.dart';
 import 'token_helper.dart';
 import 'websocket_manager.dart';
 import '../utils/toast_helper.dart';
@@ -79,6 +81,26 @@ bool _isEmojiOnly(String text) {
     return false;
   }
   return true;
+}
+
+// Compress a chat image for upload: downscale to ≤1600px on the long edge and
+// re-encode as JPEG q78. Runs in a background isolate (via compute) so large
+// screenshots don't jank the UI. Returns the input unchanged if it can't decode.
+Uint8List _compressChatImage(Uint8List input) {
+  try {
+    final decoded = img.decodeImage(input);
+    if (decoded == null) return input;
+    const maxDim = 1600;
+    img.Image out = decoded;
+    if (decoded.width > maxDim || decoded.height > maxDim) {
+      out = decoded.width >= decoded.height
+          ? img.copyResize(decoded, width: maxDim)
+          : img.copyResize(decoded, height: maxDim);
+    }
+    return Uint8List.fromList(img.encodeJpg(out, quality: 78));
+  } catch (_) {
+    return input;
+  }
 }
 
 // ─── ChatPage ────────────────────────────────────────────────────────────────
@@ -1372,8 +1394,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
+      // Pick at high quality; the compress-on-upload step (or the HD toggle in
+      // the preview) decides final size, so HD can send near-original quality.
       final x = await ImagePicker()
-          .pickImage(source: source, imageQuality: 74, maxWidth: 1600);
+          .pickImage(source: source, imageQuality: 92, maxWidth: 2560);
       if (x == null) return;
       final bytes = await x.readAsBytes();
       await _previewAndSendImage(bytes, x.name, 'image/jpeg');
@@ -1403,6 +1427,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final outBytes = (result['bytes'] as Uint8List?) ?? bytes;
     final outMime = (result['mime'] as String?) ?? mime;
     final caption = ((result['caption'] as String?) ?? '').trim();
+    final hd = (result['hd'] as bool?) ?? false;
     // If the editor flattened to PNG, make the filename match so the server
     // stores the right extension/content-type.
     var outName = filename;
@@ -1416,6 +1441,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       mime: outMime,
       type: 'image',
       caption: caption,
+      hd: hd,
     );
   }
 
@@ -1561,9 +1587,36 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     required String type,
     int? durationMs,
     String caption = '',
+    bool hd = false,
   }) async {
     setState(() => _uploadingMedia = true);
     try {
+      // Compress images before upload to keep server storage + bandwidth down.
+      // This covers gallery/camera, document-picked and shared-in images
+      // (e.g. big screenshots). Skipped when HD is on (send the original) — but
+      // still forced if the original exceeds the 15 MB upload cap. GIFs and
+      // small images pass through untouched.
+      final tooBigForRaw = bytes.length > 15 * 1024 * 1024;
+      if (type == 'image' &&
+          mime != 'image/gif' &&
+          (!hd || tooBigForRaw) &&
+          bytes.length > 350 * 1024) {
+        try {
+          final compressed =
+              await compute(_compressChatImage, Uint8List.fromList(bytes));
+          if (compressed.isNotEmpty && compressed.length < bytes.length) {
+            bytes = compressed;
+            mime = 'image/jpeg';
+            final dot = filename.lastIndexOf('.');
+            filename =
+                '${dot > 0 ? filename.substring(0, dot) : filename}.jpg';
+            if (hd && tooBigForRaw && mounted) {
+              showToast(context, 'Original too large — sent compressed',
+                  type: ToastType.info);
+            }
+          }
+        } catch (_) {/* keep the original bytes on any failure */}
+      }
       final up = await ApiService()
           .uploadMedia(bytes: bytes, filename: filename, mime: mime);
       if (up == null || up['url'] == null) {
@@ -1624,6 +1677,19 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         return _VoiceNotePlayer(
           url: url,
           durationMs: (msg['media_duration'] as num?)?.toInt() ?? 0,
+          accent: scheme.primary,
+          onColor: textColor,
+        );
+      case 'song':
+        return _SongBubble(
+          assetId: SongCache.assetId(rel),
+          url: url,
+          title: (msg['content'] as String?)?.trim().isNotEmpty == true
+              ? (msg['content'] as String).trim()
+              : ((msg['media_name'] as String?) ?? 'Song'),
+          fileName: msg['media_name'] as String?,
+          mime: msg['media_mime'] as String?,
+          isMe: isMe,
           accent: scheme.primary,
           onColor: textColor,
         );
@@ -2725,7 +2791,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         if (isMedia)
                           _mediaContent(
                               msgType, mediaRel, msg, isMe, textColor, scheme),
-                        if (!tomb && mainText.trim().isNotEmpty)
+                        // A shared song shows its title inside the card, so skip
+                        // the duplicate text line (content == the song label).
+                        if (!tomb &&
+                            msgType != 'song' &&
+                            mainText.trim().isNotEmpty)
                           Padding(
                             padding: EdgeInsets.only(top: isMedia ? 6 : 0),
                             child: Linkify(

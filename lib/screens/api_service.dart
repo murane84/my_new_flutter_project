@@ -497,16 +497,24 @@ class ApiService {
 
   /// Upload a chat attachment (image / file / voice note). Returns the server's
   /// response: `{url: /attachments/<id>, name, mime, size}`, or null on failure.
+  ///
+  /// Pass `ephemeral: true` for a shared song: the server marks the bytes for
+  /// early purge (removed once the recipient caches the file locally and acks
+  /// via [ackAttachmentCached], or after a 7-day TTL), keeping only a reference.
   Future<Map<String, dynamic>?> uploadMedia({
     required List<int> bytes,
     required String filename,
     required String mime,
+    bool ephemeral = false,
   }) async {
     try {
       final token = await _getToken();
       if (token == null) throw Exception('No access token');
 
-      final uri = Uri.parse('${await _baseUrl}/upload/media');
+      var uri = Uri.parse('${await _baseUrl}/upload/media');
+      if (ephemeral) {
+        uri = uri.replace(queryParameters: {'ephemeral': 'true'});
+      }
       final req = http.MultipartRequest('POST', uri)
         ..headers['Authorization'] = 'Bearer $token'
         ..files.add(http.MultipartFile.fromBytes(
@@ -528,6 +536,24 @@ class ApiService {
     } catch (e) {
       _logger.e('Upload media exception: $e');
       return null;
+    }
+  }
+
+  /// Tell the server that an ephemeral shared song (`/attachments/<id>`) is now
+  /// cached on this device. The server purges its copy of the bytes and keeps
+  /// only the reference row. Idempotent + best-effort — returns true on success.
+  Future<bool> ackAttachmentCached(String assetId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/attachments/$assetId/cached'),
+        headers: _authHeaders(token),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.e('ackAttachmentCached exception: $e');
+      return false;
     }
   }
 

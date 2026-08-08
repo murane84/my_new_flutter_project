@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -230,6 +231,13 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // Guards against a spurious "completed" event auto-advancing to another song.
   bool _switching = false;
   Set<String> _favorites = {};
+  // User-defined groups: name -> ordered list of song paths. Persisted locally
+  // (the songs are device-local files, so groups are too).
+  Map<String, List<String>> _groups = {};
+  // When non-null, transport (next/prev/auto-advance) cycles ONLY within this
+  // ordered subset of paths — e.g. "play all gospels". null = the whole library
+  // (default behaviour, unchanged).
+  List<String>? _activeQueue;
 
   String _trackName = 'No track loaded';
   String _artistName = '';
@@ -298,6 +306,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
     _configSession();
     _loadFavorites();
+    _loadGroups();
     _restorePlaylist();
     _listenPlayer();
     if (Platform.isAndroid) _restoreEqualizer();
@@ -423,6 +432,154 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   Future<void> _saveFavorites() async {
     final p = await SharedPreferences.getInstance();
     await p.setStringList('music_favorites', _favorites.toList());
+  }
+
+  // ── Groups (user-named collections, e.g. "Gospels") ─────────────────────────
+
+  Future<void> _loadGroups() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final raw = p.getString('music_groups');
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final loaded = <String, List<String>>{};
+      decoded.forEach((k, v) {
+        loaded[k] = (v as List).map((e) => e.toString()).toList();
+      });
+      if (mounted) setState(() => _groups = loaded);
+    } catch (_) {}
+  }
+
+  Future<void> _saveGroups() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString('music_groups', jsonEncode(_groups));
+    } catch (_) {}
+  }
+
+  void _createGroup(String name) {
+    final n = name.trim();
+    if (n.isEmpty || _groups.containsKey(n)) return;
+    setState(() => _groups[n] = <String>[]);
+    _saveGroups();
+  }
+
+  void _deleteGroup(String name) {
+    if (!_groups.containsKey(name)) return;
+    setState(() => _groups.remove(name));
+    _saveGroups();
+  }
+
+  void _renameGroup(String oldName, String newName) {
+    final n = newName.trim();
+    if (n.isEmpty || !_groups.containsKey(oldName) || _groups.containsKey(n)) {
+      return;
+    }
+    setState(() {
+      _groups[n] = _groups.remove(oldName)!;
+    });
+    _saveGroups();
+  }
+
+  // Set the FULL membership of a song across all groups (checkbox sheet).
+  void _setSongGroups(String path, Set<String> groups) {
+    setState(() {
+      for (final entry in _groups.entries) {
+        final inGroup = groups.contains(entry.key);
+        if (inGroup && !entry.value.contains(path)) {
+          entry.value.add(path);
+        } else if (!inGroup) {
+          entry.value.remove(path);
+        }
+      }
+    });
+    _saveGroups();
+  }
+
+  // Add several songs to one group at once (bulk "add to group").
+  void _addManyToGroup(List<String> paths, String group) {
+    if (!_groups.containsKey(group)) return;
+    setState(() {
+      for (final p in paths) {
+        if (!_groups[group]!.contains(p)) _groups[group]!.add(p);
+      }
+    });
+    _saveGroups();
+  }
+
+  // ── Bulk selection actions ──────────────────────────────────────────────────
+
+  void _removeMany(List<String> paths) {
+    setState(() {
+      final playingPath = (_currentIndex >= 0 && _currentIndex < _playlist.length)
+          ? _playlist[_currentIndex]
+          : null;
+      _playlist.removeWhere(paths.contains);
+      // Keep group membership consistent when songs leave the library.
+      for (final g in _groups.values) {
+        g.removeWhere(paths.contains);
+      }
+      _currentIndex =
+          playingPath != null ? _playlist.indexOf(playingPath) : -1;
+    });
+    _publishPlaylist();
+    _saveGroups();
+  }
+
+  void _favoriteMany(List<String> paths, bool makeFav) {
+    setState(() {
+      if (makeFav) {
+        _favorites.addAll(paths);
+      } else {
+        _favorites.removeAll(paths);
+      }
+    });
+    _saveFavorites();
+    _syncFavoriteAmbient();
+  }
+
+  // ── Scope-aware playback (play/shuffle a filter, e.g. a group) ───────────────
+
+  // Ordered LIBRARY indices for the current playback scope: the active queue
+  // (a filtered/shuffled subset) mapped to indices, or the whole library.
+  List<int> _scopeIndices() {
+    final q = _activeQueue;
+    if (q == null) {
+      return List<int>.generate(_playlist.length, (i) => i);
+    }
+    final out = <int>[];
+    for (final p in q) {
+      final i = _playlist.indexOf(p);
+      if (i >= 0) out.add(i);
+    }
+    return out;
+  }
+
+  // Start playback from a specific view (filtered + sorted paths). Tapping a song
+  // OR "Play all"/"Shuffle" a group all route here, so auto-advance stays within
+  // whatever the user is looking at. A full-library, in-order view clears the
+  // queue so default behaviour is unchanged.
+  void _playScope(List<String> paths, int startIndex, bool shuffle) {
+    if (paths.isEmpty) return;
+    var q = List<String>.from(paths);
+    var startPath = (startIndex >= 0 && startIndex < paths.length)
+        ? paths[startIndex]
+        : paths.first;
+    if (shuffle) {
+      q.shuffle(_rng);
+      startPath = q.first;
+    }
+    final isFullLibraryInOrder = !shuffle &&
+        q.length == _playlist.length &&
+        () {
+          for (var i = 0; i < q.length; i++) {
+            if (q[i] != _playlist[i]) return false;
+          }
+          return true;
+        }();
+    setState(() => _activeQueue = isFullLibraryInOrder ? null : q);
+    final idx = _playlist.indexOf(startPath);
+    if (idx >= 0) _play(idx);
   }
 
   // ── Player listeners ───────────────────────────────────────────────────────
@@ -572,14 +729,22 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     if (_playlist.isEmpty) return;
     if (_repeatOne) {
       _play(_currentIndex);
-    } else if (_shuffle) {
-      _play(_rng.nextInt(_playlist.length));
+      return;
+    }
+    // Navigate within the current scope (active queue, or whole library).
+    final scope = _scopeIndices();
+    if (scope.isEmpty) return;
+    if (_shuffle) {
+      _play(scope[_rng.nextInt(scope.length)]);
+      return;
+    }
+    final pos = scope.indexOf(_currentIndex);
+    if (pos >= 0 && pos + 1 < scope.length) {
+      _play(scope[pos + 1]);
     } else if (_repeatAll) {
-      _play((_currentIndex + 1) % _playlist.length);
-    } else if (_currentIndex + 1 < _playlist.length) {
-      _play(_currentIndex + 1);
+      _play(scope.first);
     } else {
-      // End of playlist, no repeat
+      // End of scope, no repeat
       ref.read(nowPlayingProvider.notifier).update(
           track: _trackName, artist: _artistName, playing: false);
       if (mounted) setState(() {});
@@ -600,12 +765,17 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   void _next() {
     if (_playlist.isEmpty) return;
+    final scope = _scopeIndices();
+    if (scope.isEmpty) return;
     if (_shuffle) {
-      _play(_rng.nextInt(_playlist.length));
-    } else if (_currentIndex + 1 < _playlist.length) {
-      _play(_currentIndex + 1);
+      _play(scope[_rng.nextInt(scope.length)]);
+      return;
+    }
+    final pos = scope.indexOf(_currentIndex);
+    if (pos >= 0 && pos + 1 < scope.length) {
+      _play(scope[pos + 1]);
     } else if (_repeatAll) {
-      _play(0);
+      _play(scope.first);
     } else {
       _snack('End of playlist');
     }
@@ -617,10 +787,13 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       _player.seek(Duration.zero);
       return;
     }
-    if (_currentIndex > 0) {
-      _play(_currentIndex - 1);
+    final scope = _scopeIndices();
+    if (scope.isEmpty) return;
+    final pos = scope.indexOf(_currentIndex);
+    if (pos > 0) {
+      _play(scope[pos - 1]);
     } else if (_repeatAll) {
-      _play(_playlist.length - 1);
+      _play(scope.last);
     } else {
       _player.seek(Duration.zero);
     }
@@ -1265,10 +1438,23 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                   playlist: _playlist,
                   currentIndex: _currentIndex,
                   favorites: _favorites,
+                  groups: _groups,
                   loading: _scanning,
-                  onPlay: (i) {
-                    _closePlaylist();
-                    _play(i);
+                  player: _player,
+                  currentTitle: _trackName,
+                  hasTrack:
+                      _currentIndex >= 0 && _currentIndex < _playlist.length,
+                  // Tapping a song, "Play all", and "Shuffle" all route here so
+                  // auto-advance stays within whatever the user is viewing.
+                  onPlayScope: _playScope,
+                  onTogglePlay: _togglePlayPause,
+                  onNext: _next,
+                  onPrev: _previous,
+                  onSeekFraction: (f) {
+                    final d = _player.duration;
+                    if (d != null && d > Duration.zero) {
+                      _player.seek(d * f.clamp(0.0, 1.0));
+                    }
                   },
                   onClose: _closePlaylist,
                   onRemove: (i) {
@@ -1281,24 +1467,14 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                     _publishPlaylist();
                   },
                   onFavorite: _toggleFavorite,
-                  onReorder: (o, n) {
-                    setState(() {
-                      // Remember the playing track by PATH so the now-playing
-                      // pointer follows it wherever it lands after the move.
-                      final playingPath = (_currentIndex >= 0 &&
-                              _currentIndex < _playlist.length)
-                          ? _playlist[_currentIndex]
-                          : null;
-                      if (n > o) n--;
-                      final item = _playlist.removeAt(o);
-                      _playlist.insert(n, item);
-                      if (playingPath != null) {
-                        _currentIndex = _playlist.indexOf(playingPath);
-                      }
-                    });
-                    _publishPlaylist();
-                  },
                   onAdd: _pickMusic,
+                  onCreateGroup: _createGroup,
+                  onDeleteGroup: _deleteGroup,
+                  onRenameGroup: _renameGroup,
+                  onSetSongGroups: _setSongGroups,
+                  onAddManyToGroup: _addManyToGroup,
+                  onRemoveMany: _removeMany,
+                  onFavoriteMany: _favoriteMany,
                         ),
                       ),
                     ),

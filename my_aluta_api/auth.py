@@ -44,7 +44,9 @@ class UserCreate(BaseModel):
     username: str
     email: EmailStr
     password: str
-    phone: str | None = None
+    # Phone is now MANDATORY (like email) and expected in E.164 form
+    # (+<country code><number>), so contacts can be matched across countries.
+    phone: str
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -202,17 +204,32 @@ def get_active_user(current_user: User = Depends(get_current_user)):
 # Routes
 # ------------------------------
 
-@router.post("/register/")  
+@router.post("/register/")
 def register_user(user: UserCreate, db: Session = Depends(get_db)):
     if get_user_by_email(db, user.email):
         raise HTTPException(status_code=400, detail="Email already registered")
-    
+
+    # Phone is mandatory and must be a valid E.164 number (+<cc><number>,
+    # 8–15 digits) so it can be matched against contacts across countries.
+    phone = (user.phone or "").strip()
+    import re as _re
+    if not _re.fullmatch(r"\+\d{8,15}", phone):
+        raise HTTPException(
+            status_code=400,
+            detail="Enter a valid phone number with country code (e.g. +255…).",
+        )
+    # Block a second account on the same number (numbers are the discovery key).
+    existing_phone = db.query(User).filter(User.phone == phone).first()
+    if existing_phone:
+        raise HTTPException(
+            status_code=400, detail="That phone number is already registered.")
+
     hashed_password = get_password_hash(user.password)
     new_user = User(
         username=user.username,
         email=user.email,
         hashed_password=hashed_password,
-        phone=user.phone,
+        phone=phone,
         is_online=False
     )
     db.add(new_user)

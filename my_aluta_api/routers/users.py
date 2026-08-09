@@ -2,14 +2,71 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime, timezone
+import re
 from models import BlockStatus
 from database import get_db
-from models import User, MuteStatus
+from models import User, MuteStatus, Friend
 import crud, schemas
 from schemas import UserOut  # Ensure this contains fields like id, email, username, is_online
 from auth import get_current_user, get_password_hash, verify_password
 
 router = APIRouter()
+
+
+def _phone_keys(p: str) -> set:
+    """Match keys for a phone number. Prefers the FULL E.164 digits (country
+    code + national number) — the modern, cross-country-correct key — and also
+    includes the last 9 digits as a fallback so numbers stored before the E.164
+    switch (no country code) still match."""
+    digits = re.sub(r"\D", "", p or "")
+    keys = set()
+    if len(digits) >= 8:
+        keys.add(digits)          # full E.164 (e.g. 255765123456)
+    if len(digits) >= 9:
+        keys.add(digits[-9:])     # legacy fallback (national tail)
+    return keys
+
+
+@router.post("/users/contacts/sync", tags=["Users"])
+def sync_contacts(
+    payload: schemas.ContactsSync,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Match phone-book numbers against registered users and auto-add the ones
+    found as friends. Returns the matched users + how many were newly added, so
+    a user only ever discovers people already in their own contacts — never the
+    whole registered-user table."""
+    contact_keys = set()
+    for p in payload.phones:
+        contact_keys |= _phone_keys(p)
+    if not contact_keys:
+        return {"matched": [], "added": 0}
+    candidates = (
+        db.query(User)
+        .filter(User.phone.isnot(None), User.id != current_user.id)
+        .all()
+    )
+    matched = [u for u in candidates if _phone_keys(u.phone) & contact_keys]
+    added = 0
+    for u in matched:
+        exists = (
+            db.query(Friend)
+            .filter(
+                ((Friend.user_id == current_user.id) & (Friend.friend_id == u.id))
+                | ((Friend.user_id == u.id) & (Friend.friend_id == current_user.id))
+            )
+            .first()
+        )
+        if not exists:
+            db.add(Friend(user_id=current_user.id, friend_id=u.id))
+            added += 1
+    if added:
+        db.commit()
+    return {
+        "matched": [UserOut.model_validate(u) for u in matched],
+        "added": added,
+    }
 
 # ---------------------------
 # Routes

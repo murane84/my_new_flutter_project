@@ -2,7 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, kReleaseMode, defaultTargetPlatform, TargetPlatform;
+import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:phone_numbers_parser/phone_numbers_parser.dart';
 // Hide intl's TextDirection so TextPainter/TextDirection.ltr resolve to dart:ui's.
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:provider/provider.dart';
@@ -124,6 +127,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   // ── Chat state ────────────────────────────────────────────────────────────
   String? _activeFriendId;
+  // When a GROUP is open, its conversation map lives here and the chat panel
+  // renders it (instead of a DM) — so groups sit in the chat panel on desktop,
+  // never taking over the whole window.
+  Map<String, dynamic>? _activeGroup;
   String? _activeFriendName;
   bool? _activeFriendOnline;
   String? _activeFriendLastSeen;
@@ -958,6 +965,106 @@ class HomePageState extends rp.ConsumerState<HomePage>
     ApiService().markMessagesAsReadPatch(friend['id'] as int);
   }
 
+  /// Open a GROUP conversation inside the chat panel (leaving the music panel
+  /// visible on desktop). Called from the Groups popup / after creating a group.
+  void openGroupInPanel(Map<String, dynamic> conv) {
+    setState(() {
+      _activeGroup = conv;
+      // Groups and DMs are mutually exclusive in the panel.
+      _activeFriendId = null;
+      _activeFriendName = null;
+      _activeFriendOnline = null;
+      _activeFriendLastSeen = null;
+      _avatarExpanded = false;
+      _playerExpanded = false; // make sure the chat panel is the front surface
+    });
+  }
+
+  void _closeGroupPanel() => setState(() => _activeGroup = null);
+
+  /// Read the phone's address book, match numbers against registered users, and
+  /// auto-add the matches as friends. Android/iOS only.
+  Future<void> _findFriendsFromContacts() async {
+    final mobile = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+    if (!mobile) {
+      if (mounted) {
+        showToast(context, 'Contact sync is only available on the phone app.',
+            type: ToastType.info);
+      }
+      return;
+    }
+    try {
+      final granted = await FlutterContacts.requestPermission(readonly: true);
+      if (!granted) {
+        if (mounted) {
+          showToast(context, 'Contacts permission denied.',
+              type: ToastType.error);
+        }
+        return;
+      }
+      if (mounted) {
+        showToast(context, 'Checking your contacts…', type: ToastType.info);
+      }
+      final contacts =
+          await FlutterContacts.getContacts(withProperties: true);
+      // Default region for LOCAL (no country code) contact numbers = the
+      // device's country. Numbers already in +international form are parsed as
+      // written. Everything is normalised to E.164 so matching is correct
+      // across countries.
+      IsoCode region = IsoCode.TZ;
+      final cc =
+          WidgetsBinding.instance.platformDispatcher.locale.countryCode;
+      if (cc != null) {
+        try {
+          region = IsoCode.values.byName(cc.toUpperCase());
+        } catch (_) {/* keep default */}
+      }
+      final phoneSet = <String>{};
+      for (final c in contacts) {
+        for (final p in c.phones) {
+          final raw = p.number.trim();
+          if (raw.isEmpty) continue;
+          try {
+            final parsed = PhoneNumber.parse(raw, callerCountry: region);
+            if (parsed.isValid()) {
+              phoneSet.add(parsed.international); // +<cc><number>
+            } else {
+              phoneSet.add(raw); // fall back to raw (server tail-match may hit)
+            }
+          } catch (_) {
+            phoneSet.add(raw);
+          }
+        }
+      }
+      final phones = phoneSet.toList();
+      if (phones.isEmpty) {
+        if (mounted) {
+          showToast(context, 'No phone numbers found in your contacts.',
+              type: ToastType.info);
+        }
+        return;
+      }
+      final res = await ApiService().syncContacts(phones);
+      final added = (res['added'] as num?)?.toInt() ?? 0;
+      final matched = (res['matched'] as List?)?.length ?? 0;
+      if (!mounted) return;
+      showToast(
+        context,
+        matched == 0
+            ? 'None of your contacts are on Aluta yet.'
+            : 'Found $matched on Aluta · added $added new friend${added == 1 ? '' : 's'}.',
+        type: ToastType.success,
+      );
+      _fetchFriends(); // refresh the list with any newly-added friends
+    } catch (e) {
+      if (mounted) {
+        showToast(context, 'Could not sync contacts.', type: ToastType.error);
+      }
+    }
+  }
+
   // Direct call to a friend's saved phone number (tel: dialer).
   Future<void> _callNumber(String? phone, String name) async {
     final p = (phone ?? '').trim();
@@ -1320,6 +1427,48 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final scheme = Theme.of(context).colorScheme;
     final textColor = scheme.onSurface;
 
+    // Group header (back · icon · title · member count).
+    if (_activeGroup != null) {
+      final g = _activeGroup!;
+      final members = (g['members'] as List?) ?? const [];
+      return Row(
+        children: [
+          _PanelToggleBtn(
+            isFullScreen: false,
+            customIcon: Icons.arrow_back_ios_new_rounded,
+            tooltip: 'Back to messages',
+            onTap: _closeGroupPanel,
+          ),
+          const SizedBox(width: 10),
+          CircleAvatar(
+            radius: 17,
+            backgroundColor: scheme.primaryContainer,
+            child: Icon(Icons.groups_rounded,
+                color: scheme.onPrimaryContainer, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  (g['title'] ?? 'Group').toString(),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 14),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  '${members.length} members',
+                  style: TextStyle(
+                      fontSize: 11, color: textColor.withAlpha(130)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
     if (_activeFriendId != null) {
       return Row(
         children: [
@@ -1557,7 +1706,23 @@ class HomePageState extends rp.ConsumerState<HomePage>
                   child: child,
                 ),
               ),
-              child: _activeFriendId != null
+              child: _activeGroup != null
+                  ? ChatPage(
+                      key: ValueKey('g${_activeGroup!['id']}'),
+                      friendName: (_activeGroup!['title'] ?? 'Group').toString(),
+                      textColor: textColor,
+                      showAppBar: false,
+                      conversationId: (_activeGroup!['id'] as num).toInt(),
+                      isGroup: true,
+                      groupTitle:
+                          (_activeGroup!['title'] ?? 'Group').toString(),
+                      groupAvatar:
+                          (_activeGroup!['avatar_url'] ?? '').toString(),
+                      memberCount:
+                          ((_activeGroup!['members'] as List?) ?? const [])
+                              .length,
+                    )
+                  : _activeFriendId != null
                   ? ChatPage(
                       key: ValueKey(_activeFriendId),
                       friendId: int.parse(_activeFriendId!),
@@ -2578,6 +2743,21 @@ class HomePageState extends rp.ConsumerState<HomePage>
     );
   }
 
+  // One row of the header overflow menu (icon + label).
+  PopupMenuItem<String> _menuItem(String value, IconData icon, String label) {
+    final scheme = Theme.of(context).colorScheme;
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 12),
+          Text(label),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFooter(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
@@ -2730,6 +2910,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final canLeave = !(_isMusicFullScreen ||
         _isChatFullScreen ||
         _playerExpanded ||
+        _activeGroup != null ||
         _activeFriendId != null);
 
     // Listener sits above the whole app and is passive (it never consumes
@@ -2742,6 +2923,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
           if (_playerExpanded) {
             // Collapse the slide-up player back to the mini bar first.
             _playerExpanded = false;
+          } else if (_activeGroup != null) {
+            // Close the open group → back to the messages list.
+            _activeGroup = null;
           } else if (_activeFriendId != null) {
             // Close the open conversation → back to the messages list.
             _activeFriendId = null;
@@ -2787,36 +2971,54 @@ class HomePageState extends rp.ConsumerState<HomePage>
           ],
         ),
         actions: [
-          IconButton(
-            icon: Icon(Icons.groups_rounded, color: scheme.onSurface),
-            tooltip: 'Groups',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const GroupsScreen()),
-            ),
-          ),
-          IconButton(
-            icon: Icon(
-              themeProvider.isDarkMode
-                  ? Icons.light_mode_rounded
-                  : Icons.dark_mode_rounded,
-              color: scheme.onSurface,
-            ),
-            tooltip: themeProvider.isDarkMode
-                ? 'Switch to light mode'
-                : 'Switch to dark mode',
-            onPressed: () =>
-                themeProvider.toggleTheme(!themeProvider.isDarkMode),
-          ),
-          IconButton(
-            icon: Icon(Icons.shield_outlined, color: scheme.onSurface),
-            tooltip: 'Legal & About',
-            onPressed: () => showLegalMenu(context),
-          ),
-          IconButton(
-            icon: _LogoutGlyph(color: scheme.onSurface.withAlpha(210)),
-            onPressed: _logout,
-            tooltip: 'Sign out',
+          // Single overflow menu — all the header actions live here now
+          // (Groups, theme, Profile, Legal, Sign out). New items get added to
+          // this one menu instead of crowding the header with icons.
+          PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert_rounded, color: scheme.onSurface),
+            tooltip: 'Menu',
+            position: PopupMenuPosition.under,
+            onSelected: (v) async {
+              switch (v) {
+                case 'groups':
+                  final conv = await showAppPopup<Map<String, dynamic>>(
+                      context, const GroupsScreen());
+                  if (conv != null && mounted) openGroupInPanel(conv);
+                  break;
+                case 'find_friends':
+                  await _findFriendsFromContacts();
+                  break;
+                case 'theme':
+                  themeProvider.toggleTheme(!themeProvider.isDarkMode);
+                  break;
+                case 'profile':
+                  await showAppPopup(context, const ProfileScreen());
+                  if (mounted) _loadUserData();
+                  break;
+                case 'legal':
+                  showLegalMenu(context);
+                  break;
+                case 'logout':
+                  _logout();
+                  break;
+              }
+            },
+            itemBuilder: (ctx) => [
+              _menuItem('groups', Icons.groups_rounded, 'Groups'),
+              _menuItem(
+                  'find_friends', Icons.contacts_rounded, 'Find friends'),
+              _menuItem(
+                'theme',
+                themeProvider.isDarkMode
+                    ? Icons.light_mode_rounded
+                    : Icons.dark_mode_rounded,
+                themeProvider.isDarkMode ? 'Light mode' : 'Dark mode',
+              ),
+              _menuItem('profile', Icons.person_rounded, 'Profile'),
+              _menuItem('legal', Icons.shield_outlined, 'Legal & About'),
+              const PopupMenuDivider(),
+              _menuItem('logout', Icons.logout_rounded, 'Sign out'),
+            ],
           ),
         ],
       ),

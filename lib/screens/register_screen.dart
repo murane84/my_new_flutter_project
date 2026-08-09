@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:email_validator/email_validator.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
 import 'api_service.dart';
 import 'login_screen.dart';
 import 'theme_provider.dart';
@@ -58,16 +59,8 @@ class RegisterPageState extends State<RegisterPage> {
     super.dispose();
   }
 
-  String? _phoneError(String value) {
-    final p = value.trim();
-    if (p.isEmpty) return 'Enter your phone number';
-    // Optional leading +, then 7–15 digits (spaces/dashes/parens allowed).
-    final cleaned = p.replaceAll(RegExp(r'[\s\-()]'), '');
-    if (!RegExp(r'^\+?\d{7,15}$').hasMatch(cleaned)) {
-      return 'Enter a valid phone number';
-    }
-    return null;
-  }
+  // Phone validity is enforced per-country by the IntlPhoneField below; the
+  // full E.164 value is captured into _phoneController as the user types.
 
   // Eligibility scan: valid format, real-looking domain, not disposable.
   String? _emailError(String value) {
@@ -94,6 +87,12 @@ class RegisterPageState extends State<RegisterPage> {
 
   Future<void> _performRegister() async {
     if (!_formKey.currentState!.validate()) return;
+    // Phone is mandatory (like email) — the IntlPhoneField writes the full E.164
+    // value here as the user types; an empty value means they skipped it.
+    if (_phoneController.text.trim().isEmpty) {
+      showErrorSnackBar(context, 'Enter your phone number');
+      return;
+    }
     setState(() => _isLoading = true);
 
     final result = await ApiService().register(
@@ -282,12 +281,22 @@ class RegisterPageState extends State<RegisterPage> {
                                   validator: (v) => _emailError(v ?? ''),
                                 ),
                                 const SizedBox(height: 14),
-                                _buildField(
-                                  controller: _phoneController,
-                                  label: 'Phone number',
-                                  icon: Icons.phone_outlined,
-                                  keyboardType: TextInputType.phone,
-                                  validator: (v) => _phoneError(v ?? ''),
+                                IntlPhoneField(
+                                  // International number with a country picker →
+                                  // we store the full E.164 value (+<cc><number>)
+                                  // so contact matching works across countries.
+                                  initialCountryCode: 'TZ',
+                                  disableLengthCheck: false,
+                                  decoration: InputDecoration(
+                                    labelText: 'Phone number',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  onChanged: (phone) =>
+                                      _phoneController.text = phone.completeNumber,
+                                  invalidNumberMessage:
+                                      'Enter a valid phone number',
                                 ),
                                 const SizedBox(height: 6),
                                 Align(

@@ -1,31 +1,13 @@
 import 'package:flutter/material.dart';
 
 import 'api_service.dart';
-import 'chat_page.dart';
-import 'token_helper.dart';
 import '../utils/toast_helper.dart';
+import '../utils/popup_shell.dart';
 
-/// Open a group conversation as a full-screen chat (reuses ChatPage in group
-/// mode). `conv` is a ConversationOut map from the server.
-Future<void> openGroupChat(BuildContext context, Map<String, dynamic> conv) {
-  final scheme = Theme.of(context).colorScheme;
-  final members = (conv['members'] as List?) ?? const [];
-  return Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => ChatPage(
-        friendName: (conv['title'] ?? 'Group').toString(),
-        textColor: scheme.onSurface,
-        showAppBar: true,
-        conversationId: (conv['id'] as num).toInt(),
-        isGroup: true,
-        groupTitle: (conv['title'] ?? 'Group').toString(),
-        groupAvatar: (conv['avatar_url'] ?? '').toString(),
-        memberCount: members.length,
-      ),
-    ),
-  );
-}
+// Groups are presented as CARD POPUPS (AppPopupShell) — not full-window routes —
+// so on desktop they never hide the music/chat panels. Selecting or creating a
+// group pops back the conversation map; the caller (home_page) then opens it
+// inside the chat panel (openGroupInPanel).
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Groups list
@@ -58,88 +40,76 @@ class _GroupsScreenState extends State<GroupsScreen> {
   }
 
   Future<void> _newGroup() async {
-    final created = await Navigator.push<Map<String, dynamic>>(
-      context,
-      MaterialPageRoute(builder: (_) => const GroupCreateScreen()),
-    );
-    if (!mounted) return;
-    await _load();
+    final created = await showAppPopup<Map<String, dynamic>>(
+        context, const GroupCreateScreen());
     if (!mounted || created == null) return;
-    openGroupChat(context, created);
+    // Bubble the new group up so home opens it in the chat panel.
+    Navigator.pop(context, created);
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Groups'),
-        actions: [
-          IconButton(
-            tooltip: 'New group',
-            icon: const Icon(Icons.group_add_rounded),
-            onPressed: _newGroup,
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _groups.isEmpty
-                ? _empty(scheme)
-                : RefreshIndicator(
-                    onRefresh: _load,
-                    child: ListView.separated(
-                      itemCount: _groups.length,
-                      separatorBuilder: (_, _) => Divider(
-                          height: 1,
-                          color: scheme.outlineVariant.withAlpha(60)),
-                      itemBuilder: (_, i) => _tile(_groups[i], scheme),
-                    ),
-                  ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _newGroup,
+    return AppPopupShell(
+      title: 'Groups',
+      icon: Icons.groups_rounded,
+      headerAction: IconButton(
+        tooltip: 'New group',
         icon: const Icon(Icons.group_add_rounded),
-        label: const Text('New group'),
+        onPressed: _newGroup,
       ),
+      builder: (ctx, isWide) => _body(ctx),
     );
   }
 
-  Widget _empty(ColorScheme scheme) => LayoutBuilder(
-        builder: (_, cons) => SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: SizedBox(
-            height: cons.maxHeight,
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.groups_rounded,
-                      size: 64, color: scheme.primary.withAlpha(120)),
-                  const SizedBox(height: 12),
-                  const Text('No groups yet',
-                      style: TextStyle(
-                          fontSize: 17, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 6),
-                  Text('Create one to chat with several friends at once.',
-                      style: TextStyle(color: scheme.onSurfaceVariant)),
-                ],
-              ),
+  Widget _body(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.all(40),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_groups.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.groups_rounded,
+                size: 56, color: scheme.primary.withAlpha(120)),
+            const SizedBox(height: 12),
+            const Text('No groups yet',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 6),
+            Text('Create one to chat with several friends at once.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: scheme.onSurfaceVariant)),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _newGroup,
+              icon: const Icon(Icons.group_add_rounded),
+              label: const Text('New group'),
             ),
-          ),
+          ],
         ),
       );
+    }
+    return ListView.separated(
+      shrinkWrap: true,
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      itemCount: _groups.length,
+      separatorBuilder: (_, _) =>
+          Divider(height: 1, color: scheme.outlineVariant.withAlpha(60)),
+      itemBuilder: (_, i) => _tile(_groups[i], scheme),
+    );
+  }
 
   Widget _tile(Map<String, dynamic> g, ColorScheme scheme) {
     final members = (g['members'] as List?) ?? const [];
     final unread = (g['unread_count'] as num?)?.toInt() ?? 0;
     final last = (g['last_message'] ?? '').toString();
     return ListTile(
-      onTap: () async {
-        await openGroupChat(context, g);
-        _load();
-      },
+      onTap: () => Navigator.pop(context, g), // home opens it in the panel
       leading: CircleAvatar(
         backgroundColor: scheme.primaryContainer,
         child: Icon(Icons.groups_rounded, color: scheme.onPrimaryContainer),
@@ -155,8 +125,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
       ),
       trailing: unread > 0
           ? Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                   color: scheme.primary,
                   borderRadius: BorderRadius.circular(20)),
@@ -172,7 +141,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Group creation (name + pick friends)
+// Group creation (name + pick friends) — pops back the created conversation.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class GroupCreateScreen extends StatefulWidget {
@@ -184,35 +153,56 @@ class GroupCreateScreen extends StatefulWidget {
 
 class _GroupCreateScreenState extends State<GroupCreateScreen> {
   final _name = TextEditingController();
+  final _search = TextEditingController();
   List<Map<String, dynamic>> _friends = [];
   final Set<int> _selected = {};
   bool _loading = true;
+  bool _error = false;
   bool _creating = false;
 
   @override
   void initState() {
     super.initState();
+    _search.addListener(() => setState(() {}));
     _loadFriends();
   }
 
   @override
   void dispose() {
     _name.dispose();
+    _search.dispose();
     super.dispose();
   }
 
   Future<void> _loadFriends() async {
-    final token = await getToken();
-    if (token == null) {
-      if (mounted) setState(() => _loading = false);
-      return;
-    }
-    final list = await ApiService().getFriendsList(token);
-    if (!mounted) return;
     setState(() {
-      _friends = list;
-      _loading = false;
+      _loading = true;
+      _error = false;
     });
+    try {
+      // Same source as the home chat list (the Friend table) → only the user's
+      // own contacts, never every registered account.
+      final list = await ApiService().getFriends();
+      if (!mounted) return;
+      setState(() {
+        _friends = list;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = true;
+      });
+    }
+  }
+
+  List<Map<String, dynamic>> get _visibleFriends {
+    final q = _search.text.trim().toLowerCase();
+    if (q.isEmpty) return _friends;
+    return _friends
+        .where((f) => (f['username'] ?? '').toString().toLowerCase().contains(q))
+        .toList();
   }
 
   Future<void> _create() async {
@@ -232,98 +222,159 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
     if (conv != null) {
       Navigator.pop(context, conv); // caller opens the new group
     } else {
-      showToast(context, 'Could not create the group.',
-          type: ToastType.error);
+      showToast(context, 'Could not create the group.', type: ToastType.error);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('New group'),
-        actions: [
-          TextButton(
-            onPressed: _creating ? null : _create,
-            child: _creating
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2.4))
-                : Text('Create (${_selected.length})',
-                    style: TextStyle(
-                        color: scheme.primary, fontWeight: FontWeight.w700)),
-          ),
-        ],
+    return AppPopupShell(
+      title: 'New group',
+      icon: Icons.group_add_rounded,
+      headerAction: TextButton(
+        onPressed: _creating ? null : _create,
+        child: _creating
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2.4))
+            : Text('Create (${_selected.length})',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w700)),
       ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: TextField(
-                controller: _name,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                  labelText: 'Group name',
-                  prefixIcon: Icon(Icons.groups_rounded),
-                  border: OutlineInputBorder(),
+      builder: (ctx, isWide) => _body(ctx),
+    );
+  }
+
+  Widget _body(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+          child: TextField(
+            controller: _name,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'Group name',
+              prefixIcon: Icon(Icons.groups_rounded),
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
+          child: Row(
+            children: [
+              Text('Add members',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurfaceVariant)),
+              const Spacer(),
+              Text('from your contacts',
+                  style:
+                      TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+        if (!_loading && !_error && _friends.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+            child: TextField(
+              controller: _search,
+              decoration: InputDecoration(
+                hintText: 'Search contacts…',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                isDense: true,
+                filled: true,
+                fillColor: scheme.surfaceContainerHighest,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
                 ),
               ),
             ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-                child: Text('Add members',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: scheme.onSurfaceVariant)),
-              ),
-            ),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _friends.isEmpty
-                      ? Center(
-                          child: Text('No friends to add yet.',
-                              style:
-                                  TextStyle(color: scheme.onSurfaceVariant)))
-                      : ListView.builder(
-                          itemCount: _friends.length,
-                          itemBuilder: (_, i) {
-                            final f = _friends[i];
-                            final id = (f['id'] as num).toInt();
-                            final name = (f['username'] ?? 'Friend').toString();
-                            final checked = _selected.contains(id);
-                            return CheckboxListTile(
-                              value: checked,
-                              onChanged: (v) => setState(() {
-                                if (v == true) {
-                                  _selected.add(id);
-                                } else {
-                                  _selected.remove(id);
-                                }
-                              }),
-                              secondary: CircleAvatar(
-                                backgroundColor: scheme.primaryContainer,
-                                child: Text(
-                                  name.isNotEmpty
-                                      ? name[0].toUpperCase()
-                                      : '?',
-                                  style: TextStyle(
-                                      color: scheme.onPrimaryContainer),
-                                ),
-                              ),
-                              title: Text(name),
-                            );
-                          },
-                        ),
+          ),
+        Flexible(child: _membersArea(scheme)),
+      ],
+    );
+  }
+
+  Widget _membersArea(ColorScheme scheme) {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.all(28),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_error) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.wifi_off_rounded,
+                size: 40, color: scheme.onSurfaceVariant),
+            const SizedBox(height: 10),
+            Text('Couldn’t load your contacts.',
+                style: TextStyle(color: scheme.onSurfaceVariant)),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _loadFriends,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Retry'),
             ),
           ],
         ),
-      ),
+      );
+    }
+    if (_friends.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          'No contacts yet. Start a 1:1 chat with someone first — then you can '
+          'add them to a group.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: scheme.onSurfaceVariant),
+        ),
+      );
+    }
+    final list = _visibleFriends;
+    if (list.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text('No contacts match “${_search.text.trim()}”.',
+            style: TextStyle(color: scheme.onSurfaceVariant)),
+      );
+    }
+    return ListView.builder(
+      shrinkWrap: true,
+      padding: const EdgeInsets.only(bottom: 8),
+      itemCount: list.length,
+      itemBuilder: (_, i) {
+        final f = list[i];
+        final id = (f['id'] as num).toInt();
+        final name = (f['username'] ?? 'Friend').toString();
+        final checked = _selected.contains(id);
+        return CheckboxListTile(
+          value: checked,
+          onChanged: (v) => setState(() {
+            if (v == true) {
+              _selected.add(id);
+            } else {
+              _selected.remove(id);
+            }
+          }),
+          secondary: CircleAvatar(
+            backgroundColor: scheme.primaryContainer,
+            child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                style: TextStyle(color: scheme.onPrimaryContainer)),
+          ),
+          title: Text(name),
+        );
+      },
     );
   }
 }

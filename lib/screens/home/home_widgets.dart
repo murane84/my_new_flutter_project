@@ -95,7 +95,9 @@ class _ScrollingText extends StatelessWidget {
 
 /// A refined, thin-stroke logout mark — a rounded door frame with an arrow
 /// gliding out through the opening. Lighter and more elegant than the stock
-/// filled Material "exit" glyph.
+/// filled Material "exit" glyph. Kept for reuse (the header now uses a plain
+/// menu item, so it's not referenced right now).
+// ignore: unused_element
 class _LogoutGlyph extends StatelessWidget {
   const _LogoutGlyph({required this.color});
 

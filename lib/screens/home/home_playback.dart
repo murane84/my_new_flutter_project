@@ -36,6 +36,30 @@ class PlaybackBus {
 
 final playbackBus = PlaybackBus();
 
+// Command channel for the app-wide PLAYLIST DRAWER. The playlist UI lives in
+// MusicControls (which is always mounted, so the drawer can render over the
+// chat via the root Overlay). MusicControls registers [open]/[close]/[toggle]
+// on init and clears them on dispose; any screen — e.g. a chat thread's header
+// button — can drive the drawer through this bus without owning the player.
+// [isOpen] lets those shortcut buttons show the right icon.
+class PlaylistDrawerBus {
+  VoidCallback? open;
+  VoidCallback? close;
+  VoidCallback? toggle;
+  final ValueNotifier<bool> isOpen = ValueNotifier<bool>(false);
+  // The playlist body itself, built by MusicControls (which owns the data). The
+  // HOST (home_page) renders this below the active header so the header — and
+  // the chat's playlist toggle — stay visible above the drawer.
+  WidgetBuilder? contentBuilder;
+  // Bumped by MusicControls whenever the playlist/current track/favourites
+  // change while the drawer is open, so the host rebuilds the (externally
+  // hosted) content with fresh data.
+  final ValueNotifier<int> revision = ValueNotifier<int>(0);
+  bool get available => toggle != null;
+}
+
+final playlistDrawerBus = PlaylistDrawerBus();
+
 // Elapsed / total for the current track, so the now-playing bar can show tiny
 // time labels flanking the seek bar. Updated per position tick alongside
 // [playProgressNotifier]; kept separate so only the times rebuild.

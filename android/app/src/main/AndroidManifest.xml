@@ -97,6 +97,17 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
+        <!-- Renderer: fall back from Impeller (Vulkan) to the Skia/OpenGL
+             renderer on Android. Some devices — notably Redmi / Xiaomi HyperOS
+             (citrine) GPUs — lose the Vulkan context and Impeller hard-aborts
+             with "Check failed: back_texture. Context is valid:0"
+             (flutter/impeller/display_list/canvas.cc). Skia is stable there.
+             Remove this once the app is pinned to a Flutter engine where the
+             Impeller/Vulkan context-loss crash is fixed. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
+
         <!-- FCM: the default channel a data/notification message is posted to if
              it doesn't name one. Matches the "Messages" channel created in
              notif_service.dart so background pushes ring on the right channel. -->

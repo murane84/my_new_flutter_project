@@ -63,13 +63,18 @@ class AppPopupShell extends StatelessWidget {
     // Clear the Aluta app header (toolbar + status bar) with a small gap.
     final topInset = media.padding.top + 64;
     final maxW = isWide ? desktopMaxWidth : media.size.width - 24;
-    final maxH = media.size.height - topInset - 20;
+    // Reserve the system navigation-bar inset (padding.bottom) at the bottom so
+    // the popup card — and any controls near its bottom edge — never sit under
+    // the Android 3-button nav bar. It's ~0 on gesture-nav phones, so no space
+    // is wasted there.
+    final bottomInset = media.padding.bottom;
+    final maxH = media.size.height - topInset - 20 - bottomInset;
 
     return Align(
       alignment: Alignment.topCenter,
       child: Padding(
-        padding:
-            EdgeInsets.only(top: topInset, left: 12, right: 12, bottom: 12),
+        padding: EdgeInsets.only(
+            top: topInset, left: 12, right: 12, bottom: 12 + bottomInset),
         child: Material(
           type: MaterialType.transparency,
           child: ConstrainedBox(

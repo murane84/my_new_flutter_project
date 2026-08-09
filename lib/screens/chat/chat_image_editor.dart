@@ -420,11 +420,18 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
           // ── Caption + send ──────────────────────────────────────────────
           Container(
             color: Colors.black,
+            // bottom padding = keyboard height (viewInsets) + the system
+            // navigation-bar inset (padding.bottom) + a little breathing room.
+            // padding.bottom is the 3-button nav-bar height on those phones and
+            // ~0 on gesture nav, and it collapses to 0 while the keyboard is up
+            // (viewInsets already covers it), so the two never double-count.
             padding: EdgeInsets.only(
               left: 12,
               right: 12,
               top: 6,
-              bottom: MediaQuery.of(context).viewInsets.bottom + 10,
+              bottom: MediaQuery.of(context).viewInsets.bottom +
+                  MediaQuery.of(context).padding.bottom +
+                  10,
             ),
             child: Row(
               children: [

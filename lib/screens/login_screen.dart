@@ -6,6 +6,7 @@ import 'home_page.dart';
 import 'theme_provider.dart';
 import 'auth_page.dart';
 import 'register_screen.dart';
+import 'forgot_password_screen.dart';
 import 'token_helper.dart';
 import '../services/biometric_service.dart';
 import '../utils/snackbar_helper.dart';
@@ -439,7 +440,39 @@ class LoginPageState extends State<LoginPage> {
                                           ? 'Enter your password'
                                           : null,
                                 ),
-                                const SizedBox(height: 28),
+
+                                // Forgot password → recover via authenticator
+                                // (Google Authenticator) code.
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton(
+                                    onPressed: _isLoading
+                                        ? null
+                                        : () => Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    const ForgotPasswordScreen(),
+                                              ),
+                                            ),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: scheme.primary,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 4),
+                                      minimumSize: const Size(0, 36),
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    child: const Text(
+                                      'Forgot password?',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
 
                                 // Sign In button — pill width, centred
                                 Center(

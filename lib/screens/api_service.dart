@@ -61,6 +61,210 @@ class ApiService {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Two-factor authentication + password recovery (TOTP / Google Authenticator)
+  // ---------------------------------------------------------------------------
+
+  /// Whether authenticator 2FA is currently enabled for the signed-in user.
+  Future<bool> twoFactorStatus() async {
+    try {
+      final t = await _getToken();
+      if (t == null) return false;
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/auth/2fa/status'),
+        headers: _authHeaders(t),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return (_tryDecode(resp.body)?['enabled'] ?? false) == true;
+      }
+    } catch (e) {
+      _logger.e('twoFactorStatus exception: $e');
+    }
+    return false;
+  }
+
+  /// Begin authenticator enrollment. Returns {secret, otpauth_uri} to render as
+  /// a QR. Not active until [twoFactorVerify] confirms a code.
+  Future<Map<String, dynamic>> twoFactorSetup() async {
+    try {
+      final t = await _getToken();
+      if (t == null) {
+        return {'success': false, 'message': 'Please sign in again.'};
+      }
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/auth/2fa/setup'),
+        headers: _authHeaders(t),
+      );
+      final body = _tryDecode(resp.body);
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return {
+          'success': true,
+          'secret': body?['secret'] ?? '',
+          'otpauth_uri': body?['otpauth_uri'] ?? '',
+        };
+      }
+      return {
+        'success': false,
+        'message': body?['detail'] ?? 'Could not start setup.',
+      };
+    } catch (e) {
+      _logger.e('twoFactorSetup exception: $e');
+      return {'success': false, 'message': 'Network error. Check your connection.'};
+    }
+  }
+
+  /// Confirm the first authenticator code, turning 2FA on.
+  Future<Map<String, dynamic>> twoFactorVerify(String code) async {
+    try {
+      final t = await _getToken();
+      if (t == null) {
+        return {'success': false, 'message': 'Please sign in again.'};
+      }
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/auth/2fa/verify'),
+        headers: _authHeaders(t),
+        body: jsonEncode({'code': code}),
+      );
+      final body = _tryDecode(resp.body);
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return {'success': true};
+      }
+      return {
+        'success': false,
+        'message': body?['detail'] ?? 'Invalid or expired code.',
+      };
+    } catch (e) {
+      _logger.e('twoFactorVerify exception: $e');
+      return {'success': false, 'message': 'Network error. Check your connection.'};
+    }
+  }
+
+  /// Turn 2FA off — prove ownership with a current [code] OR the account
+  /// [password].
+  Future<Map<String, dynamic>> twoFactorDisable({
+    String? code,
+    String? password,
+  }) async {
+    try {
+      final t = await _getToken();
+      if (t == null) {
+        return {'success': false, 'message': 'Please sign in again.'};
+      }
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/auth/2fa/disable'),
+        headers: _authHeaders(t),
+        body: jsonEncode({
+          if (code != null && code.isNotEmpty) 'code': code,
+          if (password != null && password.isNotEmpty) 'password': password,
+        }),
+      );
+      final body = _tryDecode(resp.body);
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return {'success': true};
+      }
+      return {
+        'success': false,
+        'message': body?['detail'] ?? 'Could not turn off 2FA.',
+      };
+    } catch (e) {
+      _logger.e('twoFactorDisable exception: $e');
+      return {'success': false, 'message': 'Network error. Check your connection.'};
+    }
+  }
+
+  /// Ask the backend to email a password-reset code. Always resolves to a
+  /// generic success (the server never reveals whether the email exists).
+  Future<Map<String, dynamic>> requestEmailResetCode(String email) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/auth/password-reset/request'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email}),
+      );
+      final body = _tryDecode(resp.body);
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return {
+          'success': true,
+          'message': body?['message'] ?? 'If that email is registered, a code was sent.',
+        };
+      }
+      return {
+        'success': false,
+        'message': body?['detail'] ?? 'Could not send a code right now.',
+      };
+    } catch (e) {
+      _logger.e('requestEmailResetCode exception: $e');
+      return {'success': false, 'message': 'Network error. Check your connection.'};
+    }
+  }
+
+  /// Reset a FORGOTTEN password using the emailed code.
+  Future<Map<String, dynamic>> resetPasswordWithEmailCode({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/auth/password-reset/confirm'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email,
+          'code': code,
+          'new_password': newPassword,
+        }),
+      );
+      final body = _tryDecode(resp.body);
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return {
+          'success': true,
+          'message': body?['message'] ?? 'Password updated.',
+        };
+      }
+      return {
+        'success': false,
+        'message': body?['detail'] ?? 'Invalid or expired code.',
+      };
+    } catch (e) {
+      _logger.e('resetPasswordWithEmailCode exception: $e');
+      return {'success': false, 'message': 'Network error. Check your connection.'};
+    }
+  }
+
+  /// Reset a FORGOTTEN password using the authenticator code (no auth token
+  /// needed — the code is the proof of ownership).
+  Future<Map<String, dynamic>> resetPasswordWithTotp({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/auth/password-reset'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email,
+          'code': code,
+          'new_password': newPassword,
+        }),
+      );
+      final body = _tryDecode(resp.body);
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return {
+          'success': true,
+          'message': body?['message'] ?? 'Password updated.',
+        };
+      }
+      return {
+        'success': false,
+        'message': body?['detail'] ?? 'Could not reset password.',
+      };
+    } catch (e) {
+      _logger.e('resetPasswordWithTotp exception: $e');
+      return {'success': false, 'message': 'Network error. Check your connection.'};
+    }
+  }
+
   // REGISTER
   Future<Map<String, dynamic>> register(
     String email,

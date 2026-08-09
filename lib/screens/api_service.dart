@@ -746,6 +746,29 @@ class ApiService {
     }
   }
 
+  /// Match device address-book phone numbers against registered Aluta users;
+  /// the server auto-adds matches as friends. Returns {matched:[users], added:N}.
+  Future<Map<String, dynamic>> syncContacts(List<String> phones) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return {'matched': [], 'added': 0};
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/users/contacts/sync'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'phones': phones}),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = _tryDecode(resp.body);
+        if (data != null) return data;
+      }
+      _logger.w('syncContacts failed: ${resp.statusCode}');
+      return {'matched': [], 'added': 0};
+    } catch (e) {
+      _logger.e('syncContacts exception: $e');
+      return {'matched': [], 'added': 0};
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Group conversations (DMs keep using the legacy /messages endpoints above)
   // ---------------------------------------------------------------------------

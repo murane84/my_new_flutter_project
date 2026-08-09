@@ -197,6 +197,14 @@ class SeenByEntry(BaseModel):
     read_at: Optional[datetime] = None
 
 
+# ---------------------- CONTACTS SYNC ----------------------
+
+class ContactsSync(BaseModel):
+    # Phone numbers read from the device address book (any format — the server
+    # normalises them before matching against registered users' phone numbers).
+    phones: list[str] = []
+
+
 # ---------------------- PUSH / DEVICE SCHEMAS ----------------------
 
 class DeviceTokenIn(BaseModel):

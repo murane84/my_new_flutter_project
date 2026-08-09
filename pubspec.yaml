@@ -41,6 +41,15 @@ dependencies:
   # Render the authenticator (TOTP) enrollment secret as a scannable QR code.
   # Pure Dart (CustomPainter) — no native side, safe on every platform / SDK.
   qr_flutter: ^4.1.0
+  # Read the phone's address book to auto-discover which of the user's contacts
+  # are already on Aluta (matched by phone number). Android/iOS only — every
+  # call is guarded off on web/desktop.
+  flutter_contacts: ^1.1.9+2
+  # International phone-number input (country picker) at sign-up, and E.164
+  # normalisation of phone-book numbers so contact matching is correct across
+  # countries. Both pure Dart — safe on every platform / SDK.
+  intl_phone_field: ^3.2.0
+  phone_numbers_parser: ^9.0.0
 
   # Audio
   just_audio: ^0.10.5

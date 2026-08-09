@@ -8,6 +8,7 @@ from .users import get_current_user
 from datetime import datetime, timedelta, timezone
 from websocket_manager import safe_notify_user
 from push import send_push_to_user
+import crud_conversations
 
 router = APIRouter(
     prefix="/messages",
@@ -40,6 +41,30 @@ def serialize_message(msg):
         if isinstance(value, datetime):
             data[key] = value.isoformat()
     return data
+
+
+def _access_ids(db, msg) -> list:
+    """User ids allowed to see/act on a message: a DM's two parties, or a
+    group's members. Lets group members react/edit/delete/pin (not just the
+    sender/receiver)."""
+    if getattr(msg, "conversation_id", None):
+        conv = crud_conversations.get_conversation(db, msg.conversation_id)
+        if conv and conv.is_group:
+            return crud_conversations.member_ids(db, msg.conversation_id)
+    ids = []
+    if msg.sender_id:
+        ids.append(msg.sender_id)
+    if msg.receiver_id:
+        ids.append(msg.receiver_id)
+    return ids
+
+
+def _fanout_others(db, msg, me: int, event: dict):
+    """Notify everyone who can see the message except the actor (works for both
+    DMs — the other party — and groups — every other member)."""
+    for uid in _access_ids(db, msg):
+        if uid != me:
+            safe_notify_user(int(uid), event)
 
 # 1️⃣ SEND MESSAGE
 @router.post("/", response_model=schemas.MessageWithSender)
@@ -122,7 +147,7 @@ def delete_single_message(message_id: int, delete_for_all: bool = Query(False), 
     message = db.query(Message).filter(Message.id == message_id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
-    if current_user.id not in [message.sender_id, message.receiver_id]:
+    if current_user.id not in _access_ids(db, message):
         raise HTTPException(status_code=403, detail="Not authorized")
 
     if delete_for_all:
@@ -140,7 +165,7 @@ def delete_single_message(message_id: int, delete_for_all: bool = Query(False), 
         message.media_duration = None
         message.reactions = None
         db.commit()
-        safe_notify_user(message.receiver_id, {
+        _fanout_others(db, message, current_user.id, {
             "type": "message_deleted",
             "data": {
                 "message_id": message_id,
@@ -168,7 +193,7 @@ def react_to_message(
     message = db.query(Message).filter(Message.id == message_id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
-    if current_user.id not in [message.sender_id, message.receiver_id]:
+    if current_user.id not in _access_ids(db, message):
         raise HTTPException(status_code=403, detail="Not authorized")
     if message.is_deleted:
         raise HTTPException(status_code=400, detail="Cannot react to a deleted message")
@@ -186,12 +211,7 @@ def react_to_message(
     message.reactions = json.dumps(reactions) if reactions else None
     db.commit()
 
-    other_id = (
-        message.receiver_id
-        if current_user.id == message.sender_id
-        else message.sender_id
-    )
-    safe_notify_user(other_id, {
+    _fanout_others(db, message, current_user.id, {
         "type": "message_reaction",
         "data": {"message_id": message_id, "reactions": message.reactions},
     })
@@ -209,33 +229,37 @@ def pin_message(
     message = db.query(Message).filter(Message.id == message_id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
-    if current_user.id not in [message.sender_id, message.receiver_id]:
+    if current_user.id not in _access_ids(db, message):
         raise HTTPException(status_code=403, detail="Not authorized")
     if message.is_deleted:
         raise HTTPException(status_code=400, detail="Cannot pin a deleted message")
 
-    # One active pin per conversation: clear any other pins between these two
-    # users first, so the banner always reflects the newest pinned message.
-    a, b = message.sender_id, message.receiver_id
-    db.query(Message).filter(
-        (((Message.sender_id == a) & (Message.receiver_id == b)) |
-         ((Message.sender_id == b) & (Message.receiver_id == a))),
-        Message.id != message_id,
-        Message.pinned_until.isnot(None),
-    ).update({Message.pinned_until: None}, synchronize_session=False)
+    # One active pin per conversation: clear any other pins in this SAME thread
+    # first (by conversation_id for groups, or the DM pair), so the banner always
+    # reflects the newest pinned message.
+    if getattr(message, "conversation_id", None):
+        db.query(Message).filter(
+            Message.conversation_id == message.conversation_id,
+            Message.id != message_id,
+            Message.pinned_until.isnot(None),
+        ).update({Message.pinned_until: None}, synchronize_session=False)
+    else:
+        a, b = message.sender_id, message.receiver_id
+        db.query(Message).filter(
+            (((Message.sender_id == a) & (Message.receiver_id == b)) |
+             ((Message.sender_id == b) & (Message.receiver_id == a))),
+            Message.id != message_id,
+            Message.pinned_until.isnot(None),
+        ).update({Message.pinned_until: None}, synchronize_session=False)
 
     message.pinned_until = datetime.now(timezone.utc) + timedelta(hours=hours)
     db.commit()
     db.refresh(message)
 
-    other_id = (
-        message.receiver_id
-        if current_user.id == message.sender_id
-        else message.sender_id
-    )
     validated = schemas.MessageWithSender.model_validate(message)
     serialized = serialize_message(validated)
-    safe_notify_user(other_id, {"type": "message_pinned", "data": serialized})
+    _fanout_others(db, message, current_user.id,
+                   {"type": "message_pinned", "data": serialized})
     return validated
 
 
@@ -249,19 +273,14 @@ def unpin_message(
     message = db.query(Message).filter(Message.id == message_id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
-    if current_user.id not in [message.sender_id, message.receiver_id]:
+    if current_user.id not in _access_ids(db, message):
         raise HTTPException(status_code=403, detail="Not authorized")
 
     message.pinned_until = None
     db.commit()
     db.refresh(message)
 
-    other_id = (
-        message.receiver_id
-        if current_user.id == message.sender_id
-        else message.sender_id
-    )
-    safe_notify_user(other_id, {
+    _fanout_others(db, message, current_user.id, {
         "type": "message_unpinned",
         "data": {"message_id": message_id},
     })
@@ -304,7 +323,8 @@ def edit_message(
 
     validated = schemas.MessageWithSender.model_validate(message)
     serialized = serialize_message(validated)
-    safe_notify_user(message.receiver_id, {"type": "message_edited", "data": serialized})
+    _fanout_others(db, message, current_user.id,
+                   {"type": "message_edited", "data": serialized})
     return validated
 
 # 5️⃣ Single message delivery endpoint

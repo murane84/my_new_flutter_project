@@ -706,24 +706,32 @@ class ApiService {
     String? mediaMime,
     int? mediaSize,
     int? mediaDuration, // audio length in ms
+    int? conversationId, // when set → send to a GROUP conversation instead of a DM
   }) async {
     try {
       final token = await _getToken();
       if (token == null) throw Exception('No access token');
 
+      // Group send: POST to the conversation (no receiver_id — the members are
+      // the recipients). DM send stays on the legacy /messages/ path unchanged.
+      final Uri uri = conversationId != null
+          ? Uri.parse('${await _baseUrl}/conversations/$conversationId/messages')
+          : Uri.parse('${await _baseUrl}/messages/');
+      final Map<String, dynamic> payload = {
+        'content': content,
+        'message_type': ?messageType,
+        'media_url': ?mediaUrl,
+        'media_name': ?mediaName,
+        'media_mime': ?mediaMime,
+        'media_size': ?mediaSize,
+        'media_duration': ?mediaDuration,
+      };
+      if (conversationId == null) payload['receiver_id'] = receiverId;
+
       final response = await http.post(
-        Uri.parse('${await _baseUrl}/messages/'),
+        uri,
         headers: _authHeaders(token),
-        body: jsonEncode({
-          'receiver_id': receiverId,
-          'content': content,
-          'message_type': ?messageType,
-          'media_url': ?mediaUrl,
-          'media_name': ?mediaName,
-          'media_mime': ?mediaMime,
-          'media_size': ?mediaSize,
-          'media_duration': ?mediaDuration,
-        }),
+        body: jsonEncode(payload),
       );
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -735,6 +743,190 @@ class ApiService {
     } catch (e) {
       _logger.e('Send message exception: $e');
       return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Group conversations (DMs keep using the legacy /messages endpoints above)
+  // ---------------------------------------------------------------------------
+
+  /// All my conversations (groups + DMs) with last-message + unread, newest
+  /// first. Returns raw maps (see ConversationOut on the server).
+  Future<List<Map<String, dynamic>>> listConversations() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return [];
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/conversations'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode == 200) {
+        final body = jsonDecode(resp.body);
+        if (body is List) return body.whereType<Map<String, dynamic>>().toList();
+      }
+      return [];
+    } catch (e) {
+      _logger.e('listConversations exception: $e');
+      return [];
+    }
+  }
+
+  /// Create a group. Returns the created conversation map, or null.
+  Future<Map<String, dynamic>?> createGroup(
+    String title,
+    List<int> memberIds, {
+    String? avatarUrl,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/conversations/group'),
+        headers: _authHeaders(token),
+        body: jsonEncode({
+          'title': title,
+          'member_ids': memberIds,
+          'avatar_url': ?avatarUrl,
+        }),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      _logger.w('createGroup failed: ${resp.statusCode} ${resp.body}');
+      return null;
+    } catch (e) {
+      _logger.e('createGroup exception: $e');
+      return null;
+    }
+  }
+
+  /// One conversation's details (members, title, my role, …).
+  Future<Map<String, dynamic>?> getConversation(int cid) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/conversations/$cid'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.e('getConversation exception: $e');
+      return null;
+    }
+  }
+
+  /// A page of a conversation's messages (same shape as DM messages).
+  Future<List<Map<String, dynamic>>> fetchConversationMessages(
+    int cid, {
+    int skip = 0,
+    int limit = 60,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return [];
+      final uri = Uri.parse('${await _baseUrl}/conversations/$cid/messages')
+          .replace(queryParameters: {
+        'skip': skip.toString(),
+        'limit': limit.toString(),
+      });
+      final resp = await http.get(uri, headers: _authHeaders(token));
+      if (resp.statusCode == 200) {
+        final body = jsonDecode(resp.body);
+        if (body is List) return body.whereType<Map<String, dynamic>>().toList();
+      }
+      return [];
+    } catch (e) {
+      _logger.e('fetchConversationMessages exception: $e');
+      return [];
+    }
+  }
+
+  /// Mark a conversation read (up to a message id, or all).
+  Future<void> markConversationRead(int cid, {int? messageId}) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return;
+      await http.patch(
+        Uri.parse('${await _baseUrl}/conversations/$cid/read'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'message_id': ?messageId}),
+      );
+    } catch (e) {
+      _logger.e('markConversationRead exception: $e');
+    }
+  }
+
+  /// Who has read a given group message (for a 'seen by' sheet).
+  Future<List<Map<String, dynamic>>> conversationSeenBy(
+      int cid, int messageId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return [];
+      final resp = await http.get(
+        Uri.parse(
+            '${await _baseUrl}/conversations/$cid/messages/$messageId/seen'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode == 200) {
+        final body = jsonDecode(resp.body);
+        if (body is List) return body.whereType<Map<String, dynamic>>().toList();
+      }
+      return [];
+    } catch (e) {
+      _logger.e('conversationSeenBy exception: $e');
+      return [];
+    }
+  }
+
+  Future<bool> addGroupMembers(int cid, List<int> userIds) async {
+    return _convAction('POST', '/conversations/$cid/members',
+        body: {'user_ids': userIds});
+  }
+
+  Future<bool> removeGroupMember(int cid, int userId) async {
+    return _convAction('DELETE', '/conversations/$cid/members/$userId');
+  }
+
+  Future<bool> leaveConversation(int cid) async {
+    return _convAction('POST', '/conversations/$cid/leave');
+  }
+
+  Future<bool> renameGroup(int cid, String title) async {
+    return _convAction('PATCH', '/conversations/$cid', body: {'title': title});
+  }
+
+  Future<bool> _convAction(String method, String path,
+      {Map<String, dynamic>? body}) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final uri = Uri.parse('${await _baseUrl}$path');
+      final headers = _authHeaders(token);
+      final encoded = body == null ? null : jsonEncode(body);
+      late final http.Response resp;
+      switch (method) {
+        case 'POST':
+          resp = await http.post(uri, headers: headers, body: encoded);
+          break;
+        case 'PATCH':
+          resp = await http.patch(uri, headers: headers, body: encoded);
+          break;
+        case 'DELETE':
+          resp = await http.delete(uri, headers: headers, body: encoded);
+          break;
+        default:
+          resp = await http.get(uri, headers: headers);
+      }
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.e('_convAction $method $path exception: $e');
+      return false;
     }
   }
 

@@ -459,9 +459,12 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
         }
       },
       child: Dialog(
-        // Bottom-anchored sheet styled like the playlist overlay.
+        // Bottom-anchored sheet styled like the playlist overlay. Add the
+        // system navigation-bar inset to the bottom so its controls never sit
+        // under the Android 3-button nav bar (~0 on gesture nav).
         alignment: Alignment.bottomCenter,
-        insetPadding: const EdgeInsets.fromLTRB(8, 40, 8, 8),
+        insetPadding: EdgeInsets.fromLTRB(
+            8, 40, 8, 8 + MediaQuery.of(context).padding.bottom),
         backgroundColor: Colors.transparent,
         elevation: 0,
         child: ConstrainedBox(

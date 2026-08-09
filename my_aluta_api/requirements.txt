@@ -15,3 +15,6 @@ python-multipart
 # if Firebase env vars are unset, push is skipped and the app still works.
 google-auth
 requests
+# Two-factor / password recovery: TOTP (Google Authenticator) code generation
+# and verification.
+pyotp

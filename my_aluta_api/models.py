@@ -26,6 +26,13 @@ class User(Base):
     # Optional profile picture, stored as an attachment ref (/attachments/<id>).
     avatar_url = Column(String, nullable=True)
 
+    # Two-factor / account recovery (TOTP, e.g. Google Authenticator).
+    # `totp_secret` is the base32 shared secret; `totp_enabled` flips true only
+    # after the user confirms a first valid code. A user can reset a forgotten
+    # password by proving a current TOTP code (see auth.py password-reset).
+    totp_secret = Column(String, nullable=True)
+    totp_enabled = Column(Boolean, default=False, nullable=False)
+
     sent_messages = relationship(
         "Message",
         foreign_keys="[Message.sender_id]",
@@ -200,3 +207,30 @@ class DeviceToken(Base):
 
     def __repr__(self):
         return f"<DeviceToken(user_id={self.user_id}, platform='{self.platform}')>"
+
+
+class PasswordResetCode(Base):
+    """A short-lived email-delivered code for resetting a forgotten password.
+
+    The plaintext code is never stored — only an HMAC of it (see auth.py). Codes
+    expire after a few minutes, are single-use (`used`), and lock after too many
+    wrong `attempts` to blunt brute force. This is the email-based recovery path;
+    the authenticator (TOTP) path is separate and needs no stored code.
+    """
+    __tablename__ = "password_reset_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        index=True, nullable=False,
+    )
+    code_hash = Column(String, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used = Column(Boolean, default=False, nullable=False)
+    attempts = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", foreign_keys=[user_id], passive_deletes=True)
+
+    def __repr__(self):
+        return f"<PasswordResetCode(user_id={self.user_id}, used={self.used})>"

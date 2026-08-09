@@ -1,17 +1,40 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from jose import JWTError, jwt
+import pyotp
+import secrets
+import hmac
+import hashlib
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel, EmailStr
-from models import User
+from models import User, PasswordResetCode
 from database import get_db
+from mailer import send_password_reset_code
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, INACTIVITY_TIMEOUT_MINUTES
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Label shown for the account inside the authenticator app (e.g. "Aluta").
+TOTP_ISSUER = "Aluta"
+
+def _digits_only(code: str | None) -> str:
+    """Strip spaces/dashes users often paste, keep just the digits."""
+    return "".join(ch for ch in (code or "") if ch.isdigit())
+
+# Email-code recovery tuning.
+RESET_CODE_TTL_MINUTES = 15
+RESET_CODE_MAX_ATTEMPTS = 5
+
+def _hash_code(code: str) -> str:
+    """HMAC-SHA256 the reset code with the app secret so the DB never holds the
+    plaintext (and a leaked DB can't be reversed to a code)."""
+    return hmac.new(
+        SECRET_KEY.encode(), _digits_only(code).encode(), hashlib.sha256
+    ).hexdigest()
 
 # ------------------------------
 # Pydantic Schemas
@@ -34,6 +57,40 @@ class TokenResponse(BaseModel):
     email: EmailStr
     username: str
     last_login: datetime
+
+# --- Two-factor / password-recovery (TOTP) ---
+
+class TwoFASetupResponse(BaseModel):
+    secret: str          # base32 shared secret (also encoded in the QR)
+    otpauth_uri: str     # otpauth://... — render as a QR for Google Authenticator
+
+class TwoFAStatus(BaseModel):
+    enabled: bool
+
+class TwoFAVerify(BaseModel):
+    code: str
+
+class TwoFADisable(BaseModel):
+    # Disabling requires proof of ownership: EITHER a current authenticator
+    # code OR the account password.
+    code: str | None = None
+    password: str | None = None
+
+class PasswordReset(BaseModel):
+    # Reset a forgotten password by proving a current authenticator code.
+    email: EmailStr
+    code: str
+    new_password: str
+
+# --- Email-code password recovery ---
+
+class EmailOnly(BaseModel):
+    email: EmailStr
+
+class EmailCodeReset(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str
 
 # ------------------------------
 # Helper Functions
@@ -241,3 +298,211 @@ def get_me(current_user: User = Depends(get_active_user)):
         "email": current_user.email,
         "is_online": current_user.is_online
     }
+
+
+# ---------------------------------------------------------------------------
+# Two-factor authentication + password recovery (TOTP / Google Authenticator)
+# ---------------------------------------------------------------------------
+# Enrolling an authenticator lets a user recover a FORGOTTEN password without
+# email: they prove ownership of the account by entering a current 6-digit code
+# from their authenticator app. Enrollment is a two-step handshake — /setup
+# hands out a secret (shown as a QR), /verify confirms the first code and flips
+# the account to enabled. `get_current_user` is used (not `get_active_user`) so
+# these work right after login regardless of the online flag.
+
+@router.get("/2fa/status", response_model=TwoFAStatus)
+def twofa_status(current_user: User = Depends(get_current_user)):
+    return TwoFAStatus(enabled=bool(current_user.totp_enabled))
+
+
+@router.post("/2fa/setup", response_model=TwoFASetupResponse)
+def twofa_setup(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Never re-hand-out a secret for an already-protected account — the user
+    # must explicitly disable first. This prevents a hijacked session from
+    # silently swapping the authenticator.
+    if current_user.totp_enabled and current_user.totp_secret:
+        raise HTTPException(
+            status_code=400,
+            detail="Two-factor is already on. Turn it off first to re-enroll.",
+        )
+    secret = pyotp.random_base32()
+    current_user.totp_secret = secret
+    current_user.totp_enabled = False  # not active until a code is verified
+    db.commit()
+    uri = pyotp.TOTP(secret).provisioning_uri(
+        name=current_user.email, issuer_name=TOTP_ISSUER
+    )
+    return TwoFASetupResponse(secret=secret, otpauth_uri=uri)
+
+
+@router.post("/2fa/verify")
+def twofa_verify(
+    payload: TwoFAVerify,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.totp_secret:
+        raise HTTPException(status_code=400, detail="Start setup first.")
+    # valid_window=1 tolerates a ±30s clock skew between phone and server.
+    totp = pyotp.TOTP(current_user.totp_secret)
+    if not totp.verify(_digits_only(payload.code), valid_window=1):
+        raise HTTPException(status_code=400, detail="Invalid or expired code.")
+    current_user.totp_enabled = True
+    db.commit()
+    return {"message": "Two-factor enabled", "enabled": True}
+
+
+@router.post("/2fa/disable")
+def twofa_disable(
+    payload: TwoFADisable,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ok = False
+    if payload.code and current_user.totp_secret:
+        ok = pyotp.TOTP(current_user.totp_secret).verify(
+            _digits_only(payload.code), valid_window=1
+        )
+    if not ok and payload.password:
+        ok = verify_password(payload.password, current_user.hashed_password)
+    if not ok:
+        raise HTTPException(
+            status_code=400,
+            detail="Enter a valid authenticator code or your password to turn off 2FA.",
+        )
+    current_user.totp_secret = None
+    current_user.totp_enabled = False
+    db.commit()
+    return {"message": "Two-factor disabled", "enabled": False}
+
+
+@router.post("/password-reset")
+def password_reset(payload: PasswordReset, db: Session = Depends(get_db)):
+    """Reset a forgotten password by proving a current authenticator code.
+
+    Only works for accounts that enrolled an authenticator beforehand. Errors
+    are deliberately generic so the endpoint doesn't reveal which emails exist
+    or which have 2FA turned on.
+    """
+    generic = HTTPException(
+        status_code=400,
+        detail="Couldn't reset. Check the email and the authenticator code, "
+               "and make sure two-factor was set up on this account.",
+    )
+    user = get_user_by_email(db, payload.email)
+    if not user or not user.totp_enabled or not user.totp_secret:
+        raise generic
+    if not pyotp.TOTP(user.totp_secret).verify(
+        _digits_only(payload.code), valid_window=1
+    ):
+        raise generic
+
+    new_pw = payload.new_password or ""
+    if len(new_pw) < 6:
+        raise HTTPException(
+            status_code=400,
+            detail="New password must be at least 6 characters.",
+        )
+    user.hashed_password = get_password_hash(new_pw)
+    # Invalidate any lingering session so a thief with the old password is out.
+    user.refresh_token = None
+    db.commit()
+    return {"message": "Password updated. Sign in with your new password."}
+
+
+# ---------------------------------------------------------------------------
+# Email-code password recovery (fallback for users without an authenticator)
+# ---------------------------------------------------------------------------
+# Two steps: /request emails a short-lived 6-digit code; /confirm verifies it
+# and sets the new password. Codes are stored HMAC-hashed, single-use, expiring,
+# and attempt-limited. Both endpoints stay deliberately vague about whether an
+# email exists.
+
+@router.post("/password-reset/request")
+def password_reset_request(
+    payload: EmailOnly,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    user = get_user_by_email(db, payload.email)
+    if user:
+        # Retire any earlier unused codes so only the newest one works.
+        db.query(PasswordResetCode).filter(
+            PasswordResetCode.user_id == user.id,
+            PasswordResetCode.used == False,  # noqa: E712
+        ).update({"used": True})
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        rec = PasswordResetCode(
+            user_id=user.id,
+            code_hash=_hash_code(code),
+            expires_at=datetime.now(timezone.utc)
+            + timedelta(minutes=RESET_CODE_TTL_MINUTES),
+            used=False,
+            attempts=0,
+        )
+        db.add(rec)
+        db.commit()
+        # Send off the request thread so the response isn't blocked on SMTP.
+        background.add_task(
+            send_password_reset_code, user.email, user.username, code
+        )
+    # Always the same response, whether or not the email is registered.
+    return {
+        "message": "If that email is registered, a reset code is on its way. "
+                   "It expires in 15 minutes.",
+    }
+
+
+@router.post("/password-reset/confirm")
+def password_reset_confirm(payload: EmailCodeReset, db: Session = Depends(get_db)):
+    generic = HTTPException(status_code=400, detail="Invalid or expired code.")
+    user = get_user_by_email(db, payload.email)
+    if not user:
+        raise generic
+
+    rec = (
+        db.query(PasswordResetCode)
+        .filter(
+            PasswordResetCode.user_id == user.id,
+            PasswordResetCode.used == False,  # noqa: E712
+        )
+        .order_by(PasswordResetCode.id.desc())
+        .first()
+    )
+    if not rec:
+        raise generic
+
+    # Expiry (guard against a naive datetime coming back from some drivers).
+    exp = rec.expires_at
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    if exp < datetime.now(timezone.utc):
+        rec.used = True
+        db.commit()
+        raise generic
+
+    if rec.attempts >= RESET_CODE_MAX_ATTEMPTS:
+        rec.used = True
+        db.commit()
+        raise generic
+
+    if not hmac.compare_digest(rec.code_hash, _hash_code(payload.code)):
+        rec.attempts += 1
+        db.commit()
+        raise generic
+
+    new_pw = payload.new_password or ""
+    if len(new_pw) < 6:
+        raise HTTPException(
+            status_code=400,
+            detail="New password must be at least 6 characters.",
+        )
+
+    user.hashed_password = get_password_hash(new_pw)
+    user.refresh_token = None
+    rec.used = True
+    db.commit()
+    return {"message": "Password updated. Sign in with your new password."}

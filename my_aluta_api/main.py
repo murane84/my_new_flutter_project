@@ -85,6 +85,9 @@ def ensure_media_schema():
         # Direct-call phone number + profile picture on the user profile.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR",
+        # Two-factor / password-recovery via TOTP (Google Authenticator).
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret VARCHAR",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT FALSE",
         # Owner of a DB-stored attachment, for the authenticated media endpoint.
         # New uploads set this at upload time; pre-existing rows stay NULL and
         # are handled by the endpoint's legacy path (see routers/attachments.py).

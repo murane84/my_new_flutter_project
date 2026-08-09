@@ -44,6 +44,24 @@ FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID")
 FIREBASE_SERVICE_ACCOUNT_JSON = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
 FIREBASE_SERVICE_ACCOUNT_FILE = os.getenv("FIREBASE_SERVICE_ACCOUNT_FILE")
 
+# ---------------------------------------------------------------------------
+# Transactional email (ZeptoMail) — used for email-code password recovery.
+# ---------------------------------------------------------------------------
+# ZEPTOMAIL_TOKEN: the agent's "Send Mail" token. Paste either the bare key or
+#   the full "Zoho-enczapikey <key>" value — the mailer normalises it.
+# ZEPTOMAIL_FROM: a verified sender on your domain (e.g. noreply@ozilane.com).
+# ZEPTOMAIL_FROM_NAME: display name shown to recipients.
+# ZEPTOMAIL_API_URL: region endpoint — default .com; use the .eu host if your
+#   ZeptoMail account is in the EU data centre.
+# If the token/from are unset, email sending is skipped (the app still works;
+# users can recover via authenticator instead).
+ZEPTOMAIL_TOKEN = os.getenv("ZEPTOMAIL_TOKEN")
+ZEPTOMAIL_FROM = os.getenv("ZEPTOMAIL_FROM")
+ZEPTOMAIL_FROM_NAME = os.getenv("ZEPTOMAIL_FROM_NAME", "Aluta")
+ZEPTOMAIL_API_URL = os.getenv(
+    "ZEPTOMAIL_API_URL", "https://api.zeptomail.com/v1.1/email"
+)
+
 # Log which database backend is in use (never print credentials).
 try:
     _scheme = DATABASE_URL.split("://", 1)[0]

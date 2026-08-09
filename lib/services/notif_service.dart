@@ -25,6 +25,13 @@ Future<void> initNotifications() async {
     final android_ = _fln.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     await android_?.requestNotificationsPermission();
+    // Android 14+ (API 34) gates full-screen intents behind a dedicated
+    // permission that isn't granted by default — without it a `call_offer`
+    // push can't wake/turn on the screen, it just lands quietly in the shade.
+    // Best-effort: on older Androids this is a no-op.
+    try {
+      await android_?.requestFullScreenIntentPermission();
+    } catch (_) {/* not available on this OS/plugin path */}
     await android_?.createNotificationChannel(
       const AndroidNotificationChannel(
         _channelId,
@@ -95,6 +102,11 @@ Future<void> showCallNotification({
           category: AndroidNotificationCategory.call,
           fullScreenIntent: true,
           ongoing: true,
+          autoCancel: false,
+          // Show full content on the lock screen so the call surfaces even
+          // when the device is locked.
+          visibility: NotificationVisibility.public,
+          ticker: 'Incoming call',
           icon: '@mipmap/launcher_icon',
         ),
       ),

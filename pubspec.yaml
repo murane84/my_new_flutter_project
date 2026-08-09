@@ -38,6 +38,9 @@ dependencies:
 
   # Auth
   email_validator: ^3.0.0
+  # Render the authenticator (TOTP) enrollment secret as a scannable QR code.
+  # Pure Dart (CustomPainter) — no native side, safe on every platform / SDK.
+  qr_flutter: ^4.1.0
 
   # Audio
   just_audio: ^0.10.5

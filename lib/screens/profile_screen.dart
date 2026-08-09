@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'api_service.dart';
 import 'token_helper.dart' show mediaAuthHeaders;
 import 'auth_page.dart';
+import 'two_factor_setup_screen.dart';
 import '../services/biometric_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/popup_shell.dart';
@@ -43,6 +44,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _obscureConf = true;
   bool _bioAvailable = false;
   bool _bioOn = false;
+  bool _twoFAOn = false;
 
   @override
   void initState() {
@@ -57,6 +59,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
     _load();
     _loadBio();
+    _load2fa();
+  }
+
+  Future<void> _load2fa() async {
+    final on = await ApiService().twoFactorStatus();
+    if (mounted) setState(() => _twoFAOn = on);
   }
 
   Future<void> _loadBio() async {
@@ -467,9 +475,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       )
                     : const Text('Save changes'),
               ),
+              const SizedBox(height: 22),
+              _heading('Security', scheme),
+              const SizedBox(height: 12),
+              _twoFactorSection(scheme),
               if (_bioAvailable) ...[
-                const SizedBox(height: 22),
-                _heading('Security', scheme),
                 const SizedBox(height: 12),
                 _securitySection(scheme),
               ],
@@ -588,6 +598,83 @@ class _ProfileScreenState extends State<ProfileScreen> {
         suffixIcon: IconButton(
           icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
           onPressed: toggle,
+        ),
+      ),
+    );
+  }
+
+  /// Authenticator-based 2FA + password recovery. Tapping opens the setup
+  /// screen (QR enrollment / turn off). Always shown, since it's the recovery
+  /// path for a forgotten password.
+  Widget _twoFactorSection(ColorScheme scheme) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: _saving
+          ? null
+          : () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const TwoFactorSetupScreen(),
+                ),
+              );
+              // Refresh the on/off badge after returning.
+              _load2fa();
+            },
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest.withAlpha(90),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: scheme.primary.withAlpha(60)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.shield_outlined, color: scheme.primary),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Two-factor & password recovery',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 14)),
+                  const SizedBox(height: 2),
+                  Text(
+                    _twoFAOn
+                        ? 'On — you can reset a forgotten password with your '
+                            'authenticator code.'
+                        : 'Set up Google Authenticator so you can recover your '
+                            'account if you forget your password.',
+                    style: TextStyle(
+                        fontSize: 12, color: scheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: _twoFAOn
+                    ? Colors.green.withAlpha(40)
+                    : scheme.primary.withAlpha(28),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                _twoFAOn ? 'On' : 'Set up',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: _twoFAOn ? Colors.green.shade700 : scheme.primary,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right_rounded,
+                color: scheme.onSurfaceVariant),
+          ],
         ),
       ),
     );

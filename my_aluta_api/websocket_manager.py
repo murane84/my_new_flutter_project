@@ -56,3 +56,16 @@ def safe_notify_user(user_id: int, event: dict):
     """
     if main_loop and main_loop.is_running():
         asyncio.run_coroutine_threadsafe(notify_user(user_id, event), main_loop)
+
+
+def safe_broadcast_users(user_ids, event: dict, exclude=None):
+    """Thread-safe fan-out to many users (e.g. a conversation's members).
+    Skips `exclude` (typically the sender)."""
+    for uid in user_ids:
+        try:
+            uid = int(uid)
+        except (TypeError, ValueError):
+            continue
+        if exclude is not None and uid == int(exclude):
+            continue
+        safe_notify_user(uid, event)

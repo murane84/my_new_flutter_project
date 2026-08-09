@@ -62,7 +62,8 @@ class MessageEdit(BaseModel):
 class Message(BaseModel):
     id: int
     sender_id: int
-    receiver_id: int
+    receiver_id: Optional[int] = None
+    conversation_id: Optional[int] = None
     content: Optional[str] = ""
     timestamp: datetime
     is_read: bool
@@ -85,7 +86,8 @@ class MessageWithSender(BaseModel):
     id: int
     sender_id: int
     sender: UserOut  # The sender is now a full UserOut object
-    receiver_id: int
+    receiver_id: Optional[int] = None
+    conversation_id: Optional[int] = None
     content: Optional[str] = ""
     timestamp: datetime
     is_read: bool
@@ -124,6 +126,75 @@ class FriendLastSeen(BaseModel):
     last_seen: Optional[datetime]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ---------------------- CONVERSATION (DM + GROUP) SCHEMAS ----------------------
+
+class GroupCreate(BaseModel):
+    title: str
+    member_ids: list[int] = []
+    avatar_url: Optional[str] = None
+
+
+class GroupMessageCreate(BaseModel):
+    # Like MessageCreate but WITHOUT receiver_id — the conversation determines
+    # the recipients (its members).
+    content: Optional[str] = ""
+    message_type: Optional[str] = "text"
+    media_url: Optional[str] = None
+    media_name: Optional[str] = None
+    media_mime: Optional[str] = None
+    media_size: Optional[int] = None
+    media_duration: Optional[int] = None
+
+
+class AddMembers(BaseModel):
+    user_ids: list[int]
+
+
+class RenameGroup(BaseModel):
+    title: str
+
+
+class ReadUpTo(BaseModel):
+    # Mark read up to a message id; omit to mark the whole conversation read.
+    message_id: Optional[int] = None
+
+
+class ConversationMemberOut(BaseModel):
+    user_id: int
+    username: str
+    avatar_url: Optional[str] = None
+    is_online: Optional[bool] = False
+    role: str = "member"
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ConversationOut(BaseModel):
+    id: int
+    is_group: bool
+    title: Optional[str] = None       # group name; for DMs the client shows the other user
+    avatar_url: Optional[str] = None
+    created_by: Optional[int] = None
+    updated_at: Optional[datetime] = None
+    members: list[ConversationMemberOut] = []
+    # Convenience fields the chat list needs.
+    other_user: Optional[UserOut] = None   # for DMs: the OTHER member (not me)
+    last_message: Optional[str] = None
+    last_timestamp: Optional[datetime] = None
+    last_sender_id: Optional[int] = None
+    unread_count: int = 0
+    my_role: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SeenByEntry(BaseModel):
+    user_id: int
+    username: str
+    avatar_url: Optional[str] = None
+    read_at: Optional[datetime] = None
 
 
 # ---------------------- PUSH / DEVICE SCHEMAS ----------------------

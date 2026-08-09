@@ -50,6 +50,11 @@ class _PlaylistOverlay extends StatefulWidget {
   final void Function(List<String> paths) onRemoveMany;
   final void Function(List<String> paths, bool fav) onFavoriteMany;
 
+  // Presentation: when true this is shown as a right-side full-height DRAWER
+  // (no bottom-sheet grab handle/margin/border of its own; a right-pointing
+  // back button collapses it) rather than the old bottom sheet.
+  final bool drawer;
+
   const _PlaylistOverlay({
     required this.playlist,
     required this.currentIndex,
@@ -78,6 +83,7 @@ class _PlaylistOverlay extends StatefulWidget {
     required this.onRemoveMany,
     required this.onFavoriteMany,
     this.loading = false,
+    this.drawer = false,
   });
 
   @override
@@ -818,19 +824,29 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     final displayedPaths = displayed.map((e) => e.value).toList();
 
     return Container(
-      margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
+      // In drawer mode the surrounding Material provides the surface, left-
+      // rounded corners and elevation, so this inner container stays flush with
+      // no margin/border of its own. The bottom-sheet look keeps its card.
+      margin: widget.drawer
+          ? EdgeInsets.zero
+          : const EdgeInsets.only(left: 8, right: 8, bottom: 8),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: scheme.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: scheme.primary.withAlpha(130)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(50),
-            blurRadius: 26,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        borderRadius:
+            widget.drawer ? BorderRadius.zero : BorderRadius.circular(20),
+        border: widget.drawer
+            ? null
+            : Border.all(color: scheme.primary.withAlpha(130)),
+        boxShadow: widget.drawer
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withAlpha(50),
+                  blurRadius: 26,
+                  offset: const Offset(0, 8),
+                ),
+              ],
       ),
       child: Column(
         // Stretch every row to the full panel width so the header spans edge to
@@ -838,27 +854,29 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         // however wide the panel is stretched.
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Grab handle — tap OR slide down to dismiss.
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: widget.onClose,
-            onVerticalDragEnd: (d) {
-              if ((d.primaryVelocity ?? 0) > 0) widget.onClose();
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              width: double.infinity,
-              alignment: Alignment.center,
+          // Grab handle — bottom-sheet only (tap OR slide down to dismiss). The
+          // drawer collapses via its header back button or a right swipe.
+          if (!widget.drawer)
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onClose,
+              onVerticalDragEnd: (d) {
+                if ((d.primaryVelocity ?? 0) > 0) widget.onClose();
+              },
               child: Container(
-                width: 44,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: scheme.onSurfaceVariant.withAlpha(90),
-                  borderRadius: BorderRadius.circular(3),
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                width: double.infinity,
+                alignment: Alignment.center,
+                child: Container(
+                  width: 44,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: scheme.onSurfaceVariant.withAlpha(90),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
                 ),
               ),
             ),
-          ),
 
           // Header — either the normal header or the multi-select action bar.
           _selecting ? _selectionBar(scheme) : _header(scheme),
@@ -973,7 +991,9 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           GestureDetector(
             onTap: widget.onClose,
             child: Tooltip(
-              message: 'Close',
+              // In drawer mode this collapses the panel back to the right edge
+              // (a right chevron reads as "push it away"); the sheet just closes.
+              message: widget.drawer ? 'Collapse' : 'Close',
               child: Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
@@ -981,8 +1001,12 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                   shape: BoxShape.circle,
                   border: Border.all(color: scheme.primary.withAlpha(70)),
                 ),
-                child: Icon(Icons.keyboard_arrow_down_rounded,
-                    size: 22, color: scheme.primary),
+                child: Icon(
+                    widget.drawer
+                        ? Icons.chevron_right_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 22,
+                    color: scheme.primary),
               ),
             ),
           ),

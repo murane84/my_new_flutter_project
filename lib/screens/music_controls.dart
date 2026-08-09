@@ -12,6 +12,7 @@ import 'package:audio_session/audio_session.dart';
 import '../screens/home_page.dart'
     show
         playbackBus,
+        playlistDrawerBus,
         playlistNotifier,
         playProgressNotifier,
         playClockNotifier,
@@ -267,6 +268,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   Duration? _sleepRemaining;
   Timer? _sleepTick;
 
+  // True while the app-wide playlist drawer is open. The drawer itself is
+  // rendered by the HOST (home_page) — below the active header — using the
+  // playlist body MusicControls exposes via playlistDrawerBus.contentBuilder.
   bool _showPlaylist = false;
   bool _showSpeedPanel = false;
   // Volume popup: appears on tap, auto-hides after a short idle.
@@ -358,6 +362,16 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     playbackBus.currentPositionMs = () => _player.position.inMilliseconds;
     playbackBus.isPlaying = () => _player.playing;
     playbackBus.onToggleFavorite = _toggleCurrentFavorite;
+
+    // App-wide playlist drawer. MusicControls owns the playlist UI + data and
+    // is always mounted, so it registers the drawer handlers here — any screen
+    // (e.g. a chat thread header) can summon the drawer through the bus.
+    playlistDrawerBus.open = _openPlaylistDrawer;
+    playlistDrawerBus.close = _closePlaylistDrawer;
+    playlistDrawerBus.toggle = _togglePlaylistDrawer;
+    // Expose the playlist body so the host (home_page) can render it below the
+    // active header.
+    playlistDrawerBus.contentBuilder = (_) => _buildPlaylistOverlayWidget();
   }
 
   // Toggle "favourite" on whatever track is playing now (driven by the bar
@@ -401,6 +415,17 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     } catch (_) {}
   }
 
+  // Keep the externally-hosted drawer in sync: any setState that changes the
+  // playlist / current track / favourites should refresh the host's copy too
+  // (it lives outside this element's subtree). Only bump while it's open.
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    if (playlistDrawerBus.isOpen.value) {
+      playlistDrawerBus.revision.value++;
+    }
+  }
+
   @override
   void dispose() {
     // Only clear the bus if we're still the registered owner.
@@ -416,6 +441,14 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       playbackBus.currentPositionMs = null;
       playbackBus.isPlaying = null;
       playbackBus.onToggleFavorite = null;
+    }
+    // Relinquish the playlist drawer if we own it.
+    if (playlistDrawerBus.toggle == _togglePlaylistDrawer) {
+      playlistDrawerBus.isOpen.value = false;
+      playlistDrawerBus.open = null;
+      playlistDrawerBus.close = null;
+      playlistDrawerBus.toggle = null;
+      playlistDrawerBus.contentBuilder = null;
     }
     _liveSub?.close();
     _liveStateSub?.cancel();
@@ -1317,44 +1350,111 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       _snack('No tracks — add music first');
       return;
     }
-    setState(() => _showPlaylist = true);
-    _playlistCtrl.forward(from: 0);
+    _openPlaylistDrawer();
   }
 
   /// Unified Playlist action (the "Add" button folded into this). If songs are
-  /// already loaded it just opens the sheet; the first time on an empty list it
-  /// opens the sheet with a loader and scans the device (Android) or opens the
+  /// already loaded it just opens the drawer; the first time on an empty list it
+  /// opens the drawer with a loader and scans the device (Android) or opens the
   /// file picker (desktop/web).
   Future<void> _openOrScanPlaylist() async {
     if (_playlist.isNotEmpty) {
-      setState(() => _showPlaylist = true);
-      _playlistCtrl.forward(from: 0);
+      _openPlaylistDrawer();
       return;
     }
     if (!_isMobile) {
-      // Desktop/web: the file picker opens the sheet itself on success.
+      // Desktop/web: the file picker opens the drawer itself on success.
       await _pickDesktop();
       return;
     }
-    // Android first-open: show the sheet with a loading animation, then scan.
-    setState(() {
-      _showPlaylist = true;
-      _scanning = true;
-    });
-    _playlistCtrl.forward(from: 0);
+    // Android first-open: show the drawer with a loading animation, then scan.
+    setState(() => _scanning = true);
+    _openPlaylistDrawer();
     try {
       await _scanIntoPlaylist();
     } finally {
       if (mounted) setState(() => _scanning = false);
-      // If the scan found nothing, close the empty sheet again.
+      // If the scan found nothing, close the empty drawer again.
       if (mounted && _playlist.isEmpty) _closePlaylist();
     }
   }
 
-  void _closePlaylist() {
-    _playlistCtrl.reverse().then((_) {
-      if (mounted) setState(() => _showPlaylist = false);
-    });
+  void _closePlaylist() => _closePlaylistDrawer();
+
+  // ── App-wide playlist DRAWER (right-side, full-height, root-overlay) ────────
+  // Hosted in the ROOT overlay so it floats over whatever's on screen (chat or
+  // music), sliding in from the right and covering the area between the app
+  // header and footer. Toggled from the music panel's Playlist tile AND from a
+  // chat-thread header button (via playlistDrawerBus).
+
+  void _togglePlaylistDrawer() {
+    if (playlistDrawerBus.isOpen.value) {
+      _closePlaylistDrawer();
+    } else {
+      _openOrScanPlaylist();
+    }
+  }
+
+  void _openPlaylistDrawer() {
+    if (playlistDrawerBus.isOpen.value) return;
+    setState(() => _showPlaylist = true);
+    playlistDrawerBus.isOpen.value = true; // the host animates it in
+  }
+
+  void _closePlaylistDrawer() {
+    if (!playlistDrawerBus.isOpen.value) return;
+    setState(() => _showPlaylist = false);
+    playlistDrawerBus.isOpen.value = false; // the host animates it out
+  }
+
+  /// The playlist body itself, wired to this widget's state + callbacks. The
+  /// host (home_page) frames it as the sliding drawer.
+  Widget _buildPlaylistOverlayWidget() {
+    return _PlaylistOverlay(
+      playlist: _playlist,
+      currentIndex: _currentIndex,
+      favorites: _favorites,
+      groups: _groups,
+      playCounts: _playCounts,
+      lastPlayed: _lastPlayed,
+      loading: _scanning,
+      player: _player,
+      currentTitle: _trackName,
+      hasTrack: _currentIndex >= 0 && _currentIndex < _playlist.length,
+      // Tapping a song, "Play all", and "Shuffle" all route here so auto-advance
+      // stays within whatever the user is viewing.
+      onPlayScope: _playScope,
+      onTogglePlay: _togglePlayPause,
+      onNext: _next,
+      onPrev: _previous,
+      onSeekFraction: (f) {
+        final d = _player.duration;
+        if (d != null && d > Duration.zero) {
+          _player.seek(d * f.clamp(0.0, 1.0));
+        }
+      },
+      onClose: _closePlaylist,
+      onRemove: (i) {
+        setState(() {
+          _playlist.removeAt(i);
+          if (_currentIndex >= _playlist.length) {
+            _currentIndex = _playlist.length - 1;
+          }
+        });
+        _publishPlaylist();
+      },
+      onFavorite: _toggleFavorite,
+      onShare: _shareSong,
+      onAdd: _pickMusic,
+      onCreateGroup: _createGroup,
+      onDeleteGroup: _deleteGroup,
+      onRenameGroup: _renameGroup,
+      onSetSongGroups: _setSongGroups,
+      onAddManyToGroup: _addManyToGroup,
+      onRemoveMany: _removeMany,
+      onFavoriteMany: _favoriteMany,
+      drawer: true,
+    );
   }
 
   void _openEqualizer() {
@@ -1567,88 +1667,11 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           // ── Main content ──────────────────────────────────────────────
           _buildMain(context, scheme, isDark),
 
-          // ── Playlist sheet — slides UP from the bottom, WIDTH-CAPPED +
-          //    centred so it doesn't span the whole screen on desktop/tablet.
-          //    Tall by design: the track list is the point of this panel, so it
-          //    takes most of the card height (a sliver of the disc still peeks
-          //    at the top). On short cards it grows to ~92% so rows stay usable
-          //    instead of collapsing to one line. ─────────────────────────────
-          if (_showPlaylist)
-            LayoutBuilder(
-              builder: (ctx, cons) {
-                // Fill the panel width so the header (and its right-aligned
-                // collapse chevron) reach the far edge instead of floating in a
-                // centred 520-wide column that looks orphaned on desktop.
-                final sheetW = cons.maxWidth;
-                final sheetH =
-                    cons.maxHeight * (cons.maxHeight < 560 ? 0.92 : 0.82);
-                return Align(
-                  alignment: Alignment.bottomCenter,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0, 1),
-                      end: Offset.zero,
-                    ).animate(CurvedAnimation(
-                      parent: _playlistCtrl,
-                      curve: Curves.easeOutCubic,
-                      reverseCurve: Curves.easeInCubic,
-                    )),
-                    child: FadeTransition(
-                      opacity: _playlistCtrl,
-                      child: SizedBox(
-                        width: sheetW,
-                        height: sheetH,
-                        child: _PlaylistOverlay(
-                  playlist: _playlist,
-                  currentIndex: _currentIndex,
-                  favorites: _favorites,
-                  groups: _groups,
-                  playCounts: _playCounts,
-                  lastPlayed: _lastPlayed,
-                  loading: _scanning,
-                  player: _player,
-                  currentTitle: _trackName,
-                  hasTrack:
-                      _currentIndex >= 0 && _currentIndex < _playlist.length,
-                  // Tapping a song, "Play all", and "Shuffle" all route here so
-                  // auto-advance stays within whatever the user is viewing.
-                  onPlayScope: _playScope,
-                  onTogglePlay: _togglePlayPause,
-                  onNext: _next,
-                  onPrev: _previous,
-                  onSeekFraction: (f) {
-                    final d = _player.duration;
-                    if (d != null && d > Duration.zero) {
-                      _player.seek(d * f.clamp(0.0, 1.0));
-                    }
-                  },
-                  onClose: _closePlaylist,
-                  onRemove: (i) {
-                    setState(() {
-                      _playlist.removeAt(i);
-                      if (_currentIndex >= _playlist.length) {
-                        _currentIndex = _playlist.length - 1;
-                      }
-                    });
-                    _publishPlaylist();
-                  },
-                  onFavorite: _toggleFavorite,
-                  onShare: _shareSong,
-                  onAdd: _pickMusic,
-                  onCreateGroup: _createGroup,
-                  onDeleteGroup: _deleteGroup,
-                  onRenameGroup: _renameGroup,
-                  onSetSongGroups: _setSongGroups,
-                  onAddManyToGroup: _addManyToGroup,
-                  onRemoveMany: _removeMany,
-                  onFavoriteMany: _favoriteMany,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
+          // Playlist is now a right-side, full-height DRAWER rendered by the
+          // HOST (home_page) BELOW the active header — via
+          // playlistDrawerBus.contentBuilder — so it can float over the chat
+          // thread while the header (and its toggle) stay visible. It is no
+          // longer rendered inline in the music panel here.
 
           // ── Speed popup — scales from the speed button (bottom-right) ──
           if (_showSpeedPanel)

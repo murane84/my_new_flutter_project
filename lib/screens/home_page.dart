@@ -76,7 +76,8 @@ class HomePage extends rp.ConsumerStatefulWidget {
   rp.ConsumerState<HomePage> createState() => HomePageState();
 }
 
-class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserver {
+class HomePageState extends rp.ConsumerState<HomePage>
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   String _username = '';
   String? _myAvatar;
   // Online-friends count + per-friend dots now come from presenceProvider.
@@ -116,6 +117,10 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
   // pill docked in the footer centre that reopens it.
   bool _barDismissed = false;
 
+  // Drives the app-wide playlist drawer's slide/fade (hosted below the active
+  // header — see _playlistDrawerHost).
+  late final AnimationController _playlistDrawerCtrl;
+
   // ── Chat state ────────────────────────────────────────────────────────────
   String? _activeFriendId;
   String? _activeFriendName;
@@ -144,6 +149,14 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Drives the playlist drawer's smooth slide/fade in & out. MusicControls
+    // flips playlistDrawerBus.isOpen; we animate the host from that.
+    _playlistDrawerCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 340),
+      reverseDuration: const Duration(milliseconds: 260),
+    );
+    playlistDrawerBus.isOpen.addListener(_onPlaylistDrawerToggled);
     AppConfig.baseUrl.then((b) {
       if (mounted) setState(() => _apiBase = b);
     });
@@ -203,11 +216,23 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
     WidgetsBinding.instance.removeObserver(this);
     ConnectionStatus.instance.online.removeListener(_onGlobalConnChanged);
     SessionEvents.instance.expired.removeListener(_onSessionExpired);
+    playlistDrawerBus.isOpen.removeListener(_onPlaylistDrawerToggled);
+    _playlistDrawerCtrl.dispose();
     _refreshTimer?.cancel();
     _heartbeatTimer?.cancel();
     _connectivitySub?.cancel();
     _notifyWs?.close();
     super.dispose();
+  }
+
+  // Animate the playlist drawer in/out whenever its open-state flips.
+  void _onPlaylistDrawerToggled() {
+    if (!mounted) return;
+    if (playlistDrawerBus.isOpen.value) {
+      _playlistDrawerCtrl.forward();
+    } else {
+      _playlistDrawerCtrl.reverse();
+    }
   }
 
   // ── Session expiry → clean auto sign-out ──────────────────────────────────
@@ -1212,9 +1237,14 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
           _buildMusicHeader(context),
           const SizedBox(height: 10),
           Expanded(
-            child: kIsWeb
-                ? WebMusicPanel(textColor: scheme.onSurface)
-                : MusicControls(textColor: scheme.onSurface),
+            child: Stack(
+              children: [
+                kIsWeb
+                    ? WebMusicPanel(textColor: scheme.onSurface)
+                    : MusicControls(textColor: scheme.onSurface),
+                _playlistDrawerHost(context, music: true),
+              ],
+            ),
           ),
         ],
       ),
@@ -1345,6 +1375,17 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
                   ),
                 ),
               ],
+            ),
+          ),
+          // Quick playlist drawer toggle — pop the music library in from the
+          // right without leaving the conversation (or opening the music panel).
+          ValueListenableBuilder<bool>(
+            valueListenable: playlistDrawerBus.isOpen,
+            builder: (_, open, _) => IconButton(
+              tooltip: open ? 'Hide playlist' : 'Playlist',
+              icon: Icon(Icons.queue_music_rounded,
+                  color: open ? scheme.primary : null),
+              onPressed: () => playlistDrawerBus.toggle?.call(),
             ),
           ),
           IconButton(
@@ -1500,7 +1541,9 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
           const SizedBox(height: 10),
           if (_activeFriendId != null) _buildExpandedAvatar(context),
           Expanded(
-            child: AnimatedSwitcher(
+            child: Stack(
+              children: [
+                AnimatedSwitcher(
               duration: const Duration(milliseconds: 280),
               switchInCurve: Curves.easeOutCubic,
               transitionBuilder: (child, anim) => FadeTransition(
@@ -1538,6 +1581,9 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
                       },
                     )
                   : _buildFriendList(context),
+                ),
+                _playlistDrawerHost(context, music: false),
+              ],
             ),
           ),
         ],
@@ -1545,6 +1591,93 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
       // On phones, trim the side margins (wider chat) and drop the bottom
       // padding so the composer sits flush against the player/footer module.
       padding: phone ? const EdgeInsets.fromLTRB(4, 12, 4, 0) : null,
+    );
+  }
+
+  // Whether the music surface (not the chat/friends surface) is front-most —
+  // decides which host renders the drawer's single content instance.
+  bool get _musicIsFront =>
+      _isMusicFullScreen ||
+      _playerExpanded ||
+      MediaQuery.of(context).size.width >= 640;
+
+  /// The playlist drawer, hosted BELOW the active header so the header (and the
+  /// chat's playlist toggle) stay visible above it. Slides/fades in from the
+  /// right on [_playlistDrawerCtrl]; swipe right or tap the scrim to close.
+  /// [music] hosts live on the music surface, the other on the chat surface —
+  /// only the front-most one builds content, so it's never duplicated.
+  Widget _playlistDrawerHost(BuildContext context, {required bool music}) {
+    final builder = playlistDrawerBus.contentBuilder;
+    if (builder == null) return const SizedBox.shrink();
+    return AnimatedBuilder(
+      animation: _playlistDrawerCtrl,
+      builder: (context, _) {
+        final t = _playlistDrawerCtrl.value;
+        if (t <= 0.001 || music != _musicIsFront) {
+          return const SizedBox.shrink();
+        }
+        final scheme = Theme.of(context).colorScheme;
+        final eased = Curves.easeOutCubic.transform(t);
+        return LayoutBuilder(
+          builder: (ctx, cons) {
+            final isPhone = cons.maxWidth < 520;
+            final double panelW =
+                isPhone ? cons.maxWidth : cons.maxWidth.clamp(0.0, 460.0).toDouble();
+            return Stack(
+              children: [
+                // Dim scrim — fades with the drawer; tap to close.
+                Positioned.fill(
+                  child: IgnorePointer(
+                    ignoring: t < 0.05,
+                    child: Opacity(
+                      opacity: 0.5 * eased,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => playlistDrawerBus.close?.call(),
+                        child: const ColoredBox(color: Colors.black),
+                      ),
+                    ),
+                  ),
+                ),
+                // The sliding panel — glides in from the right edge.
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FractionalTranslation(
+                    translation: Offset(1 - eased, 0),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      // Flick right to collapse it back like a curtain.
+                      onHorizontalDragEnd: (d) {
+                        if ((d.primaryVelocity ?? 0) > 250) {
+                          playlistDrawerBus.close?.call();
+                        }
+                      },
+                      child: SizedBox(
+                        width: panelW,
+                        height: double.infinity,
+                        child: Material(
+                          color: scheme.surface,
+                          elevation: 16,
+                          shadowColor: Colors.black.withAlpha(120),
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(20),
+                            bottomLeft: Radius.circular(20),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: ValueListenableBuilder<int>(
+                            valueListenable: playlistDrawerBus.revision,
+                            builder: (c, _, _) => builder(c),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1939,9 +2072,14 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
           ),
           const SizedBox(height: 10),
           Expanded(
-            child: kIsWeb
-                ? WebMusicPanel(textColor: scheme.onSurface)
-                : MusicControls(textColor: scheme.onSurface),
+            child: Stack(
+              children: [
+                kIsWeb
+                    ? WebMusicPanel(textColor: scheme.onSurface)
+                    : MusicControls(textColor: scheme.onSurface),
+                _playlistDrawerHost(context, music: true),
+              ],
+            ),
           ),
         ],
       ),

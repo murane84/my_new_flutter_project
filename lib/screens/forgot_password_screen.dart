@@ -123,7 +123,26 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Reset password')),
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: Stack(
+          children: [
+            // Faint, centred logo watermark sitting behind the form. Purely
+            // decorative — IgnorePointer so it never intercepts taps, and low
+            // opacity so it reads as a watermark, not content.
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Center(
+                  child: Opacity(
+                    opacity: 0.06,
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      width: MediaQuery.of(context).size.width * 0.6,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
           child: Form(
             key: _formKey,
@@ -329,6 +348,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               ],
             ),
           ),
+            ),
+          ],
         ),
       ),
     );

@@ -377,7 +377,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
         () => setState(() => _obscureConf = !_obscureConf),
         Icons.lock_reset_outlined);
 
-    return AbsorbPointer(
+    return Stack(
+      children: [
+        // Faint, centred logo watermark behind the profile form. Decorative
+        // only — IgnorePointer so it never blocks taps, low opacity so it reads
+        // as a watermark under the fields.
+        Positioned.fill(
+          child: IgnorePointer(
+            child: Center(
+              child: Opacity(
+                opacity: 0.05,
+                child: Image.asset(
+                  'assets/images/logo.png',
+                  width: MediaQuery.of(context).size.width * 0.45,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+        ),
+        AbsorbPointer(
       absorbing: _saving,
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
@@ -489,6 +508,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
       ),
+        ),
+      ],
     );
   }
 

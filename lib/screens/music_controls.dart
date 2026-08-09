@@ -1567,9 +1567,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           // ── Main content ──────────────────────────────────────────────
           _buildMain(context, scheme, isDark),
 
-          // ── Playlist sheet — slides UP from the bottom, half-height so the
-          //    spinning disc stays visible, and WIDTH-CAPPED + centred so it
-          //    doesn't span the whole screen on desktop/tablet. ────────────
+          // ── Playlist sheet — slides UP from the bottom, WIDTH-CAPPED +
+          //    centred so it doesn't span the whole screen on desktop/tablet.
+          //    Tall by design: the track list is the point of this panel, so it
+          //    takes most of the card height (a sliver of the disc still peeks
+          //    at the top). On short cards it grows to ~92% so rows stay usable
+          //    instead of collapsing to one line. ─────────────────────────────
           if (_showPlaylist)
             LayoutBuilder(
               builder: (ctx, cons) {
@@ -1577,7 +1580,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                 // collapse chevron) reach the far edge instead of floating in a
                 // centred 520-wide column that looks orphaned on desktop.
                 final sheetW = cons.maxWidth;
-                final sheetH = cons.maxHeight * 0.62;
+                final sheetH =
+                    cons.maxHeight * (cons.maxHeight < 560 ? 0.92 : 0.82);
                 return Align(
                   alignment: Alignment.bottomCenter,
                   child: SlideTransition(

@@ -51,6 +51,8 @@ class _ImagePreviewScreen extends StatefulWidget {
 class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
   final GlobalKey _boundaryKey = GlobalKey();
   final TextEditingController _captionCtrl = TextEditingController();
+  // HD off = compress before upload (smaller); HD on = send the original.
+  bool _hd = false;
   // The editor canvas's on-screen size, captured in the LayoutBuilder. Used to
   // scale strokes/emoji from display units up to the ORIGINAL image resolution
   // when flattening, so the sent image stays sharp (not a blurry screen grab).
@@ -140,6 +142,8 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
       'caption': _captionCtrl.text,
       'bytes': outBytes,
       'mime': mime,
+      // Honour the HD toggle: off = compress on upload (smaller), on = original.
+      'hd': _hd,
     });
   }
 
@@ -424,6 +428,39 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
             ),
             child: Row(
               children: [
+                // HD toggle: off = compressed (smaller), on = original quality.
+                Tooltip(
+                  message: _hd
+                      ? 'HD on — sending original quality'
+                      : 'Send compressed · tap for HD (original)',
+                  child: GestureDetector(
+                    onTap: () => setState(() => _hd = !_hd),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: _hd ? scheme.primary : Colors.white10,
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.hd_rounded,
+                              size: 16,
+                              color: _hd ? scheme.onPrimary : Colors.white70),
+                          const SizedBox(width: 3),
+                          Text('HD',
+                              style: TextStyle(
+                                  color:
+                                      _hd ? scheme.onPrimary : Colors.white70,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     controller: _captionCtrl,

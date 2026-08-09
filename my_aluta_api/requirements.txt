@@ -10,3 +10,8 @@ python-jose[cryptography]
 alembic
 pydantic[email]
 python-multipart
+# Firebase Cloud Messaging (HTTP v1) push: mint OAuth2 tokens from a service
+# account (google-auth) and POST to FCM (requests). Both optional at runtime —
+# if Firebase env vars are unset, push is skipped and the app still works.
+google-auth
+requests

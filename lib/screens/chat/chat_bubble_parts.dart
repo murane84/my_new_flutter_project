@@ -460,6 +460,7 @@ class _SongBubble extends StatefulWidget {
     required this.isMe,
     required this.accent,
     required this.onColor,
+    required this.onDownload,
   });
 
   final String? assetId;
@@ -470,6 +471,9 @@ class _SongBubble extends StatefulWidget {
   final bool isMe;
   final Color accent;
   final Color onColor;
+  // Save the song out to the device's own storage (Files / Music) — handled by
+  // the chat page, which reads from the local cache (server copy may be purged).
+  final VoidCallback onDownload;
 
   @override
   State<_SongBubble> createState() => _SongBubbleState();
@@ -480,17 +484,25 @@ class _SongBubbleState extends State<_SongBubble> {
   bool _prepared = false;
   bool _loading = false;
   bool _unavailable = false;
+  bool _dragging = false;
+  double _dragFrac = 0;
   String? _localPath;
   Duration _pos = Duration.zero;
   Duration _dur = Duration.zero;
   StreamSubscription? _posSub;
+  StreamSubscription? _durSub;
   StreamSubscription? _stateSub;
 
   @override
   void initState() {
     super.initState();
     _posSub = _player.positionStream.listen((p) {
-      if (mounted) setState(() => _pos = p);
+      if (mounted && !_dragging) setState(() => _pos = p);
+    });
+    // Duration can arrive after setFilePath/setUrl returns null (streamed or
+    // some codecs), so keep the slider's total in sync as the player learns it.
+    _durSub = _player.durationStream.listen((d) {
+      if (mounted && d != null) setState(() => _dur = d);
     });
     _stateSub = _player.playerStateStream.listen((s) {
       if (!mounted) return;
@@ -530,57 +542,63 @@ class _SongBubbleState extends State<_SongBubble> {
   @override
   void dispose() {
     _posSub?.cancel();
+    _durSub?.cancel();
     _stateSub?.cancel();
     _player.dispose();
     super.dispose();
   }
 
+  /// Load the audio (cache-first) without starting playback — used when the
+  /// user drags the slider before pressing play.
+  Future<bool> _ensureLoaded() async {
+    if (_prepared) return true;
+    setState(() => _loading = true);
+    try {
+      final id = widget.assetId;
+      var path = _localPath;
+      if (path == null && id != null) {
+        path = await SongCache.cachedPath(id,
+            filename: widget.fileName, mime: widget.mime);
+      }
+      if (path == null && !widget.isMe && id != null) {
+        path = await SongCache.ensureCached(
+          id,
+          widget.url,
+          mediaAuthHeaders(widget.url),
+          filename: widget.fileName,
+          mime: widget.mime,
+        );
+        if (path != null && !SongCache.hasAcked(id)) {
+          SongCache.markAcked(id);
+          unawaited(ApiService().ackAttachmentCached(id));
+        }
+      }
+      Duration? d;
+      if (path != null) {
+        _localPath = path;
+        d = await _player.setFilePath(path);
+      } else {
+        d = await _player.setUrl(widget.url,
+            headers: mediaAuthHeaders(widget.url));
+      }
+      if (d != null && mounted) _dur = d;
+      _prepared = true;
+      if (mounted) setState(() => _loading = false);
+      return true;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _unavailable = true;
+        });
+      }
+      return false;
+    }
+  }
+
   Future<void> _toggle() async {
     if (_unavailable) return;
-    if (!_prepared) {
-      setState(() => _loading = true);
-      Duration? d;
-      try {
-        final id = widget.assetId;
-        var path = _localPath;
-        if (path == null && id != null) {
-          path = await SongCache.cachedPath(id,
-              filename: widget.fileName, mime: widget.mime);
-        }
-        if (path == null && !widget.isMe && id != null) {
-          path = await SongCache.ensureCached(
-            id,
-            widget.url,
-            mediaAuthHeaders(widget.url),
-            filename: widget.fileName,
-            mime: widget.mime,
-          );
-          if (path != null && !SongCache.hasAcked(id)) {
-            SongCache.markAcked(id);
-            unawaited(ApiService().ackAttachmentCached(id));
-          }
-        }
-        if (path != null) {
-          _localPath = path;
-          d = await _player.setFilePath(path);
-        } else {
-          // Last resort: stream from the server if it still has the bytes.
-          d = await _player.setUrl(widget.url,
-              headers: mediaAuthHeaders(widget.url));
-        }
-        if (d != null && mounted) _dur = d;
-        _prepared = true;
-      } catch (_) {
-        if (mounted) {
-          setState(() {
-            _loading = false;
-            _unavailable = true;
-          });
-        }
-        return;
-      }
-      if (mounted) setState(() => _loading = false);
-    }
+    if (!await _ensureLoaded()) return;
     if (_player.playing) {
       await _player.pause();
     } else {
@@ -589,6 +607,18 @@ class _SongBubbleState extends State<_SongBubble> {
       }
       await _player.play();
     }
+  }
+
+  // Seek to a fraction of the track, loading it first if the user drags before
+  // pressing play.
+  Future<void> _seekToFraction(double frac) async {
+    if (_unavailable) return;
+    if (!await _ensureLoaded()) return;
+    final total = _dur;
+    if (total <= Duration.zero) return;
+    final target = total * frac.clamp(0.0, 1.0);
+    await _player.seek(target);
+    if (mounted) setState(() => _pos = target);
   }
 
   String _fmt(Duration d) {
@@ -602,123 +632,173 @@ class _SongBubbleState extends State<_SongBubble> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final playing = _player.playing;
     final total = _dur.inMilliseconds;
-    final frac = total > 0 ? (_pos.inMilliseconds / total).clamp(0.0, 1.0) : 0.0;
+    final liveFrac =
+        total > 0 ? (_pos.inMilliseconds / total).clamp(0.0, 1.0) : 0.0;
+    final frac = _dragging ? _dragFrac : liveFrac;
+    // Seekable whenever the song isn't gone — dragging before the first play
+    // loads it, then jumps to the dropped position.
+    final canSeek = !_unavailable;
     // "Title — Artist" → two lines; a bare title stays one line.
     final parts = widget.title.split(' — ');
     final line1 = parts.first;
     final line2 = parts.length > 1 ? parts.sublist(1).join(' — ') : null;
+    final shownPos =
+        _dragging ? Duration(milliseconds: (total * _dragFrac).round()) : _pos;
     return SizedBox(
-      width: 232,
-      child: Row(
+      width: 248,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          GestureDetector(
-            onTap: _toggle,
-            child: Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: widget.accent.withAlpha(isDark ? 48 : 30),
-                shape: BoxShape.circle,
-                border: Border.all(
-                    color: widget.accent.withAlpha(isDark ? 90 : 70), width: 1),
+          // ── Title row: play/pause · title/artist · download ──────────────
+          Row(
+            children: [
+              GestureDetector(
+                onTap: _toggle,
+                child: Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: widget.accent.withAlpha(isDark ? 48 : 30),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: widget.accent.withAlpha(isDark ? 90 : 70),
+                        width: 1),
+                  ),
+                  child: _loading
+                      ? Padding(
+                          padding: const EdgeInsets.all(11),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: widget.accent),
+                        )
+                      : Icon(
+                          _unavailable
+                              ? Icons.music_off_rounded
+                              : (playing
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded),
+                          color:
+                              isDark ? const Color(0xFFFF8A93) : widget.accent,
+                          size: 22),
+                ),
               ),
-              child: _loading
-                  ? Padding(
-                      padding: const EdgeInsets.all(11),
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: widget.accent),
-                    )
-                  : Icon(
-                      _unavailable
-                          ? Icons.music_off_rounded
-                          : (playing
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded),
-                      color: isDark ? const Color(0xFFFF8A93) : widget.accent,
-                      size: 22),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.music_note_rounded,
-                        size: 13, color: widget.onColor.withAlpha(170)),
-                    const SizedBox(width: 3),
-                    Expanded(
-                      child: Text(line1,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
-                              color: widget.onColor)),
+                    Row(
+                      children: [
+                        Icon(Icons.music_note_rounded,
+                            size: 13, color: widget.onColor.withAlpha(170)),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(line1,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: widget.onColor)),
+                        ),
+                      ],
                     ),
+                    if (line2 != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 16, top: 1),
+                        child: Text(line2,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 11.5,
+                                color: widget.onColor.withAlpha(165))),
+                      ),
                   ],
                 ),
-                if (line2 != null)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 16, top: 1),
-                    child: Text(line2,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 11.5,
-                            color: widget.onColor.withAlpha(165))),
-                  ),
-                const SizedBox(height: 5),
-                if (_unavailable)
-                  Row(
-                    children: [
-                      Icon(Icons.cloud_off_rounded,
-                          size: 12, color: widget.onColor.withAlpha(150)),
-                      const SizedBox(width: 4),
-                      Text('No longer available',
-                          style: TextStyle(
-                              fontSize: 10.5,
-                              fontStyle: FontStyle.italic,
-                              color: widget.onColor.withAlpha(150))),
-                    ],
-                  )
-                else ...[
-                  Stack(
-                    alignment: Alignment.centerLeft,
-                    children: [
-                      Container(
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: widget.onColor.withAlpha(45),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                      FractionallySizedBox(
-                        widthFactor: frac == 0 ? 0.001 : frac,
-                        child: Container(
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: widget.accent,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
+              ),
+              // Save the song to the device's own storage.
+              Tooltip(
+                message: 'Save to device',
+                child: IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 34, minHeight: 34),
+                  icon: Icon(Icons.download_rounded,
+                      size: 20, color: widget.onColor.withAlpha(190)),
+                  onPressed: widget.onDownload,
+                ),
+              ),
+            ],
+          ),
+          if (_unavailable)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, left: 2),
+              child: Row(
+                children: [
+                  Icon(Icons.cloud_off_rounded,
+                      size: 12, color: widget.onColor.withAlpha(150)),
+                  const SizedBox(width: 4),
+                  Text('No longer on server — cache expired',
+                      style: TextStyle(
+                          fontSize: 10.5,
+                          fontStyle: FontStyle.italic,
+                          color: widget.onColor.withAlpha(150))),
+                ],
+              ),
+            )
+          else ...[
+            // ── Seek slider ────────────────────────────────────────────────
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3,
+                activeTrackColor: widget.accent,
+                inactiveTrackColor: widget.onColor.withAlpha(45),
+                thumbColor: widget.accent,
+                thumbShape:
+                    const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape:
+                    const RoundSliderOverlayShape(overlayRadius: 12),
+              ),
+              child: Slider(
+                value: frac,
+                onChangeStart: canSeek
+                    ? (v) => setState(() {
+                          _dragging = true;
+                          _dragFrac = v;
+                        })
+                    : null,
+                onChanged: canSeek
+                    ? (v) => setState(() => _dragFrac = v)
+                    : null,
+                onChangeEnd: canSeek
+                    ? (v) {
+                        setState(() => _dragging = false);
+                        _seekToFraction(v);
+                      }
+                    : null,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
                   Text(
-                    _prepared && total > 0
-                        ? '${_fmt(_pos)} / ${_fmt(_dur)}'
-                        : 'Tap to play',
+                    total > 0 ? _fmt(shownPos) : 'Tap to play',
                     style: TextStyle(
-                        fontSize: 10, color: widget.onColor.withAlpha(150)),
+                        fontSize: 10, color: widget.onColor.withAlpha(160)),
+                  ),
+                  Text(
+                    total > 0 ? _fmt(_dur) : '',
+                    style: TextStyle(
+                        fontSize: 10, color: widget.onColor.withAlpha(160)),
                   ),
                 ],
-              ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

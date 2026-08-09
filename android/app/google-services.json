@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "401642639757",
+    "project_id": "aluta-app-174f7",
+    "storage_bucket": "aluta-app-174f7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:401642639757:android:b1068351bc8de430b6edc4",
+        "android_client_info": {
+          "package_name": "com.murane.aluta"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCKvvXvD3YHxP2cotioyZdGFNTqgkNQgdg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:401642639757:android:b07ee87770dfff22b6edc4",
+        "android_client_info": {
+          "package_name": "com.ozilane.aluta"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCKvvXvD3YHxP2cotioyZdGFNTqgkNQgdg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

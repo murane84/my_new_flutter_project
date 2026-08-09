@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 import crud, schemas
@@ -7,6 +7,7 @@ from models import User, Message
 from .users import get_current_user
 from datetime import datetime, timedelta, timezone
 from websocket_manager import safe_notify_user
+from push import send_push_to_user
 
 router = APIRouter(
     prefix="/messages",
@@ -42,7 +43,7 @@ def serialize_message(msg):
 
 # 1️⃣ SEND MESSAGE
 @router.post("/", response_model=schemas.MessageWithSender)
-def send_message(message: schemas.MessageCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def send_message(message: schemas.MessageCreate, background: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     db_message = crud.create_message(db, sender_id=current_user.id, message=message)
     validated_message = schemas.MessageWithSender.model_validate(db_message)
     serialized = serialize_message(validated_message)
@@ -51,6 +52,21 @@ def send_message(message: schemas.MessageCreate, db: Session = Depends(get_db), 
     safe_notify_user(message.receiver_id, {"type": "new_message", "data": serialized})
     # Notify sender
     safe_notify_user(current_user.id, {"type": "message_sent", "data": serialized})
+
+    # Push (best-effort, after the response) so the receiver is woken when their
+    # app is backgrounded or closed and the WebSocket is dead. A short type +
+    # sender + preview is enough for the client to build the local notification.
+    background.add_task(
+        send_push_to_user,
+        int(message.receiver_id),
+        {
+            "type": "new_message",
+            "sender_id": str(current_user.id),
+            "sender_name": current_user.username or "New message",
+            "message_id": str(db_message.id),
+            "body": crud.list_preview(db_message),
+        },
+    )
 
     return validated_message
 

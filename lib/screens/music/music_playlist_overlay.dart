@@ -668,13 +668,16 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     );
   }
 
-  String _currentViewLabel() {
+  String _activeFilterLabel() {
     if (_smart == _Smart.recent) return 'Recent';
     if (_smart == _Smart.most) return 'Most played';
     if (_activeGroup != null) return _activeGroup!;
     if (_favOnly) return 'Favourites';
-    return 'Play all';
+    return 'All';
   }
+
+  bool get _isFiltered =>
+      _smart != _Smart.none || _activeGroup != null || _favOnly;
 
   void _playPath(String path) {
     final disp = _displayed();
@@ -830,6 +833,10 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         ],
       ),
       child: Column(
+        // Stretch every row to the full panel width so the header spans edge to
+        // edge and its trailing collapse chevron stays pinned to the far right,
+        // however wide the panel is stretched.
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Grab handle — tap OR slide down to dismiss.
           GestureDetector(
@@ -839,7 +846,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
               if ((d.primaryVelocity ?? 0) > 0) widget.onClose();
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 10),
+              padding: const EdgeInsets.symmetric(vertical: 6),
               width: double.infinity,
               alignment: Alignment.center,
               child: Container(
@@ -856,10 +863,9 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           // Header — either the normal header or the multi-select action bar.
           _selecting ? _selectionBar(scheme) : _header(scheme),
 
-          // Group filter chips.
-          if (!_selecting) _groupChips(scheme),
-
-          // Search + sort row.
+          // Search + filter + sort — the ONLY chrome above the list now. The
+          // old always-on chip row and the Play/Shuffle row were folded into
+          // the filter menu (the funnel button) to give the list more room.
           if (!_selecting)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -884,45 +890,14 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                     ),
                   ),
                   const SizedBox(width: 6),
+                  // Filter & play menu (All / Recent / Most played / groups /
+                  // New group + Play/Shuffle the current view).
+                  _filterButton(scheme),
+                  const SizedBox(width: 2),
                   // Sort button.
                   _iconBtn(scheme, Icons.sort_rounded, 'Sort',
                       () => _showSort(context),
                       active: _sort != _PlSort.manual),
-                ],
-              ),
-            ),
-
-          // Play / Shuffle the current view.
-          if (!_selecting && displayed.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () =>
-                          widget.onPlayScope(displayedPaths, 0, false),
-                      icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                      label: Text(_currentViewLabel()),
-                      style: OutlinedButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        foregroundColor: scheme.primary,
-                        side: BorderSide(color: scheme.primary.withAlpha(120)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: () =>
-                        widget.onPlayScope(displayedPaths, 0, true),
-                    icon: const Icon(Icons.shuffle_rounded, size: 18),
-                    label: const Text('Shuffle'),
-                    style: OutlinedButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      foregroundColor: scheme.primary,
-                      side: BorderSide(color: scheme.primary.withAlpha(120)),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -1067,89 +1042,183 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     );
   }
 
-  Widget _groupChips(ColorScheme scheme) {
-    Widget chip(String label, bool selected, VoidCallback onTap,
-        {VoidCallback? onLong, IconData? icon}) {
-      return Padding(
-        padding: const EdgeInsets.only(right: 6),
-        child: GestureDetector(
-          onLongPress: onLong,
-          child: ChoiceChip(
-            label: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, size: 13,
-                      color: selected ? scheme.onPrimary : scheme.onSurfaceVariant),
-                  const SizedBox(width: 3),
-                ],
-                Text(label, style: const TextStyle(fontSize: 12)),
+  /// Compact filter control that sits in the search row: a funnel icon that
+  /// grows a tinted label when a filter is active, so the current view is
+  /// visible at a glance without a dedicated chip row. Tapping opens the menu.
+  Widget _filterButton(ColorScheme scheme) {
+    final on = _isFiltered;
+    final fg = on ? scheme.primary : scheme.onSurfaceVariant;
+    return Tooltip(
+      message: 'Filter & play',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => _showFilterMenu(context),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: on ? 10 : 8, vertical: 7),
+          decoration: BoxDecoration(
+            color: on ? scheme.primary.withAlpha(28) : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+                color: on
+                    ? scheme.primary.withAlpha(120)
+                    : scheme.outlineVariant.withAlpha(120)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.filter_list_rounded, size: 18, color: fg),
+              if (on) ...[
+                const SizedBox(width: 4),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 92),
+                  child: Text(
+                    _activeFilterLabel(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w600, color: fg),
+                  ),
+                ),
               ],
-            ),
-            selected: selected,
-            showCheckmark: false,
-            visualDensity: VisualDensity.compact,
-            selectedColor: scheme.primary,
-            labelStyle: TextStyle(
-                color: selected ? scheme.onPrimary : scheme.onSurface),
-            onSelected: (_) => onTap(),
+            ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// The filter + play sheet: pick All / Recent / Most played / a group / make
+  /// a new group, and Play or Shuffle the current view — everything the old
+  /// chip row and Play/Shuffle row used to hold, now off the panel's main area.
+  void _showFilterMenu(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final displayedPaths = _displayed().map((e) => e.value).toList();
+    final label = _activeFilterLabel();
+    final scopeWord = label == 'All' ? 'all' : label;
+
+    void pick(VoidCallback apply) {
+      setState(apply);
+      Navigator.pop(context);
+    }
+
+    Widget filterTile(IconData icon, String text, bool active, VoidCallback onTap,
+        {Widget? trailing}) {
+      return ListTile(
+        dense: true,
+        leading:
+            Icon(icon, color: active ? scheme.primary : scheme.onSurfaceVariant),
+        title: Text(text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: active ? scheme.primary : null)),
+        trailing: trailing ??
+            (active ? Icon(Icons.check_rounded, color: scheme.primary) : null),
+        onTap: onTap,
       );
     }
 
-    return SizedBox(
-      height: 40,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        children: [
-          chip('All', _activeGroup == null && !_favOnly && _smart == _Smart.none,
-              () {
-            setState(() {
-              _activeGroup = null;
-              _favOnly = false;
-              _smart = _Smart.none;
-            });
-          }, icon: Icons.library_music_rounded),
-          // Smart auto-lists (from listening stats).
-          chip('Recent', _smart == _Smart.recent, () {
-            setState(() {
-              _smart = _smart == _Smart.recent ? _Smart.none : _Smart.recent;
-              _activeGroup = null;
-              _favOnly = false;
-            });
-          }, icon: Icons.history_rounded),
-          chip('Most played', _smart == _Smart.most, () {
-            setState(() {
-              _smart = _smart == _Smart.most ? _Smart.none : _Smart.most;
-              _activeGroup = null;
-              _favOnly = false;
-            });
-          }, icon: Icons.trending_up_rounded),
-          for (final g in widget.groups.keys)
-            chip(
-              '$g (${widget.groups[g]?.length ?? 0})',
-              _activeGroup == g,
-              () => setState(() {
-                _activeGroup = _activeGroup == g ? null : g;
-                _favOnly = false;
-                _smart = _Smart.none;
-              }),
-              onLong: () => _manageGroup(context, g),
-              icon: Icons.folder_rounded,
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+            const Text('Show',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            const SizedBox(height: 4),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  filterTile(
+                    Icons.library_music_rounded,
+                    'All songs',
+                    _activeGroup == null && !_favOnly && _smart == _Smart.none,
+                    () => pick(() {
+                      _activeGroup = null;
+                      _favOnly = false;
+                      _smart = _Smart.none;
+                    }),
+                  ),
+                  filterTile(
+                    Icons.history_rounded,
+                    'Recently played',
+                    _smart == _Smart.recent,
+                    () => pick(() {
+                      _smart = _Smart.recent;
+                      _activeGroup = null;
+                      _favOnly = false;
+                    }),
+                  ),
+                  filterTile(
+                    Icons.trending_up_rounded,
+                    'Most played',
+                    _smart == _Smart.most,
+                    () => pick(() {
+                      _smart = _Smart.most;
+                      _activeGroup = null;
+                      _favOnly = false;
+                    }),
+                  ),
+                  if (widget.groups.isNotEmpty)
+                    Divider(
+                        height: 1, color: scheme.outlineVariant.withAlpha(70)),
+                  for (final g in widget.groups.keys)
+                    filterTile(
+                      Icons.folder_rounded,
+                      '$g (${widget.groups[g]?.length ?? 0})',
+                      _activeGroup == g,
+                      () => pick(() {
+                        _activeGroup = g;
+                        _favOnly = false;
+                        _smart = _Smart.none;
+                      }),
+                      trailing: IconButton(
+                        icon: Icon(Icons.more_horiz_rounded,
+                            color: scheme.onSurfaceVariant),
+                        tooltip: 'Manage group',
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _manageGroup(context, g);
+                        },
+                      ),
+                    ),
+                  ListTile(
+                    dense: true,
+                    leading: Icon(Icons.create_new_folder_rounded,
+                        color: scheme.primary),
+                    title: Text('New group…',
+                        style: TextStyle(color: scheme.primary)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _promptCreateGroup(context);
+                    },
+                  ),
+                ],
+              ),
             ),
-          // New group.
-          Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: ActionChip(
-              avatar: Icon(Icons.add_rounded, size: 15, color: scheme.primary),
-              label: const Text('New', style: TextStyle(fontSize: 12)),
-              visualDensity: VisualDensity.compact,
-              onPressed: () => _promptCreateGroup(context),
-            ),
-          ),
-        ],
+            Divider(height: 1, color: scheme.outlineVariant.withAlpha(70)),
+            _optionTile(scheme, Icons.play_arrow_rounded, 'Play $scopeWord', () {
+              Navigator.pop(ctx);
+              if (displayedPaths.isNotEmpty) {
+                widget.onPlayScope(displayedPaths, 0, false);
+              }
+            }),
+            _optionTile(scheme, Icons.shuffle_rounded, 'Shuffle $scopeWord', () {
+              Navigator.pop(ctx);
+              if (displayedPaths.isNotEmpty) {
+                widget.onPlayScope(displayedPaths, 0, true);
+              }
+            }),
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
     );
   }
@@ -1314,6 +1383,13 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
 
   // ── Inline transport strip ────────────────────────────────────────────────
 
+  /// Path of the track currently playing, or null if the index is out of range.
+  String? _curPath() {
+    final i = widget.currentIndex;
+    if (i >= 0 && i < widget.playlist.length) return widget.playlist[i];
+    return null;
+  }
+
   Widget _transportStrip(ColorScheme scheme) {
     return Container(
       decoration: BoxDecoration(
@@ -1383,6 +1459,16 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                       fontSize: 12.5, fontWeight: FontWeight.w600),
                 ),
               ),
+              // Share the CURRENT song straight to a chat — a one-tap, always-
+              // visible affordance (the per-track ⋮ menu also has "Share to
+              // chat" for any other song in the list).
+              if (_curPath() != null)
+                IconButton(
+                  icon: Icon(Icons.share_rounded, color: scheme.primary),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Share this song',
+                  onPressed: () => widget.onShare(_curPath()!),
+                ),
               IconButton(
                 icon: const Icon(Icons.skip_previous_rounded),
                 visualDensity: VisualDensity.compact,

@@ -22,6 +22,45 @@ class ApiService {
   // Delegates to the platform-aware token store (web-safe).
   Future<String?> _getToken() async => getToken();
 
+  String _platformName() {
+    if (kIsWeb) return 'web';
+    return defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android';
+  }
+
+  /// Register this device's FCM token so the backend can push
+  /// message/call notifications when the app is backgrounded or closed.
+  Future<bool> saveDeviceToken(String token) async {
+    try {
+      final t = await _getToken();
+      if (t == null) return false;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/devices/token'),
+        headers: _authHeaders(t),
+        body: jsonEncode({'token': token, 'platform': _platformName()}),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.e('saveDeviceToken exception: $e');
+      return false;
+    }
+  }
+
+  /// Unregister this device's FCM token (on logout) so it stops receiving the
+  /// account's pushes. Best-effort.
+  Future<void> deleteDeviceToken(String token) async {
+    try {
+      final t = await _getToken();
+      if (t == null) return;
+      await http.delete(
+        Uri.parse('${await _baseUrl}/devices/token'),
+        headers: _authHeaders(t),
+        body: jsonEncode({'token': token}),
+      );
+    } catch (e) {
+      _logger.e('deleteDeviceToken exception: $e');
+    }
+  }
+
   // REGISTER
   Future<Map<String, dynamic>> register(
     String email,

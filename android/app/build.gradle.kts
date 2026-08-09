@@ -5,10 +5,15 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("dev.flutter.flutter-gradle-plugin")
+    // Firebase (Cloud Messaging). Requires android/app/google-services.json —
+    // downloaded from the Firebase console (see the setup guide). The Android
+    // build will fail with "File google-services.json is missing" until it's in
+    // place, so add that file before building for Android.
+    id("com.google.gms.google-services")
 }
 
 android {
-    namespace = "com.example.new_flutter_project_fixed"
+    namespace = "com.ozilane.aluta"
 
     // 🔕 Do NOT fail build on lint issues from Flutter plugins
     lint {
@@ -23,7 +28,7 @@ android {
     ndkVersion = "28.2.13676358"
 
     defaultConfig {
-        applicationId = "com.example.new_flutter_project_fixed"
+        applicationId = "com.ozilane.aluta"
         minSdk = 24
 
         // ✅ Required by most of your plugins

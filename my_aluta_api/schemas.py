@@ -124,3 +124,10 @@ class FriendLastSeen(BaseModel):
     last_seen: Optional[datetime]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ---------------------- PUSH / DEVICE SCHEMAS ----------------------
+
+class DeviceTokenIn(BaseModel):
+    token: str
+    platform: Optional[str] = None  # "android" | "ios" | "web"

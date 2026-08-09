@@ -13,11 +13,12 @@ class UserProfilePage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: Text('${user.username} Profile')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             CircleAvatar(
               radius: 40,
               backgroundColor: Colors.grey[300],
@@ -32,6 +33,7 @@ class UserProfilePage extends StatelessWidget {
             const SizedBox(height: 8),
             Text('Last Seen: ${user.lastTimestamp}', style: TextStyle(color: textColor)),
           ],
+          ),
         ),
       ),
     );

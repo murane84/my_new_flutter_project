@@ -21,6 +21,7 @@ from routers import upload
 from routers import attachments
 from routers import devices as devices_router
 from routers import live as live_router
+from routers import conversations as conversations_router
 from websocket_routes import router as websocket_router
 import websocket_manager
 from sqlalchemy import text
@@ -52,6 +53,8 @@ app.include_router(upload.router)
 app.include_router(attachments.router)
 # Device (FCM) token registration for push notifications.
 app.include_router(devices_router.router)
+# Group + DM conversations (create group, list, fetch/send/read, members).
+app.include_router(conversations_router.router)
 # Listen-together (live session) endpoints: POST /live/sessions, /live/ws/{id},
 # /live/sessions/{id}/end. Without this include the whole /live prefix 404s and
 # starting a listen-together session fails.
@@ -82,6 +85,11 @@ def ensure_media_schema():
         # Pin-a-message: expiry timestamp (NULL = not pinned).
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS pinned_until TIMESTAMPTZ",
         "ALTER TABLE messages ALTER COLUMN content DROP NOT NULL",
+        # Group conversations: every message belongs to a conversation; group
+        # messages have no single receiver, so receiver_id becomes nullable
+        # (DMs still set it, keeping the 1:1 path unchanged).
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS conversation_id INTEGER",
+        "ALTER TABLE messages ALTER COLUMN receiver_id DROP NOT NULL",
         # Direct-call phone number + profile picture on the user profile.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR",
@@ -112,6 +120,54 @@ def ensure_media_schema():
 
 
 ensure_media_schema()
+
+
+# ✅ One-time backfill: fold every existing 1:1 message pair into a DM
+#    conversation and stamp conversation_id onto those rows. Idempotent — it
+#    only touches messages whose conversation_id is still NULL, so it no-ops on
+#    every boot after the first (new messages are stamped at send time).
+def backfill_dm_conversations():
+    from database import SessionLocal
+    import crud_conversations as cc
+    from sqlalchemy import text as _text
+    db = SessionLocal()
+    try:
+        pairs = db.execute(_text(
+            """
+            SELECT DISTINCT LEAST(sender_id, receiver_id)  AS a,
+                            GREATEST(sender_id, receiver_id) AS b
+            FROM messages
+            WHERE conversation_id IS NULL
+              AND receiver_id IS NOT NULL
+              AND sender_id <> receiver_id
+            """
+        )).fetchall()
+        made = 0
+        for a, b in pairs:
+            conv = cc.get_or_create_dm_conversation(db, int(a), int(b))
+            db.execute(
+                _text(
+                    """
+                    UPDATE messages SET conversation_id = :cid
+                    WHERE conversation_id IS NULL
+                      AND ((sender_id = :a AND receiver_id = :b)
+                        OR (sender_id = :b AND receiver_id = :a))
+                    """
+                ),
+                {"cid": conv.id, "a": int(a), "b": int(b)},
+            )
+            made += 1
+        db.commit()
+        if made:
+            print(f"[migrate] backfilled {made} DM conversation(s)")
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        print(f"⚠️ backfill_dm_conversations failed: {e}")
+    finally:
+        db.close()
+
+
+backfill_dm_conversations()
 
 
 # ✅ Health / discovery endpoint — Flutter uses this to auto-detect server IP

@@ -6,6 +6,7 @@ from sqlalchemy import func
 
 from models import Message, User, Friend, MuteStatus, BlockStatus
 from schemas import MessageCreate, FriendWithUnread
+import crud_conversations
 
 
 # Presence window: a user is shown "online" only if the server heard from them
@@ -38,9 +39,16 @@ def update_user_status(db: Session, user_id: int, is_online: bool):
 
 # ------------------ Messaging Core ------------------
 def create_message(db: Session, sender_id: int, message: MessageCreate) -> Message:
+    # Resolve (or create) the DM conversation so every message — including 1:1 —
+    # belongs to a conversation. receiver_id is still set, so all the existing
+    # 1:1 endpoints and read/delivered logic keep working exactly as before.
+    conv = crud_conversations.get_or_create_dm_conversation(
+        db, sender_id, message.receiver_id
+    )
     db_message = Message(
         sender_id=sender_id,
         receiver_id=message.receiver_id,
+        conversation_id=conv.id,
         content=message.content or "",
         message_type=(message.message_type or "text"),
         media_url=message.media_url,
@@ -57,6 +65,16 @@ def create_message(db: Session, sender_id: int, message: MessageCreate) -> Messa
     db.add(db_message)
     db.commit()
     db.refresh(db_message)
+    # Keep the conversation ordering fresh + advance the sender's own read
+    # pointer (so group-style unread/receipts stay consistent for DMs too).
+    conv.updated_at = datetime.now(timezone.utc)
+    sm = crud_conversations.get_member(db, conv.id, sender_id)
+    if sm:
+        sm.last_read_message_id = db_message.id
+        sm.last_read_at = db_message.timestamp
+        sm.last_delivered_message_id = db_message.id
+        sm.last_delivered_at = db_message.timestamp
+    db.commit()
     return db_message
 
 

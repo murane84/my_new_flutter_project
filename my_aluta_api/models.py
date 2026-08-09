@@ -57,7 +57,16 @@ class Message(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     sender_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    receiver_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    # receiver_id is the OTHER party in a 1:1 DM. It is NULL for group messages
+    # (which fan out to a conversation's members instead). DMs still set it so
+    # all the existing 1:1 endpoints/logic keep working unchanged.
+    receiver_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    # The conversation this message belongs to. Backfilled for existing DMs and
+    # set on every new message (DM or group). DMs also keep receiver_id set.
+    conversation_id = Column(
+        Integer, ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=True, index=True,
+    )
     # Nullable now: media messages may carry an empty (or caption) content.
     content = Column(Text, nullable=True, default="")
     timestamp = Column(DateTime(timezone=True), default=func.now())
@@ -97,6 +106,70 @@ class Message(Base):
             f"<Message(id={self.id}, sender_id={self.sender_id}, "
             f"receiver_id={self.receiver_id}, visible_to_sender={self.visible_to_sender}, "
             f"visible_to_receiver={self.visible_to_receiver})>"
+        )
+
+
+class Conversation(Base):
+    """A chat thread. `is_group=False` is a 1:1 DM (exactly two members, no
+    title/avatar); `is_group=True` is a named group with any number of members.
+    Existing 1:1 message history is migrated into DM conversations on boot."""
+    __tablename__ = "conversations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    is_group = Column(Boolean, default=False, nullable=False)
+    title = Column(String, nullable=True)       # group name (NULL for DMs)
+    avatar_url = Column(String, nullable=True)  # group photo (NULL for DMs)
+    created_by = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    members = relationship(
+        "ConversationMember",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    def __repr__(self):
+        return f"<Conversation(id={self.id}, is_group={self.is_group})>"
+
+
+class ConversationMember(Base):
+    """A user's membership in a conversation, plus WhatsApp-style per-member
+    delivery/read POINTERS (the highest message id delivered to / read by this
+    member). Pointers give per-member unread counts and 'delivered/read by all'
+    ticks + seen-by lists without a row per (message, member)."""
+    __tablename__ = "conversation_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(
+        Integer, ForeignKey("conversations.id", ondelete="CASCADE"),
+        index=True, nullable=False,
+    )
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        index=True, nullable=False,
+    )
+    role = Column(String, default="member", nullable=False)  # "admin" | "member"
+    joined_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    last_read_message_id = Column(Integer, nullable=True)
+    last_read_at = Column(DateTime(timezone=True), nullable=True)
+    last_delivered_message_id = Column(Integer, nullable=True)
+    last_delivered_at = Column(DateTime(timezone=True), nullable=True)
+
+    conversation = relationship("Conversation", back_populates="members")
+    user = relationship("User", foreign_keys=[user_id], passive_deletes=True)
+
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "user_id", name="_conv_member_uc"),
+    )
+
+    def __repr__(self):
+        return (
+            f"<ConversationMember(conversation_id={self.conversation_id}, "
+            f"user_id={self.user_id}, role='{self.role}')>"
         )
 
 

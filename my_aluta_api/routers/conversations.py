@@ -234,6 +234,26 @@ def message_seen_by(
     return cc.seen_by(db, cid, mid, exclude_user=current_user.id)
 
 
+@router.get("/{cid}/messages/{mid}/info", response_model=schemas.MessageInfoOut)
+def message_info(
+    cid: int,
+    mid: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """WhatsApp-style message info: who has read / received / not-yet-received a
+    message. Excludes the message's own sender from every bucket."""
+    _require_member(db, cid, current_user.id)
+    msg = (
+        db.query(Message)
+        .filter(Message.id == mid, Message.conversation_id == cid)
+        .first()
+    )
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return cc.message_info(db, cid, mid, msg.sender_id)
+
+
 # ── Membership admin ───────────────────────────────────────────────────────────
 
 @router.post("/{cid}/members")
@@ -298,7 +318,7 @@ def leave(
 
 
 @router.patch("/{cid}", response_model=schemas.ConversationOut)
-def rename(
+def update_group(
     cid: int,
     payload: schemas.RenameGroup,
     db: Session = Depends(get_db),
@@ -308,8 +328,8 @@ def rename(
     if not conv.is_group:
         raise HTTPException(status_code=400, detail="Not a group")
     if not cc.is_admin(db, cid, current_user.id):
-        raise HTTPException(status_code=403, detail="Only admins can rename")
-    cc.rename_group(db, cid, payload.title)
+        raise HTTPException(status_code=403, detail="Only admins can edit the group")
+    cc.update_group(db, cid, title=payload.title, avatar_url=payload.avatar_url)
     safe_broadcast_users(
         cc.member_ids(db, cid),
         {"type": "conversation_updated", "conversation_id": cid},

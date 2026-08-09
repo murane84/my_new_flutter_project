@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import 'api_service.dart';
+import 'token_helper.dart' show mediaAuthHeaders;
 import '../utils/toast_helper.dart';
 import '../utils/popup_shell.dart';
+import '../utils/app_config.dart';
 
 // Groups are presented as CARD POPUPS (AppPopupShell) — not full-window routes —
 // so on desktop they never hide the music/chat panels. Selecting or creating a
@@ -373,6 +377,409 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
                 style: TextStyle(color: scheme.onPrimaryContainer)),
           ),
           title: Text(name),
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Group info / settings — avatar · name · members · add/remove · leave
+// ─────────────────────────────────────────────────────────────────────────────
+
+class GroupInfoScreen extends StatefulWidget {
+  final int conversationId;
+  const GroupInfoScreen({super.key, required this.conversationId});
+
+  @override
+  State<GroupInfoScreen> createState() => _GroupInfoScreenState();
+}
+
+class _GroupInfoScreenState extends State<GroupInfoScreen> {
+  Map<String, dynamic>? _conv;
+  int? _myUid;
+  String _apiBase = '';
+  bool _loading = true;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    AppConfig.baseUrl.then((b) {
+      if (mounted) setState(() => _apiBase = b);
+    });
+    _load();
+  }
+
+  bool get _isAdmin => (_conv?['my_role']?.toString() ?? '') == 'admin';
+  List _members() => (_conv?['members'] as List?) ?? const [];
+
+  Future<void> _load() async {
+    _myUid ??= (await ApiService().getUserData())['id'] as int?;
+    final c = await ApiService().getConversation(widget.conversationId);
+    if (!mounted) return;
+    setState(() {
+      _conv = c;
+      _loading = false;
+    });
+  }
+
+  String? _fullAvatar() {
+    final a = (_conv?['avatar_url'] ?? '').toString();
+    if (a.isEmpty) return null;
+    return a.startsWith('http') ? a : '$_apiBase$a';
+  }
+
+  Future<void> _changeAvatar() async {
+    if (!_isAdmin) return;
+    try {
+      final x = await ImagePicker()
+          .pickImage(source: ImageSource.gallery, imageQuality: 80);
+      if (x == null) return;
+      setState(() => _busy = true);
+      final bytes = await x.readAsBytes();
+      final up = await ApiService()
+          .uploadMedia(bytes: bytes, filename: x.name, mime: 'image/jpeg');
+      if (up == null || up['url'] == null) {
+        throw Exception('upload failed');
+      }
+      final ok = await ApiService().updateGroup(widget.conversationId,
+          avatarUrl: up['url'].toString());
+      if (!mounted) return;
+      setState(() => _busy = false);
+      if (ok) {
+        await _load();
+      } else {
+        showToast(context, 'Could not update the photo.',
+            type: ToastType.error);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _busy = false);
+        showToast(context, 'Could not update the photo.',
+            type: ToastType.error);
+      }
+    }
+  }
+
+  Future<void> _rename() async {
+    if (!_isAdmin) return;
+    final ctrl =
+        TextEditingController(text: (_conv?['title'] ?? '').toString());
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('Group name'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dctx),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dctx, ctrl.text.trim()),
+              child: const Text('Save')),
+        ],
+      ),
+    );
+    if (newName == null || newName.isEmpty) return;
+    setState(() => _busy = true);
+    final ok = await ApiService()
+        .updateGroup(widget.conversationId, title: newName);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
+      await _load();
+    } else {
+      showToast(context, 'Could not rename.', type: ToastType.error);
+    }
+  }
+
+  Future<void> _removeMember(int uid) async {
+    setState(() => _busy = true);
+    final ok = await ApiService().removeGroupMember(widget.conversationId, uid);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
+      await _load();
+    } else {
+      showToast(context, 'Could not remove member.', type: ToastType.error);
+    }
+  }
+
+  Future<void> _addMembers() async {
+    final existing =
+        _members().map((m) => (m['user_id'] as num).toInt()).toSet();
+    final picked = await showAppPopup<List<int>>(
+      context,
+      _AddMembersPicker(exclude: existing),
+    );
+    if (picked == null || picked.isEmpty) return;
+    setState(() => _busy = true);
+    final ok = await ApiService().addGroupMembers(widget.conversationId, picked);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
+      await _load();
+    } else {
+      showToast(context, 'Could not add members.', type: ToastType.error);
+    }
+  }
+
+  Future<void> _leave() async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('Leave group?'),
+        content: const Text(
+            'You will stop receiving this group\'s messages.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dctx, true),
+              child: const Text('Leave')),
+        ],
+      ),
+    );
+    if (yes != true) return;
+    final ok = await ApiService().leaveConversation(widget.conversationId);
+    if (!mounted) return;
+    if (ok) {
+      Navigator.pop(context, 'left'); // caller closes the panel
+    } else {
+      showToast(context, 'Could not leave the group.', type: ToastType.error);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppPopupShell(
+      title: 'Group info',
+      icon: Icons.info_outline_rounded,
+      builder: (ctx, isWide) => _loading
+          ? const Padding(
+              padding: EdgeInsets.all(40),
+              child: Center(child: CircularProgressIndicator()))
+          : _body(ctx),
+    );
+  }
+
+  Widget _body(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final title = (_conv?['title'] ?? 'Group').toString();
+    final avatar = _fullAvatar();
+    final members = _members();
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      child: Column(
+        children: [
+          // Avatar (tap to change if admin)
+          GestureDetector(
+            onTap: (_isAdmin && !_busy) ? _changeAvatar : null,
+            child: Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                CircleAvatar(
+                  radius: 44,
+                  backgroundColor: scheme.primaryContainer,
+                  backgroundImage: avatar != null
+                      ? CachedNetworkImageProvider(avatar,
+                          headers: mediaAuthHeaders(avatar))
+                      : null,
+                  child: avatar == null
+                      ? Icon(Icons.groups_rounded,
+                          size: 40, color: scheme.onPrimaryContainer)
+                      : null,
+                ),
+                if (_isAdmin)
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                        color: scheme.primary, shape: BoxShape.circle),
+                    child: const Icon(Icons.camera_alt_rounded,
+                        size: 15, color: Colors.white),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Name (edit if admin)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(title,
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w700),
+                    overflow: TextOverflow.ellipsis),
+              ),
+              if (_isAdmin)
+                IconButton(
+                  icon: const Icon(Icons.edit_rounded, size: 18),
+                  onPressed: _busy ? null : _rename,
+                  tooltip: 'Rename',
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Text('${members.length} members',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurfaceVariant)),
+              const Spacer(),
+              if (_isAdmin)
+                TextButton.icon(
+                  onPressed: _busy ? null : _addMembers,
+                  icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                  label: const Text('Add'),
+                ),
+            ],
+          ),
+          const Divider(height: 8),
+          ...members.map((m) => _memberTile(m, scheme)),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _busy ? null : _leave,
+              icon: const Icon(Icons.logout_rounded),
+              label: const Text('Leave group'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: scheme.error,
+                side: BorderSide(color: scheme.error.withAlpha(120)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _memberTile(dynamic m, ColorScheme scheme) {
+    final uid = (m['user_id'] as num).toInt();
+    final name = (m['username'] ?? 'User').toString();
+    final role = (m['role'] ?? 'member').toString();
+    final isSelf = uid == _myUid;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      leading: CircleAvatar(
+        backgroundColor: scheme.primaryContainer,
+        child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+            style: TextStyle(color: scheme.onPrimaryContainer)),
+      ),
+      title: Text(isSelf ? '$name (You)' : name),
+      subtitle: role == 'admin'
+          ? Text('Admin',
+              style: TextStyle(fontSize: 11, color: scheme.primary))
+          : null,
+      trailing: (_isAdmin && !isSelf)
+          ? IconButton(
+              icon: Icon(Icons.remove_circle_outline_rounded,
+                  color: scheme.error),
+              tooltip: 'Remove',
+              onPressed: _busy ? null : () => _removeMember(uid),
+            )
+          : null,
+    );
+  }
+}
+
+// A small popup that returns the selected friend ids to add to a group.
+class _AddMembersPicker extends StatefulWidget {
+  final Set<int> exclude;
+  const _AddMembersPicker({required this.exclude});
+
+  @override
+  State<_AddMembersPicker> createState() => _AddMembersPickerState();
+}
+
+class _AddMembersPickerState extends State<_AddMembersPicker> {
+  List<Map<String, dynamic>> _friends = [];
+  final Set<int> _selected = {};
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    List<Map<String, dynamic>> list = [];
+    try {
+      list = await ApiService().getFriends();
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _friends = list
+          .where((f) => !widget.exclude.contains((f['id'] as num).toInt()))
+          .toList();
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppPopupShell(
+      title: 'Add members',
+      icon: Icons.person_add_alt_1_rounded,
+      headerAction: TextButton(
+        onPressed:
+            _selected.isEmpty ? null : () => Navigator.pop(context, _selected.toList()),
+        child: Text('Add (${_selected.length})',
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.w700)),
+      ),
+      builder: (ctx, isWide) {
+        final scheme = Theme.of(ctx).colorScheme;
+        if (_loading) {
+          return const Padding(
+            padding: EdgeInsets.all(30),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (_friends.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text('Everyone in your contacts is already here.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: scheme.onSurfaceVariant)),
+          );
+        }
+        return ListView.builder(
+          shrinkWrap: true,
+          itemCount: _friends.length,
+          itemBuilder: (_, i) {
+            final f = _friends[i];
+            final id = (f['id'] as num).toInt();
+            final name = (f['username'] ?? 'Friend').toString();
+            return CheckboxListTile(
+              value: _selected.contains(id),
+              onChanged: (v) => setState(() {
+                if (v == true) {
+                  _selected.add(id);
+                } else {
+                  _selected.remove(id);
+                }
+              }),
+              secondary: CircleAvatar(
+                backgroundColor: scheme.primaryContainer,
+                child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: TextStyle(color: scheme.onPrimaryContainer)),
+              ),
+              title: Text(name),
+            );
+          },
         );
       },
     );

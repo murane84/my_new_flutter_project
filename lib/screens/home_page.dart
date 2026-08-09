@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart'
     show kIsWeb, kReleaseMode, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:phone_numbers_parser/phone_numbers_parser.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
 // Hide intl's TextDirection so TextPainter/TextDirection.ltr resolve to dart:ui's.
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:provider/provider.dart';
@@ -13,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:marquee/marquee.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/toast_helper.dart';
 import '../utils/app_reload.dart';
 import '../utils/connection_status.dart';
@@ -103,6 +105,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // message pops a local notification).
   bool _appForeground = true;
   List<Map<String, dynamic>> _filteredFriends = [];
+  // Group conversations the user belongs to. They sit at the TOP of the same
+  // list as DMs, so a created/joined group appears right alongside friends.
+  List<Map<String, dynamic>> _groups = [];
+  List<Map<String, dynamic>> _filteredGroups = [];
   bool _isLoadingFriends = false;
 
   // ── Layout state ──────────────────────────────────────────────────────────
@@ -216,6 +222,108 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 15),
       (_) => _fetchFriends(quiet: true),
+    );
+
+    // Nudge users who have no phone number saved to add one (so friends can
+    // discover them via contacts). Shown after the first frame; dismissible.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptForPhone());
+  }
+
+  Future<void> _maybePromptForPhone() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('phone_prompt_dismissed') == true) return;
+      final me = await ApiService().getUserData();
+      final phone = (me['phone'] ?? '').toString().trim();
+      if (phone.isNotEmpty) return; // already has a number
+      if (!mounted) return;
+      _showAddPhoneDialog();
+    } catch (_) {/* never block the app on this */}
+  }
+
+  void _showAddPhoneDialog() {
+    final ctrl = TextEditingController();
+    bool saving = false;
+    showDialog<void>(
+      context: context,
+      builder: (dctx) => StatefulBuilder(
+        builder: (dctx, setLocal) {
+          final scheme = Theme.of(dctx).colorScheme;
+          Future<void> dismiss() async {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool('phone_prompt_dismissed', true);
+            if (dctx.mounted) Navigator.pop(dctx);
+          }
+
+          Future<void> save() async {
+            if (ctrl.text.trim().isEmpty) {
+              showToast(context, 'Enter your phone number.',
+                  type: ToastType.error);
+              return;
+            }
+            setLocal(() => saving = true);
+            final res =
+                await ApiService().updateProfile(phone: ctrl.text.trim());
+            if (res['success'] == true) {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setBool('phone_prompt_dismissed', true);
+              if (dctx.mounted) Navigator.pop(dctx);
+              if (mounted) {
+                showToast(context, 'Saved — friends can now find you.',
+                    type: ToastType.success);
+              }
+            } else {
+              setLocal(() => saving = false);
+              if (mounted) {
+                showToast(context,
+                    (res['message'] ?? 'Could not save your number.').toString(),
+                    type: ToastType.error);
+              }
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Add your phone number'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'So friends who have your number can find you on Aluta. '
+                  'It stays private — only used for contact matching.',
+                  style: TextStyle(
+                      fontSize: 13, color: scheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 14),
+                IntlPhoneField(
+                  initialCountryCode: 'TZ',
+                  decoration: InputDecoration(
+                    labelText: 'Phone number',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onChanged: (p) => ctrl.text = p.completeNumber,
+                  invalidNumberMessage: 'Enter a valid phone number',
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: saving ? null : dismiss,
+                child: const Text('Not now'),
+              ),
+              FilledButton(
+                onPressed: saving ? null : save,
+                child: saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2.4))
+                    : const Text('Add'),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -871,6 +979,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
       ref.read(unreadProvider.notifier).syncFromFriends(counts);
       ref.read(presenceProvider.notifier).syncFromFriends(online);
       ConnectionStatus.instance.set(true);
+      // Groups live in the same list — refresh them too (non-blocking).
+      _fetchGroups();
     } catch (_) {
       // ─── API error (401 session expired, network down, etc.) ────────────
       // IMPORTANT: do NOT overwrite _allFriends here.
@@ -887,6 +997,34 @@ class HomePageState extends rp.ConsumerState<HomePage>
         ConnectionStatus.instance.set(false);
       }
     }
+  }
+
+  /// Fetch the group conversations the user belongs to and keep them in
+  /// `_groups` (they render at the top of the friend list). Silent on failure —
+  /// a group fetch error must never disturb the DM list.
+  Future<void> _fetchGroups() async {
+    try {
+      final convs = await ApiService().listConversations();
+      if (!mounted) return;
+      final groups = convs
+          .where((c) => c['is_group'] == true)
+          .toList();
+      setState(() {
+        _groups = groups;
+        _filteredGroups = _applyGroupQuery(groups, _searchQuery);
+      });
+    } catch (_) {
+      // Keep whatever groups we already have.
+    }
+  }
+
+  List<Map<String, dynamic>> _applyGroupQuery(
+      List<Map<String, dynamic>> groups, String query) {
+    final q = query.toLowerCase();
+    if (q.isEmpty) return groups;
+    return groups
+        .where((g) => (g['title'] as String? ?? '').toLowerCase().contains(q))
+        .toList();
   }
 
   // ── Auto-reconnect (WhatsApp style) ──────────────────────────────────────
@@ -938,13 +1076,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
   }
 
+  String _searchQuery = '';
+
   void _filterFriends(String query) {
     final q = query.toLowerCase();
     setState(() {
+      _searchQuery = query;
       _filteredFriends = _allFriends
           .where((f) =>
               (f['username'] as String? ?? '').toLowerCase().contains(q))
           .toList();
+      _filteredGroups = _applyGroupQuery(_groups, query);
     });
   }
 
@@ -981,6 +1123,36 @@ class HomePageState extends rp.ConsumerState<HomePage>
   }
 
   void _closeGroupPanel() => setState(() => _activeGroup = null);
+
+  /// Open the group info / settings sheet for the active group (tapped from the
+  /// chat header). Refreshes the open header afterwards so a renamed group, a
+  /// new photo, or member changes reflect immediately; closes the panel if the
+  /// user left the group.
+  Future<void> _openGroupInfo() async {
+    final g = _activeGroup;
+    if (g == null) return;
+    final cid = (g['id'] as num).toInt();
+    final result = await showAppPopup<String>(
+      context,
+      GroupInfoScreen(conversationId: cid),
+    );
+    if (!mounted) return;
+    if (result == 'left') {
+      _closeGroupPanel();
+      _fetchGroups();
+      return;
+    }
+    // Any edit (rename / photo / members) → re-pull the conversation so the
+    // header and the group's list tile show the latest state.
+    final fresh = await ApiService().getConversation(cid);
+    if (!mounted) return;
+    if (fresh != null &&
+        _activeGroup != null &&
+        (_activeGroup!['id'] as num).toInt() == cid) {
+      setState(() => _activeGroup = fresh);
+    }
+    _fetchGroups();
+  }
 
   /// Read the phone's address book, match numbers against registered users, and
   /// auto-add the matches as friends. Android/iOS only.
@@ -1431,6 +1603,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     if (_activeGroup != null) {
       final g = _activeGroup!;
       final members = (g['members'] as List?) ?? const [];
+      final groupAvatar = _avatarFull(g['avatar_url']);
       return Row(
         children: [
           _PanelToggleBtn(
@@ -1439,30 +1612,64 @@ class HomePageState extends rp.ConsumerState<HomePage>
             tooltip: 'Back to messages',
             onTap: _closeGroupPanel,
           ),
-          const SizedBox(width: 10),
-          CircleAvatar(
-            radius: 17,
-            backgroundColor: scheme.primaryContainer,
-            child: Icon(Icons.groups_rounded,
-                color: scheme.onPrimaryContainer, size: 20),
-          ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 6),
+          // Tapping anywhere on the group identity opens Group info / settings.
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  (g['title'] ?? 'Group').toString(),
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 14),
-                  overflow: TextOverflow.ellipsis,
+            child: InkWell(
+              onTap: _openGroupInfo,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 17,
+                      backgroundColor: scheme.primaryContainer,
+                      backgroundImage: groupAvatar != null
+                          ? CachedNetworkImageProvider(groupAvatar,
+                              headers: mediaAuthHeaders(groupAvatar))
+                          : null,
+                      child: groupAvatar == null
+                          ? Icon(Icons.groups_rounded,
+                              color: scheme.onPrimaryContainer, size: 20)
+                          : null,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            (g['title'] ?? 'Group').toString(),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 14),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            '${members.length} members · tap for info',
+                            style: TextStyle(
+                                fontSize: 11, color: textColor.withAlpha(130)),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right_rounded,
+                        size: 20, color: textColor.withAlpha(90)),
+                  ],
                 ),
-                Text(
-                  '${members.length} members',
-                  style: TextStyle(
-                      fontSize: 11, color: textColor.withAlpha(130)),
-                ),
-              ],
+              ),
+            ),
+          ),
+          // Quick playlist drawer toggle — same shortcut as the DM header so the
+          // music library can pop in without leaving the group conversation.
+          ValueListenableBuilder<bool>(
+            valueListenable: playlistDrawerBus.isOpen,
+            builder: (_, open, _) => IconButton(
+              tooltip: open ? 'Hide playlist' : 'Playlist',
+              icon: Icon(Icons.queue_music_rounded,
+                  color: open ? scheme.primary : null),
+              onPressed: () => playlistDrawerBus.toggle?.call(),
             ),
           ),
         ],
@@ -1851,6 +2058,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final scheme = Theme.of(context).colorScheme;
     final textColor = scheme.onSurface;
 
+    // Groups sit at the TOP of the same list as DMs (WhatsApp-style unified
+    // chat list). Each item carries is_group so the builder picks the right row.
+    final combined = <Map<String, dynamic>>[
+      ..._filteredGroups,
+      ..._filteredFriends,
+    ];
+
     return Column(
       key: const ValueKey('friendList'),
       children: [
@@ -1876,7 +2090,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                   onRefresh: _onPullToRefresh,
                   // AlwaysScrollable → the list can overscroll (and so trigger
                   // the pull gesture) even when it's short or empty.
-                  child: _filteredFriends.isEmpty
+                  child: combined.isEmpty
                       ? ListView(
                           physics: const AlwaysScrollableScrollPhysics(),
                           children: [
@@ -1907,14 +2121,18 @@ class HomePageState extends rp.ConsumerState<HomePage>
                         )
                       : ListView.separated(
                           physics: const AlwaysScrollableScrollPhysics(),
-                          itemCount: _filteredFriends.length,
+                          itemCount: combined.length,
                           separatorBuilder: (ctx, i) => Divider(
                             height: 1,
                             indent: 68,
                             color: scheme.outlineVariant.withAlpha(70),
                           ),
-                          itemBuilder: (_, i) => _buildFriendTile(
-                              _filteredFriends[i], textColor, scheme),
+                          itemBuilder: (_, i) {
+                            final item = combined[i];
+                            return item['is_group'] == true
+                                ? _buildGroupTile(item, textColor, scheme)
+                                : _buildFriendTile(item, textColor, scheme);
+                          },
                         ),
                 ),
         ),
@@ -2025,6 +2243,119 @@ class HomePageState extends rp.ConsumerState<HomePage>
                 avatar: f['avatar_url'] as String?,
                 phone: f['phone'] as String?,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// A group conversation row in the unified chat list. Tapping opens the group
+  /// inside the chat panel (never a full-window route).
+  Widget _buildGroupTile(
+      Map<String, dynamic> g, Color textColor, ColorScheme scheme) {
+    final title = (g['title'] as String?)?.trim();
+    final name = (title == null || title.isEmpty) ? 'Group' : title;
+    final lastMsg = g['last_message'] as String? ?? '';
+    final lastTime = (g['last_timestamp'] ?? '').toString();
+    final unread = (g['unread_count'] as num?)?.toInt() ?? 0;
+    final hasUnread = unread > 0;
+    final avatar = _avatarFull(g['avatar_url']);
+
+    return InkWell(
+      onTap: () => openGroupInPanel(g),
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: scheme.primaryContainer,
+              backgroundImage: avatar != null
+                  ? CachedNetworkImageProvider(avatar,
+                      headers: mediaAuthHeaders(avatar))
+                  : null,
+              child: avatar == null
+                  ? Icon(Icons.groups_rounded,
+                      color: scheme.onPrimaryContainer, size: 24)
+                  : null,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.groups_rounded,
+                          size: 14, color: textColor.withAlpha(120)),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          name,
+                          style: TextStyle(
+                            fontWeight:
+                                hasUnread ? FontWeight.bold : FontWeight.w500,
+                            fontSize: 14,
+                            color: textColor,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    lastMsg.isEmpty ? 'Tap to open the group' : lastMsg,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: hasUnread
+                          ? textColor.withAlpha(200)
+                          : textColor.withAlpha(110),
+                      fontWeight:
+                          hasUnread ? FontWeight.w500 : FontWeight.normal,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  _formatFriendTimestamp(lastTime),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color:
+                        hasUnread ? scheme.primary : textColor.withAlpha(110),
+                    fontWeight:
+                        hasUnread ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                ),
+                if (hasUnread) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: scheme.primary,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      unread > 99 ? '99+' : '$unread',
+                      style: TextStyle(
+                        color: scheme.onPrimary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ],
         ),
@@ -2744,16 +3075,19 @@ class HomePageState extends rp.ConsumerState<HomePage>
   }
 
   // One row of the header overflow menu (icon + label).
-  PopupMenuItem<String> _menuItem(String value, IconData icon, String label) {
+  PopupMenuItem<String> _menuItem(String value, IconData icon, String label,
+      {bool destructive = false}) {
     final scheme = Theme.of(context).colorScheme;
+    final accent = destructive ? scheme.error : scheme.primary;
     return PopupMenuItem<String>(
       value: value,
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: scheme.onSurfaceVariant),
-          const SizedBox(width: 12),
-          Text(label),
-        ],
+      padding: EdgeInsets.zero,
+      child: _HoverMenuItem(
+        icon: icon,
+        label: label,
+        accent: accent,
+        textColor: destructive ? scheme.error : scheme.onSurface,
+        iconBg: scheme.surfaceContainerHighest,
       ),
     );
   }
@@ -2978,6 +3312,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
             icon: Icon(Icons.more_vert_rounded, color: scheme.onSurface),
             tooltip: 'Menu',
             position: PopupMenuPosition.under,
+            color: scheme.surface,
+            elevation: 10,
+            // Red accent outline so the menu is clearly separated from whatever
+            // UI sits behind it.
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: Color(0xFFE53935), width: 1.5),
+            ),
             onSelected: (v) async {
               switch (v) {
                 case 'groups':
@@ -3017,7 +3359,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
               _menuItem('profile', Icons.person_rounded, 'Profile'),
               _menuItem('legal', Icons.shield_outlined, 'Legal & About'),
               const PopupMenuDivider(),
-              _menuItem('logout', Icons.logout_rounded, 'Sign out'),
+              _menuItem('logout', Icons.logout_rounded, 'Sign out',
+                  destructive: true),
             ],
           ),
         ],

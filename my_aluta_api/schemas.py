@@ -153,7 +153,9 @@ class AddMembers(BaseModel):
 
 
 class RenameGroup(BaseModel):
-    title: str
+    # Group settings update — either/both. (Kept the name for compatibility.)
+    title: Optional[str] = None
+    avatar_url: Optional[str] = None
 
 
 class ReadUpTo(BaseModel):
@@ -195,6 +197,23 @@ class SeenByEntry(BaseModel):
     username: str
     avatar_url: Optional[str] = None
     read_at: Optional[datetime] = None
+
+
+class MessageInfoMember(BaseModel):
+    user_id: int
+    username: str
+    avatar_url: Optional[str] = None
+    phone: Optional[str] = None
+    # When they read (read list) or received (delivered list) the message.
+    timestamp: Optional[datetime] = None
+
+
+class MessageInfoOut(BaseModel):
+    # WhatsApp-style "Message info": every OTHER group member bucketed into
+    # exactly one of the three states for this message.
+    read: list[MessageInfoMember] = []
+    delivered: list[MessageInfoMember] = []
+    sent: list[MessageInfoMember] = []
 
 
 # ---------------------- CONTACTS SYNC ----------------------

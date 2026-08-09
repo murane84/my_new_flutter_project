@@ -2177,6 +2177,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   },
                 ),
               if (isMe) ...[
+                // Group only: who has read / received / not-yet-received this.
+                if (_isGroup && msg['is_deleted'] != true)
+                  _ActionTile(
+                    icon: Icons.info_outline_rounded,
+                    label: 'Message info',
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showMessageInfo(msg);
+                    },
+                  ),
                 if ((msg['message_type'] ?? 'text') == 'text' &&
                     msg['is_deleted'] != true &&
                     _withinEditWindow(msg))
@@ -2212,6 +2222,198 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         ),
       ),
     );
+  }
+
+  /// WhatsApp-style "Message info": three buckets — Read, Delivered (received
+  /// but not read), and Sent (not yet delivered) — for a message I sent to the
+  /// group. One scrollable sheet, one section per category.
+  void _showMessageInfo(Map<String, dynamic> msg) {
+    final rawId = msg['id'];
+    if (rawId == null) return;
+    final mid = rawId is int ? rawId : int.tryParse(rawId.toString()) ?? 0;
+    final scheme = Theme.of(context).colorScheme;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.62,
+        minChildSize: 0.4,
+        maxChildSize: 0.94,
+        expand: false,
+        builder: (c, scrollCtrl) => Container(
+          margin: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: FutureBuilder<Map<String, dynamic>?>(
+            future: ApiService().messageInfo(_cid, mid),
+            builder: (c, snap) {
+              final handle = Container(
+                margin: const EdgeInsets.symmetric(vertical: 10),
+                width: 36,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: scheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              );
+              if (snap.connectionState == ConnectionState.waiting) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    handle,
+                    const Padding(
+                      padding: EdgeInsets.all(40),
+                      child: CircularProgressIndicator(),
+                    ),
+                  ],
+                );
+              }
+              final data = snap.data;
+              if (data == null) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    handle,
+                    Padding(
+                      padding: const EdgeInsets.all(30),
+                      child: Text('Couldn\'t load message info.',
+                          style: TextStyle(color: scheme.onSurfaceVariant)),
+                    ),
+                  ],
+                );
+              }
+              final read = (data['read'] as List?) ?? const [];
+              final delivered = (data['delivered'] as List?) ?? const [];
+              final sent = (data['sent'] as List?) ?? const [];
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  handle,
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text('Message info',
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface)),
+                  ),
+                  const Divider(height: 1),
+                  Flexible(
+                    child: ListView(
+                      controller: scrollCtrl,
+                      padding: const EdgeInsets.only(bottom: 16),
+                      children: [
+                        _infoSection('Read by', Icons.done_all_rounded,
+                            const Color(0xFF1976D2), read, scheme),
+                        _infoSection(
+                            'Delivered to',
+                            Icons.done_all_rounded,
+                            scheme.onSurfaceVariant,
+                            delivered,
+                            scheme),
+                        _infoSection('Not yet received', Icons.check_rounded,
+                            scheme.onSurfaceVariant, sent, scheme),
+                        if (read.isEmpty && delivered.isEmpty && sent.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Center(
+                              child: Text('No other members in this group yet.',
+                                  style: TextStyle(
+                                      color: scheme.onSurfaceVariant)),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// One category block inside the Message-info sheet. Hidden when empty.
+  Widget _infoSection(String title, IconData icon, Color color, List members,
+      ColorScheme scheme) {
+    if (members.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 8),
+              Text(
+                '$title · ${members.length}',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+        ...members.map((m) => _infoMemberTile(m, scheme)),
+      ],
+    );
+  }
+
+  Widget _infoMemberTile(dynamic m, ColorScheme scheme) {
+    final name = (m['username'] ?? 'User').toString();
+    final phone = (m['phone'] ?? '').toString();
+    final avatarRel = (m['avatar_url'] ?? '').toString();
+    final avatar = avatarRel.isNotEmpty ? fullMediaUrl(avatarRel) : null;
+    final ts = (m['timestamp'] ?? '').toString();
+    return ListTile(
+      dense: true,
+      leading: CircleAvatar(
+        radius: 18,
+        backgroundColor: scheme.primaryContainer,
+        backgroundImage: avatar != null
+            ? CachedNetworkImageProvider(avatar,
+                headers: mediaAuthHeaders(avatar))
+            : null,
+        child: avatar == null
+            ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                style: TextStyle(color: scheme.onPrimaryContainer))
+            : null,
+      ),
+      title: Text(name, overflow: TextOverflow.ellipsis),
+      subtitle: phone.isNotEmpty
+          ? Text(phone,
+              style: TextStyle(
+                  fontSize: 11.5, color: scheme.onSurfaceVariant))
+          : null,
+      trailing: ts.isNotEmpty
+          ? Text(_infoTime(ts),
+              style: TextStyle(
+                  fontSize: 11, color: scheme.onSurfaceVariant))
+          : null,
+    );
+  }
+
+  /// Compact timestamp for a Message-info row (today → time only, else date).
+  String _infoTime(String iso) {
+    final t = DateTime.tryParse(iso);
+    if (t == null) return '';
+    final local = t.toLocal();
+    final now = DateTime.now();
+    final sameDay =
+        local.year == now.year && local.month == now.month && local.day == now.day;
+    return sameDay
+        ? DateFormat('HH:mm').format(local)
+        : DateFormat('MMM d, HH:mm').format(local);
   }
 
   // Parse the server reactions JSON ({"<uid>":"<emoji>"}) into a unique,
@@ -2828,9 +3030,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final Map senderMap = (msg['sender'] as Map?) ?? const {};
     final String senderName = (senderMap['username'] ?? '').toString();
     final String senderAvatar = (senderMap['avatar_url'] ?? '').toString();
-    // Which avatar/name to show on this received bubble.
+    final String senderPhone = (senderMap['phone'] ?? '').toString();
+    // Which avatar/name/phone to show on this received bubble.
     final String rxAvatar = _isGroup ? senderAvatar : _friendAvatar;
     final String rxName = _isGroup ? senderName : widget.friendName;
+    final String rxPhone = _isGroup ? senderPhone : '';
 
     final msgId = msg['id'].toString();
     final key = _msgKeys.putIfAbsent(msgId, () => GlobalKey());
@@ -2849,19 +3053,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         crossAxisAlignment:
             isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          // Group sender label — above the FIRST bubble of each sender's run.
-          if (_isGroup && !isMe && isFirst && rxName.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(left: 38, bottom: 2),
-              child: Text(
-                rxName,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w700,
-                  color: _senderColor(rxName, isDark),
-                ),
-              ),
-            ),
           _SwipeToReply(
             isMe: isMe,
             onReply: () {
@@ -2938,6 +3129,42 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // ── Group sender details — name (+ phone) INSIDE the
+                        // top of the first bubble of each sender's run, the way
+                        // WhatsApp shows unsaved group members. ──
+                        if (_isGroup && !isMe && isFirst && rxName.isNotEmpty && !tomb)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 3, right: 8),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    '~ $rxName',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: _senderColor(rxName, isDark),
+                                    ),
+                                  ),
+                                ),
+                                if (rxPhone.isNotEmpty) ...[
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    rxPhone,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w400,
+                                      color: textColor.withAlpha(150),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
                         // ── Deleted tombstone ─────────────────────────
                         if (tomb)
                           Row(

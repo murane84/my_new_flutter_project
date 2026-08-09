@@ -258,6 +258,40 @@ def message_receipts(db: Session, conversation_id: int, message_id: int, sender_
     }
 
 
+def message_info(db: Session, conversation_id: int, message_id: int, sender_id: int) -> dict:
+    """Bucket every OTHER member of the conversation into read / delivered (but
+    not yet read) / sent (not yet delivered), for a single sent message. This is
+    the data behind the WhatsApp-style "Message info" screen."""
+    members = (
+        db.query(ConversationMember)
+        .filter(
+            ConversationMember.conversation_id == conversation_id,
+            ConversationMember.user_id != sender_id,
+        )
+        .all()
+    )
+    read: list[dict] = []
+    delivered: list[dict] = []
+    sent: list[dict] = []
+    for m in members:
+        u = db.query(User).filter(User.id == m.user_id).first()
+        base = {
+            "user_id": m.user_id,
+            "username": (u.username if u else str(m.user_id)),
+            "avatar_url": (u.avatar_url if u else None),
+            "phone": (u.phone if u else None),
+        }
+        lr = m.last_read_message_id or 0
+        ld = m.last_delivered_message_id or 0
+        if lr >= message_id:
+            read.append({**base, "timestamp": m.last_read_at})
+        elif ld >= message_id:
+            delivered.append({**base, "timestamp": m.last_delivered_at})
+        else:
+            sent.append({**base, "timestamp": None})
+    return {"read": read, "delivered": delivered, "sent": sent}
+
+
 def seen_by(db: Session, conversation_id: int, message_id: int, exclude_user: int | None = None) -> list[dict]:
     q = (
         db.query(ConversationMember)
@@ -316,14 +350,23 @@ def set_role(db: Session, conversation_id: int, user_id: int, role: str) -> None
         db.commit()
 
 
-def rename_group(db: Session, conversation_id: int, title: str) -> None:
+def update_group(
+    db: Session,
+    conversation_id: int,
+    title: str | None = None,
+    avatar_url: str | None = None,
+) -> None:
     conv = get_conversation(db, conversation_id)
-    if conv:
-        new = (title or "").strip()
+    if not conv:
+        return
+    if title is not None:
+        new = title.strip()
         if new:
             conv.title = new
-        conv.updated_at = _now()
-        db.commit()
+    if avatar_url is not None:
+        conv.avatar_url = avatar_url.strip() or None
+    conv.updated_at = _now()
+    db.commit()
 
 
 # ── Listing ──────────────────────────────────────────────────────────────────

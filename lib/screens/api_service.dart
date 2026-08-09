@@ -907,6 +907,28 @@ class ApiService {
     }
   }
 
+  /// WhatsApp-style message info: three buckets (read / delivered / sent) of the
+  /// group's other members for one sent message. Returns null on failure.
+  Future<Map<String, dynamic>?> messageInfo(int cid, int messageId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.get(
+        Uri.parse(
+            '${await _baseUrl}/conversations/$cid/messages/$messageId/info'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode == 200) {
+        final body = jsonDecode(resp.body);
+        if (body is Map<String, dynamic>) return body;
+      }
+      return null;
+    } catch (e) {
+      _logger.e('messageInfo exception: $e');
+      return null;
+    }
+  }
+
   Future<bool> addGroupMembers(int cid, List<int> userIds) async {
     return _convAction('POST', '/conversations/$cid/members',
         body: {'user_ids': userIds});
@@ -920,8 +942,15 @@ class ApiService {
     return _convAction('POST', '/conversations/$cid/leave');
   }
 
-  Future<bool> renameGroup(int cid, String title) async {
-    return _convAction('PATCH', '/conversations/$cid', body: {'title': title});
+  Future<bool> renameGroup(int cid, String title) =>
+      updateGroup(cid, title: title);
+
+  /// Update group settings (name and/or avatar). Admin only (server-enforced).
+  Future<bool> updateGroup(int cid, {String? title, String? avatarUrl}) async {
+    return _convAction('PATCH', '/conversations/$cid', body: {
+      'title': ?title,
+      'avatar_url': ?avatarUrl,
+    });
   }
 
   Future<bool> _convAction(String method, String path,

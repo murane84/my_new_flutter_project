@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
+import 'package:phone_numbers_parser/phone_numbers_parser.dart';
 import 'api_service.dart';
 import 'token_helper.dart' show mediaAuthHeaders;
 import 'auth_page.dart';
@@ -182,13 +184,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       RegExp(r'[a-z]').hasMatch(p) &&
       RegExp(r'[0-9]').hasMatch(p);
 
-  String? _phoneError(String v) {
-    final p = v.trim();
-    if (p.isEmpty) return null; // phone optional on edit
-    final c = p.replaceAll(RegExp(r'[\s\-()]'), '');
-    if (!RegExp(r'^\+?\d{7,15}$').hasMatch(c)) return 'Enter a valid phone number';
-    return null;
-  }
+  // Phone validity is enforced by the IntlPhoneField (per country); the full
+  // E.164 value is written into _phone as the user types.
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -361,13 +358,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       validator: (v) =>
           (v == null || v.trim().isEmpty) ? 'Enter a username' : null,
     );
-    final phone = _textField(
-      _phone,
-      'Phone number',
-      Icons.phone_outlined,
-      keyboardType: TextInputType.phone,
-      validator: (v) => _phoneError(v ?? ''),
-    );
+    final phone = _phoneField(scheme);
     final curPw = _pwField(_currentPw, 'Current password', _obscureCur,
         () => setState(() => _obscureCur = !_obscureCur), Icons.lock_outline);
     final newPw = _pwField(_newPw, 'New password', _obscureNew,
@@ -587,6 +578,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
         t,
         style: TextStyle(fontWeight: FontWeight.w700, color: scheme.onSurface),
       );
+
+  // International phone field (country picker → E.164). Pre-filled from the
+  // saved number; writes the full E.164 value into [_phone] on change.
+  Widget _phoneField(ColorScheme scheme) {
+    String country = 'TZ';
+    String nsn = '';
+    final orig = _origPhone.trim();
+    if (orig.isNotEmpty) {
+      try {
+        final p = PhoneNumber.parse(orig);
+        country = p.isoCode.name;
+        nsn = p.nsn;
+      } catch (_) {
+        nsn = orig.replaceAll('+', '');
+      }
+    }
+    return IntlPhoneField(
+      initialCountryCode: country,
+      initialValue: nsn,
+      disableLengthCheck: false,
+      decoration: InputDecoration(
+        labelText: 'Phone number',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      onChanged: (phone) => _phone.text = phone.completeNumber,
+      invalidNumberMessage: 'Enter a valid phone number',
+    );
+  }
 
   Widget _textField(
     TextEditingController c,

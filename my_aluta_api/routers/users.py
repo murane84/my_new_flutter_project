@@ -97,7 +97,27 @@ def update_profile(
             current_user.username = new_username
 
     if payload.phone is not None:
-        current_user.phone = payload.phone.strip() or None
+        new_phone = payload.phone.strip()
+        if new_phone:
+            # Must be valid E.164 and unique (it's the contact-discovery key).
+            if not re.fullmatch(r"\+\d{8,15}", new_phone):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Enter a valid phone number with country code (e.g. +255…).",
+                )
+            clash = (
+                db.query(User)
+                .filter(User.phone == new_phone, User.id != current_user.id)
+                .first()
+            )
+            if clash:
+                raise HTTPException(
+                    status_code=400,
+                    detail="That phone number is already registered.",
+                )
+            current_user.phone = new_phone
+        else:
+            current_user.phone = None
 
     if payload.avatar_url is not None:
         current_user.avatar_url = payload.avatar_url.strip() or None

@@ -2449,10 +2449,19 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
         // seeing your online friends (plus the toast) already tells you you're
         // back online, so the word was redundant.
         return Container(
-          height: 44,
+          // Fill the footer colour behind the system navigation bar area too,
+          // then SafeArea lifts the 44px status row up above the 3-button nav
+          // bar (or the gesture pill) so the footer — and, because this is the
+          // Scaffold's bottomNavigationBar, the whole body above it (chat
+          // composer + now-playing bar) — never hides under the system controls.
           color: scheme.surfaceContainerHighest,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
+          child: SafeArea(
+            top: false,
+            child: SizedBox(
+              height: 44,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
             children: [
               // ── Left: server / connection status (tap to configure) ───────
               Tooltip(
@@ -2561,6 +2570,9 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
                 ),
               ),
             ],
+                ),
+              ),
+            ),
           ),
         );
       },

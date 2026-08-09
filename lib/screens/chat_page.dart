@@ -558,19 +558,34 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     if (!mounted) return;
 
     if (type == 'new_message') {
-      final msg = event['message'] as Map<String, dynamic>?;
+      // Backend sends the payload under `data` (a MessageWithSender), like every
+      // other branch below — NOT `message`. Reading the wrong key made the live
+      // insert (and the inline read-ack) silently dead when the chat was open.
+      final msg = event['data'] as Map<String, dynamic>?;
       if (msg != null) {
-        setState(() {
-          final id = msg['id'].toString();
-          if (!_messages.any((m) => m['id'].toString() == id)) {
-            _messages.insert(0, msg);
+        // The socket is per-user and carries EVERY conversation's events, so
+        // only accept messages that belong to THIS thread (me ↔ this friend).
+        final sId = msg['sender_id']?.toString();
+        final rId = msg['receiver_id']?.toString();
+        final fId = widget.friendId.toString();
+        final inThread =
+            (sId == fId && rId == _myId) || (sId == _myId && rId == fId);
+        if (inThread) {
+          setState(() {
+            final id = msg['id'].toString();
+            if (!_messages.any((m) => m['id'].toString() == id)) {
+              _messages.insert(0, msg);
+            }
+          });
+          // Only an incoming message (from the friend) drives read/badge state.
+          if (rId == _myId) {
+            if (_isAtBottom) {
+              _scrollToBottom();
+              ApiService().markMessagesAsReadPatch(widget.friendId);
+            } else {
+              setState(() => _hasNewMsg = true);
+            }
           }
-        });
-        if (_isAtBottom) {
-          _scrollToBottom();
-          ApiService().markMessagesAsReadPatch(widget.friendId);
-        } else {
-          setState(() => _hasNewMsg = true);
         }
       }
     } else if (type == 'message_delivered') {
@@ -1692,6 +1707,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           isMe: isMe,
           accent: scheme.primary,
           onColor: textColor,
+          onDownload: () => _saveMediaToDevice(msg),
         );
       default:
         return _fileBubble(url, msg, textColor, scheme);
@@ -1827,9 +1843,18 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                 ],
               ),
             ),
-            const SizedBox(width: 6),
-            Icon(Icons.download_rounded,
-                size: 18, color: textColor.withAlpha(160)),
+            const SizedBox(width: 2),
+            // Explicit "Save to device" (Save As…). Tapping the rest of the
+            // bubble still opens/previews the file.
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+              tooltip: 'Save to device',
+              icon: Icon(Icons.download_rounded,
+                  size: 20, color: textColor.withAlpha(180)),
+              onPressed: () => _saveMediaToDevice(msg),
+            ),
           ],
         ),
       ),
@@ -1905,6 +1930,95 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           .share(ShareParams(files: [XFile(file.path)]));
     } catch (_) {
       if (mounted) showToast(context, 'Could not save image', type: ToastType.error);
+    }
+  }
+
+  /// Save ANY received media message (shared song, PDF, doc, image, voice note)
+  /// out to the user's own device storage. For ephemeral songs the server copy
+  /// may already be purged, so we read from the LOCAL CACHE first and only fall
+  /// back to the network while the bytes still live there. The bytes are then
+  /// handed to [_saveBytesToDevice], which shows a real "Save As…" dialog.
+  Future<void> _saveMediaToDevice(Map<String, dynamic> msg) async {
+    final rel = msg['media_url'] as String?;
+    if (rel == null || rel.isEmpty) return;
+    final name = (msg['media_name'] as String?)?.trim();
+    final mime = msg['media_mime'] as String?;
+    final type = (msg['message_type'] as String?) ?? 'file';
+    try {
+      if (mounted) showToast(context, 'Preparing download…');
+      List<int>? bytes;
+      // Ephemeral song → prefer the on-device cache (survives server purge).
+      final id = SongCache.assetId(rel);
+      if (id != null) {
+        final cached =
+            await SongCache.cachedPath(id, filename: name, mime: mime);
+        if (cached != null) bytes = await File(cached).readAsBytes();
+      }
+      // Otherwise pull from the server while it still has the bytes.
+      if (bytes == null || bytes.isEmpty) {
+        final url = fullMediaUrl(rel);
+        final res =
+            await http.get(Uri.parse(url), headers: mediaAuthHeaders(url));
+        if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
+          bytes = res.bodyBytes;
+        }
+      }
+      if (bytes == null || bytes.isEmpty) {
+        if (mounted) {
+          showToast(context,
+              type == 'song'
+                  ? 'Song is no longer available'
+                  : 'File is no longer available',
+              type: ToastType.error);
+        }
+        return;
+      }
+      final ext = type == 'song' ? '.mp3' : '';
+      final fallback =
+          'aluta_${type}_${DateTime.now().millisecondsSinceEpoch}$ext';
+      await _saveBytesToDevice(
+          bytes, (name == null || name.isEmpty) ? fallback : name);
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not save', type: ToastType.error);
+      }
+    }
+  }
+
+  /// Present a real "Save As…" flow and write [bytes] there. `FilePicker.saveFile`
+  /// (v12) shows a native Save dialog on desktop and the system "Save to"
+  /// location picker on mobile, and — because `bytes` is passed — writes the
+  /// file itself, returning the chosen path (null if the user cancels). If the
+  /// platform doesn't support the dialog, we fall back to the share/save sheet.
+  Future<void> _saveBytesToDevice(List<int> bytes, String fname) async {
+    final data = Uint8List.fromList(bytes);
+    try {
+      final saved = await FilePicker.saveFile(
+        dialogTitle: 'Save to device',
+        fileName: fname,
+        bytes: data,
+      );
+      // A null result is a user cancel, not an error.
+      if (saved != null && mounted) {
+        showToast(context, 'Saved to device', type: ToastType.success);
+      }
+    } catch (_) {
+      // saveFile unsupported here → fall back to the system share/save sheet.
+      await _shareBytes(data, fname);
+    }
+  }
+
+  /// Fallback saver: write to a temp file and open the OS share/save sheet.
+  Future<void> _shareBytes(Uint8List data, String fname) async {
+    try {
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/$fname');
+      await file.writeAsBytes(data, flush: true);
+      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not save', type: ToastType.error);
+      }
     }
   }
 
@@ -1995,6 +2109,19 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   onTap: () {
                     Navigator.pop(ctx);
                     _showForwardPicker(msg);
+                  },
+                ),
+              // Save any received/sent media (song, PDF, doc, image, voice
+              // note) to the device's own storage via a Save As… dialog.
+              if (msg['is_deleted'] != true &&
+                  (msg['message_type'] ?? 'text') != 'text' &&
+                  (msg['media_url'] as String? ?? '').isNotEmpty)
+                _ActionTile(
+                  icon: Icons.download_rounded,
+                  label: 'Save to device',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _saveMediaToDevice(msg);
                   },
                 ),
               if (isMe) ...[
@@ -3323,7 +3450,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           Offstage(
             offstage: !_showEmoji,
             child: Container(
-              height: 306,
+              // GIF/sticker tab gets a taller panel so the denser grid shows
+              // ~2–3 rows at a glance (was 306 → only one big row fit). The
+              // emoji tab keeps 306 so the emoji picker (fixed 262 internal
+              // height) doesn't leave a gap below it.
+              height: _emojiTab == 1 ? 372 : 306,
               decoration: BoxDecoration(
                 color: scheme.surface,
                 border: Border(

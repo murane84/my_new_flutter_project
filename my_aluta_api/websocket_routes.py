@@ -1,4 +1,5 @@
 # websocket_routes.py
+import asyncio
 import json
 from typing import Optional
 
@@ -9,6 +10,7 @@ from config import SECRET_KEY, ALGORITHM
 from database import SessionLocal
 from models import User
 from websocket_manager import connected_users, disconnect_user, notify_user
+from push import send_push_to_user
 
 router = APIRouter()
 
@@ -63,9 +65,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
     # 🔒 This socket used to trust the {user_id} in the path blindly, so anyone
     # could subscribe as anyone. Require a valid JWT (passed as ?token=<jwt>)
     # whose user matches {user_id}, exactly like /live/ws.
-    if _authenticate_ws(token, user_id) is None:
+    caller = _authenticate_ws(token, user_id)
+    if caller is None:
         await websocket.close(code=4401)  # unauthorized
         return
+    # Column attributes are already loaded, so this is safe after the auth
+    # helper closed its session. Used to label the incoming-call push.
+    caller_name = caller.username or "Someone"
 
     # Register the now-authenticated socket. (We register here rather than via
     # connect_user() because that helper also calls websocket.accept(), and we
@@ -111,6 +117,23 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                         await notify_user(int(to), payload)
                     except Exception:
                         pass
+                    # Wake the callee if their app is backgrounded/closed — only
+                    # for the initial offer (that's what starts the ringing).
+                    # Runs off the event loop so a slow FCM call never stalls
+                    # signaling.
+                    if etype == "call_offer":
+                        try:
+                            asyncio.create_task(asyncio.to_thread(
+                                send_push_to_user,
+                                int(to),
+                                {
+                                    "type": "call_offer",
+                                    "from": str(user_id),
+                                    "caller_name": caller_name,
+                                },
+                            ))
+                        except Exception:
+                            pass
             # (Other event types are still accepted and ignored, keeping the
             #  socket alive as a heartbeat.)
 

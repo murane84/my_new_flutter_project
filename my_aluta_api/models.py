@@ -176,3 +176,27 @@ class MediaAsset(Base):
 
     def __repr__(self):
         return f"<MediaAsset(id={self.id}, mime='{self.mime}', size={self.size})>"
+
+
+class DeviceToken(Base):
+    """A Firebase Cloud Messaging (FCM) registration token for one of a user's
+    devices. Used to push new-message / incoming-call notifications when the app
+    is backgrounded or closed (the WebSocket is dead then). One row per device
+    token; a token is unique and re-homed to whoever last registered it (tokens
+    can migrate between users on a shared device after logout/login)."""
+    __tablename__ = "device_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        index=True, nullable=False,
+    )
+    token = Column(String, unique=True, index=True, nullable=False)
+    platform = Column(String, nullable=True)   # "android" | "ios" | "web"
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", foreign_keys=[user_id], passive_deletes=True)
+
+    def __repr__(self):
+        return f"<DeviceToken(user_id={self.user_id}, platform='{self.platform}')>"

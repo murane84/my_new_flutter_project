@@ -48,6 +48,10 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
+    <!-- FCM incoming-call notifications: show a full-screen ringing intent over
+         the lock screen (Android 14+ requires this permission). -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
     <application
         android:label="Aluta"
         android:name="${applicationName}"
@@ -92,6 +96,13 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- FCM: the default channel a data/notification message is posted to if
+             it doesn't name one. Matches the "Messages" channel created in
+             notif_service.dart so background pushes ring on the right channel. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="aluta_messages" />
 
         <!-- audio_service: media session (car / Bluetooth / lock-screen
              controls) + foreground playback service. -->

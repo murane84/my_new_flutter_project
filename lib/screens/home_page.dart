@@ -28,6 +28,7 @@ import 'legal_screen.dart';
 import '../services/live_session_service.dart'
     show activeLiveSession, endActiveLiveSession;
 import '../services/notif_service.dart';
+import '../services/fcm_service.dart';
 import 'token_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
@@ -157,6 +158,12 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
     _fetchFriends();          // then refresh from network
     _loadLayoutState();
     _discoverServer();
+
+    // Register this device for push notifications (Android/iOS; no-op else) so
+    // messages/calls wake the phone when the app is backgrounded or closed. The
+    // authed home only mounts after login, so this doubles as "register on
+    // login" and re-registers on every relaunch (token can rotate).
+    FcmService.instance.registerToken();
 
     // Foreground heartbeat: keep the server-side presence alive while the app
     // is open, so idling no longer silently drops the user offline.
@@ -658,6 +665,17 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
     if (type == 'new_message' || type == 'message' || type == 'chat_message') {
       final data =
           (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      // Mark delivered the moment our device receives the message — on ANY
+      // screen — so the sender's tick turns to a gray double without us having
+      // to open the chat. (Read is only marked when we actually view it.)
+      // NOTE: dropped during an earlier home_page rebuild, which regressed the
+      // gray double-tick — keep this here.
+      final mid = data['id'];
+      if (mid != null &&
+          data['receiver_id']?.toString() == _myUserId?.toString() &&
+          data['delivered'] == false) {
+        ApiService().markMessageAsDelivered(mid);
+      }
       // Backend payload is a MessageWithSender: sender is a nested user object
       // and the text lives in `content`.
       final senderObj = (data['sender'] as Map?)?.cast<String, dynamic>();
@@ -1059,6 +1077,9 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
       },
     );
     if (confirmed != true) return;
+    // Stop pushes reaching this device for the account we're leaving (done while
+    // the token is still valid, before logoutUser clears it). Best-effort.
+    await FcmService.instance.unregisterToken();
     await ApiService().logoutUser();
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
@@ -1127,18 +1148,22 @@ class HomePageState extends rp.ConsumerState<HomePage> with WidgetsBindingObserv
     return Container(
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        // Rounded on ALL FOUR corners so the panel reads as one floating card —
+        // the bottom corners emerge from the footer just like the top corners
+        // emerge from the header (both sit on the same surfaceContainerHighest
+        // background), for a smoother, symmetric look.
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
             color: theme.shadowColor.withAlpha(35),
-            blurRadius: 10,
-            offset: const Offset(0, -1),
+            blurRadius: 12,
+            offset: const Offset(0, 0),
           ),
         ],
       ),
       // Clip the child to the rounded shape so scrolling content can never
-      // paint into the top corners (which was flickering the header/triangle
-      // pockets faintly visible during a fast scroll).
+      // paint into the corners (which was flickering faint pockets at the top
+      // during a fast scroll; the same clip now also cleans the bottom corners).
       clipBehavior: Clip.antiAlias,
       padding: padding ?? const EdgeInsets.all(14),
       child: child,

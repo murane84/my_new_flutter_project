@@ -19,8 +19,11 @@ import 'services/biometric_service.dart';
 import 'screens/friends_list_screen.dart';
 import 'screens/chat_page.dart';
 import 'screens/music_controls.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'services/audio_handler.dart';
 import 'services/notif_service.dart';
+import 'services/fcm_service.dart';
 import 'services/metadata_overrides.dart';
 import 'services/live_session_service.dart' show liveHostNotify;
 import 'utils/toast_helper.dart';
@@ -73,6 +76,17 @@ Future<void> consumeInitialSharedMedia() async {
   } catch (_) {/* platform without the plugin */}
 }
 
+/// FCM background/terminated handler. Runs in its OWN isolate, so it must
+/// initialise Firebase itself, then it turns the data push into a local
+/// notification. Must be a top-level function annotated for AOT entry.
+@pragma('vm:entry-point')
+Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
+  try {
+    await Firebase.initializeApp();
+    await handleFcmData(message.data);
+  } catch (_) {/* best-effort */}
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Media session (car / Bluetooth / lock-screen controls + a foreground
@@ -80,6 +94,18 @@ void main() async {
   // failure never blocks launch.
   await initAudioService();
   await initNotifications();
+  // Push notifications (Android/iOS only). Firebase reads its config from
+  // android/app/google-services.json; if that or the Firebase project isn't set
+  // up yet, this whole block fails softly and the app still runs (WebSocket-only
+  // delivery). Register the background handler BEFORE runApp so terminated-state
+  // pushes are handled.
+  if (fcmSupported) {
+    try {
+      await Firebase.initializeApp();
+      FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
+      await FcmService.instance.init();
+    } catch (_) {/* Firebase not configured yet — non-fatal */}
+  }
   await metadataStore.load();
   // Warm the in-memory auth caches (access token + API origin) before any UI
   // renders, so the very first avatar/image frame can attach the auth header to

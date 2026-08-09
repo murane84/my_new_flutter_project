@@ -31,6 +31,19 @@ INACTIVITY_TIMEOUT_MINUTES = int(os.getenv("INACTIVITY_TIMEOUT_MINUTES", 60))
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
+# ---------------------------------------------------------------------------
+# Firebase Cloud Messaging (push notifications)
+# ---------------------------------------------------------------------------
+# The FCM HTTP v1 API needs (1) the Firebase project id and (2) a service
+# account to mint OAuth2 access tokens. Provide the service account EITHER as a
+# raw JSON string in FIREBASE_SERVICE_ACCOUNT_JSON (recommended on Railway — set
+# it as a variable, never commit the file) OR as a path in
+# FIREBASE_SERVICE_ACCOUNT_FILE. If neither is set, push is disabled and the app
+# still works (WebSocket delivery only) — pushes are best-effort.
+FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID")
+FIREBASE_SERVICE_ACCOUNT_JSON = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+FIREBASE_SERVICE_ACCOUNT_FILE = os.getenv("FIREBASE_SERVICE_ACCOUNT_FILE")
+
 # Log which database backend is in use (never print credentials).
 try:
     _scheme = DATABASE_URL.split("://", 1)[0]

@@ -19,6 +19,7 @@ from routers import messages as messages_router
 from routers import users as users_router
 from routers import upload
 from routers import attachments
+from routers import devices as devices_router
 from routers import live as live_router
 from websocket_routes import router as websocket_router
 import websocket_manager
@@ -49,6 +50,8 @@ app.include_router(users_router.router)
 app.include_router(messages_router.router)
 app.include_router(upload.router)
 app.include_router(attachments.router)
+# Device (FCM) token registration for push notifications.
+app.include_router(devices_router.router)
 # Listen-together (live session) endpoints: POST /live/sessions, /live/ws/{id},
 # /live/sessions/{id}/end. Without this include the whole /live prefix 404s and
 # starting a listen-together session fails.

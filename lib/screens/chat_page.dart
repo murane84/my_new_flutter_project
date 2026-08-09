@@ -114,14 +114,30 @@ class ChatPage extends StatefulWidget {
   final bool showAppBar;
   final Function(bool, String?)? onFriendOnlineStatusChanged;
 
+  // ── Group mode ──────────────────────────────────────────────────────────
+  // When [conversationId] is set and [isGroup] is true this same screen runs as
+  // a GROUP chat: fetch/send/read via the /conversations endpoints, route WS by
+  // conversation_id, and show sender labels + avatars. DMs leave these
+  // null/false and behave exactly as before.
+  final int? conversationId;
+  final bool isGroup;
+  final String groupTitle;
+  final String groupAvatar;
+  final int memberCount;
+
   const ChatPage({
     super.key,
-    required this.friendId,
+    this.friendId = 0,
     required this.friendName,
     this.friendAvatar = '',
     required this.textColor,
     this.showAppBar = true,
     this.onFriendOnlineStatusChanged,
+    this.conversationId,
+    this.isGroup = false,
+    this.groupTitle = '',
+    this.groupAvatar = '',
+    this.memberCount = 0,
   });
 
   @override
@@ -129,6 +145,10 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
+  // True when this screen is showing a GROUP conversation (vs a 1:1 DM).
+  bool get _isGroup => widget.isGroup && widget.conversationId != null;
+  int get _cid => widget.conversationId ?? 0;
+
   String? _myId;
   bool _isLoading = true;
   bool _isFriendOnline = false;
@@ -255,7 +275,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(ChatPage old) {
     super.didUpdateWidget(old);
-    if (old.friendId != widget.friendId) {
+    if (old.friendId != widget.friendId ||
+        old.conversationId != widget.conversationId) {
       setState(() {
         _isLoading = true;
         _messages.clear();
@@ -299,15 +320,24 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     if (uid == null) return;
 
     try {
-      final msgs = await ApiService().fetchMessagesBetween(
-        uid, widget.friendId,
-        skip: 0, limit: 60,
-      );
+      final msgs = _isGroup
+          ? await ApiService()
+              .fetchConversationMessages(_cid, skip: 0, limit: 60)
+          : await ApiService().fetchMessagesBetween(
+              uid, widget.friendId,
+              skip: 0, limit: 60,
+            );
 
-      final unread = msgs.any((m) =>
-          m['receiver_id'].toString() == _myId && m['is_read'] == false);
+      final unread = _isGroup
+          ? msgs.any((m) => m['sender_id'].toString() != _myId)
+          : msgs.any((m) =>
+              m['receiver_id'].toString() == _myId && m['is_read'] == false);
       if (unread && _isAtBottom) {
-        await ApiService().markMessagesAsReadPatch(widget.friendId);
+        if (_isGroup) {
+          await ApiService().markConversationRead(_cid);
+        } else {
+          await ApiService().markMessagesAsReadPatch(widget.friendId);
+        }
       }
 
       if (!mounted) return;
@@ -359,8 +389,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   // ── Message cache (offline persistence) ──────────────────────────────────
 
-  String get _cacheKey =>
-      'chat_cache_${_myId ?? 'x'}_${widget.friendId}';
+  String get _cacheKey => _isGroup
+      ? 'chat_cache_${_myId ?? 'x'}_g$_cid'
+      : 'chat_cache_${_myId ?? 'x'}_${widget.friendId}';
 
   Future<void> _loadCachedMessages() async {
     try {
@@ -456,10 +487,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     // on already-visible messages are captured every cycle — no manual refresh needed.
     List<Map<String, dynamic>> fetched;
     try {
-      fetched = await ApiService().fetchMessagesBetween(
-        uid, widget.friendId,
-        skip: 0, limit: 60,
-      );
+      fetched = _isGroup
+          ? await ApiService()
+              .fetchConversationMessages(_cid, skip: 0, limit: 60)
+          : await ApiService().fetchMessagesBetween(
+              uid, widget.friendId,
+              skip: 0, limit: 60,
+            );
     } catch (_) {
       // A single poll failure is not proof the whole server is down — leave the
       // connection status to the app-wide heartbeat so indicators stay in sync.
@@ -479,7 +513,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       }
     }
 
-    // Mark delivered
+    if (_isGroup) {
+      // Groups: fetching already advanced our delivered pointer server-side;
+      // just keep the read pointer current while we're at the bottom.
+      if (_isAtBottom) ApiService().markConversationRead(_cid);
+      return;
+    }
+
+    // Mark delivered (DM)
     for (final m in fetched) {
       if (m['receiver_id'].toString() == _myId &&
           m['delivered'] == false) {
@@ -564,12 +605,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       final msg = event['data'] as Map<String, dynamic>?;
       if (msg != null) {
         // The socket is per-user and carries EVERY conversation's events, so
-        // only accept messages that belong to THIS thread (me ↔ this friend).
+        // only accept messages that belong to THIS thread: matching
+        // conversation_id for a group, or the me↔friend pair for a DM.
         final sId = msg['sender_id']?.toString();
         final rId = msg['receiver_id']?.toString();
         final fId = widget.friendId.toString();
-        final inThread =
-            (sId == fId && rId == _myId) || (sId == _myId && rId == fId);
+        final inThread = _isGroup
+            ? msg['conversation_id']?.toString() == _cid.toString()
+            : (sId == fId && rId == _myId) || (sId == _myId && rId == fId);
+        // Incoming = from someone else (a friend in a DM, any member in a group).
+        final incoming = _isGroup ? (sId != _myId) : (rId == _myId);
         if (inThread) {
           setState(() {
             final id = msg['id'].toString();
@@ -577,11 +622,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               _messages.insert(0, msg);
             }
           });
-          // Only an incoming message (from the friend) drives read/badge state.
-          if (rId == _myId) {
+          if (incoming) {
             if (_isAtBottom) {
               _scrollToBottom();
-              ApiService().markMessagesAsReadPatch(widget.friendId);
+              if (_isGroup) {
+                ApiService().markConversationRead(_cid);
+              } else {
+                ApiService().markMessagesAsReadPatch(widget.friendId);
+              }
             } else {
               setState(() => _hasNewMsg = true);
             }
@@ -1269,9 +1317,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   void _onTextChanged() {
     setState(() {});
     _markActivity();
-    if (!_iTyping) {
+    if (!_iTyping && !_isGroup) {
+      // Typing indicators are DM-only for now (group typing needs per-member
+      // fan-out — deferred).
       _iTyping = true;
-      // Send typing event via WS
       try {
         _ws.sendEvent({'type': 'typing', 'to': widget.friendId});
       } catch (_) {}
@@ -1301,7 +1350,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _scrollToBottom();
 
     try {
-      final sent = await ApiService().sendMessage(widget.friendId, content);
+      final sent = await ApiService().sendMessage(widget.friendId, content,
+          conversationId: widget.conversationId);
       if (sent == null) {
         if (mounted) {
           _showErrorSnack('Message failed to send. Tap to retry.');
@@ -1390,6 +1440,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         mediaUrl: url,
         mediaName: 'sticker.gif',
         mediaMime: 'image/gif',
+        conversationId: widget.conversationId,
       );
       if (sent != null && mounted) {
         setState(() {
@@ -1649,6 +1700,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         mediaMime: (up['mime'] ?? mime) as String?,
         mediaSize: (up['size'] as num?)?.toInt(),
         mediaDuration: durationMs,
+        conversationId: widget.conversationId,
       );
       if (sent != null && mounted) {
         setState(() {
@@ -2669,6 +2721,17 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   // Checks if two adjacent messages (list is reversed = newer first) should
   // be grouped: same sender, within 3 minutes of each other.
+  // Stable, readable colour per sender name (group sender labels) — same idea
+  // as WhatsApp's per-participant name colours.
+  Color _senderColor(String name, bool isDark) {
+    int h = 0;
+    for (final c in name.codeUnits) {
+      h = (h * 31 + c) & 0x7fffffff;
+    }
+    final hue = (h % 360).toDouble();
+    return HSLColor.fromAHSL(1.0, hue, 0.55, isDark ? 0.72 : 0.42).toColor();
+  }
+
   bool _grouped(int index) {
     if (index + 1 >= _messages.length) return false;
     final curr = _messages[index];
@@ -2760,6 +2823,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     // ── Spacing: tighter between grouped messages ──────────────────────────
     final topPad = showAvatar ? 6.0 : 2.0; // gap before new group
 
+    // In a GROUP, received bubbles carry the sender's own name + avatar (so you
+    // can tell who said what). For DMs these are unused (the friend is implied).
+    final Map senderMap = (msg['sender'] as Map?) ?? const {};
+    final String senderName = (senderMap['username'] ?? '').toString();
+    final String senderAvatar = (senderMap['avatar_url'] ?? '').toString();
+    // Which avatar/name to show on this received bubble.
+    final String rxAvatar = _isGroup ? senderAvatar : _friendAvatar;
+    final String rxName = _isGroup ? senderName : widget.friendName;
+
     final msgId = msg['id'].toString();
     final key = _msgKeys.putIfAbsent(msgId, () => GlobalKey());
     return AnimatedContainer(
@@ -2777,6 +2849,19 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         crossAxisAlignment:
             isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
+          // Group sender label — above the FIRST bubble of each sender's run.
+          if (_isGroup && !isMe && isFirst && rxName.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 38, bottom: 2),
+              child: Text(
+                rxName,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: _senderColor(rxName, isDark),
+                ),
+              ),
+            ),
           _SwipeToReply(
             isMe: isMe,
             onReply: () {
@@ -2799,17 +2884,17 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         ? CircleAvatar(
                             radius: 13,
                             backgroundColor: scheme.primaryContainer,
-                            backgroundImage: _friendAvatar.isNotEmpty
+                            backgroundImage: rxAvatar.isNotEmpty
                                 ? CachedNetworkImageProvider(
-                                    fullMediaUrl(_friendAvatar),
+                                    fullMediaUrl(rxAvatar),
                                     headers: mediaAuthHeaders(
-                                        fullMediaUrl(_friendAvatar)))
+                                        fullMediaUrl(rxAvatar)))
                                 : null,
-                            child: _friendAvatar.isNotEmpty
+                            child: rxAvatar.isNotEmpty
                                 ? null
                                 : Text(
-                                    widget.friendName.isNotEmpty
-                                        ? widget.friendName[0].toUpperCase()
+                                    rxName.isNotEmpty
+                                        ? rxName[0].toUpperCase()
                                         : '?',
                                     style: TextStyle(
                                       color: scheme.onPrimaryContainer,
@@ -3748,6 +3833,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
     if (!widget.showAppBar) return body;
 
+    final String headerTitle = _isGroup ? widget.groupTitle : widget.friendName;
+    final String headerAvatar = _isGroup ? widget.groupAvatar : _friendAvatar;
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -3756,38 +3843,42 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               radius: 16,
               backgroundColor:
                   Theme.of(context).colorScheme.primaryContainer,
-              backgroundImage: _friendAvatar.isNotEmpty
-                  ? CachedNetworkImageProvider(fullMediaUrl(_friendAvatar),
-                      headers: mediaAuthHeaders(fullMediaUrl(_friendAvatar)))
+              backgroundImage: headerAvatar.isNotEmpty
+                  ? CachedNetworkImageProvider(fullMediaUrl(headerAvatar),
+                      headers: mediaAuthHeaders(fullMediaUrl(headerAvatar)))
                   : null,
-              child: _friendAvatar.isNotEmpty
+              child: headerAvatar.isNotEmpty
                   ? null
-                  : Text(
-                      widget.friendName.isNotEmpty
-                          ? widget.friendName[0].toUpperCase()
-                          : '?',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 13),
-                    ),
+                  : (_isGroup
+                      ? const Icon(Icons.groups_rounded, size: 18)
+                      : Text(
+                          headerTitle.isNotEmpty
+                              ? headerTitle[0].toUpperCase()
+                              : '?',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 13),
+                        )),
             ),
             const SizedBox(width: 10),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.friendName,
+                Text(headerTitle,
                     style: const TextStyle(
                         fontSize: 15, fontWeight: FontWeight.bold)),
                 Text(
-                  _friendTyping
-                      ? 'typing…'
-                      : _isFriendOnline
-                          ? 'online'
-                          : _lastSeen.isNotEmpty
-                              ? 'last seen ${formatLastSeen(_lastSeen)}'
-                              : 'offline',
+                  _isGroup
+                      ? '${widget.memberCount} members'
+                      : _friendTyping
+                          ? 'typing…'
+                          : _isFriendOnline
+                              ? 'online'
+                              : _lastSeen.isNotEmpty
+                                  ? 'last seen ${formatLastSeen(_lastSeen)}'
+                                  : 'offline',
                   style: TextStyle(
                     fontSize: 11,
-                    color: _friendTyping || _isFriendOnline
+                    color: (!_isGroup && (_friendTyping || _isFriendOnline))
                         ? Colors.green
                         : Theme.of(context)
                             .colorScheme
@@ -3798,18 +3889,20 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Call ${widget.friendName}',
-            icon: const Icon(Icons.call_rounded),
-            onPressed: _showCallChoice,
-          ),
-          IconButton(
-            tooltip: 'Listen together',
-            icon: const Icon(Icons.headphones_rounded),
-            onPressed: _startListenTogether,
-          ),
-        ],
+        actions: _isGroup
+            ? const []
+            : [
+                IconButton(
+                  tooltip: 'Call ${widget.friendName}',
+                  icon: const Icon(Icons.call_rounded),
+                  onPressed: _showCallChoice,
+                ),
+                IconButton(
+                  tooltip: 'Listen together',
+                  icon: const Icon(Icons.headphones_rounded),
+                  onPressed: _startListenTogether,
+                ),
+              ],
       ),
       body: body,
     );

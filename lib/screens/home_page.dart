@@ -19,6 +19,7 @@ import 'theme_provider.dart';
 import 'music_controls.dart';
 import 'web_music_panel.dart';
 import 'chat_page.dart';
+import 'group_screens.dart';
 import 'profile_screen.dart';
 import '../utils/popup_shell.dart';
 import 'api_service.dart';
@@ -2786,6 +2787,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
           ],
         ),
         actions: [
+          IconButton(
+            icon: Icon(Icons.groups_rounded, color: scheme.onSurface),
+            tooltip: 'Groups',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const GroupsScreen()),
+            ),
+          ),
           IconButton(
             icon: Icon(
               themeProvider.isDarkMode

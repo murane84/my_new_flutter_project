@@ -2,7 +2,9 @@ name: CI
 
 # Budget-conscious (2000 free Actions minutes/month):
 #   • analyze + test run on every push — cheap (~3 min, no Android toolchain).
-#   • the heavier Android APK build runs ONLY on `main` + manual dispatch.
+#   • the Android APK build is MANUAL-ONLY (Actions tab → Run workflow). It
+#     doesn't run on pushes, so it never fails your pushes or emails you; run it
+#     on demand when you actually want a debug APK artifact.
 #   • superseded runs on the same ref are cancelled automatically.
 #   • pushes that touch only *.md are skipped.
 on:
@@ -11,8 +13,6 @@ on:
       - '**.md'
   workflow_dispatch:
 
-# Cancel an in-progress run when a newer commit lands on the same branch, so
-# rapid pushes don't stack up billable minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -27,17 +27,17 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          cache: true # cache the Flutter SDK to shave minutes off each run
+          cache: true
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
 
   build_apk:
     name: Debug APK
-    needs: analyze_test # skip the expensive build if analyze/test failed
-    # Only build on main or a manual run — feature-branch pushes get analyze+test
-    # only, keeping typical usage well within the free minutes.
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: analyze_test
+    # MANUAL-ONLY: runs only via "Run workflow" (workflow_dispatch), never on a
+    # normal push, so a slow/flaky Android build never gates your pushes.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -45,11 +45,15 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17' # AGP 8 needs JDK 17
+          java-version: '17'
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
+      # android/gradle.properties pins a WINDOWS JDK path (org.gradle.java.home=
+      # C:\jdk-17) for local dev. That path doesn't exist on the Linux runner, so
+      # strip it here — Gradle then uses the setup-java JDK 17 above.
+      - run: sed -i '/org\.gradle\.java\.home/d' android/gradle.properties
       - run: flutter pub get
       - run: flutter build apk --debug
       - uses: actions/upload-artifact@v4

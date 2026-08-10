@@ -815,8 +815,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
           barrierColor: Colors.black,
           transitionDuration: const Duration(milliseconds: 240),
           reverseTransitionDuration: const Duration(milliseconds: 320),
-          pageBuilder: (_, __, ___) => const GroupCallScreen(),
-          transitionsBuilder: (_, anim, __, child) => FadeTransition(
+          pageBuilder: (_, _, _) => const GroupCallScreen(),
+          transitionsBuilder: (_, anim, _, child) => FadeTransition(
             opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
             child: child,
           ),
@@ -883,8 +883,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
           barrierColor: Colors.black,
           transitionDuration: const Duration(milliseconds: 240),
           reverseTransitionDuration: const Duration(milliseconds: 320),
-          pageBuilder: (_, __, ___) => const CallScreen(),
-          transitionsBuilder: (_, anim, __, child) => FadeTransition(
+          pageBuilder: (_, _, _) => const CallScreen(),
+          transitionsBuilder: (_, anim, _, child) => FadeTransition(
             opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
             child: child,
           ),

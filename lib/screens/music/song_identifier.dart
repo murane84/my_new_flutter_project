@@ -1,0 +1,501 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../api_service.dart';
+import '../../utils/toast_helper.dart';
+
+/// Shazam-style "what's this song?" flow. Records a short clip from the mic,
+/// sends it to the backend (which asks AudD to identify it), then shows the
+/// title/artist with links to open it elsewhere. Available from anywhere via
+/// [showSongIdentifier].
+Future<void> showSongIdentifier(BuildContext context) {
+  return showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => const _SongIdentifierSheet(),
+  );
+}
+
+enum _Phase { listening, identifying, result, noMatch, error, notConfigured, denied }
+
+class _SongIdentifierSheet extends StatefulWidget {
+  const _SongIdentifierSheet();
+
+  @override
+  State<_SongIdentifierSheet> createState() => _SongIdentifierSheetState();
+}
+
+class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
+    with SingleTickerProviderStateMixin {
+  // How long we listen before auto-identifying, and the earliest a user can
+  // cut it short (a couple of seconds is too little for a reliable match).
+  static const int _maxMs = 10000;
+  static const int _minMs = 4000;
+
+  final AudioRecorder _recorder = AudioRecorder();
+  late final AnimationController _pulse;
+  Timer? _tick;
+  int _elapsedMs = 0;
+  String? _clipPath;
+  bool _stopping = false;
+
+  _Phase _phase = _Phase.listening;
+  Map<String, dynamic>? _result;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat(reverse: true);
+    _start();
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    _pulse.dispose();
+    // Best-effort: make sure the recorder is released.
+    _recorder.dispose();
+    super.dispose();
+  }
+
+  Future<void> _start() async {
+    setState(() {
+      _phase = _Phase.listening;
+      _elapsedMs = 0;
+      _result = null;
+    });
+    try {
+      if (!await _recorder.hasPermission()) {
+        if (mounted) setState(() => _phase = _Phase.denied);
+        return;
+      }
+      final dir = await getTemporaryDirectory();
+      _clipPath =
+          '${dir.path}/aluta_id_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _recorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 128000,
+          sampleRate: 44100,
+        ),
+        path: _clipPath!,
+      );
+      _tick = Timer.periodic(const Duration(milliseconds: 100), (_) {
+        if (!mounted) return;
+        setState(() => _elapsedMs += 100);
+        if (_elapsedMs >= _maxMs) _stopAndIdentify();
+      });
+    } catch (_) {
+      if (mounted) setState(() => _phase = _Phase.error);
+    }
+  }
+
+  Future<void> _stopAndIdentify() async {
+    if (_stopping) return;
+    _stopping = true;
+    _tick?.cancel();
+    if (!mounted) return;
+    setState(() => _phase = _Phase.identifying);
+    try {
+      final path = await _recorder.stop();
+      final clip = path ?? _clipPath;
+      if (clip == null) {
+        if (mounted) setState(() => _phase = _Phase.error);
+        return;
+      }
+      final file = File(clip);
+      final bytes = await file.readAsBytes();
+      try {
+        await file.delete();
+      } catch (_) {}
+      if (bytes.isEmpty) {
+        if (mounted) setState(() => _phase = _Phase.error);
+        return;
+      }
+      final res = await ApiService()
+          .recognizeSong(bytes: bytes, filename: 'clip.m4a', mime: 'audio/mp4');
+      if (!mounted) return;
+      if (res == null) {
+        setState(() => _phase = _Phase.error);
+      } else if (res['error'] == 'not_configured') {
+        setState(() => _phase = _Phase.notConfigured);
+      } else if (res['matched'] == true) {
+        setState(() {
+          _result = res;
+          _phase = _Phase.result;
+        });
+      } else {
+        setState(() => _phase = _Phase.noMatch);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _phase = _Phase.error);
+    } finally {
+      _stopping = false;
+    }
+  }
+
+  Future<void> _retry() async {
+    // Fresh recorder session.
+    await _start();
+  }
+
+  Future<void> _open(String? url) async {
+    if (url == null || url.isEmpty) return;
+    try {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (_) {
+      if (mounted) showToast(context, 'Could not open the link');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.all(10),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: scheme.primary.withAlpha(120)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 3,
+              margin: const EdgeInsets.only(bottom: 14),
+              decoration: BoxDecoration(
+                color: scheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            _body(scheme),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _body(ColorScheme scheme) {
+    switch (_phase) {
+      case _Phase.listening:
+        return _listening(scheme);
+      case _Phase.identifying:
+        return _identifying(scheme);
+      case _Phase.result:
+        return _resultView(scheme);
+      case _Phase.noMatch:
+        return _message(
+          scheme,
+          Icons.search_off_rounded,
+          'No match found',
+          'Couldn\'t recognise that one. Try again with the music a little louder or closer.',
+          retry: true,
+        );
+      case _Phase.notConfigured:
+        return _message(
+          scheme,
+          Icons.info_outline_rounded,
+          'Not set up yet',
+          'Song recognition needs an AudD API key on the server. Add AUDD_API_TOKEN in Railway to enable it.',
+        );
+      case _Phase.denied:
+        return _message(
+          scheme,
+          Icons.mic_off_rounded,
+          'Microphone needed',
+          'Allow microphone access so Aluta can listen to the song.',
+          retry: true,
+        );
+      case _Phase.error:
+        return _message(
+          scheme,
+          Icons.error_outline_rounded,
+          'Something went wrong',
+          'Couldn\'t identify the song right now. Please try again.',
+          retry: true,
+        );
+    }
+  }
+
+  Widget _pulsingMic(ColorScheme scheme, {bool active = true}) {
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (_, _) {
+        final t = active ? _pulse.value : 0.0;
+        return Container(
+          width: 120,
+          height: 120,
+          alignment: Alignment.center,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 92 + 28 * t,
+                height: 92 + 28 * t,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: scheme.primary.withAlpha((40 * (1 - t)).round()),
+                ),
+              ),
+              Container(
+                width: 84,
+                height: 84,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: scheme.primary,
+                  boxShadow: [
+                    BoxShadow(
+                      color: scheme.primary.withAlpha(90),
+                      blurRadius: 20,
+                      spreadRadius: 2 * t,
+                    ),
+                  ],
+                ),
+                child: Icon(Icons.mic_rounded,
+                    size: 38, color: scheme.onPrimary),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _listening(ColorScheme scheme) {
+    final remaining = ((_maxMs - _elapsedMs) / 1000).ceil().clamp(0, 99);
+    final canStop = _elapsedMs >= _minMs;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('Listening…',
+            style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurface)),
+        const SizedBox(height: 4),
+        Text('Point the phone toward the music',
+            style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 18),
+        _pulsingMic(scheme),
+        const SizedBox(height: 16),
+        Text('$remaining s',
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: canStop ? _stopAndIdentify : null,
+            icon: const Icon(Icons.graphic_eq_rounded),
+            label: Text(canStop ? 'Identify now' : 'Keep listening…'),
+          ),
+        ),
+        TextButton(
+          onPressed: () => Navigator.maybePop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
+    );
+  }
+
+  Widget _identifying(ColorScheme scheme) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('Identifying…',
+            style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurface)),
+        const SizedBox(height: 22),
+        SizedBox(
+          width: 46,
+          height: 46,
+          child: CircularProgressIndicator(strokeWidth: 3, color: scheme.primary),
+        ),
+        const SizedBox(height: 22),
+        Text('Matching the clip against millions of songs',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 10),
+      ],
+    );
+  }
+
+  Widget _resultView(ColorScheme scheme) {
+    final r = _result ?? const {};
+    final title = (r['title'] ?? 'Unknown title').toString();
+    final artist = (r['artist'] ?? '').toString();
+    final album = (r['album'] ?? '').toString();
+    final artwork = (r['artwork'] ?? '').toString();
+    final spotify = (r['spotify_url'] ?? '').toString();
+    final apple = (r['apple_url'] ?? '').toString();
+    final songLink = (r['song_link'] ?? '').toString();
+    final source = (r['source'] ?? '').toString();
+    final sourceLabel = source == 'acoustid'
+        ? 'via AcoustID'
+        : source == 'audd'
+            ? 'via AudD'
+            : '';
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: artwork.isNotEmpty
+              ? Image.network(
+                  artwork,
+                  width: 132,
+                  height: 132,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => _artFallback(scheme),
+                )
+              : _artFallback(scheme),
+        ),
+        const SizedBox(height: 14),
+        Text(title,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: scheme.onSurface)),
+        if (artist.isNotEmpty) ...[
+          const SizedBox(height: 3),
+          Text(artist,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: scheme.onSurfaceVariant)),
+        ],
+        if (album.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text(album,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: scheme.onSurfaceVariant.withAlpha(180))),
+        ],
+        if (sourceLabel.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(sourceLabel,
+              style: TextStyle(
+                  fontSize: 10.5,
+                  letterSpacing: 0.3,
+                  color: scheme.onSurfaceVariant.withAlpha(150))),
+        ],
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          children: [
+            if (spotify.isNotEmpty)
+              _linkChip(scheme, Icons.music_note_rounded, 'Spotify',
+                  () => _open(spotify)),
+            if (apple.isNotEmpty)
+              _linkChip(scheme, Icons.apple_rounded, 'Apple Music',
+                  () => _open(apple)),
+            if (songLink.isNotEmpty)
+              _linkChip(scheme, Icons.open_in_new_rounded, 'Open',
+                  () => _open(songLink)),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _retry,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Again'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton(
+                onPressed: () => Navigator.maybePop(context),
+                child: const Text('Done'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _artFallback(ColorScheme scheme) => Container(
+        width: 132,
+        height: 132,
+        color: scheme.primaryContainer,
+        child: Icon(Icons.music_note_rounded,
+            size: 54, color: scheme.onPrimaryContainer),
+      );
+
+  Widget _linkChip(
+      ColorScheme scheme, IconData icon, String label, VoidCallback onTap) {
+    return ActionChip(
+      onPressed: onTap,
+      avatar: Icon(icon, size: 18, color: scheme.primary),
+      label: Text(label),
+      side: BorderSide(color: scheme.outlineVariant.withAlpha(120)),
+    );
+  }
+
+  Widget _message(ColorScheme scheme, IconData icon, String title, String body,
+      {bool retry = false}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 6),
+        Icon(icon, size: 46, color: scheme.primary),
+        const SizedBox(height: 12),
+        Text(title,
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurface)),
+        const SizedBox(height: 6),
+        Text(body,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 18),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => Navigator.maybePop(context),
+                child: const Text('Close'),
+              ),
+            ),
+            if (retry) ...[
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _retry,
+                  icon: const Icon(Icons.mic_rounded, size: 18),
+                  label: const Text('Try again'),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}

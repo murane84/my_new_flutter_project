@@ -125,6 +125,14 @@ class ChatPage extends StatefulWidget {
   final String groupAvatar;
   final int memberCount;
 
+  // ── Share-into-Aluta ──────────────────────────────────────────────────────
+  // Local image paths shared in from another app (e.g. a screenshot). When set,
+  // the chat opens straight into the image preview/caption flow for each one.
+  // [onShareConsumed] fires once they've been handed off, so the host can drop
+  // them and never re-send on a later rebuild.
+  final List<String>? initialSharePaths;
+  final VoidCallback? onShareConsumed;
+
   const ChatPage({
     super.key,
     this.friendId = 0,
@@ -138,6 +146,8 @@ class ChatPage extends StatefulWidget {
     this.groupTitle = '',
     this.groupAvatar = '',
     this.memberCount = 0,
+    this.initialSharePaths,
+    this.onShareConsumed,
   });
 
   @override
@@ -235,6 +245,36 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       onEventReceived: _handleWsEvent,
       onDisconnected: () => _startPolling(),
     );
+
+    // If this chat was opened to receive a shared-in image (e.g. a screenshot
+    // shared from another app), jump straight into the preview/caption flow.
+    final shared = widget.initialSharePaths;
+    if (shared != null && shared.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _consumeSharedImages(shared);
+      });
+    }
+  }
+
+  /// Send each shared-in image through the normal preview → caption → upload
+  /// path (works for both DMs and groups). Called once, from initState.
+  Future<void> _consumeSharedImages(List<String> paths) async {
+    // Tell the host to drop these now so a later rebuild can't re-send them.
+    widget.onShareConsumed?.call();
+    for (final p in paths) {
+      if (!mounted) return;
+      try {
+        final file = File(p);
+        if (!await file.exists()) continue;
+        final bytes = await file.readAsBytes();
+        if (bytes.isEmpty || !mounted) continue;
+        final name = p.split(Platform.pathSeparator).last;
+        await _previewAndSendImage(
+            bytes, name.isNotEmpty ? name : 'shared.jpg', 'image/jpeg');
+      } catch (_) {
+        /* skip a bad path, continue with the rest */
+      }
+    }
   }
 
   void _onConnStatusChanged() {

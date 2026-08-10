@@ -7,7 +7,7 @@ part of '../music_controls.dart';
 // ─── Playlist overlay ─────────────────────────────────────────────────────────
 
 // Sort modes for the track list.
-enum _PlSort { manual, az, za, artist, recent }
+enum _PlSort { manual, az, za, artist, recent, fileName, duration, size }
 
 // Smart auto-lists driven by listening stats.
 enum _Smart { none, recent, most }
@@ -98,6 +98,12 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   _Smart _smart = _Smart.none; // Recent / Most-played auto-list
   _PlSort _sort = _PlSort.manual;
 
+  // Per-track duration (ms) + file size (bytes), used by the Duration / File
+  // size sorts. Filled lazily from the device MediaStore (+ filesystem fallback
+  // for app-cached files); missing entries sort as 0.
+  Map<String, int> _durMs = {};
+  Map<String, int> _sizeB = {};
+
   // Multi-select mode.
   bool _selecting = false;
   final Set<String> _selected = {};
@@ -134,6 +140,54 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         }
       });
     }
+    _loadTrackMeta();
+  }
+
+  /// Populate the duration/size maps used by the Duration & File-size sorts.
+  /// MediaStore (on_audio_query) gives both for device songs; for any path it
+  /// doesn't know (app-cached / shared files) we read the size off disk.
+  Future<void> _loadTrackMeta() async {
+    final dur = <String, int>{};
+    final size = <String, int>{};
+    try {
+      if (Platform.isAndroid || Platform.isIOS) {
+        final songs = await OnAudioQuery().querySongs();
+        for (final s in songs) {
+          final p = s.data;
+          if (p.isEmpty) continue;
+          // Read via dynamic so this compiles whether the plugin types these as
+          // int or int? — and to sidestep the matching analyzer warnings.
+          final dynamic dRaw = s.duration;
+          final dynamic szRaw = s.size;
+          final int d = dRaw is int ? dRaw : 0;
+          final int sz = szRaw is int ? szRaw : 0;
+          if (d > 0) dur[p] = d;
+          if (sz > 0) size[p] = sz;
+        }
+      }
+    } catch (_) {/* desktop / no permission — fall back to file stats */}
+    for (final p in widget.playlist) {
+      if (!size.containsKey(p)) {
+        try {
+          final f = File(p);
+          if (f.existsSync()) size[p] = f.lengthSync();
+        } catch (_) {/* unreadable path */}
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _durMs = dur;
+      _sizeB = size;
+    });
+  }
+
+  // Raw file name (with extension) for the "File name" sort — distinct from the
+  // cleaned display title used by the A→Z sorts.
+  String _rawFileName(String path) {
+    final sep = Platform.pathSeparator;
+    if (path.contains(sep)) return path.substring(path.lastIndexOf(sep) + 1);
+    if (path.contains('/')) return path.substring(path.lastIndexOf('/') + 1);
+    return path;
   }
 
   @override
@@ -230,6 +284,21 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       case _PlSort.recent:
         // Newly-added songs are appended to the library, so newest = highest index.
         entries = entries.reversed.toList();
+        break;
+      case _PlSort.fileName:
+        entries.sort((a, b) => _rawFileName(a.value)
+            .toLowerCase()
+            .compareTo(_rawFileName(b.value).toLowerCase()));
+        break;
+      case _PlSort.duration:
+        // Shortest first; unknown durations (0) sink to the top harmlessly.
+        entries.sort(
+            (a, b) => (_durMs[a.value] ?? 0).compareTo(_durMs[b.value] ?? 0));
+        break;
+      case _PlSort.size:
+        // Largest first — the more useful default when hunting big files.
+        entries.sort(
+            (a, b) => (_sizeB[b.value] ?? 0).compareTo(_sizeB[a.value] ?? 0));
         break;
       case _PlSort.manual:
         break;
@@ -556,8 +625,11 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             tile(_PlSort.manual, Icons.reorder_rounded, 'Custom (added order)'),
             tile(_PlSort.az, Icons.sort_by_alpha_rounded, 'Title A → Z'),
             tile(_PlSort.za, Icons.sort_by_alpha_rounded, 'Title Z → A'),
+            tile(_PlSort.fileName, Icons.text_snippet_rounded, 'File name'),
             tile(_PlSort.artist, Icons.person_rounded, 'Artist'),
             tile(_PlSort.recent, Icons.schedule_rounded, 'Recently added'),
+            tile(_PlSort.duration, Icons.timer_outlined, 'Duration (shortest first)'),
+            tile(_PlSort.size, Icons.sd_storage_rounded, 'File size (largest first)'),
             const SizedBox(height: 8),
           ],
         ),

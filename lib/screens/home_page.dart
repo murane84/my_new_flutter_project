@@ -25,6 +25,7 @@ import 'music_controls.dart';
 import 'web_music_panel.dart';
 import 'chat_page.dart';
 import 'group_screens.dart';
+import 'music/song_identifier.dart' show showSongIdentifier;
 import 'profile_screen.dart';
 import '../utils/popup_shell.dart';
 import 'api_service.dart';
@@ -35,6 +36,7 @@ import '../services/live_session_service.dart'
     show activeLiveSession, endActiveLiveSession;
 import '../services/notif_service.dart';
 import '../services/fcm_service.dart';
+import '../services/share_inbox.dart';
 import 'token_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
@@ -111,6 +113,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   List<Map<String, dynamic>> _filteredGroups = [];
   bool _isLoadingFriends = false;
 
+  // Images shared into Aluta from another app, waiting to be handed to the chat
+  // the user next taps (screenshot-share flow). Null when nothing is pending.
+  List<String>? _shareToSend;
+
   // ── Layout state ──────────────────────────────────────────────────────────
   double _musicPanelWidth = 280;
   bool _isMusicFullScreen = false;
@@ -180,6 +186,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // When the token genuinely expires (server returns 401/403), sign out to a
     // fresh login instead of leaving the user stuck offline.
     SessionEvents.instance.expired.addListener(_onSessionExpired);
+    // Screenshot / photo shared into Aluta → surface the "pick a chat to send"
+    // banner and react if one arrives while Home is already open.
+    ShareInbox.instance.addListener(_onSharePending);
     _loadUserData();
     _loadCachedFriends();    // show cached list instantly (no spinner flash)
     _fetchFriends();          // then refresh from network
@@ -332,6 +341,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     WidgetsBinding.instance.removeObserver(this);
     ConnectionStatus.instance.online.removeListener(_onGlobalConnChanged);
     SessionEvents.instance.expired.removeListener(_onSessionExpired);
+    ShareInbox.instance.removeListener(_onSharePending);
     playlistDrawerBus.isOpen.removeListener(_onPlaylistDrawerToggled);
     _playlistDrawerCtrl.dispose();
     _refreshTimer?.cancel();
@@ -1088,6 +1098,41 @@ class HomePageState extends rp.ConsumerState<HomePage>
           .toList();
       _filteredGroups = _applyGroupQuery(_groups, query);
     });
+  }
+
+  // ── Share-into-Aluta (pick a chat to send a shared photo) ─────────────────
+
+  bool get _isSharing => ShareInbox.instance.hasPending;
+
+  /// A photo/screenshot was shared into Aluta. Return to the friend list so the
+  /// user can tap a recipient, and repaint to show the share banner.
+  void _onSharePending() {
+    if (!mounted) return;
+    if (ShareInbox.instance.hasPending) {
+      _activeFriendId = null;
+      _activeFriendName = null;
+      _activeGroup = null;
+      _playerExpanded = false;
+    }
+    setState(() {});
+  }
+
+  /// User tapped a recipient while a share is pending: grab the images, clear
+  /// the inbox, and open that chat — it sends them via the preview flow.
+  void _sendShareTo({Map<String, dynamic>? friend, Map<String, dynamic>? group}) {
+    final paths = List<String>.from(ShareInbox.instance.pending);
+    ShareInbox.instance.clear();
+    _shareToSend = paths.isEmpty ? null : paths;
+    if (friend != null) {
+      openChat(friend);
+    } else if (group != null) {
+      openGroupInPanel(group);
+    }
+  }
+
+  void _cancelShare() {
+    ShareInbox.instance.clear();
+    setState(() => _shareToSend = null);
   }
 
   // ── Chat open/close ───────────────────────────────────────────────────────
@@ -1928,6 +1973,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       memberCount:
                           ((_activeGroup!['members'] as List?) ?? const [])
                               .length,
+                      initialSharePaths: _shareToSend,
+                      onShareConsumed: () => _shareToSend = null,
                     )
                   : _activeFriendId != null
                   ? ChatPage(
@@ -1952,6 +1999,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
                           }
                         }
                       },
+                      initialSharePaths: _shareToSend,
+                      onShareConsumed: () => _shareToSend = null,
                     )
                   : _buildFriendList(context),
                 ),
@@ -2068,6 +2117,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     return Column(
       key: const ValueKey('friendList'),
       children: [
+        if (_isSharing) _buildShareBanner(scheme),
         TextField(
           onChanged: _filterFriends,
           decoration: InputDecoration(
@@ -2140,6 +2190,59 @@ class HomePageState extends rp.ConsumerState<HomePage>
     );
   }
 
+  /// Banner shown across the top of the chat list while a photo shared into
+  /// Aluta is waiting for the user to pick a recipient.
+  Widget _buildShareBanner(ColorScheme scheme) {
+    final n = ShareInbox.instance.pending.length;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.primary.withAlpha(120)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.photo_library_rounded,
+              size: 20, color: scheme.onPrimaryContainer),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  n > 1 ? 'Sharing $n photos' : 'Sharing a photo',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: scheme.onPrimaryContainer,
+                  ),
+                ),
+                Text(
+                  'Tap a chat below to send it',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: scheme.onPrimaryContainer.withAlpha(200),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: _cancelShare,
+            style: TextButton.styleFrom(
+              foregroundColor: scheme.onPrimaryContainer,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 32),
+            ),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFriendTile(
       Map<String, dynamic> f, Color textColor, ColorScheme scheme) {
     final name = f['username'] as String? ?? '';
@@ -2152,7 +2255,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final hasUnread = unread > 0;
 
     return InkWell(
-      onTap: () => openChat(f),
+      onTap: () => _isSharing ? _sendShareTo(friend: f) : openChat(f),
       borderRadius: BorderRadius.circular(10),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
@@ -2263,7 +2366,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final avatar = _avatarFull(g['avatar_url']);
 
     return InkWell(
-      onTap: () => openGroupInPanel(g),
+      onTap: () => _isSharing ? _sendShareTo(group: g) : openGroupInPanel(g),
       borderRadius: BorderRadius.circular(10),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
@@ -3330,6 +3433,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
                 case 'find_friends':
                   await _findFriendsFromContacts();
                   break;
+                case 'identify':
+                  await showSongIdentifier(context);
+                  break;
                 case 'theme':
                   themeProvider.toggleTheme(!themeProvider.isDarkMode);
                   break;
@@ -3347,6 +3453,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
             },
             itemBuilder: (ctx) => [
               _menuItem('groups', Icons.groups_rounded, 'Groups'),
+              _menuItem(
+                  'identify', Icons.graphic_eq_rounded, 'Identify song'),
               _menuItem(
                   'find_friends', Icons.contacts_rounded, 'Find friends'),
               _menuItem(

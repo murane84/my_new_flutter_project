@@ -1,0 +1,7 @@
+# Extra system packages for the backend.
+#
+# The song-recognition AcoustID fallback fingerprints audio with Chromaprint's
+# `fpcalc`, which in turn needs ffmpeg to decode m4a/aac clips. Nixpacks installs
+# these from nixpkgs; the "..." keeps the packages it auto-detected for Python.
+[phases.setup]
+nixPkgs = ["...", "chromaprint", "ffmpeg"]

@@ -715,8 +715,10 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
       onTap: () => showUserProfile(
         context,
         username: name,
+        userId: uid,
         phone: phone.isEmpty ? null : phone,
         avatarUrl: avatar,
+        isOnline: m['is_online'] == true,
       ),
       leading: CircleAvatar(
         backgroundColor: scheme.primaryContainer,

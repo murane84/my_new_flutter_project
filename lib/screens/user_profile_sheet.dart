@@ -1,18 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'api_service.dart';
 import 'token_helper.dart' show mediaAuthHeaders;
 import '../services/contact_names.dart';
 import '../utils/net_image.dart';
+import '../utils/time_utils.dart';
 import '../utils/toast_helper.dart';
 
 /// A read-only profile card for ANOTHER user (a friend or a group member).
 /// Opens from a tap on their name/avatar. Shows the photo, the name (their saved
 /// phonebook name if you have their number, otherwise their app username), the
-/// phone number (copyable), and an optional Call action.
+/// phone number (copyable), online/last-seen, and an optional Call action.
+///
+/// If [userId] is given, the sheet FETCHES that user's live details
+/// (/users/{id}/status → phone + is_online + last_seen) on open, so it shows the
+/// current profile even when the caller only had a partial record. Any values
+/// passed in are used immediately as a first paint while the fetch resolves.
 Future<void> showUserProfile(
   BuildContext context, {
   required String username,
+  int? userId,
   String? phone,
   String? avatarUrl, // full URL (already resolved)
   bool isOnline = false,
@@ -25,6 +33,7 @@ Future<void> showUserProfile(
     isScrollControlled: true,
     builder: (_) => _UserProfileSheet(
       username: username,
+      userId: userId,
       phone: phone,
       avatarUrl: avatarUrl,
       isOnline: isOnline,
@@ -34,8 +43,9 @@ Future<void> showUserProfile(
   );
 }
 
-class _UserProfileSheet extends StatelessWidget {
+class _UserProfileSheet extends StatefulWidget {
   final String username;
+  final int? userId;
   final String? phone;
   final String? avatarUrl;
   final bool isOnline;
@@ -44,6 +54,7 @@ class _UserProfileSheet extends StatelessWidget {
 
   const _UserProfileSheet({
     required this.username,
+    this.userId,
     this.phone,
     this.avatarUrl,
     this.isOnline = false,
@@ -52,14 +63,59 @@ class _UserProfileSheet extends StatelessWidget {
   });
 
   @override
+  State<_UserProfileSheet> createState() => _UserProfileSheetState();
+}
+
+class _UserProfileSheetState extends State<_UserProfileSheet> {
+  late String? _phone = widget.phone;
+  late bool _isOnline = widget.isOnline;
+  late String? _statusLine = widget.statusLine;
+  bool _fetching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLive();
+  }
+
+  /// Pull the user's live status (online, last-seen) + phone from the server so
+  /// the sheet reflects the current profile, not a possibly-stale hand-off.
+  Future<void> _fetchLive() async {
+    final id = widget.userId;
+    if (id == null) return;
+    setState(() => _fetching = true);
+    try {
+      final st = await ApiService().fetchFriendStatus(id);
+      if (!mounted) return;
+      final fp = (st['phone'] as String?)?.trim();
+      final online = st['is_online'] == true;
+      final lastSeen = (st['last_seen'] as String?)?.trim();
+      setState(() {
+        if (fp != null && fp.isNotEmpty) _phone = fp;
+        _isOnline = online;
+        if (online) {
+          _statusLine = 'Online';
+        } else if (lastSeen != null && lastSeen.isNotEmpty) {
+          _statusLine = 'Last seen ${formatLastSeen(lastSeen)}';
+        }
+        _fetching = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _fetching = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final ph = (phone ?? '').trim();
+    final ph = (_phone ?? '').trim();
     final saved = ph.isNotEmpty ? ContactNames.instance.nameFor(ph) : null;
     final inPhonebook = saved != null && saved.isNotEmpty;
-    final title = inPhonebook ? saved : username;
+    final title = inPhonebook ? saved : widget.username;
     final initial = title.isNotEmpty ? title[0].toUpperCase() : '?';
+    final avatarUrl = widget.avatarUrl;
     final hasAvatar = (avatarUrl ?? '').isNotEmpty;
+    final status = (_statusLine ?? '').trim();
 
     return Container(
       margin: const EdgeInsets.all(10),
@@ -108,18 +164,20 @@ class _UserProfileSheet extends StatelessWidget {
                     color: scheme.onSurface)),
             // Show the app username as a secondary line when it differs from the
             // saved contact name (so you still know who it is in the app).
-            if (inPhonebook && username.isNotEmpty && username != saved) ...[
+            if (inPhonebook &&
+                widget.username.isNotEmpty &&
+                widget.username != saved) ...[
               const SizedBox(height: 2),
-              Text('~ $username',
+              Text('~ ${widget.username}',
                   style: TextStyle(
                       fontSize: 12.5, color: scheme.onSurfaceVariant)),
             ],
-            if ((statusLine ?? '').isNotEmpty) ...[
+            if (status.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text(statusLine!,
+              Text(status,
                   style: TextStyle(
                       fontSize: 12,
-                      color: isOnline
+                      color: _isOnline
                           ? Colors.green
                           : scheme.onSurfaceVariant)),
             ],
@@ -164,6 +222,20 @@ class _UserProfileSheet extends StatelessWidget {
                   ],
                 ),
               )
+            else if (_fetching)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                  const SizedBox(width: 10),
+                  Text('Loading details…',
+                      style: TextStyle(
+                          fontSize: 12.5, color: scheme.onSurfaceVariant)),
+                ],
+              )
             else
               Text('No phone number shared',
                   style: TextStyle(
@@ -177,13 +249,13 @@ class _UserProfileSheet extends StatelessWidget {
                     child: const Text('Close'),
                   ),
                 ),
-                if (onCall != null) ...[
+                if (widget.onCall != null) ...[
                   const SizedBox(width: 10),
                   Expanded(
                     child: FilledButton.icon(
                       onPressed: () {
                         Navigator.maybePop(context);
-                        onCall!();
+                        widget.onCall!();
                       },
                       icon: const Icon(Icons.call_rounded, size: 18),
                       label: const Text('Call'),

@@ -22,6 +22,7 @@ from routers import attachments
 from routers import devices as devices_router
 from routers import live as live_router
 from routers import conversations as conversations_router
+from routers import recognize as recognize_router
 from websocket_routes import router as websocket_router
 import websocket_manager
 from sqlalchemy import text
@@ -59,6 +60,8 @@ app.include_router(conversations_router.router)
 # /live/sessions/{id}/end. Without this include the whole /live prefix 404s and
 # starting a listen-together session fails.
 app.include_router(live_router.router)
+# Shazam-style song recognition (proxied to AudD; needs AUDD_API_TOKEN set).
+app.include_router(recognize_router.router)
 app.include_router(websocket_router)
 
 

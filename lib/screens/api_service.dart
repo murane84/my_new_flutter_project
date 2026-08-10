@@ -907,6 +907,44 @@ class ApiService {
     }
   }
 
+  /// Shazam-style recognition: upload a short mic clip; the backend asks AudD to
+  /// identify it and returns {matched, title, artist, album, artwork, links…}.
+  /// Returns {matched:false, error:'not_configured'} if the server has no key,
+  /// or null on a transport failure.
+  Future<Map<String, dynamic>?> recognizeSong({
+    required List<int> bytes,
+    String filename = 'clip.m4a',
+    String mime = 'audio/mp4',
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final uri = Uri.parse('${await _baseUrl}/recognize');
+      final req = http.MultipartRequest('POST', uri)
+        ..headers['Authorization'] = 'Bearer $token'
+        ..files.add(http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: filename,
+          contentType: MediaType.parse(mime),
+        ));
+      final streamed = await req.send();
+      final resp = await http.Response.fromStream(streamed);
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+        return {'matched': false};
+      }
+      if (resp.statusCode == 503) {
+        return {'matched': false, 'error': 'not_configured'};
+      }
+      return null;
+    } catch (e) {
+      _logger.e('recognizeSong exception: $e');
+      return null;
+    }
+  }
+
   /// WhatsApp-style message info: three buckets (read / delivered / sent) of the
   /// group's other members for one sent message. Returns null on failure.
   Future<Map<String, dynamic>?> messageInfo(int cid, int messageId) async {

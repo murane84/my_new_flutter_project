@@ -30,6 +30,7 @@ import '../services/metadata_overrides.dart';
 import '../utils/marquee_text.dart';
 import 'api_service.dart';
 import 'chat/song_cache.dart';
+import 'music/song_identifier.dart' show showSongIdentifier;
 
 part 'music/music_control_widgets.dart'; // _CtrlBtn, _CtrlChip, _SpeedPanel
 part 'music/music_playlist_overlay.dart'; // _PlaylistOverlay + state
@@ -2190,6 +2191,24 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                                 : onSurface.withAlpha(180)),
                       ),
                     ),
+                  ),
+                ),
+                const Spacer(),
+
+                // ── Identify song (Shazam-style) — centred between the volume
+                // and speed controls. Listens via the mic and names the song. ──
+                GestureDetector(
+                  onTap: () => showSongIdentifier(context),
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: accent.withAlpha(28),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: accent.withAlpha(120)),
+                    ),
+                    child: Icon(Icons.graphic_eq_rounded,
+                        size: 20, color: accent),
                   ),
                 ),
                 const Spacer(),

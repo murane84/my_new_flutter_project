@@ -12,6 +12,7 @@ import '../services/biometric_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/popup_shell.dart';
 import '../utils/app_config.dart';
+import '../utils/emoji_field.dart';
 
 /// Profile popup: edit username / phone / password (email is fixed), or
 /// permanently delete the account and wipe all data from the server. Rendered
@@ -357,6 +358,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       Icons.person_outline,
       validator: (v) =>
           (v == null || v.trim().isEmpty) ? 'Enter a username' : null,
+      // Tap to add emojis to your display name.
+      suffixIcon: emojiSuffixButton(context, _username),
     );
     final phone = _phoneField(scheme);
     final curPw = _pwField(_currentPw, 'Current password', _obscureCur,
@@ -613,6 +616,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     IconData icon, {
     TextInputType? keyboardType,
     String? Function(String?)? validator,
+    Widget? suffixIcon,
   }) {
     return TextFormField(
       controller: c,
@@ -622,6 +626,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         labelText: label,
         prefixIcon: Icon(icon),
         border: const OutlineInputBorder(),
+        suffixIcon: suffixIcon,
       ),
     );
   }

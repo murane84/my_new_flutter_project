@@ -55,6 +55,11 @@ class _PlaylistOverlay extends StatefulWidget {
   // back button collapses it) rather than the old bottom sheet.
   final bool drawer;
 
+  // True when hosted on the CHAT surface (phone), where the app's now-playing
+  // bar already provides transport — so this body drops its inline strip to
+  // avoid two players for one song. False on the music surface (keeps the strip).
+  final bool hostIsChat;
+
   const _PlaylistOverlay({
     required this.playlist,
     required this.currentIndex,
@@ -84,6 +89,7 @@ class _PlaylistOverlay extends StatefulWidget {
     required this.onFavoriteMany,
     this.loading = false,
     this.drawer = false,
+    this.hostIsChat = false,
   });
 
   @override
@@ -766,7 +772,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 'Remove from list',
                 () {
                   Navigator.pop(ctx);
-                  widget.onRemove(realIdx);
+                  _confirmRemove(realIdx, title);
                 },
                 danger: true,
               ),
@@ -776,6 +782,34 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         ),
       ),
     );
+  }
+
+  /// Confirm before removing a track from the playlist (no accidental deletes).
+  Future<void> _confirmRemove(int realIdx, String title) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (dctx) {
+        final scheme = Theme.of(dctx).colorScheme;
+        return AlertDialog(
+          title: const Text('Remove track?'),
+          content: Text(
+            'Remove "$title" from your playlist?\n'
+            'This only removes it from the list — the file stays on your device.',
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: scheme.error),
+              onPressed: () => Navigator.pop(dctx, true),
+              child: const Text('Remove'),
+            ),
+          ],
+        );
+      },
+    );
+    if (yes == true) widget.onRemove(realIdx);
   }
 
   Widget _optionTile(ColorScheme scheme, IconData icon, String label,
@@ -938,6 +972,11 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     final scheme = Theme.of(context).colorScheme;
     final displayed = _displayed();
     final displayedPaths = displayed.map((e) => e.value).toList();
+    // On the CHAT surface the app's own now-playing bar (richer, at the bottom)
+    // already controls playback, so the card drawer omits its inline strip —
+    // otherwise one playing song would show two transport controls. On the music
+    // surface there's no bottom bar, so the strip stays as the drawer's control.
+    final bool appBarHandlesPlayback = widget.hostIsChat;
 
     return Container(
       // In drawer mode the surrounding Material provides the surface, left-
@@ -1053,7 +1092,10 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           ),
 
           // Inline transport strip — control playback without leaving the list.
-          if (widget.hasTrack && !_selecting) _transportStrip(scheme),
+          // Skipped on phone (the app's now-playing bar handles it), so a single
+          // song never shows two players stacked.
+          if (widget.hasTrack && !_selecting && !appBarHandlesPlayback)
+            _transportStrip(scheme),
         ],
       ),
     );
@@ -1483,20 +1525,10 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         },
       );
 
-      // Swipe-to-remove only outside selection mode.
-      if (_selecting) return tile;
-      return Dismissible(
-        key: ValueKey(path),
-        direction: DismissDirection.endToStart,
-        background: Container(
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.only(right: 16),
-          color: scheme.error.withAlpha(180),
-          child: const Icon(Icons.delete_outline, color: Colors.white),
-        ),
-        onDismissed: (_) => widget.onRemove(realIdx),
-        child: tile,
-      );
+      // Removal is an explicit action (row ⋮ → Remove, with a confirm dialog),
+      // never a swipe — swiping accidentally deleted tracks and clashed with the
+      // drawer's swipe-to-close.
+      return tile;
     }
 
     if (!isNow) return buildRow();

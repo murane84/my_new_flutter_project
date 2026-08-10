@@ -110,6 +110,10 @@ def ensure_media_schema():
         "ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS cached_at TIMESTAMPTZ",
         "ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS purged_at TIMESTAMPTZ",
         "ALTER TABLE media_assets ALTER COLUMN data DROP NOT NULL",
+        # QR device-linking: the desktop's platform/label carried on the pending
+        # link (added here too in case login_links was created before these).
+        "ALTER TABLE login_links ADD COLUMN IF NOT EXISTS device_label VARCHAR",
+        "ALTER TABLE login_links ADD COLUMN IF NOT EXISTS device_platform VARCHAR",
     ]
     try:
         with engine.begin() as conn:

@@ -307,3 +307,77 @@ class PasswordResetCode(Base):
 
     def __repr__(self):
         return f"<PasswordResetCode(user_id={self.user_id}, used={self.used})>"
+
+
+class LoginLink(Base):
+    """A desktop QR-login handshake (WhatsApp-Web style).
+
+    The desktop creates a pending link and shows `code` as a QR (and `pair_code`
+    for manual entry). The signed-in phone approves it, which mints tokens stored
+    here; the desktop polls with `code`, picks the tokens up ONCE, then the row is
+    marked consumed. Links expire after a few minutes.
+    """
+    __tablename__ = "login_links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, index=True, nullable=False)
+    pair_code = Column(String, unique=True, index=True, nullable=False)
+    status = Column(String, default="pending", nullable=False)  # pending|approved|consumed
+    device_label = Column(String, nullable=True)
+    device_platform = Column(String, nullable=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+    )
+    access_token = Column(Text, nullable=True)
+    refresh_token = Column(Text, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", foreign_keys=[user_id], passive_deletes=True)
+
+    def __repr__(self):
+        return f"<LoginLink(status='{self.status}', user_id={self.user_id})>"
+
+
+class UserContactBook(Base):
+    """The user's own phone-book name map (number-key → saved name), uploaded by
+    their phone so the desktop app can personalise friends' names. Private to the
+    user; one row per user, stored as a JSON string."""
+    __tablename__ = "user_contact_books"
+
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    data = Column(Text, nullable=False, default="{}")
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user = relationship("User", foreign_keys=[user_id], passive_deletes=True)
+
+
+class DeviceSession(Base):
+    """A revocable session for a device linked via QR (WhatsApp "linked devices").
+
+    Tokens minted for a QR link carry this session's `sid`; every authenticated
+    request checks the session still exists and isn't revoked, so the user can
+    sign a linked computer out remotely from their phone.
+    """
+    __tablename__ = "device_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        index=True, nullable=False,
+    )
+    sid = Column(String, unique=True, index=True, nullable=False)
+    label = Column(String, nullable=True)
+    platform = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at = Column(DateTime(timezone=True), server_default=func.now())
+    revoked = Column(Boolean, default=False, nullable=False)
+
+    user = relationship("User", foreign_keys=[user_id], passive_deletes=True)
+
+    def __repr__(self):
+        return f"<DeviceSession(user_id={self.user_id}, label='{self.label}', revoked={self.revoked})>"

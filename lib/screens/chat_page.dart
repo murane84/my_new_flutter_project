@@ -26,6 +26,8 @@ import 'gif_picker.dart';
 import '../services/call_service.dart';
 import '../services/contact_names.dart';
 import '../utils/net_image.dart';
+import 'package:photo_view/photo_view.dart';
+import 'package:photo_view/photo_view_gallery.dart';
 import 'user_profile_sheet.dart';
 import 'home_page.dart' show playlistNotifier, playbackBus;
 import 'dart:io';
@@ -1888,22 +1890,27 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               backgroundColor: Colors.black,
               body: Stack(
                 children: [
-                  PageView.builder(
-                    controller: controller,
+                  PhotoViewGallery.builder(
+                    pageController: controller,
                     itemCount: images.length,
                     onPageChanged: (i) => setSB(() => current = i),
-                    itemBuilder: (_, i) => GestureDetector(
-                      onTap: () => Navigator.pop(ctx),
-                      child: Center(
-                        child: InteractiveViewer(
-                          minScale: 0.8,
-                          maxScale: 4,
-                          child: authNetworkImage(
-                              url: images[i],
-                              headers: mediaAuthHeaders(images[i]),
-                              fit: BoxFit.contain),
-                        ),
+                    backgroundDecoration:
+                        const BoxDecoration(color: Colors.black),
+                    loadingBuilder: (_, _) => const Center(
+                      child: SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
                       ),
+                    ),
+                    builder: (ctx2, i) => PhotoViewGalleryPageOptions(
+                      imageProvider: authNetworkImageProvider(
+                          images[i], mediaAuthHeaders(images[i])),
+                      minScale: PhotoViewComputedScale.contained,
+                      maxScale: PhotoViewComputedScale.covered * 3,
+                      initialScale: PhotoViewComputedScale.contained,
+                      onTapUp: (_, _, _) => Navigator.pop(ctx),
                     ),
                   ),
                   // Close.

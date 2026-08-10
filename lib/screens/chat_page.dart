@@ -2178,11 +2178,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       if (name.isEmpty || !name.contains('.')) {
         name = 'aluta_image_${DateTime.now().millisecondsSinceEpoch}.jpg';
       }
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/$name');
-      await file.writeAsBytes(res.bodyBytes, flush: true);
-      await SharePlus.instance
-          .share(ShareParams(files: [XFile(file.path)]));
+      // Real "Save As…" dialog (same flow as other media) so desktop opens a
+      // proper save-path picker instead of the OS share sheet, which errors on
+      // Windows ("Try that again"). On mobile, _saveBytesToDevice falls back to
+      // the share/save sheet automatically.
+      await _saveBytesToDevice(res.bodyBytes, name);
     } catch (_) {
       if (mounted) showToast(context, 'Could not save image', type: ToastType.error);
     }

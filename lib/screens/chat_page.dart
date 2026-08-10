@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, compute;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, compute, kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 // Hide intl's TextDirection so the unprefixed name resolves to dart:ui's
@@ -1941,10 +1941,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     ScrollConfiguration(
                       behavior: ScrollConfiguration.of(ctx).copyWith(
                         dragDevices: {
-                          PointerDeviceKind.touch,
-                          PointerDeviceKind.mouse,
-                          PointerDeviceKind.trackpad,
-                          PointerDeviceKind.stylus,
+                          ui.PointerDeviceKind.touch,
+                          ui.PointerDeviceKind.mouse,
+                          ui.PointerDeviceKind.trackpad,
+                          ui.PointerDeviceKind.stylus,
                         },
                         scrollbars: false,
                       ),

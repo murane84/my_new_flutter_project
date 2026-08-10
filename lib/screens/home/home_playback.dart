@@ -32,6 +32,9 @@ class PlaybackBus {
   bool Function()? isPlaying;
   // Toggle "favourite" on the currently-playing track (driven by the bar heart).
   VoidCallback? onToggleFavorite;
+  // Share the currently-playing track to a chat (the quick action that used to
+  // live in the drawer's transport strip; now surfaced on the in-chat bar).
+  VoidCallback? onShareToChat;
 }
 
 final playbackBus = PlaybackBus();
@@ -55,6 +58,11 @@ class PlaylistDrawerBus {
   // change while the drawer is open, so the host rebuilds the (externally
   // hosted) content with fresh data.
   final ValueNotifier<int> revision = ValueNotifier<int>(0);
+  // True while the drawer is being rendered on the CHAT surface (phone), where
+  // the app's own now-playing bar already shows a transport control. The
+  // playlist body reads this to drop its inline strip there (no double player);
+  // on the music surface (no bottom bar) it keeps the strip.
+  bool hostIsChatSurface = false;
   bool get available => toggle != null;
 }
 

@@ -363,6 +363,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     playbackBus.currentPositionMs = () => _player.position.inMilliseconds;
     playbackBus.isPlaying = () => _player.playing;
     playbackBus.onToggleFavorite = _toggleCurrentFavorite;
+    playbackBus.onShareToChat = _shareCurrentSong;
 
     // App-wide playlist drawer. MusicControls owns the playlist UI + data and
     // is always mounted, so it registers the drawer handlers here — any screen
@@ -442,6 +443,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       playbackBus.currentPositionMs = null;
       playbackBus.isPlaying = null;
       playbackBus.onToggleFavorite = null;
+      playbackBus.onShareToChat = null;
     }
     // Relinquish the playlist drawer if we own it.
     if (playlistDrawerBus.toggle == _togglePlaylistDrawer) {
@@ -646,6 +648,17 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       backgroundColor: Colors.transparent,
       builder: (_) => _ShareSheet(path: path, title: title, artist: artist),
     );
+  }
+
+  /// Share whatever is playing right now to a chat — driven by the now-playing
+  /// bar's "Share to chat" button (playbackBus.onShareToChat).
+  void _shareCurrentSong() {
+    if (_currentIndex >= 0 && _currentIndex < _playlist.length) {
+      _shareSong(_playlist[_currentIndex]);
+    } else {
+      showToast(context, 'No song is playing to share.',
+          type: ToastType.info);
+    }
   }
 
   void _createGroup(String name) {
@@ -1455,6 +1468,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       onRemoveMany: _removeMany,
       onFavoriteMany: _favoriteMany,
       drawer: true,
+      // The host marks which surface it's on right before building this; on the
+      // chat surface the app now-playing bar handles transport (skip the strip).
+      hostIsChat: playlistDrawerBus.hostIsChatSurface,
     );
   }
 

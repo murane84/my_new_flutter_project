@@ -7,6 +7,8 @@ import 'token_helper.dart' show mediaAuthHeaders;
 import '../utils/toast_helper.dart';
 import '../utils/popup_shell.dart';
 import '../utils/app_config.dart';
+import '../utils/emoji_field.dart';
+import 'user_profile_sheet.dart';
 
 // Groups are presented as CARD POPUPS (AppPopupShell) — not full-window routes —
 // so on desktop they never hide the music/chat panels. Selecting or creating a
@@ -474,7 +476,11 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           controller: ctrl,
           autofocus: true,
           textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(border: OutlineInputBorder()),
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            // Tap to insert emojis into the group name.
+            suffixIcon: emojiSuffixButton(dctx, ctrl),
+          ),
         ),
         actions: [
           TextButton(
@@ -689,18 +695,38 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     );
   }
 
+  // Build a full media URL from a stored relative avatar ref.
+  String? _fullUrl(String rel) {
+    if (rel.isEmpty) return null;
+    return rel.startsWith('http') ? rel : '$_apiBase$rel';
+  }
+
   Widget _memberTile(dynamic m, ColorScheme scheme) {
     final uid = (m['user_id'] as num).toInt();
     final name = (m['username'] ?? 'User').toString();
     final role = (m['role'] ?? 'member').toString();
+    final phone = (m['phone'] ?? '').toString();
     final isSelf = uid == _myUid;
+    final avatar = _fullUrl((m['avatar_url'] ?? '').toString());
     return ListTile(
       contentPadding: EdgeInsets.zero,
       dense: true,
+      // Tap a member to view their profile details (photo, name, number).
+      onTap: () => showUserProfile(
+        context,
+        username: name,
+        phone: phone.isEmpty ? null : phone,
+        avatarUrl: avatar,
+      ),
       leading: CircleAvatar(
         backgroundColor: scheme.primaryContainer,
-        child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
-            style: TextStyle(color: scheme.onPrimaryContainer)),
+        backgroundImage: avatar != null
+            ? authNetworkImageProvider(avatar, mediaAuthHeaders(avatar))
+            : null,
+        child: avatar == null
+            ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                style: TextStyle(color: scheme.onPrimaryContainer))
+            : null,
       ),
       title: Text(isSelf ? '$name (You)' : name),
       subtitle: role == 'admin'

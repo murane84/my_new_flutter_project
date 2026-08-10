@@ -2196,19 +2196,23 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                 const Spacer(),
 
                 // ── Identify song (Shazam-style) — centred between the volume
-                // and speed controls. Listens via the mic and names the song. ──
-                GestureDetector(
-                  onTap: () => showSongIdentifier(context),
-                  child: Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: accent.withAlpha(28),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: accent.withAlpha(120)),
+                // and speed controls. Listens via the mic and names the song.
+                // Uses an "ear/listen" icon so it never reads like the Equalizer
+                // (which is graphic-eq bars). ──
+                Tooltip(
+                  message: 'Identify song',
+                  child: GestureDetector(
+                    onTap: () => showSongIdentifier(context),
+                    child: Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: accent.withAlpha(28),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: accent.withAlpha(120)),
+                      ),
+                      child: Icon(Icons.hearing_rounded, size: 20, color: accent),
                     ),
-                    child: Icon(Icons.graphic_eq_rounded,
-                        size: 20, color: accent),
                   ),
                 ),
                 const Spacer(),

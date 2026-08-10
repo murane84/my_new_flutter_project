@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../utils/net_image.dart';
 
 import 'api_service.dart';
 import 'token_helper.dart' show mediaAuthHeaders;
@@ -575,78 +575,104 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     final title = (_conv?['title'] ?? 'Group').toString();
     final avatar = _fullAvatar();
     final members = _members();
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-      child: Column(
-        children: [
-          // Avatar (tap to change if admin)
-          GestureDetector(
-            onTap: (_isAdmin && !_busy) ? _changeAvatar : null,
-            child: Stack(
-              alignment: Alignment.bottomRight,
-              children: [
-                CircleAvatar(
-                  radius: 44,
-                  backgroundColor: scheme.primaryContainer,
-                  backgroundImage: avatar != null
-                      ? CachedNetworkImageProvider(avatar,
-                          headers: mediaAuthHeaders(avatar))
-                      : null,
-                  child: avatar == null
-                      ? Icon(Icons.groups_rounded,
-                          size: 40, color: scheme.onPrimaryContainer)
-                      : null,
+    // Layout: a compact FIXED header (avatar + name + member count), then the
+    // member list takes all remaining height and scrolls on its own, and the
+    // Leave button stays PINNED at the bottom so it's always reachable.
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+          child: Column(
+            children: [
+              // Avatar (tap to change if admin)
+              GestureDetector(
+                onTap: (_isAdmin && !_busy) ? _changeAvatar : null,
+                child: Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    CircleAvatar(
+                      radius: 38,
+                      backgroundColor: scheme.primaryContainer,
+                      backgroundImage: avatar != null
+                          ? authNetworkImageProvider(
+                              avatar, mediaAuthHeaders(avatar))
+                          : null,
+                      child: avatar == null
+                          ? Icon(Icons.groups_rounded,
+                              size: 36, color: scheme.onPrimaryContainer)
+                          : null,
+                    ),
+                    if (_isAdmin)
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                            color: scheme.primary, shape: BoxShape.circle),
+                        child: const Icon(Icons.camera_alt_rounded,
+                            size: 15, color: Colors.white),
+                      ),
+                  ],
                 ),
-                if (_isAdmin)
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                        color: scheme.primary, shape: BoxShape.circle),
-                    child: const Icon(Icons.camera_alt_rounded,
-                        size: 15, color: Colors.white),
+              ),
+              const SizedBox(height: 10),
+              // Name (edit if admin)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(title,
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w700),
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis),
                   ),
-              ],
+                  if (_isAdmin)
+                    IconButton(
+                      icon: const Icon(Icons.edit_rounded, size: 18),
+                      onPressed: _busy ? null : _rename,
+                      tooltip: 'Rename',
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Text('${members.length} members',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurfaceVariant)),
+                  const Spacer(),
+                  if (_isAdmin)
+                    TextButton.icon(
+                      onPressed: _busy ? null : _addMembers,
+                      icon:
+                          const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                      label: const Text('Add'),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        Divider(height: 1, color: scheme.outlineVariant.withAlpha(90)),
+        // Member list — expands to use all remaining height, scrolls when long.
+        Flexible(
+          child: ListView.builder(
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            itemCount: members.length,
+            itemBuilder: (_, i) => _memberTile(members[i], scheme),
+          ),
+        ),
+        // Pinned footer — Leave group is always visible, never scrolls away.
+        Container(
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(color: scheme.outlineVariant.withAlpha(90)),
             ),
           ),
-          const SizedBox(height: 12),
-          // Name (edit if admin)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(title,
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w700),
-                    overflow: TextOverflow.ellipsis),
-              ),
-              if (_isAdmin)
-                IconButton(
-                  icon: const Icon(Icons.edit_rounded, size: 18),
-                  onPressed: _busy ? null : _rename,
-                  tooltip: 'Rename',
-                ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Text('${members.length} members',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: scheme.onSurfaceVariant)),
-              const Spacer(),
-              if (_isAdmin)
-                TextButton.icon(
-                  onPressed: _busy ? null : _addMembers,
-                  icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
-                  label: const Text('Add'),
-                ),
-            ],
-          ),
-          const Divider(height: 8),
-          ...members.map((m) => _memberTile(m, scheme)),
-          const SizedBox(height: 12),
-          SizedBox(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          child: SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: _busy ? null : _leave,
@@ -658,8 +684,8 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

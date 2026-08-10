@@ -145,7 +145,7 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
               backgroundColor: scheme.primaryContainer,
               backgroundImage: hasAvatar
                   ? authNetworkImageProvider(
-                      avatarUrl!, mediaAuthHeaders(avatarUrl!))
+                      avatarUrl!, mediaAuthHeaders(avatarUrl))
                   : null,
               child: hasAvatar
                   ? null

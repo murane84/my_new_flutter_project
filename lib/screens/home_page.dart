@@ -117,6 +117,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // list as DMs, so a created/joined group appears right alongside friends.
   List<Map<String, dynamic>> _groups = [];
   List<Map<String, dynamic>> _filteredGroups = [];
+  final TextEditingController _searchCtrl = TextEditingController();
   bool _isLoadingFriends = false;
 
   // Images shared into Aluta from another app, waiting to be handed to the chat
@@ -361,6 +362,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     ShareInbox.instance.removeListener(_onSharePending);
     playlistDrawerBus.isOpen.removeListener(_onPlaylistDrawerToggled);
     _playlistDrawerCtrl.dispose();
+    _searchCtrl.dispose();
     _refreshTimer?.cancel();
     _heartbeatTimer?.cancel();
     _connectivitySub?.cancel();
@@ -1076,7 +1078,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
       await _saveFriendsCache(friends);
       setState(() {
         _allFriends = friends;
-        _filteredFriends = friends;
+        // Respect an active search query — mirrors _fetchGroups so a background
+        // refresh can't leave friends unfiltered while groups stay filtered.
+        _filteredFriends = _applyFriendQuery(friends, _searchQuery);
         _isCurrentUserOnline = true;
         _serverReachable = true;
         _isLoadingFriends = false;
@@ -1193,23 +1197,39 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   String _searchQuery = '';
 
-  void _filterFriends(String query) {
+  /// Filter the friend list by the search query. Matches the app username AND
+  /// the SHOWN name (saved phone-book name) so searching by how you know them
+  /// works even if their app username differs. Empty query → the full list.
+  List<Map<String, dynamic>> _applyFriendQuery(
+      List<Map<String, dynamic>> friends, String query) {
     final q = query.toLowerCase();
+    if (q.isEmpty) return friends;
+    return friends.where((f) {
+      final username = (f['username'] as String? ?? '').toLowerCase();
+      final shown = _contactDisplayName(
+              f['phone']?.toString(), f['username'] as String? ?? '')
+          .toLowerCase();
+      return username.contains(q) || shown.contains(q);
+    }).toList();
+  }
+
+  void _filterFriends(String query) {
     setState(() {
       _searchQuery = query;
-      _filteredFriends = _allFriends
-          .where((f) {
-            final username = (f['username'] as String? ?? '').toLowerCase();
-            // Match the SHOWN name too (saved phone-book name), so searching by
-            // how you know them works even if their app username differs.
-            final shown = _contactDisplayName(
-                    f['phone']?.toString(), f['username'] as String? ?? '')
-                .toLowerCase();
-            return username.contains(q) || shown.contains(q);
-          })
-          .toList();
+      _filteredFriends = _applyFriendQuery(_allFriends, query);
       _filteredGroups = _applyGroupQuery(_groups, query);
     });
+  }
+
+  /// Clear the search so BOTH friends and groups return to their full lists and
+  /// the search box empties. Called when a chat is opened, so coming back shows
+  /// the whole list (and groups don't stay filtered out by a stale query). The
+  /// caller wraps this in setState.
+  void _clearSearchState() {
+    _searchQuery = '';
+    _searchCtrl.clear();
+    _filteredFriends = _allFriends;
+    _filteredGroups = _groups;
   }
 
   // ── Share-into-Aluta (pick a chat to send a shared photo) ─────────────────
@@ -1264,6 +1284,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   void openChat(Map<String, dynamic> friend) {
     setState(() {
+      _clearSearchState();
       _activeFriendId = friend['id'].toString();
       _activeFriendName = friend['username'] ?? 'Friend';
       _activeFriendOnline = friend['is_online'] ?? false;
@@ -1281,6 +1302,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// visible on desktop). Called from the Groups popup / after creating a group.
   void openGroupInPanel(Map<String, dynamic> conv) {
     setState(() {
+      _clearSearchState();
       _activeGroup = conv;
       // Groups and DMs are mutually exclusive in the panel.
       _activeFriendId = null;
@@ -2357,6 +2379,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       children: [
         if (_isSharing) _buildShareBanner(scheme),
         TextField(
+          controller: _searchCtrl,
           onChanged: _filterFriends,
           decoration: InputDecoration(
             hintText: 'Search messages…',

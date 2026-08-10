@@ -106,6 +106,12 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFF1A1012),
         body: Container(
+          // Fill the whole screen. Without these, the Container shrink-wraps to
+          // its content width — and in the "Call ended" state (no full-width
+          // controls row) that made the gradient cover only a narrow strip,
+          // leaving the rest black (the "screen dividing" on hang-up).
+          width: double.infinity,
+          height: double.infinity,
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,

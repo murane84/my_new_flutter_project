@@ -50,6 +50,10 @@ class _GroupCallScreenState extends ConsumerState<GroupCallScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFF12131A),
         body: Container(
+          // Fill the whole screen (see call_screen.dart) so narrow states like
+          // "ringing" never let the container shrink-wrap and paint a strip.
+          width: double.infinity,
+          height: double.infinity,
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,

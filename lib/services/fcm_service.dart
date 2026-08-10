@@ -23,6 +23,10 @@ Future<void> handleFcmData(Map<String, dynamic> data) async {
     if (type == 'call_offer') {
       final caller = (data['caller_name'] ?? 'Someone').toString();
       await showCallNotification(caller: caller);
+    } else if (type == 'group_call') {
+      final caller = (data['caller_name'] ?? 'Someone').toString();
+      final title = (data['title'] ?? 'Group').toString();
+      await showCallNotification(caller: '$caller · $title');
     } else if (type == 'call_end' ||
         type == 'call_cancel' ||
         type == 'call_decline' ||

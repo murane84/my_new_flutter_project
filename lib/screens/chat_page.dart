@@ -2430,8 +2430,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   Widget _infoMemberTile(dynamic m, ColorScheme scheme) {
-    final name = (m['username'] ?? 'User').toString();
+    final username = (m['username'] ?? 'User').toString();
     final phone = (m['phone'] ?? '').toString();
+    // Prefer the user's phonebook-saved name over the raw DB username.
+    final saved =
+        phone.isNotEmpty ? ContactNames.instance.nameFor(phone) : null;
+    final name = (saved != null && saved.isNotEmpty) ? saved : username;
     final avatarRel = (m['avatar_url'] ?? '').toString();
     final avatar = avatarRel.isNotEmpty ? fullMediaUrl(avatarRel) : null;
     final ts = (m['timestamp'] ?? '').toString();

@@ -1861,53 +1861,107 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     );
   }
 
-  void _openImageViewer(String url) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withAlpha(235),
-      builder: (ctx) => Stack(
-        children: [
-          GestureDetector(
-            onTap: () => Navigator.pop(ctx),
-            child: Center(
-              child: InteractiveViewer(
-                minScale: 0.8,
-                maxScale: 4,
-                child: authNetworkImage(
-                    url: url,
-                    headers: mediaAuthHeaders(url),
-                    fit: BoxFit.contain),
+  void _openImageViewer(String tappedUrl) {
+    // Gather EVERY image shared in this thread (chronological order) so the
+    // viewer is a swipeable gallery, not a single photo. Opening any image lets
+    // the user page left/right through all of them, pinch-zoom each, and save.
+    final images = <String>[];
+    for (final m in _messages) {
+      if ((m['message_type'] as String?) == 'image') {
+        final rel = (m['media_url'] as String?) ?? '';
+        if (rel.isNotEmpty) images.add(fullMediaUrl(rel));
+      }
+    }
+    if (!images.contains(tappedUrl)) images.insert(0, tappedUrl);
+    var initial = images.indexOf(tappedUrl);
+    if (initial < 0) initial = 0;
+    final controller = PageController(initialPage: initial);
+    var current = initial;
+
+    Navigator.of(context)
+        .push(PageRouteBuilder(
+          opaque: true,
+          transitionDuration: const Duration(milliseconds: 200),
+          reverseTransitionDuration: const Duration(milliseconds: 200),
+          pageBuilder: (_, _, _) => StatefulBuilder(
+            builder: (ctx, setSB) => Scaffold(
+              backgroundColor: Colors.black,
+              body: Stack(
+                children: [
+                  PageView.builder(
+                    controller: controller,
+                    itemCount: images.length,
+                    onPageChanged: (i) => setSB(() => current = i),
+                    itemBuilder: (_, i) => GestureDetector(
+                      onTap: () => Navigator.pop(ctx),
+                      child: Center(
+                        child: InteractiveViewer(
+                          minScale: 0.8,
+                          maxScale: 4,
+                          child: authNetworkImage(
+                              url: images[i],
+                              headers: mediaAuthHeaders(images[i]),
+                              fit: BoxFit.contain),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Close.
+                  Positioned(
+                    top: 40,
+                    right: 12,
+                    child: IconButton(
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black.withAlpha(115),
+                      ),
+                      icon: const Icon(Icons.close_rounded, color: Colors.white),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ),
+                  // Save the image currently on screen.
+                  Positioned(
+                    top: 40,
+                    left: 12,
+                    child: IconButton(
+                      tooltip: 'Save image',
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black.withAlpha(115),
+                      ),
+                      icon: const Icon(Icons.download_rounded,
+                          color: Colors.white),
+                      onPressed: () => _saveImage(images[current]),
+                    ),
+                  ),
+                  // Position counter (only when there's more than one image).
+                  if (images.length > 1)
+                    Positioned(
+                      top: 46,
+                      left: 0,
+                      right: 0,
+                      child: IgnorePointer(
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withAlpha(115),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text('${current + 1} / ${images.length}',
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 13)),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
-          Positioned(
-            top: 40,
-            right: 12,
-            child: IconButton(
-              // Dark translucent disc behind the icon so it stays visible over
-              // light/white images (a bare white icon vanished on them).
-              style: IconButton.styleFrom(
-                backgroundColor: Colors.black.withAlpha(115),
-              ),
-              icon: const Icon(Icons.close_rounded, color: Colors.white),
-              onPressed: () => Navigator.pop(ctx),
-            ),
-          ),
-          Positioned(
-            top: 40,
-            left: 12,
-            child: IconButton(
-              tooltip: 'Save image',
-              style: IconButton.styleFrom(
-                backgroundColor: Colors.black.withAlpha(115),
-              ),
-              icon: const Icon(Icons.download_rounded, color: Colors.white),
-              onPressed: () => _saveImage(url),
-            ),
-          ),
-        ],
-      ),
-    );
+          transitionsBuilder: (_, anim, _, child) =>
+              FadeTransition(opacity: anim, child: child),
+        ))
+        .then((_) => controller.dispose());
   }
 
   Widget _fileBubble(String url, Map<String, dynamic> msg, Color textColor,

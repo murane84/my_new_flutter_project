@@ -171,6 +171,17 @@ def send_push_to_user(
             "Content-Type": "application/json; UTF-8",
         }
         str_data = {str(k): str(v) for k, v in (data or {}).items()}
+        # FCM rejects the ENTIRE message (HTTP 400) if any data key is a reserved
+        # word: "from", "message_type", "notification", or anything starting with
+        # "google"/"gcm". Strip them defensively so one stray key can never
+        # silently kill a push (this is what broke call_offer: it used "from").
+        _reserved = {"from", "message_type", "notification"}
+        _bad = [k for k in str_data
+                if k in _reserved or k.startswith("google") or k.startswith("gcm")]
+        for k in _bad:
+            str_data.pop(k, None)
+        if _bad:
+            print(f"[push] stripped reserved FCM data key(s): {_bad}")
         sent = 0
         for token in tokens:
             body = {

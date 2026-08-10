@@ -128,7 +128,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                                 int(to),
                                 {
                                     "type": "call_offer",
-                                    "from": str(user_id),
+                                    # NB: 'from' is a RESERVED FCM data key —
+                                    # including it makes FCM reject the whole
+                                    # message with HTTP 400, so the ringing push
+                                    # never rings. Use 'caller_id' instead.
+                                    "caller_id": str(user_id),
                                     "caller_name": caller_name,
                                 },
                             ))

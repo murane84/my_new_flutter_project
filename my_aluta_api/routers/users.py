@@ -3,9 +3,10 @@ from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime, timezone
 import re
+import json
 from models import BlockStatus
 from database import get_db
-from models import User, MuteStatus, Friend
+from models import User, MuteStatus, Friend, UserContactBook
 import crud, schemas
 from schemas import UserOut  # Ensure this contains fields like id, email, username, is_online
 from auth import get_current_user, get_password_hash, verify_password
@@ -67,6 +68,56 @@ def sync_contacts(
         "matched": [UserOut.model_validate(u) for u in matched],
         "added": added,
     }
+
+@router.post("/users/contacts/names", tags=["Users"])
+def upload_contact_names(
+    payload: schemas.ContactNamesUpload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The phone uploads its number→saved-name map (already normalised keys) so
+    the DESKTOP app can show the user's own saved contact names. Private to the
+    user — one row per user, replaced on each sync."""
+    names = payload.names or {}
+    data = json.dumps({str(k): str(v) for k, v in names.items()})
+    row = (
+        db.query(UserContactBook)
+        .filter(UserContactBook.user_id == current_user.id)
+        .first()
+    )
+    if row:
+        row.data = data
+    else:
+        db.add(UserContactBook(user_id=current_user.id, data=data))
+    db.commit()
+    return {"ok": True, "count": len(names)}
+
+
+@router.get(
+    "/users/contacts/names",
+    response_model=schemas.ContactNamesOut,
+    tags=["Users"],
+)
+def get_contact_names(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The desktop app downloads the user's saved-name map after QR login."""
+    row = (
+        db.query(UserContactBook)
+        .filter(UserContactBook.user_id == current_user.id)
+        .first()
+    )
+    names = {}
+    if row and row.data:
+        try:
+            parsed = json.loads(row.data)
+            if isinstance(parsed, dict):
+                names = {str(k): str(v) for k, v in parsed.items()}
+        except Exception:
+            names = {}
+    return schemas.ContactNamesOut(names=names)
+
 
 # ---------------------------
 # Routes

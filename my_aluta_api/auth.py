@@ -8,8 +8,9 @@ import secrets
 import hmac
 import hashlib
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 from pydantic import BaseModel, EmailStr
-from models import User, PasswordResetCode
+from models import User, PasswordResetCode, LoginLink, DeviceSession
 from database import get_db
 from mailer import send_password_reset_code
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, INACTIVITY_TIMEOUT_MINUTES
@@ -123,13 +124,18 @@ def create_token(data: dict, expires_delta: timedelta) -> str:
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-def create_tokens(email: str):
+def create_tokens(email: str, sid: str | None = None):
+    # `sid` ties a token to a revocable DeviceSession (QR-linked devices); phone
+    # password logins omit it and use the user's stored refresh_token instead.
+    claims = {"sub": email}
+    if sid:
+        claims["sid"] = sid
     access_token = create_token(
-        {"sub": email},
+        dict(claims),
         timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     refresh_token = create_token(
-        {"sub": email},
+        dict(claims),
         # Long-lived so a user who leaves the app idle/backgrounded for weeks is
         # never forced to re-enter credentials — the app silently refreshes.
         timedelta(days=365)
@@ -186,6 +192,18 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     user = get_user_by_email(db, email)
     if not user:
         raise credentials_exception
+
+    # QR-linked devices carry a session id. If it's been revoked (or deleted)
+    # from the user's phone, the token is dead immediately — every request checks.
+    sid = payload.get("sid")
+    if sid:
+        sess = (
+            db.query(DeviceSession).filter(DeviceSession.sid == sid).first()
+        )
+        if not sess or sess.revoked:
+            raise credentials_exception
+        sess.last_seen_at = datetime.now(timezone.utc)
+        db.commit()
 
     # A valid token means a valid session. This is a chat app, not a bank —
     # users stay signed in like WhatsApp and are never logged out for being
@@ -280,9 +298,24 @@ def refresh_access_token(
         raise HTTPException(status_code=401, detail="Invalid token")
 
     user = get_user_by_email(db, email)
-    if not user or user.refresh_token != token:
+    if not user:
         raise HTTPException(status_code=403, detail="Invalid refresh token")
 
+    sid = payload.get("sid")
+    if sid:
+        # QR-linked device: validate the session (not the single user token, so
+        # multiple devices coexist) and keep the sid on the refreshed token.
+        sess = db.query(DeviceSession).filter(DeviceSession.sid == sid).first()
+        if not sess or sess.revoked:
+            raise HTTPException(status_code=403, detail="Session revoked")
+        new_access_token = create_token(
+            {"sub": user.email, "sid": sid},
+            timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+        )
+        return {"access_token": new_access_token, "token_type": "bearer"}
+
+    if user.refresh_token != token:
+        raise HTTPException(status_code=403, detail="Invalid refresh token")
     new_access_token, _ = create_tokens(user.email)
     return {"access_token": new_access_token, "token_type": "bearer"}
 
@@ -523,3 +556,197 @@ def password_reset_confirm(payload: EmailCodeReset, db: Session = Depends(get_db
     rec.used = True
     db.commit()
     return {"message": "Password updated. Sign in with your new password."}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# QR device linking (log the DESKTOP app in by scanning from the phone)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Links are short-lived; the desktop polls until the phone approves.
+LINK_TTL_MINUTES = 3
+_PAIR_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no ambiguous 0/O/1/I
+
+
+class LinkNewRequest(BaseModel):
+    # The desktop describes itself so it shows nicely under "Linked devices".
+    label: Optional[str] = None
+    platform: Optional[str] = None
+
+
+class LinkNewResponse(BaseModel):
+    code: str
+    pair_code: str
+    expires_in: int
+
+
+class LinkApprove(BaseModel):
+    code: Optional[str] = None
+    pair_code: Optional[str] = None
+
+
+class DeviceOut(BaseModel):
+    id: int
+    label: Optional[str] = None
+    platform: Optional[str] = None
+    created_at: Optional[datetime] = None
+    last_seen_at: Optional[datetime] = None
+    current: bool = False
+
+
+def _gen_pair_code(db: Session) -> str:
+    for _ in range(25):
+        code = "".join(secrets.choice(_PAIR_ALPHABET) for _ in range(8))
+        if not db.query(LoginLink).filter(LoginLink.pair_code == code).first():
+            return code
+    return secrets.token_hex(4).upper()
+
+
+@router.post("/link/new", response_model=LinkNewResponse)
+def link_new(payload: Optional[LinkNewRequest] = None, db: Session = Depends(get_db)):
+    """Desktop starts a login handshake: returns a secret `code` (shown as a QR)
+    and a short `pair_code` (typeable on the phone). No auth — the code itself is
+    the secret."""
+    now = datetime.now(timezone.utc)
+    # Opportunistic cleanup of expired/old links.
+    db.query(LoginLink).filter(LoginLink.expires_at < now).delete()
+    db.commit()
+    link = LoginLink(
+        code=secrets.token_urlsafe(32),
+        pair_code=_gen_pair_code(db),
+        status="pending",
+        device_label=(payload.label if payload else None),
+        device_platform=(payload.platform if payload else None),
+        expires_at=now + timedelta(minutes=LINK_TTL_MINUTES),
+    )
+    db.add(link)
+    db.commit()
+    return LinkNewResponse(
+        code=link.code,
+        pair_code=link.pair_code,
+        expires_in=LINK_TTL_MINUTES * 60,
+    )
+
+
+@router.post("/link/approve")
+def link_approve(
+    payload: LinkApprove,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Phone (signed in) authorises a desktop link — by the scanned `code` or the
+    typed `pair_code`. Mints tokens for THIS user and stores them on the link."""
+    now = datetime.now(timezone.utc)
+    base = db.query(LoginLink).filter(
+        LoginLink.expires_at >= now, LoginLink.status == "pending"
+    )
+    link = None
+    if payload.code:
+        link = base.filter(LoginLink.code == payload.code).first()
+    if link is None and payload.pair_code:
+        link = base.filter(
+            LoginLink.pair_code == payload.pair_code.strip().upper()
+        ).first()
+    if link is None:
+        raise HTTPException(status_code=404, detail="Link not found or expired")
+
+    # Create a revocable session for the linked device and bind the tokens to it.
+    # NOTE: we do NOT touch current_user.refresh_token here — that belongs to the
+    # phone; the desktop's refresh is validated via its session instead.
+    sid = secrets.token_hex(16)
+    session = DeviceSession(
+        user_id=current_user.id,
+        sid=sid,
+        label=(link.device_label or "Computer"),
+        platform=(link.device_platform or "desktop"),
+    )
+    db.add(session)
+    access_token, refresh_token = create_tokens(current_user.email, sid=sid)
+    link.user_id = current_user.id
+    link.access_token = access_token
+    link.refresh_token = refresh_token
+    link.status = "approved"
+    db.commit()
+    return {"ok": True, "linked_as": current_user.username}
+
+
+@router.get("/devices", response_model=list[DeviceOut])
+def list_devices(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+):
+    """List the user's active linked-device sessions (for a Linked-devices UI)."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    email = payload.get("sub")
+    user = get_user_by_email(db, email) if isinstance(email, str) else None
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    cur_sid = payload.get("sid")
+    rows = (
+        db.query(DeviceSession)
+        .filter(DeviceSession.user_id == user.id, DeviceSession.revoked == False)  # noqa: E712
+        .order_by(DeviceSession.last_seen_at.desc())
+        .all()
+    )
+    return [
+        DeviceOut(
+            id=s.id,
+            label=s.label,
+            platform=s.platform,
+            created_at=s.created_at,
+            last_seen_at=s.last_seen_at,
+            current=(s.sid == cur_sid),
+        )
+        for s in rows
+    ]
+
+
+@router.post("/devices/{device_id}/revoke")
+def revoke_device(
+    device_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Sign a linked device out remotely. Its tokens die on the next request."""
+    s = (
+        db.query(DeviceSession)
+        .filter(
+            DeviceSession.id == device_id,
+            DeviceSession.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not s:
+        raise HTTPException(status_code=404, detail="Device not found")
+    s.revoked = True
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/link/poll")
+def link_poll(code: str, db: Session = Depends(get_db)):
+    """Desktop polls with its secret `code`. Returns pending until the phone
+    approves, then the tokens ONCE (the link is consumed)."""
+    now = datetime.now(timezone.utc)
+    link = db.query(LoginLink).filter(LoginLink.code == code).first()
+    if link is None:
+        return {"status": "expired"}
+    if link.status == "pending":
+        if link.expires_at < now:
+            return {"status": "expired"}
+        return {"status": "pending"}
+    if link.status == "approved":
+        user = db.query(User).filter(User.id == link.user_id).first()
+        resp = {
+            "status": "approved",
+            "access_token": link.access_token,
+            "refresh_token": link.refresh_token,
+            "email": (user.email if user else None),
+            "username": (user.username if user else None),
+        }
+        link.status = "consumed"  # one-time
+        db.commit()
+        return resp
+    return {"status": "consumed"}

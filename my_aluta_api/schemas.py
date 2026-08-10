@@ -224,6 +224,16 @@ class ContactsSync(BaseModel):
     phones: list[str] = []
 
 
+class ContactNamesUpload(BaseModel):
+    # Number-key → saved contact name, uploaded by the phone so the desktop app
+    # can personalise friends' names. Keys are already normalised on the client.
+    names: dict[str, str] = {}
+
+
+class ContactNamesOut(BaseModel):
+    names: dict[str, str] = {}
+
+
 # ---------------------- PUSH / DEVICE SCHEMAS ----------------------
 
 class DeviceTokenIn(BaseModel):

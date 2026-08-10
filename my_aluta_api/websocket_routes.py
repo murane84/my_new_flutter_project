@@ -8,7 +8,7 @@ from jose import JWTError, jwt
 
 from config import SECRET_KEY, ALGORITHM
 from database import SessionLocal
-from models import User
+from models import User, Conversation, ConversationMember
 from websocket_manager import connected_users, disconnect_user, notify_user
 from push import send_push_to_user
 
@@ -24,6 +24,116 @@ _CALL_SIGNALS = {
     "call_cancel",    # caller → callee: cancelled before it was answered
     "call_busy",      # callee → caller: already in another call
 }
+
+# Group (mesh) call per-peer negotiation messages, relayed to the `to` peer.
+_GROUP_RELAY = {"group_offer", "group_answer", "group_ice"}
+
+# In-memory registry of active group-call rooms: conversation_id -> set of the
+# user ids currently in that call. In-memory is consistent with the rest of the
+# WS layer (connected_users) and fine for a single replica; a multi-replica
+# deploy would move this to Redis. Media is peer-to-peer (mesh) — the server
+# only relays signaling here, never audio.
+_group_rooms: dict[int, set[int]] = {}
+
+
+def _to_int(v):
+    try:
+        return int(v)
+    except Exception:
+        return None
+
+
+def _room_members_and_title(room_id: int):
+    """Return (member_user_ids, title) for a conversation, for ringing + auth."""
+    db = SessionLocal()
+    try:
+        rows = db.query(ConversationMember.user_id).filter(
+            ConversationMember.conversation_id == room_id).all()
+        members = [int(r[0]) for r in rows]
+        conv = db.query(Conversation).filter(
+            Conversation.id == room_id).first()
+        title = (conv.title if conv else None) or "Group call"
+        return members, title
+    except Exception:
+        return [], "Group call"
+    finally:
+        db.close()
+
+
+async def _group_start(room_id: int, uid: int, caller_name: str):
+    """Caller starts a group call: mark them in the room and ring every other
+    member over WS + push."""
+    members, title = _room_members_and_title(room_id)
+    if uid not in members:
+        return  # only members may start a call in their group
+    _group_rooms.setdefault(room_id, set()).add(uid)
+    for m in members:
+        if m == uid:
+            continue
+        try:
+            await notify_user(m, {
+                "type": "group_call_incoming", "room": room_id,
+                "from": uid, "caller_name": caller_name, "title": title,
+            })
+        except Exception:
+            pass
+        try:
+            asyncio.create_task(asyncio.to_thread(
+                send_push_to_user, m,
+                {"type": "group_call", "room": str(room_id),
+                 "caller_name": caller_name, "title": title}))
+        except Exception:
+            pass
+
+
+async def _group_join(room_id: int, uid: int):
+    """A member accepts: add them, tell them who's already in, and tell the
+    existing participants about the newcomer so the mesh can form."""
+    members, _ = _room_members_and_title(room_id)
+    if uid not in members:
+        return
+    existing = [x for x in _group_rooms.get(room_id, set()) if x != uid]
+    _group_rooms.setdefault(room_id, set()).add(uid)
+    try:
+        await notify_user(uid, {
+            "type": "group_call_participants", "room": room_id,
+            "users": [{"id": x} for x in existing],
+        })
+    except Exception:
+        pass
+    for x in existing:
+        try:
+            await notify_user(x, {
+                "type": "group_call_peer_joined", "room": room_id,
+                "user_id": uid,
+            })
+        except Exception:
+            pass
+
+
+async def _group_leave(room_id: int, uid: int):
+    """A participant leaves: drop them and tell the rest to close that peer."""
+    room = _group_rooms.get(room_id)
+    if not room or uid not in room:
+        return
+    room.discard(uid)
+    for x in list(room):
+        try:
+            await notify_user(x, {
+                "type": "group_call_peer_left", "room": room_id,
+                "user_id": uid,
+            })
+        except Exception:
+            pass
+    if not room:
+        _group_rooms.pop(room_id, None)
+
+
+async def _group_cleanup_user(uid: int):
+    """Remove a disconnected user from every group call they were in."""
+    for room_id in list(_group_rooms.keys()):
+        if uid in _group_rooms.get(room_id, set()):
+            await _group_leave(room_id, uid)
 
 
 def _authenticate_ws(token: Optional[str], user_id: int) -> Optional[User]:
@@ -153,8 +263,37 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                             ))
                         except Exception:
                             pass
+            elif etype == "group_call_start":
+                room_id = _to_int(data.get("room"))
+                if room_id is not None:
+                    await _group_start(room_id, uid, caller_name)
+            elif etype == "group_call_join":
+                room_id = _to_int(data.get("room"))
+                if room_id is not None:
+                    await _group_join(room_id, uid)
+            elif etype == "group_call_leave":
+                room_id = _to_int(data.get("room"))
+                if room_id is not None:
+                    await _group_leave(room_id, uid)
+            elif etype in _GROUP_RELAY:
+                # Per-peer mesh negotiation (offer/answer/ice) → relay to `to`.
+                to = data.get("to")
+                if to is not None:
+                    payload = {k: v for k, v in data.items() if k != "to"}
+                    payload["from"] = uid
+                    try:
+                        await notify_user(int(to), payload)
+                    except Exception:
+                        pass
             # (Other event types are still accepted and ignored, keeping the
             #  socket alive as a heartbeat.)
 
     except WebSocketDisconnect:
         disconnect_user(user_id, websocket)
+        # If this was the user's last socket, drop them from any group calls so
+        # the remaining participants tear down that peer connection.
+        if not connected_users.get(uid):
+            try:
+                await _group_cleanup_user(uid)
+            except Exception:
+                pass

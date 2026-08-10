@@ -45,7 +45,9 @@ import 'token_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
 import '../services/call_service.dart';
+import '../services/group_call_service.dart';
 import 'call_screen.dart';
+import 'group_call_screen.dart';
 import '../main.dart' show navigatorKey;
 import '../utils/time_utils.dart';
 // Prefixed: this file also imports package:provider, which exports colliding
@@ -793,9 +795,69 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // signaling out through here, and asks us to surface the call screen.
     CallService.instance.sendSignal = (msg) => _notifyWs?.sendEvent(msg);
     CallService.instance.onShowCallUI = _openCallScreen;
+    // Group (mesh) calling rides the same socket.
+    GroupCallService.instance.sendSignal = (msg) => _notifyWs?.sendEvent(msg);
+    GroupCallService.instance.onShowUI = _openGroupCallScreen;
   }
 
   bool _callScreenOpen = false;
+  bool _groupCallScreenOpen = false;
+
+  /// Show the full-screen group-call UI (incoming ring or an outgoing call).
+  void _openGroupCallScreen() {
+    if (_groupCallScreenOpen) return;
+    final nav = navigatorKey.currentState;
+    if (nav == null) return;
+    _groupCallScreenOpen = true;
+    nav
+        .push(PageRouteBuilder(
+          opaque: true,
+          barrierColor: Colors.black,
+          transitionDuration: const Duration(milliseconds: 240),
+          reverseTransitionDuration: const Duration(milliseconds: 320),
+          pageBuilder: (_, __, ___) => const GroupCallScreen(),
+          transitionsBuilder: (_, anim, __, child) => FadeTransition(
+            opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
+            child: child,
+          ),
+        ))
+        .then((_) => _groupCallScreenOpen = false);
+  }
+
+  Future<void> _startGroupCall(Map g) async {
+    final room = (g['id'] as num?)?.toInt();
+    final myId = _myUserId;
+    if (room == null || myId == null) return;
+    if (!ConnectionStatus.instance.isOnline) {
+      if (mounted) {
+        showToast(context, 'No internet — can’t start a group call',
+            type: ToastType.info);
+      }
+      return;
+    }
+    final members = <GroupParticipant>[];
+    for (final m in (g['members'] as List?) ?? const []) {
+      if (m is! Map) continue;
+      final id = (m['user_id'] as num?)?.toInt();
+      if (id == null || id == myId) continue;
+      members.add(GroupParticipant(
+        id,
+        (m['username'] ?? '').toString(),
+        m['avatar_url'] as String?,
+        phone: m['phone'] as String?,
+      ));
+    }
+    final ok = await GroupCallService.instance.startGroupCall(
+      room: room,
+      title: (g['title'] ?? 'Group').toString(),
+      myId: myId,
+      myName: _username.isNotEmpty ? _username : 'Aluta user',
+      members: members,
+    );
+    if (!ok && mounted) {
+      showToast(context, 'You’re already in a call', type: ToastType.info);
+    }
+  }
 
   /// Show the full-screen call UI (for an incoming ring or an outgoing call).
   void _openCallScreen() {
@@ -824,6 +886,15 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void _handleNotification(Map<String, dynamic> event) {
     if (!mounted) return;
     final type = event['type']?.toString();
+    // Group (mesh) call signaling — group_call_*, group_offer/answer/ice.
+    if (type != null &&
+        (type.startsWith('group_call') ||
+            type == 'group_offer' ||
+            type == 'group_answer' ||
+            type == 'group_ice')) {
+      GroupCallService.instance.onSignal(event);
+      return;
+    }
     // Aluta voice-call signaling — hand every call_* event to the call service.
     // (call_offer makes it ask us to open the ring screen via onShowCallUI.)
     if (type != null && type.startsWith('call_')) {
@@ -1790,6 +1861,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
                 ),
               ),
             ),
+          ),
+          // Start a group voice call — rings every member.
+          IconButton(
+            tooltip: 'Group call',
+            icon: const Icon(Icons.call_rounded),
+            onPressed: () => _startGroupCall(g),
           ),
           // Quick playlist drawer toggle — same shortcut as the DM header so the
           // music library can pop in without leaving the group conversation.

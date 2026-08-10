@@ -7,7 +7,9 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import User, MediaAsset, Message
+from models import (
+    User, MediaAsset, Message, Conversation, ConversationMember,
+)
 from .users import get_current_user
 
 router = APIRouter(tags=["Attachments"])
@@ -125,6 +127,53 @@ def _can_access(
             is not None
         )
         if owner_sent_to_me:
+            return True
+
+    # GROUP (and DM) conversation attachments: any MEMBER of the conversation
+    # that carries this media may view it. Group messages have receiver_id = NULL
+    # (they route by conversation_id), so the sender/receiver check above never
+    # covers them — this does, for every member.
+    conv_row = (
+        db.query(Message.conversation_id)
+        .filter(
+            Message.media_url.contains(fragment, autoescape=True),
+            Message.conversation_id.isnot(None),
+        )
+        .order_by(Message.id.asc())
+        .first()
+    )
+    if conv_row and conv_row[0]:
+        is_member = (
+            db.query(ConversationMember.user_id)
+            .filter(
+                ConversationMember.conversation_id == conv_row[0],
+                ConversationMember.user_id == user_id,
+            )
+            .first()
+            is not None
+        )
+        if is_member:
+            return True
+
+    # GROUP AVATAR: the photo lives on the Conversation (not on any User), so the
+    # profile-picture branch below never matches it. Members of that group may
+    # view its photo.
+    grp_avatar = (
+        db.query(Conversation.id)
+        .filter(Conversation.avatar_url.contains(fragment, autoescape=True))
+        .first()
+    )
+    if grp_avatar and grp_avatar[0]:
+        is_member = (
+            db.query(ConversationMember.user_id)
+            .filter(
+                ConversationMember.conversation_id == grp_avatar[0],
+                ConversationMember.user_id == user_id,
+            )
+            .first()
+            is not None
+        )
+        if is_member:
             return True
 
     if not allow_avatar:

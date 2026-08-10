@@ -803,10 +803,20 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final nav = navigatorKey.currentState;
     if (nav == null) return;
     _callScreenOpen = true;
+    // Cross-fade in/out rather than the default fullscreen-dialog slide. The
+    // slide made hang-up look like the screen was "splitting" as the call UI
+    // slid down and revealed the home screen; a fade dismisses cleanly.
     nav
-        .push(MaterialPageRoute(
-          fullscreenDialog: true,
-          builder: (_) => const CallScreen(),
+        .push(PageRouteBuilder(
+          opaque: true,
+          barrierColor: Colors.black,
+          transitionDuration: const Duration(milliseconds: 240),
+          reverseTransitionDuration: const Duration(milliseconds: 320),
+          pageBuilder: (_, __, ___) => const CallScreen(),
+          transitionsBuilder: (_, anim, __, child) => FadeTransition(
+            opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
+            child: child,
+          ),
         ))
         .then((_) => _callScreenOpen = false);
   }

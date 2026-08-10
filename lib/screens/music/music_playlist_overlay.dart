@@ -103,6 +103,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   // for app-cached files); missing entries sort as 0.
   Map<String, int> _durMs = {};
   Map<String, int> _sizeB = {};
+  // Per-track MediaStore id, used to pull embedded album art for the row leading.
+  Map<String, int> _songId = {};
 
   // Multi-select mode.
   bool _selecting = false;
@@ -149,6 +151,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   Future<void> _loadTrackMeta() async {
     final dur = <String, int>{};
     final size = <String, int>{};
+    final ids = <String, int>{};
     try {
       if (Platform.isAndroid || Platform.isIOS) {
         final songs = await OnAudioQuery().querySongs();
@@ -159,10 +162,13 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           // int or int? — and to sidestep the matching analyzer warnings.
           final dynamic dRaw = s.duration;
           final dynamic szRaw = s.size;
+          final dynamic idRaw = s.id;
           final int d = dRaw is int ? dRaw : 0;
           final int sz = szRaw is int ? szRaw : 0;
+          final int id = idRaw is int ? idRaw : 0;
           if (d > 0) dur[p] = d;
           if (sz > 0) size[p] = sz;
+          if (id > 0) ids[p] = id;
         }
       }
     } catch (_) {/* desktop / no permission — fall back to file stats */}
@@ -178,7 +184,45 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     setState(() {
       _durMs = dur;
       _sizeB = size;
+      _songId = ids;
     });
+  }
+
+  /// Row leading: the now-playing indicator, the song's embedded cover art when
+  /// we can pull it, or a music-note icon — never the raw track number.
+  Widget _leadingArt(String path, bool isNow, ColorScheme scheme) {
+    if (isNow) {
+      return CircleAvatar(
+        radius: 15,
+        backgroundColor: scheme.primary,
+        child:
+            Icon(Icons.equalizer_rounded, size: 15, color: scheme.onPrimary),
+      );
+    }
+    final fallback = CircleAvatar(
+      radius: 15,
+      backgroundColor: scheme.surfaceContainerHighest,
+      child: Icon(Icons.music_note_rounded,
+          size: 16, color: scheme.onSurfaceVariant),
+    );
+    final id = _songId[path];
+    // Embedded art is only queryable from the device MediaStore (Android/iOS).
+    if (id == null || !(Platform.isAndroid || Platform.isIOS)) return fallback;
+    return SizedBox(
+      width: 30,
+      height: 30,
+      child: ClipOval(
+        child: QueryArtworkWidget(
+          id: id,
+          type: ArtworkType.AUDIO,
+          artworkWidth: 30,
+          artworkHeight: 30,
+          artworkFit: BoxFit.cover,
+          keepOldArtwork: true,
+          nullArtworkWidget: fallback,
+        ),
+      ),
+    );
   }
 
   // Raw file name (with extension) for the "File name" sort — distinct from the
@@ -1387,19 +1431,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                     : Icons.radio_button_unchecked_rounded,
                 color: isSel ? scheme.primary : scheme.onSurfaceVariant,
               )
-            : CircleAvatar(
-                radius: 15,
-                backgroundColor:
-                    isNow ? scheme.primary : scheme.surfaceContainerHighest,
-                child: isNow
-                    ? Icon(Icons.equalizer_rounded,
-                        size: 15, color: scheme.onPrimary)
-                    : Text('${realIdx + 1}',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: scheme.onSurfaceVariant)),
-              ),
+            : _leadingArt(path, isNow, scheme),
         title: Text(
           _effTitle(path),
           maxLines: 1,

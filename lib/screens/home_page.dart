@@ -14,7 +14,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:marquee/marquee.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/toast_helper.dart';
 import '../utils/app_reload.dart';
 import '../utils/connection_status.dart';
@@ -25,6 +24,8 @@ import 'music_controls.dart';
 import 'web_music_panel.dart';
 import 'chat_page.dart';
 import 'group_screens.dart';
+import 'user_profile_sheet.dart';
+import 'device_link.dart';
 import 'music/song_identifier.dart' show showSongIdentifier;
 import 'profile_screen.dart';
 import '../utils/popup_shell.dart';
@@ -37,6 +38,8 @@ import '../services/live_session_service.dart'
 import '../services/notif_service.dart';
 import '../services/fcm_service.dart';
 import '../services/share_inbox.dart';
+import '../services/contact_names.dart';
+import '../utils/net_image.dart';
 import 'token_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
@@ -189,6 +192,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Screenshot / photo shared into Aluta → surface the "pick a chat to send"
     // banner and react if one arrives while Home is already open.
     ShareInbox.instance.addListener(_onSharePending);
+    // Warm the phonebook name map (silent — only if contacts already granted) so
+    // group message headers can show your saved names for known senders.
+    ContactNames.instance.ensureLoaded();
     _loadUserData();
     _loadCachedFriends();    // show cached list instantly (no spinner flash)
     _fetchFriends();          // then refresh from network
@@ -1226,6 +1232,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
       }
       final contacts =
           await FlutterContacts.getContacts(withProperties: true);
+      // Contacts are authorised now — populate the phonebook-name map too so
+      // group headers immediately show saved names.
+      ContactNames.instance.ensureLoaded();
       // Default region for LOCAL (no country code) contact numbers = the
       // device's country. Numbers already in +international form are parsed as
       // written. Everything is normalised to E.164 so matching is correct
@@ -1304,6 +1313,29 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// Ask whether to call over the internet (Aluta) or the device dialer, then
   /// route accordingly. Same chooser the chat screen uses, so every call button
   /// in the app offers the choice.
+  /// Open the active DM friend's profile details (tapped from the chat header).
+  void _openActiveFriendProfile() {
+    final status = _activeFriendOnline == true
+        ? 'Online'
+        : (_activeFriendLastSeen?.isNotEmpty == true
+            ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
+            : 'Offline');
+    showUserProfile(
+      context,
+      username: _activeFriendName ?? '',
+      phone: _activeFriendPhone,
+      avatarUrl: _avatarFull(_activeFriendAvatar),
+      isOnline: _activeFriendOnline == true,
+      statusLine: status,
+      onCall: () => _showCallChoice(
+        friendId: int.tryParse(_activeFriendId ?? '') ?? -1,
+        name: _activeFriendName ?? 'This user',
+        avatar: _activeFriendAvatar,
+        phone: _activeFriendPhone,
+      ),
+    );
+  }
+
   void _showCallChoice({
     required int friendId,
     required String name,
@@ -1462,8 +1494,22 @@ class HomePageState extends rp.ConsumerState<HomePage>
       duration: duration,
       curve: Curves.easeInOut,
       width: containerWidth,
-      clipBehavior: Clip.hardEdge,
-      decoration: const BoxDecoration(),
+      // Round the clip to match the inner card so there are NO triangular corner
+      // gaps — previously a rectangular hard-edge clip cut the card's shadow into
+      // hard dark wedges at the corners. The shadow lives on THIS container now
+      // (outside the clip), so it renders as a soft halo instead.
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: visible
+            ? [
+                BoxShadow(
+                  color: Theme.of(context).shadowColor.withAlpha(30),
+                  blurRadius: 12,
+                ),
+              ]
+            : const [],
+      ),
       child: IgnorePointer(
         ignoring: !visible,
         child: AnimatedOpacity(
@@ -1671,8 +1717,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       radius: 17,
                       backgroundColor: scheme.primaryContainer,
                       backgroundImage: groupAvatar != null
-                          ? CachedNetworkImageProvider(groupAvatar,
-                              headers: mediaAuthHeaders(groupAvatar))
+                          ? authNetworkImageProvider(
+                              groupAvatar, mediaAuthHeaders(groupAvatar))
                           : null,
                       child: groupAvatar == null
                           ? Icon(Icons.groups_rounded,
@@ -1754,29 +1800,34 @@ class HomePageState extends rp.ConsumerState<HomePage>
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _activeFriendName ?? '',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 14),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  _activeFriendOnline == true
-                      ? 'Online'
-                      : _activeFriendLastSeen?.isNotEmpty == true
-                          ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
-                          : 'Offline',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: _activeFriendOnline == true
-                        ? Colors.green
-                        : textColor.withAlpha(130),
+            // Tap the friend's name to open their profile details (phone, etc.).
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _openActiveFriendProfile,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _activeFriendName ?? '',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              ],
+                  Text(
+                    _activeFriendOnline == true
+                        ? 'Online'
+                        : _activeFriendLastSeen?.isNotEmpty == true
+                            ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
+                            : 'Offline',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: _activeFriendOnline == true
+                          ? Colors.green
+                          : textColor.withAlpha(130),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           // Quick playlist drawer toggle — pop the music library in from the
@@ -2045,6 +2096,15 @@ class HomePageState extends rp.ConsumerState<HomePage>
             final isPhone = cons.maxWidth < 520;
             final double panelW =
                 isPhone ? cons.maxWidth : cons.maxWidth.clamp(0.0, 460.0).toDouble();
+            // Full-width (phone): sharp corners so no dimmed layer peeks through
+            // the rounding. Narrower (desktop): keep the soft left "curtain" edge.
+            final bool fullWidth = panelW >= cons.maxWidth - 0.5;
+            final BorderRadius panelRadius = fullWidth
+                ? BorderRadius.zero
+                : const BorderRadius.only(
+                    topLeft: Radius.circular(18),
+                    bottomLeft: Radius.circular(18),
+                  );
             return Stack(
               children: [
                 // Dim scrim — fades with the drawer; tap to close.
@@ -2081,10 +2141,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                           color: scheme.surface,
                           elevation: 16,
                           shadowColor: Colors.black.withAlpha(120),
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(20),
-                            bottomLeft: Radius.circular(20),
-                          ),
+                          borderRadius: panelRadius,
                           clipBehavior: Clip.antiAlias,
                           child: ValueListenableBuilder<int>(
                             valueListenable: playlistDrawerBus.revision,
@@ -2376,8 +2433,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
               radius: 22,
               backgroundColor: scheme.primaryContainer,
               backgroundImage: avatar != null
-                  ? CachedNetworkImageProvider(avatar,
-                      headers: mediaAuthHeaders(avatar))
+                  ? authNetworkImageProvider(avatar, mediaAuthHeaders(avatar))
                   : null,
               child: avatar == null
                   ? Icon(Icons.groups_rounded,
@@ -3421,7 +3477,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
             // UI sits behind it.
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
-              side: const BorderSide(color: Color(0xFFE53935), width: 1.5),
+              // Faint red hairline — just enough to lift the menu off whatever
+              // sits behind it, without reading as a heavy outline.
+              side: BorderSide(
+                  color: const Color(0xFFE53935).withAlpha(70), width: 1),
             ),
             onSelected: (v) async {
               switch (v) {
@@ -3435,6 +3494,20 @@ class HomePageState extends rp.ConsumerState<HomePage>
                   break;
                 case 'identify':
                   await showSongIdentifier(context);
+                  break;
+                case 'link_device':
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const DeviceLinkScanScreen()),
+                  );
+                  break;
+                case 'linked_devices':
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const LinkedDevicesScreen()),
+                  );
                   break;
                 case 'theme':
                   themeProvider.toggleTheme(!themeProvider.isDarkMode);
@@ -3453,10 +3526,18 @@ class HomePageState extends rp.ConsumerState<HomePage>
             },
             itemBuilder: (ctx) => [
               _menuItem('groups', Icons.groups_rounded, 'Groups'),
-              _menuItem(
-                  'identify', Icons.graphic_eq_rounded, 'Identify song'),
+              _menuItem('identify', Icons.hearing_rounded, 'Identify song'),
               _menuItem(
                   'find_friends', Icons.contacts_rounded, 'Find friends'),
+              // Scanning to link a computer is phone-only (needs the camera).
+              if (!kIsWeb &&
+                  (defaultTargetPlatform == TargetPlatform.android ||
+                      defaultTargetPlatform == TargetPlatform.iOS))
+                _menuItem(
+                    'link_device', Icons.laptop_chromebook_rounded,
+                    'Link a computer'),
+              _menuItem(
+                  'linked_devices', Icons.devices_rounded, 'Linked devices'),
               _menuItem(
                 'theme',
                 themeProvider.isDarkMode

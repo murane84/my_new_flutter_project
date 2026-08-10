@@ -340,6 +340,155 @@ class ApiService {
     }
   }
 
+  // ── QR device linking (log the desktop app in from the phone) ──────────────
+
+  /// Desktop: start a QR-login handshake. Returns {code, pair_code, expires_in}.
+  Future<Map<String, dynamic>?> createLoginLink(
+      {String? label, String? platform}) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/auth/link/new'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'label': ?label,
+          'platform': ?platform,
+        }),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.e('createLoginLink exception: $e');
+      return null;
+    }
+  }
+
+  /// Desktop: poll a handshake. Returns {status: pending|approved|expired, ...}.
+  /// On "approved" it also saves the returned tokens locally (like a login).
+  Future<Map<String, dynamic>?> pollLoginLink(String code) async {
+    try {
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/auth/link/poll')
+            .replace(queryParameters: {'code': code}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) {
+          if (data['status'] == 'approved') {
+            final t = (data['access_token'] ?? '').toString();
+            final r = (data['refresh_token'] ?? '').toString();
+            if (t.isNotEmpty) await saveToken(t);
+            if (r.isNotEmpty) await saveRefreshToken(r);
+          }
+          return data;
+        }
+      }
+      return {'status': 'error'};
+    } catch (e) {
+      _logger.e('pollLoginLink exception: $e');
+      return {'status': 'error'};
+    }
+  }
+
+  /// Phone (signed in): authorise a desktop link by scanned code or typed pair.
+  Future<bool> approveLoginLink({String? code, String? pairCode}) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/auth/link/approve'),
+        headers: _authHeaders(token),
+        body: jsonEncode({
+          'code': ?code,
+          'pair_code': ?pairCode,
+        }),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.e('approveLoginLink exception: $e');
+      return false;
+    }
+  }
+
+  /// Phone: upload the saved-name map so the desktop can personalise names.
+  Future<bool> uploadContactNames(Map<String, String> names) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/users/contacts/names'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'names': names}),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.e('uploadContactNames exception: $e');
+      return false;
+    }
+  }
+
+  /// List the account's linked-device sessions (for the Linked-devices screen).
+  Future<List<Map<String, dynamic>>> listDevices() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return [];
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/auth/devices'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode == 200) {
+        final body = jsonDecode(resp.body);
+        if (body is List) return body.whereType<Map<String, dynamic>>().toList();
+      }
+      return [];
+    } catch (e) {
+      _logger.e('listDevices exception: $e');
+      return [];
+    }
+  }
+
+  /// Sign a linked device out remotely.
+  Future<bool> revokeDevice(int deviceId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/auth/devices/$deviceId/revoke'),
+        headers: _authHeaders(token),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.e('revokeDevice exception: $e');
+      return false;
+    }
+  }
+
+  /// Desktop: download the user's saved-name map after QR login.
+  Future<Map<String, String>> fetchContactNames() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return {};
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/users/contacts/names'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        final m = (data is Map) ? data['names'] : null;
+        if (m is Map) {
+          return m.map((k, v) => MapEntry(k.toString(), v.toString()));
+        }
+      }
+      return {};
+    } catch (e) {
+      _logger.e('fetchContactNames exception: $e');
+      return {};
+    }
+  }
+
   // LOGOUT
   Future<void> logoutUser() async {
     // If biometric quick-unlock is enrolled, KEEP the enrollment + refresh token

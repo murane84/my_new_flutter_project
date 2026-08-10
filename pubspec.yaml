@@ -41,6 +41,9 @@ dependencies:
   # Render the authenticator (TOTP) enrollment secret as a scannable QR code.
   # Pure Dart (CustomPainter) — no native side, safe on every platform / SDK.
   qr_flutter: ^4.1.0
+  # Scan the desktop's QR to log the desktop app into the phone's account
+  # (device linking). Mobile-only; the desktop just DISPLAYS the QR (qr_flutter).
+  mobile_scanner: ^7.0.0
   # Read the phone's address book to auto-discover which of the user's contacts
   # are already on Aluta (matched by phone number). Android/iOS only — every
   # call is guarded off on web/desktop.

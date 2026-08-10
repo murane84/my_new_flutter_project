@@ -302,7 +302,7 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
           width: double.infinity,
           child: FilledButton.icon(
             onPressed: canStop ? _stopAndIdentify : null,
-            icon: const Icon(Icons.graphic_eq_rounded),
+            icon: const Icon(Icons.hearing_rounded),
             label: Text(canStop ? 'Identify now' : 'Keep listening…'),
           ),
         ),

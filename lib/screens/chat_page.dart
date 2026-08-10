@@ -24,6 +24,9 @@ import '../utils/marquee_text.dart';
 import 'live_session_screen.dart';
 import 'gif_picker.dart';
 import '../services/call_service.dart';
+import '../services/contact_names.dart';
+import '../utils/net_image.dart';
+import 'user_profile_sheet.dart';
 import 'home_page.dart' show playlistNotifier, playbackBus;
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
@@ -32,7 +35,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart' as ja;
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import '../utils/app_config.dart';
@@ -245,6 +247,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       onEventReceived: _handleWsEvent,
       onDisconnected: () => _startPolling(),
     );
+
+    // Group chats show the SENDER's phonebook name when their number is saved
+    // on this device. Warm that map silently (no permission prompt) and repaint
+    // once it's ready so the header names resolve.
+    if (widget.isGroup) {
+      ContactNames.instance.ensureLoaded().then((_) {
+        if (mounted) setState(() {});
+      });
+    }
 
     // If this chat was opened to receive a shared-in image (e.g. a screenshot
     // shared from another app), jump straight into the preview/caption flow.
@@ -1080,6 +1091,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   /// Ask whether to call over the internet (Aluta) or via the device dialer.
+  /// Open a group member's profile card (tapped from their message header).
+  void _openMemberProfile(String name, String phone, String avatarRel) {
+    showUserProfile(
+      context,
+      username: name,
+      phone: phone,
+      avatarUrl: avatarRel.isNotEmpty ? fullMediaUrl(avatarRel) : null,
+    );
+  }
+
   void _showCallChoice() {
     final scheme = Theme.of(context).colorScheme;
     final online = ConnectionStatus.instance.isOnline;
@@ -1264,8 +1285,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         radius: 20,
                         backgroundColor: scheme.primary.withAlpha(38),
                         backgroundImage: avatarUrl != null
-                            ? CachedNetworkImageProvider(avatarUrl,
-                                headers: mediaAuthHeaders(avatarUrl))
+                            ? authNetworkImageProvider(avatarUrl, mediaAuthHeaders(avatarUrl))
                             : null,
                         child: avatarUrl == null
                             ? Text(
@@ -1814,11 +1834,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         child: ConstrainedBox(
           constraints: const BoxConstraints(
               maxWidth: 240, maxHeight: 300, minWidth: 120, minHeight: 80),
-          child: CachedNetworkImage(
-            imageUrl: url,
-            httpHeaders: mediaAuthHeaders(url),
+          child: authNetworkImage(
+            url: url,
+            headers: mediaAuthHeaders(url),
             fit: BoxFit.cover,
-            placeholder: (_, _) => Container(
+            placeholder: (_) => Container(
               width: 200,
               height: 150,
               color: Colors.black.withAlpha(20),
@@ -1829,7 +1849,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     child: CircularProgressIndicator(strokeWidth: 2)),
               ),
             ),
-            errorWidget: (_, _, _) => Container(
+            error: (_) => Container(
               width: 180,
               height: 120,
               color: Colors.black.withAlpha(20),
@@ -1853,9 +1873,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               child: InteractiveViewer(
                 minScale: 0.8,
                 maxScale: 4,
-                child: CachedNetworkImage(
-                    imageUrl: url,
-                    httpHeaders: mediaAuthHeaders(url),
+                child: authNetworkImage(
+                    url: url,
+                    headers: mediaAuthHeaders(url),
                     fit: BoxFit.contain),
               ),
             ),
@@ -2421,8 +2441,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         radius: 18,
         backgroundColor: scheme.primaryContainer,
         backgroundImage: avatar != null
-            ? CachedNetworkImageProvider(avatar,
-                headers: mediaAuthHeaders(avatar))
+            ? authNetworkImageProvider(avatar, mediaAuthHeaders(avatar))
             : null,
         child: avatar == null
             ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
@@ -3075,6 +3094,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final String rxAvatar = _isGroup ? senderAvatar : _friendAvatar;
     final String rxName = _isGroup ? senderName : widget.friendName;
     final String rxPhone = _isGroup ? senderPhone : '';
+    // Personal touch: if this sender's number is saved in the user's phone book,
+    // show YOUR saved name for them (clean, no ~/number). Otherwise fall back to
+    // their app username with a ~ and the number.
+    final String? savedName =
+        rxPhone.isNotEmpty ? ContactNames.instance.nameFor(rxPhone) : null;
+    final bool inPhonebook = savedName != null && savedName.isNotEmpty;
+    final String headerName = inPhonebook ? savedName : '~ $rxName';
 
     final msgId = msg['id'].toString();
     final key = _msgKeys.putIfAbsent(msgId, () => GlobalKey());
@@ -3116,10 +3142,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             radius: 13,
                             backgroundColor: scheme.primaryContainer,
                             backgroundImage: rxAvatar.isNotEmpty
-                                ? CachedNetworkImageProvider(
-                                    fullMediaUrl(rxAvatar),
-                                    headers: mediaAuthHeaders(
-                                        fullMediaUrl(rxAvatar)))
+                                ? authNetworkImageProvider(fullMediaUrl(rxAvatar), mediaAuthHeaders(fullMediaUrl(rxAvatar)))
                                 : null,
                             child: rxAvatar.isNotEmpty
                                 ? null
@@ -3169,40 +3192,51 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // ── Group sender details — name (+ phone) INSIDE the
-                        // top of the first bubble of each sender's run, the way
-                        // WhatsApp shows unsaved group members. ──
+                        // ── Group sender header INSIDE the top of the first
+                        // bubble of each sender's run. If the number is saved in
+                        // your phone book we show YOUR name for them; otherwise
+                        // their app username (~) and number, WhatsApp-style. ──
                         if (_isGroup && !isMe && isFirst && rxName.isNotEmpty && !tomb)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 3, right: 8),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.baseline,
-                              textBaseline: TextBaseline.alphabetic,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    '~ $rxName',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 12.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: _senderColor(rxName, isDark),
+                          // Tap the sender header to open their profile details.
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _openMemberProfile(
+                                rxName, rxPhone, senderAvatar),
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.only(bottom: 3, right: 8),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.baseline,
+                                textBaseline: TextBaseline.alphabetic,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      headerName,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: _senderColor(
+                                            inPhonebook ? headerName : rxName,
+                                            isDark),
+                                      ),
                                     ),
                                   ),
-                                ),
-                                if (rxPhone.isNotEmpty) ...[
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    rxPhone,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w400,
-                                      color: textColor.withAlpha(150),
+                                  // Only unsaved contacts show the raw number.
+                                  if (!inPhonebook && rxPhone.isNotEmpty) ...[
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      rxPhone,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w400,
+                                        color: textColor.withAlpha(150),
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
                           ),
                         // ── Deleted tombstone ─────────────────────────
@@ -3536,15 +3570,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               padding: const EdgeInsets.only(right: 10),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(6),
-                child: CachedNetworkImage(
-                  imageUrl: fullMediaUrl(mediaRel),
-                  httpHeaders: mediaAuthHeaders(fullMediaUrl(mediaRel)),
+                child: authNetworkImage(
+                  url: fullMediaUrl(mediaRel),
+                  headers: mediaAuthHeaders(fullMediaUrl(mediaRel)),
                   width: 36,
                   height: 36,
                   fit: BoxFit.cover,
-                  placeholder: (_, _) => Container(
+                  placeholder: (_) => Container(
                       width: 36, height: 36, color: scheme.surfaceContainerHigh),
-                  errorWidget: (_, _, _) => Container(
+                  error: (_) => Container(
                       width: 36,
                       height: 36,
                       color: scheme.surfaceContainerHigh,
@@ -4111,8 +4145,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               backgroundColor:
                   Theme.of(context).colorScheme.primaryContainer,
               backgroundImage: headerAvatar.isNotEmpty
-                  ? CachedNetworkImageProvider(fullMediaUrl(headerAvatar),
-                      headers: mediaAuthHeaders(fullMediaUrl(headerAvatar)))
+                  ? authNetworkImageProvider(fullMediaUrl(headerAvatar), mediaAuthHeaders(fullMediaUrl(headerAvatar)))
                   : null,
               child: headerAvatar.isNotEmpty
                   ? null

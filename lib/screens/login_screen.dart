@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
 import 'home_page.dart';
+import 'device_link.dart';
 import 'theme_provider.dart';
 import 'auth_page.dart';
 import 'register_screen.dart';
@@ -553,6 +556,44 @@ class LoginPageState extends State<LoginPage> {
                                             ),
                                           ),
                                         ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                // Desktop: sign in by scanning a QR with the
+                                // phone (inherits the phone's saved contact
+                                // names for name personalisation).
+                                if (!kIsWeb &&
+                                    defaultTargetPlatform !=
+                                        TargetPlatform.android &&
+                                    defaultTargetPlatform !=
+                                        TargetPlatform.iOS) ...[
+                                  const SizedBox(height: 18),
+                                  Center(
+                                    child: OutlinedButton.icon(
+                                      onPressed: _isLoading
+                                          ? null
+                                          : () => Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                    builder: (_) =>
+                                                        const DesktopQrLoginScreen()),
+                                              ),
+                                      icon: const Icon(
+                                          Icons.qr_code_scanner_rounded,
+                                          size: 18),
+                                      label:
+                                          const Text('Log in with your phone'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: scheme.primary,
+                                        side: BorderSide(
+                                            color:
+                                                scheme.primary.withAlpha(120)),
+                                        minimumSize: const Size(210, 46),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(24),
+                                        ),
                                       ),
                                     ),
                                   ),

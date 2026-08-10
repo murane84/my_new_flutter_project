@@ -1880,6 +1880,34 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final controller = PageController(initialPage: initial);
     var current = initial;
 
+    // Desktop (Windows/Linux/macOS) + web: a mouse can't drag a PageView by
+    // default (Flutter's desktop scroll behaviour excludes the mouse from drag
+    // devices), so we (a) re-enable mouse/trackpad drag-paging via a custom
+    // ScrollBehavior, (b) show <  > arrows, and (c) support left/right/Esc keys.
+    final onDesktopOrWeb = kIsWeb ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.linux ||
+        defaultTargetPlatform == TargetPlatform.macOS;
+    void goTo(int i) {
+      if (i >= 0 && i < images.length) {
+        controller.animateToPage(i,
+            duration: const Duration(milliseconds: 260), curve: Curves.easeOut);
+      }
+    }
+
+    Widget arrow(IconData ic, VoidCallback tap) => Material(
+          color: Colors.black.withAlpha(90),
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: tap,
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Icon(ic, color: Colors.white, size: 32),
+            ),
+          ),
+        );
+
     Navigator.of(context)
         .push(PageRouteBuilder(
           opaque: true,
@@ -1888,80 +1916,134 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           pageBuilder: (_, _, _) => StatefulBuilder(
             builder: (ctx, setSB) => Scaffold(
               backgroundColor: Colors.black,
-              body: Stack(
-                children: [
-                  PhotoViewGallery.builder(
-                    pageController: controller,
-                    itemCount: images.length,
-                    onPageChanged: (i) => setSB(() => current = i),
-                    backgroundDecoration:
-                        const BoxDecoration(color: Colors.black),
-                    loadingBuilder: (_, _) => const Center(
-                      child: SizedBox(
-                        width: 28,
-                        height: 28,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
+              body: Focus(
+                autofocus: true,
+                onKeyEvent: (_, event) {
+                  if (event is KeyDownEvent) {
+                    final k = event.logicalKey;
+                    if (k == LogicalKeyboardKey.arrowRight) {
+                      goTo(current + 1);
+                      return KeyEventResult.handled;
+                    }
+                    if (k == LogicalKeyboardKey.arrowLeft) {
+                      goTo(current - 1);
+                      return KeyEventResult.handled;
+                    }
+                    if (k == LogicalKeyboardKey.escape) {
+                      Navigator.pop(ctx);
+                      return KeyEventResult.handled;
+                    }
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: Stack(
+                  children: [
+                    ScrollConfiguration(
+                      behavior: ScrollConfiguration.of(ctx).copyWith(
+                        dragDevices: {
+                          PointerDeviceKind.touch,
+                          PointerDeviceKind.mouse,
+                          PointerDeviceKind.trackpad,
+                          PointerDeviceKind.stylus,
+                        },
+                        scrollbars: false,
                       ),
-                    ),
-                    builder: (ctx2, i) => PhotoViewGalleryPageOptions(
-                      imageProvider: authNetworkImageProvider(
-                          images[i], mediaAuthHeaders(images[i])),
-                      minScale: PhotoViewComputedScale.contained,
-                      maxScale: PhotoViewComputedScale.covered * 3,
-                      initialScale: PhotoViewComputedScale.contained,
-                      onTapUp: (_, _, _) => Navigator.pop(ctx),
-                    ),
-                  ),
-                  // Close.
-                  Positioned(
-                    top: 40,
-                    right: 12,
-                    child: IconButton(
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.black.withAlpha(115),
-                      ),
-                      icon: const Icon(Icons.close_rounded, color: Colors.white),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ),
-                  // Save the image currently on screen.
-                  Positioned(
-                    top: 40,
-                    left: 12,
-                    child: IconButton(
-                      tooltip: 'Save image',
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.black.withAlpha(115),
-                      ),
-                      icon: const Icon(Icons.download_rounded,
-                          color: Colors.white),
-                      onPressed: () => _saveImage(images[current]),
-                    ),
-                  ),
-                  // Position counter (only when there's more than one image).
-                  if (images.length > 1)
-                    Positioned(
-                      top: 46,
-                      left: 0,
-                      right: 0,
-                      child: IgnorePointer(
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withAlpha(115),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text('${current + 1} / ${images.length}',
-                                style: const TextStyle(
-                                    color: Colors.white, fontSize: 13)),
+                      child: PhotoViewGallery.builder(
+                        pageController: controller,
+                        itemCount: images.length,
+                        onPageChanged: (i) => setSB(() => current = i),
+                        backgroundDecoration:
+                            const BoxDecoration(color: Colors.black),
+                        loadingBuilder: (_, _) => const Center(
+                          child: SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
                           ),
+                        ),
+                        builder: (ctx2, i) => PhotoViewGalleryPageOptions(
+                          imageProvider: authNetworkImageProvider(
+                              images[i], mediaAuthHeaders(images[i])),
+                          minScale: PhotoViewComputedScale.contained,
+                          maxScale: PhotoViewComputedScale.covered * 3,
+                          initialScale: PhotoViewComputedScale.contained,
+                          onTapUp: (_, _, _) => Navigator.pop(ctx),
                         ),
                       ),
                     ),
-                ],
+                    // < > paging arrows (mouse-friendly) on desktop / web.
+                    if (onDesktopOrWeb && images.length > 1) ...[
+                      Positioned(
+                        left: 8,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: arrow(Icons.chevron_left_rounded,
+                              () => goTo(current - 1)),
+                        ),
+                      ),
+                      Positioned(
+                        right: 8,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: arrow(Icons.chevron_right_rounded,
+                              () => goTo(current + 1)),
+                        ),
+                      ),
+                    ],
+                    // Close.
+                    Positioned(
+                      top: 40,
+                      right: 12,
+                      child: IconButton(
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.black.withAlpha(115),
+                        ),
+                        icon: const Icon(Icons.close_rounded,
+                            color: Colors.white),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ),
+                    // Save the image currently on screen.
+                    Positioned(
+                      top: 40,
+                      left: 12,
+                      child: IconButton(
+                        tooltip: 'Save image',
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.black.withAlpha(115),
+                        ),
+                        icon: const Icon(Icons.download_rounded,
+                            color: Colors.white),
+                        onPressed: () => _saveImage(images[current]),
+                      ),
+                    ),
+                    // Position counter (only when there's more than one image).
+                    if (images.length > 1)
+                      Positioned(
+                        top: 46,
+                        left: 0,
+                        right: 0,
+                        child: IgnorePointer(
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withAlpha(115),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text('${current + 1} / ${images.length}',
+                                  style: const TextStyle(
+                                      color: Colors.white, fontSize: 13)),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),

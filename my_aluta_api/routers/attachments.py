@@ -11,6 +11,7 @@ from models import (
     User, MediaAsset, Message, Conversation, ConversationMember,
 )
 from .users import get_current_user
+from auth import get_current_user_flexible
 
 router = APIRouter(tags=["Attachments"])
 
@@ -251,7 +252,7 @@ async def upload_media(
 def get_attachment(
     asset_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
 ):
     """Stream a DB attachment ONLY to someone entitled to it: the uploader, a
     participant the uploader sent it to, or — for profile pictures — any signed-
@@ -335,7 +336,7 @@ def ack_cached(
 def get_media_file(
     file_path: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
 ):
     """Authenticated replacement for the old public /media static mount. Serves a
     disk file (voice notes at /media/audio/*) only to a participant of the

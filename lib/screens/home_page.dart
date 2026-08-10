@@ -26,6 +26,7 @@ import 'chat_page.dart';
 import 'group_screens.dart';
 import 'user_profile_sheet.dart';
 import 'device_link.dart';
+import 'call_reliability_screen.dart';
 import 'music/song_identifier.dart' show showSongIdentifier;
 import 'profile_screen.dart';
 import '../utils/popup_shell.dart';
@@ -139,6 +140,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // Drives the app-wide playlist drawer's slide/fade (hosted below the active
   // header — see _playlistDrawerHost).
   late final AnimationController _playlistDrawerCtrl;
+  // Passive swipe tracking for the playlist drawer (a Listener, so it works even
+  // over the swipe-to-delete rows that would otherwise eat a GestureDetector).
+  int? _drawerPointer;
+  double _drawerSwipeDx = 0;
+  double _drawerSwipeDy = 0;
 
   // ── Chat state ────────────────────────────────────────────────────────────
   String? _activeFriendId;
@@ -193,8 +199,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // banner and react if one arrives while Home is already open.
     ShareInbox.instance.addListener(_onSharePending);
     // Warm the phonebook name map (silent — only if contacts already granted) so
-    // group message headers can show your saved names for known senders.
-    ContactNames.instance.ensureLoaded();
+    // the friend list, DM header and group headers can show your SAVED names for
+    // known numbers. Repaint once it's ready so names resolve on first view.
+    ContactNames.instance.ensureLoaded().then((_) {
+      if (mounted) setState(() {});
+    });
     _loadUserData();
     _loadCachedFriends();    // show cached list instantly (no spinner flash)
     _fetchFriends();          // then refresh from network
@@ -1099,8 +1108,15 @@ class HomePageState extends rp.ConsumerState<HomePage>
     setState(() {
       _searchQuery = query;
       _filteredFriends = _allFriends
-          .where((f) =>
-              (f['username'] as String? ?? '').toLowerCase().contains(q))
+          .where((f) {
+            final username = (f['username'] as String? ?? '').toLowerCase();
+            // Match the SHOWN name too (saved phone-book name), so searching by
+            // how you know them works even if their app username differs.
+            final shown = _contactDisplayName(
+                    f['phone']?.toString(), f['username'] as String? ?? '')
+                .toLowerCase();
+            return username.contains(q) || shown.contains(q);
+          })
           .toList();
       _filteredGroups = _applyGroupQuery(_groups, query);
     });
@@ -1139,6 +1155,19 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void _cancelShare() {
     ShareInbox.instance.clear();
     setState(() => _shareToSend = null);
+  }
+
+  /// The name to SHOW for a friend/contact: their SAVED phone-book name when we
+  /// have that number saved on this device, otherwise their app username. Same
+  /// priority the group message headers use, now applied to the friend list and
+  /// DMs so a person reads the same everywhere.
+  String _contactDisplayName(String? phone, String username) {
+    final p = (phone ?? '').trim();
+    if (p.isNotEmpty) {
+      final saved = ContactNames.instance.nameFor(p);
+      if (saved != null && saved.isNotEmpty) return saved;
+    }
+    return username;
   }
 
   // ── Chat open/close ───────────────────────────────────────────────────────
@@ -1792,7 +1821,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
               }
             },
             child: InitialsAvatar(
-              name: _activeFriendName ?? '',
+              name: _contactDisplayName(
+                  _activeFriendPhone, _activeFriendName ?? ''),
               radius: 17,
               isOnline: _activeFriendOnline == true,
               imageUrl: _avatarFull(_activeFriendAvatar),
@@ -1808,7 +1838,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _activeFriendName ?? '',
+                    _contactDisplayName(
+                        _activeFriendPhone, _activeFriendName ?? ''),
                     style: const TextStyle(
                         fontWeight: FontWeight.bold, fontSize: 14),
                     overflow: TextOverflow.ellipsis,
@@ -1842,11 +1873,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
             ),
           ),
           IconButton(
-            tooltip: 'Call ${_activeFriendName ?? ''}',
+            tooltip:
+                'Call ${_contactDisplayName(_activeFriendPhone, _activeFriendName ?? '')}',
             icon: const Icon(Icons.call_rounded),
             onPressed: () => _showCallChoice(
               friendId: int.tryParse(_activeFriendId ?? '') ?? -1,
-              name: _activeFriendName ?? 'This user',
+              name: _contactDisplayName(
+                  _activeFriendPhone, _activeFriendName ?? 'This user'),
               avatar: _activeFriendAvatar,
               phone: _activeFriendPhone,
             ),
@@ -2031,7 +2064,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
                   ? ChatPage(
                       key: ValueKey(_activeFriendId),
                       friendId: int.parse(_activeFriendId!),
-                      friendName: _activeFriendName!,
+                      friendName: _contactDisplayName(
+                          _activeFriendPhone, _activeFriendName!),
                       friendAvatar: _activeFriendAvatar ?? '',
                       textColor: textColor,
                       showAppBar: false,
@@ -2089,6 +2123,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
         if (t <= 0.001 || music != _musicIsFront) {
           return const SizedBox.shrink();
         }
+        // Tell the playlist body which surface it's on: chat surface (music:false)
+        // has the app now-playing bar, so the body drops its inline strip there.
+        playlistDrawerBus.hostIsChatSurface = !music;
         final scheme = Theme.of(context).colorScheme;
         final eased = Curves.easeOutCubic.transform(t);
         return LayoutBuilder(
@@ -2126,12 +2163,38 @@ class HomePageState extends rp.ConsumerState<HomePage>
                   alignment: Alignment.centerRight,
                   child: FractionalTranslation(
                     translation: Offset(1 - eased, 0),
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      // Flick right to collapse it back like a curtain.
-                      onHorizontalDragEnd: (d) {
-                        if ((d.primaryVelocity ?? 0) > 250) {
+                    // A passive Listener (not a GestureDetector) tracks a RIGHT
+                    // swipe to close the drawer like a curtain. Because it never
+                    // enters the gesture arena, it works EVERYWHERE on the panel
+                    // — including over the swipe-to-delete rows — without blocking
+                    // taps, vertical scrolling, or the rows' left-swipe delete.
+                    child: Listener(
+                      onPointerDown: (e) {
+                        _drawerPointer = e.pointer;
+                        _drawerSwipeDx = 0;
+                        _drawerSwipeDy = 0;
+                      },
+                      onPointerMove: (e) {
+                        if (e.pointer != _drawerPointer) return;
+                        _drawerSwipeDx += e.delta.dx;
+                        _drawerSwipeDy += e.delta.dy;
+                      },
+                      onPointerUp: (e) {
+                        if (e.pointer != _drawerPointer) return;
+                        // Rightward + clearly horizontal = a close swipe.
+                        if (_drawerSwipeDx > 64 &&
+                            _drawerSwipeDx > _drawerSwipeDy.abs() * 1.4) {
                           playlistDrawerBus.close?.call();
+                        }
+                        _drawerPointer = null;
+                        _drawerSwipeDx = 0;
+                        _drawerSwipeDy = 0;
+                      },
+                      onPointerCancel: (e) {
+                        if (e.pointer == _drawerPointer) {
+                          _drawerPointer = null;
+                          _drawerSwipeDx = 0;
+                          _drawerSwipeDy = 0;
                         }
                       },
                       child: SizedBox(
@@ -2302,7 +2365,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   Widget _buildFriendTile(
       Map<String, dynamic> f, Color textColor, ColorScheme scheme) {
-    final name = f['username'] as String? ?? '';
+    // Show your saved phone-book name for this number when you have it saved,
+    // otherwise their app username.
+    final name = _contactDisplayName(
+        f['phone']?.toString(), f['username'] as String? ?? '');
     // Online dot now comes from Riverpod (single source of truth for presence).
     final isOnline = ref.watch(presenceProvider).isOnline((f['id'] as num).toInt());
     final lastMsg = f['last_message'] as String? ?? '';
@@ -3057,23 +3123,21 @@ class HomePageState extends rp.ConsumerState<HomePage>
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Favourite heart — moved here (beside the seek bar) so the
-                  // transport can nudge left and the row balances out.
-                  ValueListenableBuilder<bool>(
-                    valueListenable: favoriteNotifier,
-                    builder: (_, fav, _) => GestureDetector(
-                      onTap: () => playbackBus.onToggleFavorite?.call(),
+                  // Share to chat — the quick action that used to live in the
+                  // drawer's transport strip (dropped on the chat surface). It's
+                  // more useful than the heart on this in-chat bar, so it takes
+                  // that spot; favouriting still lives in the full player.
+                  Tooltip(
+                    message: 'Share to chat',
+                    child: GestureDetector(
+                      onTap: () => playbackBus.onShareToChat?.call(),
                       behavior: HitTestBehavior.opaque,
                       child: Padding(
                         padding: const EdgeInsets.all(5),
                         child: Icon(
-                          fav
-                              ? Icons.favorite_rounded
-                              : Icons.favorite_border_rounded,
+                          Icons.share_rounded,
                           size: 20,
-                          color: fav
-                              ? scheme.primary
-                              : scheme.onSurface.withAlpha(150),
+                          color: scheme.primary,
                         ),
                       ),
                     ),
@@ -3234,19 +3298,124 @@ class HomePageState extends rp.ConsumerState<HomePage>
   }
 
   // One row of the header overflow menu (icon + label).
-  PopupMenuItem<String> _menuItem(String value, IconData icon, String label,
+  // ── Overflow menu (grouped, MenuAnchor with submenus) ─────────────────────
+
+  /// The header overflow menu. Related actions are nested under parent
+  /// submenus (Devices, Tools & settings…) so the top level stays short as new
+  /// features are added, instead of the flat list growing ever taller.
+  Widget _buildOverflowMenu(
+      BuildContext context, ThemeProvider themeProvider, ColorScheme scheme) {
+    final bool mobile = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+    final menuStyle = MenuStyle(
+      backgroundColor: WidgetStatePropertyAll(scheme.surface),
+      elevation: const WidgetStatePropertyAll(10),
+      // Faint red hairline so the menu (and each submenu) lifts off the UI.
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+              color: const Color(0xFFE53935).withAlpha(70), width: 1),
+        ),
+      ),
+      padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(vertical: 6, horizontal: 4)),
+    );
+
+    return MenuAnchor(
+      style: menuStyle,
+      builder: (ctx, controller, child) => IconButton(
+        icon: Icon(Icons.more_vert_rounded, color: scheme.onSurface),
+        tooltip: 'Menu',
+        onPressed: () =>
+            controller.isOpen ? controller.close() : controller.open(),
+      ),
+      menuChildren: [
+        _menuBtn(scheme, Icons.groups_rounded, 'Groups', () async {
+          final conv = await showAppPopup<Map<String, dynamic>>(
+              context, const GroupsScreen());
+          if (conv != null && mounted) openGroupInPanel(conv);
+        }),
+        // Devices — QR linking + the linked-devices manager.
+        SubmenuButton(
+          menuStyle: menuStyle,
+          leadingIcon: Icon(Icons.devices_rounded,
+              size: 20, color: scheme.primary),
+          menuChildren: [
+            if (mobile)
+              _menuBtn(scheme, Icons.laptop_chromebook_rounded,
+                  'Link a computer', () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const DeviceLinkScanScreen()),
+                );
+              }),
+            _menuBtn(scheme, Icons.devices_other_rounded, 'Linked devices',
+                () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const LinkedDevicesScreen()),
+              );
+            }),
+          ],
+          child: const Text('Devices'),
+        ),
+        // Tools & settings — the catch-all so future actions nest here.
+        SubmenuButton(
+          menuStyle: menuStyle,
+          leadingIcon:
+              Icon(Icons.tune_rounded, size: 20, color: scheme.primary),
+          menuChildren: [
+            _menuBtn(scheme, Icons.hearing_rounded, 'Identify song',
+                () => showSongIdentifier(context)),
+            _menuBtn(scheme, Icons.contacts_rounded, 'Find friends',
+                () => _findFriendsFromContacts()),
+            if (mobile)
+              _menuBtn(scheme, Icons.phonelink_ring_rounded,
+                  'Call reliability', () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const CallReliabilityScreen()),
+                );
+              }),
+            _menuBtn(
+              scheme,
+              themeProvider.isDarkMode
+                  ? Icons.light_mode_rounded
+                  : Icons.dark_mode_rounded,
+              themeProvider.isDarkMode ? 'Light mode' : 'Dark mode',
+              () => themeProvider.toggleTheme(!themeProvider.isDarkMode),
+            ),
+            _menuBtn(scheme, Icons.shield_outlined, 'Legal & About',
+                () => showLegalMenu(context)),
+          ],
+          child: const Text('Tools & settings'),
+        ),
+        _menuBtn(scheme, Icons.person_rounded, 'Profile', () async {
+          await showAppPopup(context, const ProfileScreen());
+          if (mounted) _loadUserData();
+        }),
+        const Divider(height: 10),
+        _menuBtn(scheme, Icons.logout_rounded, 'Sign out', _logout,
+            destructive: true),
+      ],
+    );
+  }
+
+  MenuItemButton _menuBtn(
+      ColorScheme scheme, IconData icon, String label, VoidCallback onPressed,
       {bool destructive = false}) {
-    final scheme = Theme.of(context).colorScheme;
     final accent = destructive ? scheme.error : scheme.primary;
-    return PopupMenuItem<String>(
-      value: value,
-      padding: EdgeInsets.zero,
-      child: _HoverMenuItem(
-        icon: icon,
-        label: label,
-        accent: accent,
-        textColor: destructive ? scheme.error : scheme.onSurface,
-        iconBg: scheme.surfaceContainerHighest,
+    return MenuItemButton(
+      leadingIcon: Icon(icon, size: 20, color: accent),
+      onPressed: onPressed,
+      child: Text(
+        label,
+        style: destructive ? TextStyle(color: scheme.error) : null,
       ),
     );
   }
@@ -3464,94 +3633,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
           ],
         ),
         actions: [
-          // Single overflow menu — all the header actions live here now
-          // (Groups, theme, Profile, Legal, Sign out). New items get added to
-          // this one menu instead of crowding the header with icons.
-          PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert_rounded, color: scheme.onSurface),
-            tooltip: 'Menu',
-            position: PopupMenuPosition.under,
-            color: scheme.surface,
-            elevation: 10,
-            // Red accent outline so the menu is clearly separated from whatever
-            // UI sits behind it.
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              // Faint red hairline — just enough to lift the menu off whatever
-              // sits behind it, without reading as a heavy outline.
-              side: BorderSide(
-                  color: const Color(0xFFE53935).withAlpha(70), width: 1),
-            ),
-            onSelected: (v) async {
-              switch (v) {
-                case 'groups':
-                  final conv = await showAppPopup<Map<String, dynamic>>(
-                      context, const GroupsScreen());
-                  if (conv != null && mounted) openGroupInPanel(conv);
-                  break;
-                case 'find_friends':
-                  await _findFriendsFromContacts();
-                  break;
-                case 'identify':
-                  await showSongIdentifier(context);
-                  break;
-                case 'link_device':
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const DeviceLinkScanScreen()),
-                  );
-                  break;
-                case 'linked_devices':
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const LinkedDevicesScreen()),
-                  );
-                  break;
-                case 'theme':
-                  themeProvider.toggleTheme(!themeProvider.isDarkMode);
-                  break;
-                case 'profile':
-                  await showAppPopup(context, const ProfileScreen());
-                  if (mounted) _loadUserData();
-                  break;
-                case 'legal':
-                  showLegalMenu(context);
-                  break;
-                case 'logout':
-                  _logout();
-                  break;
-              }
-            },
-            itemBuilder: (ctx) => [
-              _menuItem('groups', Icons.groups_rounded, 'Groups'),
-              _menuItem('identify', Icons.hearing_rounded, 'Identify song'),
-              _menuItem(
-                  'find_friends', Icons.contacts_rounded, 'Find friends'),
-              // Scanning to link a computer is phone-only (needs the camera).
-              if (!kIsWeb &&
-                  (defaultTargetPlatform == TargetPlatform.android ||
-                      defaultTargetPlatform == TargetPlatform.iOS))
-                _menuItem(
-                    'link_device', Icons.laptop_chromebook_rounded,
-                    'Link a computer'),
-              _menuItem(
-                  'linked_devices', Icons.devices_rounded, 'Linked devices'),
-              _menuItem(
-                'theme',
-                themeProvider.isDarkMode
-                    ? Icons.light_mode_rounded
-                    : Icons.dark_mode_rounded,
-                themeProvider.isDarkMode ? 'Light mode' : 'Dark mode',
-              ),
-              _menuItem('profile', Icons.person_rounded, 'Profile'),
-              _menuItem('legal', Icons.shield_outlined, 'Legal & About'),
-              const PopupMenuDivider(),
-              _menuItem('logout', Icons.logout_rounded, 'Sign out',
-                  destructive: true),
-            ],
-          ),
+          // Single overflow menu with GROUPED submenus, so adding new actions
+          // nests them under a parent instead of making the menu grow taller.
+          _buildOverflowMenu(context, themeProvider, scheme),
         ],
       ),
       // ── Body ───────────────────────────────────────────────────────────

@@ -23,6 +23,13 @@ Future<void> handleFcmData(Map<String, dynamic> data) async {
     if (type == 'call_offer') {
       final caller = (data['caller_name'] ?? 'Someone').toString();
       await showCallNotification(caller: caller);
+    } else if (type == 'call_end' ||
+        type == 'call_cancel' ||
+        type == 'call_decline' ||
+        type == 'call_busy') {
+      // The caller hung up / the call ended: stop the ringing notification on a
+      // killed callee's phone so it doesn't keep ringing.
+      await cancelCallNotification();
     } else {
       final title = (data['sender_name'] ?? 'New message').toString();
       final body = (data['body'] ?? '').toString();

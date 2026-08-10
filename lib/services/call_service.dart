@@ -5,6 +5,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../screens/api_service.dart';
 import '../state/call_state.dart';
 import '../state/playback_state.dart' show providerContainer;
+import 'notif_service.dart';
 
 /// High-level state of the single active Aluta voice call.
 enum CallState {
@@ -198,6 +199,7 @@ class CallService {
   Future<void> acceptCall() async {
     if (state != CallState.ringing || _pendingOffer == null) return;
     _ringTimeout?.cancel();
+    cancelCallNotification(); // stop the ringing notification once we answer
     state = CallState.connecting;
     _publish();
     try {
@@ -369,6 +371,7 @@ class CallService {
   void _finish(CallEndReason reason) {
     if (state == CallState.idle) return;
     _ringTimeout?.cancel();
+    cancelCallNotification(); // stop any ringing call notification
     endReason = reason;
     state = CallState.ended;
     _publish();

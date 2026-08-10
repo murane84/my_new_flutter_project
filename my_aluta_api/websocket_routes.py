@@ -138,6 +138,21 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                             ))
                         except Exception:
                             pass
+                    elif etype in (
+                        "call_cancel", "call_end",
+                        "call_decline", "call_busy",
+                    ):
+                        # The call ended: push a dismiss so a killed/backgrounded
+                        # callee's ringing notification stops instead of ringing
+                        # out the full 45s window.
+                        try:
+                            asyncio.create_task(asyncio.to_thread(
+                                send_push_to_user,
+                                int(to),
+                                {"type": etype},
+                            ))
+                        except Exception:
+                            pass
             # (Other event types are still accepted and ignored, keeping the
             #  socket alive as a heartbeat.)
 

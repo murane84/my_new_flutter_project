@@ -38,6 +38,10 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Find-friends: read the address book to match contacts against
+         registered Aluta users (auto-add matches as friends). -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
     <!-- Chat media sharing: voice-note recording + camera capture -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
@@ -51,6 +55,12 @@
     <!-- FCM incoming-call notifications: show a full-screen ringing intent over
          the lock screen (Android 14+ requires this permission). -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <!-- Let the user exempt Aluta from battery optimization so high-priority
+         call pushes wake the app reliably (the "Call reliability" screen asks
+         for this). Requesting the exemption dialog needs this permission. -->
+    <uses-permission
+        android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:label="Aluta"

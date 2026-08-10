@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -46,7 +44,7 @@ Future<void> initNotifications() async {
     } catch (_) {/* not available on this OS/plugin path */}
     // Retire the old call channel (plain ding) so only the ringtone one remains.
     try {
-      await android_?.deleteNotificationChannel('aluta_calls');
+      await android_?.deleteNotificationChannel(channelId: 'aluta_calls');
     } catch (_) {/* fine if it never existed */}
     await android_?.createNotificationChannel(
       const AndroidNotificationChannel(
@@ -154,7 +152,7 @@ Future<void> showCallNotification({
 Future<void> cancelCallNotification() async {
   if (kIsWeb) return;
   try {
-    await _fln.cancel(_callNotifId);
+    await _fln.cancel(id: _callNotifId);
   } catch (_) {/* best-effort */}
 }
 

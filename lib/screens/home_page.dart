@@ -859,6 +859,15 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
   }
 
+  /// One row inside the group header's ⋮ options menu.
+  Widget _groupMenuRow(IconData icon, String label, ColorScheme scheme) => Row(
+        children: [
+          Icon(icon, size: 20, color: scheme.primary),
+          const SizedBox(width: 12),
+          Text(label),
+        ],
+      );
+
   /// Show the full-screen call UI (for an incoming ring or an outgoing call).
   void _openCallScreen() {
     if (_callScreenOpen) return;
@@ -1862,22 +1871,44 @@ class HomePageState extends rp.ConsumerState<HomePage>
               ),
             ),
           ),
-          // Start a group voice call — rings every member.
-          IconButton(
-            tooltip: 'Group call',
-            icon: const Icon(Icons.call_rounded),
-            onPressed: () => _startGroupCall(g),
-          ),
-          // Quick playlist drawer toggle — same shortcut as the DM header so the
-          // music library can pop in without leaving the group conversation.
-          ValueListenableBuilder<bool>(
-            valueListenable: playlistDrawerBus.isOpen,
-            builder: (_, open, _) => IconButton(
-              tooltip: open ? 'Hide playlist' : 'Playlist',
-              icon: Icon(Icons.queue_music_rounded,
-                  color: open ? scheme.primary : null),
-              onPressed: () => playlistDrawerBus.toggle?.call(),
-            ),
+          // All group actions live under one ⋮ menu (WhatsApp-style).
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded),
+            tooltip: 'Group options',
+            onSelected: (v) {
+              switch (v) {
+                case 'info':
+                  _openGroupInfo();
+                  break;
+                case 'call':
+                  _startGroupCall(g);
+                  break;
+                case 'playlist':
+                  playlistDrawerBus.toggle?.call();
+                  break;
+              }
+            },
+            itemBuilder: (ctx) => [
+              PopupMenuItem(
+                value: 'info',
+                child: _groupMenuRow(
+                    Icons.info_outline_rounded, 'Group info', scheme),
+              ),
+              PopupMenuItem(
+                value: 'call',
+                child:
+                    _groupMenuRow(Icons.call_rounded, 'Group call', scheme),
+              ),
+              PopupMenuItem(
+                value: 'playlist',
+                child: _groupMenuRow(
+                    Icons.queue_music_rounded,
+                    playlistDrawerBus.isOpen.value
+                        ? 'Hide playlist'
+                        : 'Playlist',
+                    scheme),
+              ),
+            ],
           ),
         ],
       );

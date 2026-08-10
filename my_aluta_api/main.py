@@ -177,6 +177,33 @@ def backfill_dm_conversations():
 backfill_dm_conversations()
 
 
+# ✅ Log whether push notifications can actually be sent. If this prints
+#    "push=DISABLED", the backend has no Firebase service account, so incoming
+#    calls / messages will NEVER wake a backgrounded or closed phone (the app
+#    still works over the WebSocket while open). Set FIREBASE_SERVICE_ACCOUNT_JSON
+#    and FIREBASE_PROJECT_ID on Railway to enable it.
+def log_push_status():
+    try:
+        import push
+        if push.push_available():
+            print(f"[push] ENABLED (Firebase project={push._project_id()})")
+        else:
+            has_json = bool(config.FIREBASE_SERVICE_ACCOUNT_JSON)
+            has_file = bool(config.FIREBASE_SERVICE_ACCOUNT_FILE)
+            has_pid = bool(config.FIREBASE_PROJECT_ID)
+            print(
+                "[push] DISABLED — backgrounded phones will NOT wake on calls. "
+                f"service_account_json={has_json} service_account_file={has_file} "
+                f"project_id={has_pid}. Set FIREBASE_SERVICE_ACCOUNT_JSON + "
+                "FIREBASE_PROJECT_ID to enable."
+            )
+    except Exception as e:  # noqa: BLE001
+        print(f"[push] status check failed: {e}")
+
+
+log_push_status()
+
+
 # ✅ Health / discovery endpoint — Flutter uses this to auto-detect server IP
 @app.get("/health")
 def health_check():

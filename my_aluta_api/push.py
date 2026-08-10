@@ -55,9 +55,20 @@ def _load_credentials():
                 return None
         if not info:
             return None
+        # A very common Railway paste bug: the private_key's newlines arrive as
+        # the literal two characters backslash-n instead of real newlines, which
+        # makes the RSA key unparseable and every send fails auth. Repair it.
+        pk = info.get("private_key")
+        if isinstance(pk, str) and "\\n" in pk and "\n" not in pk:
+            info["private_key"] = pk.replace("\\n", "\n")
+            print("⚠️ push: repaired escaped newlines in private_key")
         try:
             _credentials = service_account.Credentials.from_service_account_info(
                 info, scopes=[_FCM_SCOPE])
+            print(
+                "[push] service account loaded for project "
+                f"{getattr(_credentials, 'project_id', '?')}"
+            )
             return _credentials
         except Exception as e:  # noqa: BLE001
             print(f"⚠️ push: bad service account: {e}")
@@ -120,23 +131,47 @@ def send_push_to_user(
 ) -> None:
     """Best-effort FCM data push to every registered device of {user_id}. Never
     raises. Data values are coerced to strings (FCM v1 requirement). Tokens FCM
-    reports as unregistered are pruned so we stop pushing to dead devices."""
+    reports as unregistered are pruned so we stop pushing to dead devices.
+
+    Every decision point logs a one-line reason so a failed wake-up is fully
+    traceable in the Railway deploy logs after a single test call.
+    """
+    kind = (data or {}).get("type", "push")
     try:
         if not push_available():
+            print(
+                f"[push] SKIP user={user_id} type={kind}: Firebase not "
+                "available (missing/invalid FIREBASE_SERVICE_ACCOUNT_JSON, "
+                "missing FIREBASE_PROJECT_ID, or google-auth not installed)."
+            )
             return
         tokens = _tokens_for(user_id)
         if not tokens:
+            print(
+                f"[push] SKIP user={user_id} type={kind}: user has 0 "
+                "registered device tokens (callee never registered — "
+                "notifications denied, app never opened after login, or web-only)."
+            )
             return
         access = _access_token()
         pid = _project_id()
         if not access or not pid:
+            print(
+                f"[push] SKIP user={user_id} type={kind}: no access token / "
+                f"project id (access={bool(access)} pid={bool(pid)})."
+            )
             return
+        print(
+            f"[push] SEND user={user_id} type={kind}: {len(tokens)} token(s) "
+            f"via project {pid}"
+        )
         url = f"https://fcm.googleapis.com/v1/projects/{pid}/messages:send"
         headers = {
             "Authorization": f"Bearer {access}",
             "Content-Type": "application/json; UTF-8",
         }
         str_data = {str(k): str(v) for k, v in (data or {}).items()}
+        sent = 0
         for token in tokens:
             body = {
                 "message": {
@@ -152,6 +187,7 @@ def send_push_to_user(
                 resp = requests.post(
                     url, headers=headers, data=json.dumps(body), timeout=10)
                 if resp.status_code == 200:
+                    sent += 1
                     continue
                 text = resp.text or ""
                 if resp.status_code in (400, 403, 404) and (
@@ -160,10 +196,16 @@ def send_push_to_user(
                     or "InvalidRegistration" in text
                     or "registration-token-not-registered" in text
                 ):
+                    print(
+                        f"[push] token pruned (unregistered) for user={user_id}")
                     _delete_token(token)
                 else:
-                    print(f"⚠️ push: FCM {resp.status_code}: {text[:200]}")
+                    # SENDER_ID_MISMATCH here means the app's google-services.json
+                    # is from a DIFFERENT Firebase project than this service
+                    # account — the #1 cause of "token exists but push fails".
+                    print(f"⚠️ push: FCM {resp.status_code}: {text[:300]}")
             except Exception as e:  # noqa: BLE001
                 print(f"⚠️ push: send failed: {e}")
+        print(f"[push] DONE user={user_id} type={kind}: delivered {sent}/{len(tokens)}")
     except Exception as e:  # noqa: BLE001
         print(f"⚠️ push: unexpected: {e}")

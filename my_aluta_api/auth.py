@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
@@ -17,6 +17,10 @@ from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, INACTIVIT
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+# Same scheme but non-fatal when the header is absent — used by the flexible
+# media auth, which falls back to a `?token=` query param.
+oauth2_scheme_optional = OAuth2PasswordBearer(
+    tokenUrl="/auth/login", auto_error=False)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Label shown for the account inside the authenticator app (e.g. "Aluta").
@@ -173,7 +177,9 @@ def set_user_status_based_on_inactivity(user: User, db: Session):
 # Token Dependencies
 # ------------------------------
 
-def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
+def _resolve_user_from_token(token: str, db: Session) -> User:
+    """Shared token → User resolution (decode, load, session-revocation check,
+    activity bump). Used by both the header-only and flexible dependencies."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid credentials",
@@ -212,6 +218,33 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     update_last_seen(user.id, db)
 
     return user
+
+
+def get_current_user(
+    db: Session = Depends(get_db),
+    token: str = Depends(oauth2_scheme),
+) -> User:
+    return _resolve_user_from_token(token, db)
+
+
+def get_current_user_flexible(
+    db: Session = Depends(get_db),
+    header_token: Optional[str] = Depends(oauth2_scheme_optional),
+    token: Optional[str] = Query(default=None),
+) -> User:
+    """Like get_current_user but ALSO accepts the JWT as a `?token=` query
+    param. A browser can't attach an Authorization header to an <img>/media
+    load, so the web client puts the token in the media URL instead. The header
+    wins when both are present."""
+    tok = header_token or token
+    if not tok:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return _resolve_user_from_token(tok, db)
+
 
 def get_active_user(current_user: User = Depends(get_current_user)):
     if not current_user.is_online:

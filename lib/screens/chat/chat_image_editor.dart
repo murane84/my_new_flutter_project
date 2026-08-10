@@ -3,15 +3,17 @@ part of '../chat_page.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 // Image preview + lightweight annotation editor.
 //
-// Shown before an image is sent so the user can (a) draw freehand, (b) circle
-// something, (c) draw a focus box, (d) drop draggable emoji stickers, and add a
+// Shown before an image is sent so the user can draw freehand, highlight,
+// circle, draw a focus box, draw an arrow, drop emoji stickers, add text, and a
 // caption. All marks are stored in FRACTIONAL (0..1) canvas coordinates so they
 // stay aligned when the editor is captured at high resolution. On send, if any
-// edit exists the annotated image is flattened via RepaintBoundary → PNG so the
-// recipient sees exactly what the sender drew; otherwise the original bytes are
-// sent untouched. Returns a map {caption, bytes, mime} (or null if cancelled).
+// edit exists the annotated image is flattened via a Canvas onto the ORIGINAL
+// full-resolution bytes → PNG; otherwise the original bytes are sent untouched.
+// Returns a map {caption, bytes, mime, hd} (or null if cancelled).
 // ─────────────────────────────────────────────────────────────────────────────
-enum _EditTool { move, pen, circle, box }
+enum _EditTool { move, pen, highlight, circle, box, arrow }
+
+enum _ShapeKind { oval, box, arrow }
 
 class _PenStroke {
   _PenStroke(this.color, this.width);
@@ -21,19 +23,37 @@ class _PenStroke {
 }
 
 class _ShapeMark {
-  _ShapeMark(this.color, this.width, this.oval, this.start, this.end);
+  _ShapeMark(this.color, this.width, this.kind, this.start, this.end);
   final Color color;
   final double width;
-  final bool oval; // true = circle/oval, false = rectangle focus box
+  final _ShapeKind kind;
   Offset start; // fractional
   Offset end; // fractional
 }
 
+/// A draggable sticker: either an emoji (color == null) or a text label
+/// (color != null → drawn in that colour).
 class _EmojiMark {
-  _EmojiMark(this.emoji, this.pos, this.size);
+  _EmojiMark(this.emoji, this.pos, this.size, {this.color});
   final String emoji;
   Offset pos; // fractional centre (0..1)
   double size; // logical font size
+  final Color? color;
+}
+
+/// Draw a line from [a] to [b] with an arrowhead at [b]. Uses only Offset
+/// arithmetic (no dart:math) so it needs no extra import.
+void _drawArrow(
+    Canvas c, Offset a, Offset b, Paint p, double headLen, double headW) {
+  c.drawLine(a, b, p);
+  final dir = b - a;
+  final dist = dir.distance;
+  if (dist == 0) return;
+  final norm = dir / dist;
+  final perp = Offset(-norm.dy, norm.dx);
+  final base = b - norm * headLen;
+  c.drawLine(b, base + perp * headW, p);
+  c.drawLine(b, base - perp * headW, p);
 }
 
 class _ImagePreviewScreen extends StatefulWidget {
@@ -51,25 +71,21 @@ class _ImagePreviewScreen extends StatefulWidget {
 class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
   final GlobalKey _boundaryKey = GlobalKey();
   final TextEditingController _captionCtrl = TextEditingController();
-  // HD off = compress before upload (smaller); HD on = send the original.
   bool _hd = false;
-  // The editor canvas's on-screen size, captured in the LayoutBuilder. Used to
-  // scale strokes/emoji from display units up to the ORIGINAL image resolution
-  // when flattening, so the sent image stays sharp (not a blurry screen grab).
   double _canvasW = 1;
 
   final List<_PenStroke> _strokes = [];
   final List<_ShapeMark> _shapes = [];
   final List<_EmojiMark> _emojis = [];
-  // Chronological undo stack: which list the last-added mark went to.
-  final List<String> _history = [];
+  final List<String> _history = []; // chronological undo stack
 
   _EditTool _tool = _EditTool.move;
   Color _color = const Color(0xFFFF3B30);
+  double _strokeWidth = 3;
   double _aspect = 1;
   bool _busy = false;
   bool _showEmojiTray = false;
-  _ShapeMark? _drafting; // shape being dragged out right now
+  _ShapeMark? _drafting;
 
   static const List<Color> _palette = [
     Color(0xFFFF3B30), // red
@@ -84,11 +100,27 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
     '✅', '❌', '❗', '➡️', '⬅️', '⬆️', '⬇️', '⚡', '💯', '🎯',
   ];
 
+  bool get _isPenLike =>
+      _tool == _EditTool.pen || _tool == _EditTool.highlight;
+  bool get _isShapeTool =>
+      _tool == _EditTool.circle ||
+      _tool == _EditTool.box ||
+      _tool == _EditTool.arrow;
+
+  _ShapeKind _shapeKindForTool() {
+    switch (_tool) {
+      case _EditTool.circle:
+        return _ShapeKind.oval;
+      case _EditTool.arrow:
+        return _ShapeKind.arrow;
+      default:
+        return _ShapeKind.box;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    // Learn the image's aspect ratio so the editor canvas matches it exactly
-    // (no letterbox baked into the flattened result).
     ui.decodeImageFromList(widget.imageBytes, (img) {
       if (!mounted) return;
       setState(() => _aspect = img.width / img.height);
@@ -107,6 +139,58 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
       _history.add('emoji');
       _showEmojiTray = false;
     });
+  }
+
+  void _addText(String t) {
+    final txt = t.trim();
+    if (txt.isEmpty) return;
+    setState(() {
+      _emojis.add(_EmojiMark(txt, const Offset(0.5, 0.5), 30, color: _color));
+      _history.add('emoji');
+    });
+  }
+
+  Future<void> _promptText() async {
+    final scheme = Theme.of(context).colorScheme;
+    final ctrl = TextEditingController();
+    final res = await showDialog<String>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        title: const Text('Add text', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLines: 3,
+          minLines: 1,
+          style: const TextStyle(color: Colors.white),
+          cursorColor: scheme.primary,
+          decoration: const InputDecoration(
+            hintText: 'Type here…',
+            hintStyle: TextStyle(color: Colors.white54),
+          ),
+          onSubmitted: (v) => Navigator.pop(dctx, v),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dctx),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(dctx, ctrl.text),
+              child: const Text('Add')),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (res != null) _addText(res);
+  }
+
+  void _clearAll() {
+    _strokes.clear();
+    _shapes.clear();
+    _emojis.clear();
+    _history.clear();
+    _drafting = null;
   }
 
   void _undo() {
@@ -142,16 +226,11 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
       'caption': _captionCtrl.text,
       'bytes': outBytes,
       'mime': mime,
-      // Honour the HD toggle: off = compress on upload (smaller), on = original.
       'hd': _hd,
     });
   }
 
-  /// Flatten the annotations onto the ORIGINAL full-resolution image (rather
-  /// than screen-grabbing the small on-screen editor, which lost detail and
-  /// looked blurry). All marks are stored as fractional (0..1) coordinates, so
-  /// they map cleanly onto the real pixel dimensions; stroke/emoji sizes are
-  /// scaled by (imageWidth / canvasWidth) so the result matches what was drawn.
+  /// Flatten the annotations onto the ORIGINAL full-resolution image.
   Future<Uint8List?> _renderAnnotated() async {
     try {
       final codec = await ui.instantiateImageCodec(widget.imageBytes);
@@ -194,16 +273,23 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
         final paint = Paint()
           ..color = sh.color
           ..style = PaintingStyle.stroke
-          ..strokeWidth = sh.width * scale;
-        final rect = Rect.fromPoints(
-          Offset(sh.start.dx * w, sh.start.dy * h),
-          Offset(sh.end.dx * w, sh.end.dy * h),
-        );
-        if (sh.oval) {
-          canvas.drawOval(rect, paint);
-        } else {
-          canvas.drawRRect(
-              RRect.fromRectAndRadius(rect, Radius.circular(8 * scale)), paint);
+          ..strokeWidth = sh.width * scale
+          ..strokeCap = StrokeCap.round;
+        final a = Offset(sh.start.dx * w, sh.start.dy * h);
+        final b = Offset(sh.end.dx * w, sh.end.dy * h);
+        switch (sh.kind) {
+          case _ShapeKind.oval:
+            canvas.drawOval(Rect.fromPoints(a, b), paint);
+            break;
+          case _ShapeKind.box:
+            canvas.drawRRect(
+                RRect.fromRectAndRadius(
+                    Rect.fromPoints(a, b), Radius.circular(8 * scale)),
+                paint);
+            break;
+          case _ShapeKind.arrow:
+            _drawArrow(canvas, a, b, paint, 22 * scale, 12 * scale);
+            break;
         }
       }
 
@@ -214,7 +300,8 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
       for (final em in _emojis) {
         final tp = TextPainter(
           text: TextSpan(
-              text: em.emoji, style: TextStyle(fontSize: em.size * scale)),
+              text: em.emoji,
+              style: TextStyle(fontSize: em.size * scale, color: em.color)),
           textDirection: TextDirection.ltr,
         )..layout();
         tp.paint(canvas,
@@ -226,7 +313,7 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
       final bd = await outImg.toByteData(format: ui.ImageByteFormat.png);
       return bd?.buffer.asUint8List();
     } catch (_) {
-      return null; // fall back to the original bytes
+      return null;
     }
   }
 
@@ -235,6 +322,11 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: Colors.black,
+      // The caption bar already offsets itself by viewInsets.bottom to sit just
+      // above the keyboard, so DON'T also let the Scaffold resize for the
+      // keyboard — otherwise the keyboard height is counted twice, leaving a
+      // huge blank gap and shrinking the photo to a thumbnail.
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
@@ -259,97 +351,117 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
           // ── Canvas ──────────────────────────────────────────────────────
           Expanded(
             child: Center(
-              child: AspectRatio(
-                aspectRatio: _aspect,
-                child: RepaintBoundary(
-                  key: _boundaryKey,
-                  child: LayoutBuilder(builder: (ctx, c) {
-                    final w = c.maxWidth, h = c.maxHeight;
-                    _canvasW = w;
-                    Offset frac(Offset local) => Offset(
-                        (local.dx / w).clamp(0.0, 1.0),
-                        (local.dy / h).clamp(0.0, 1.0));
-                    final drawing = _tool != _EditTool.move;
-                    return Stack(
-                      children: [
-                        Positioned.fill(
-                          child: Image.memory(widget.imageBytes,
-                              fit: BoxFit.fill),
-                        ),
-                        // Drawing layer (pen / circle / box).
-                        Positioned.fill(
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onPanStart: !drawing
-                                ? null
-                                : (d) {
-                                    final f = frac(d.localPosition);
-                                    setState(() {
-                                      if (_tool == _EditTool.pen) {
-                                        final st = _PenStroke(_color, 3);
-                                        st.points.add(f);
-                                        _strokes.add(st);
-                                        _history.add('pen');
-                                      } else {
-                                        _drafting = _ShapeMark(
-                                            _color,
-                                            3,
-                                            _tool == _EditTool.circle,
-                                            f,
-                                            f);
-                                      }
-                                    });
-                                  },
-                            onPanUpdate: !drawing
-                                ? null
-                                : (d) {
-                                    final f = frac(d.localPosition);
-                                    setState(() {
-                                      if (_tool == _EditTool.pen &&
-                                          _strokes.isNotEmpty) {
-                                        _strokes.last.points.add(f);
-                                      } else if (_drafting != null) {
-                                        _drafting!.end = f;
-                                      }
-                                    });
-                                  },
-                            onPanEnd: !drawing
-                                ? null
-                                : (_) {
-                                    setState(() {
-                                      if (_drafting != null) {
-                                        _shapes.add(_drafting!);
-                                        _history.add('shape');
-                                        _drafting = null;
-                                      }
-                                    });
-                                  },
-                            child: CustomPaint(
-                              painter: _AnnotationPainter(
-                                  _strokes, _shapes, _drafting),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: AspectRatio(
+                  aspectRatio: _aspect,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
+                    child: RepaintBoundary(
+                      key: _boundaryKey,
+                      child: LayoutBuilder(builder: (ctx, c) {
+                        final w = c.maxWidth, h = c.maxHeight;
+                        _canvasW = w;
+                        Offset frac(Offset local) => Offset(
+                            (local.dx / w).clamp(0.0, 1.0),
+                            (local.dy / h).clamp(0.0, 1.0));
+                        final drawing = _tool != _EditTool.move;
+                        return Stack(
+                          children: [
+                            Positioned.fill(
+                              child: Image.memory(widget.imageBytes,
+                                  fit: BoxFit.fill),
                             ),
-                          ),
-                        ),
-                        // Emoji stickers (draggable).
-                        ..._emojis.map((em) => Positioned(
-                              left: em.pos.dx * w - em.size / 2,
-                              top: em.pos.dy * h - em.size / 2,
+                            // Drawing layer.
+                            Positioned.fill(
                               child: GestureDetector(
-                                onPanUpdate: (d) {
-                                  setState(() {
-                                    em.pos += Offset(
-                                        d.delta.dx / w, d.delta.dy / h);
-                                    em.pos = Offset(em.pos.dx.clamp(0.0, 1.0),
-                                        em.pos.dy.clamp(0.0, 1.0));
-                                  });
-                                },
-                                child: Text(em.emoji,
-                                    style: TextStyle(fontSize: em.size)),
+                                behavior: HitTestBehavior.opaque,
+                                onPanStart: !drawing
+                                    ? null
+                                    : (d) {
+                                        final f = frac(d.localPosition);
+                                        setState(() {
+                                          if (_isPenLike) {
+                                            final hi = _tool ==
+                                                _EditTool.highlight;
+                                            final st = _PenStroke(
+                                                hi
+                                                    ? _color.withAlpha(110)
+                                                    : _color,
+                                                hi
+                                                    ? _strokeWidth * 3.5
+                                                    : _strokeWidth);
+                                            st.points.add(f);
+                                            _strokes.add(st);
+                                            _history.add('pen');
+                                          } else {
+                                            _drafting = _ShapeMark(
+                                                _color,
+                                                _strokeWidth,
+                                                _shapeKindForTool(),
+                                                f,
+                                                f);
+                                          }
+                                        });
+                                      },
+                                onPanUpdate: !drawing
+                                    ? null
+                                    : (d) {
+                                        final f = frac(d.localPosition);
+                                        setState(() {
+                                          if (_isPenLike &&
+                                              _strokes.isNotEmpty) {
+                                            _strokes.last.points.add(f);
+                                          } else if (_drafting != null) {
+                                            _drafting!.end = f;
+                                          }
+                                        });
+                                      },
+                                onPanEnd: !drawing
+                                    ? null
+                                    : (_) {
+                                        setState(() {
+                                          if (_drafting != null) {
+                                            _shapes.add(_drafting!);
+                                            _history.add('shape');
+                                            _drafting = null;
+                                          }
+                                        });
+                                      },
+                                child: CustomPaint(
+                                  painter: _AnnotationPainter(
+                                      _strokes, _shapes, _drafting),
+                                ),
                               ),
-                            )),
-                      ],
-                    );
-                  }),
+                            ),
+                            // Emoji / text stickers (draggable).
+                            ..._emojis.map((em) => Positioned(
+                                  left: em.pos.dx * w - em.size / 2,
+                                  top: em.pos.dy * h - em.size / 2,
+                                  child: GestureDetector(
+                                    onPanUpdate: (d) {
+                                      setState(() {
+                                        em.pos += Offset(
+                                            d.delta.dx / w, d.delta.dy / h);
+                                        em.pos = Offset(
+                                            em.pos.dx.clamp(0.0, 1.0),
+                                            em.pos.dy.clamp(0.0, 1.0));
+                                      });
+                                    },
+                                    child: Text(em.emoji,
+                                        style: TextStyle(
+                                            fontSize: em.size,
+                                            color: em.color,
+                                            fontWeight: em.color != null
+                                                ? FontWeight.w700
+                                                : null)),
+                                  ),
+                                )),
+                          ],
+                        );
+                      }),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -376,25 +488,23 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
           // ── Tool + colour bar ───────────────────────────────────────────
           Container(
             color: Colors.black,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
             child: Row(
               children: [
                 _toolBtn(Icons.pan_tool_alt_rounded, _EditTool.move, 'Move'),
                 _toolBtn(Icons.edit_rounded, _EditTool.pen, 'Draw'),
-                _toolBtn(Icons.circle_outlined, _EditTool.circle, 'Circle'),
-                _toolBtn(
-                    Icons.crop_square_rounded, _EditTool.box, 'Focus box'),
+                _toolBtn(Icons.brush_rounded, _EditTool.highlight,
+                    'Highlighter'),
                 IconButton(
                   tooltip: 'Emoji',
                   onPressed: () =>
                       setState(() => _showEmojiTray = !_showEmojiTray),
                   icon: Icon(Icons.emoji_emotions_rounded,
-                      color: _showEmojiTray
-                          ? scheme.primary
-                          : Colors.white70),
+                      color:
+                          _showEmojiTray ? scheme.primary : Colors.white70),
                 ),
+                _moreMenu(scheme),
                 const Spacer(),
-                // Colour swatches.
                 for (final col in _palette)
                   GestureDetector(
                     onTap: () => setState(() => _color = col),
@@ -406,9 +516,8 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
                         color: col,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: _color == col
-                              ? Colors.white
-                              : Colors.white24,
+                          color:
+                              _color == col ? Colors.white : Colors.white24,
                           width: _color == col ? 2.5 : 1,
                         ),
                       ),
@@ -420,11 +529,6 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
           // ── Caption + send ──────────────────────────────────────────────
           Container(
             color: Colors.black,
-            // bottom padding = keyboard height (viewInsets) + the system
-            // navigation-bar inset (padding.bottom) + a little breathing room.
-            // padding.bottom is the 3-button nav-bar height on those phones and
-            // ~0 on gesture nav, and it collapses to 0 while the keyboard is up
-            // (viewInsets already covers it), so the two never double-count.
             padding: EdgeInsets.only(
               left: 12,
               right: 12,
@@ -435,7 +539,6 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
             ),
             child: Row(
               children: [
-                // HD toggle: off = compressed (smaller), on = original quality.
                 Tooltip(
                   message: _hd
                       ? 'HD on — sending original quality'
@@ -454,12 +557,14 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
                         children: [
                           Icon(Icons.hd_rounded,
                               size: 16,
-                              color: _hd ? scheme.onPrimary : Colors.white70),
+                              color:
+                                  _hd ? scheme.onPrimary : Colors.white70),
                           const SizedBox(width: 3),
                           Text('HD',
                               style: TextStyle(
-                                  color:
-                                      _hd ? scheme.onPrimary : Colors.white70,
+                                  color: _hd
+                                      ? scheme.onPrimary
+                                      : Colors.white70,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12)),
                         ],
@@ -505,8 +610,7 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
                             child: CircularProgressIndicator(
                                 strokeWidth: 2, color: Colors.white),
                           )
-                        : const Icon(Icons.send_rounded,
-                            color: Colors.white),
+                        : const Icon(Icons.send_rounded, color: Colors.white),
                   ),
                 ),
               ],
@@ -524,6 +628,82 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
       tooltip: tip,
       onPressed: () => setState(() => _tool = tool),
       icon: Icon(icon, color: selected ? scheme.primary : Colors.white70),
+    );
+  }
+
+  Widget _moreMenu(ColorScheme scheme) {
+    return PopupMenuButton<String>(
+      tooltip: 'More tools',
+      color: const Color(0xFF1C1C1E),
+      icon: Icon(Icons.more_vert_rounded,
+          color: _isShapeTool ? scheme.primary : Colors.white70),
+      onSelected: (v) {
+        switch (v) {
+          case 'circle':
+            setState(() => _tool = _EditTool.circle);
+            break;
+          case 'box':
+            setState(() => _tool = _EditTool.box);
+            break;
+          case 'arrow':
+            setState(() => _tool = _EditTool.arrow);
+            break;
+          case 'text':
+            _promptText();
+            break;
+          case 'thin':
+            setState(() => _strokeWidth = 3);
+            break;
+          case 'medium':
+            setState(() => _strokeWidth = 6);
+            break;
+          case 'thick':
+            setState(() => _strokeWidth = 10);
+            break;
+          case 'clear':
+            setState(_clearAll);
+            break;
+        }
+      },
+      itemBuilder: (ctx) => [
+        _moreItem('circle', Icons.circle_outlined, 'Circle',
+            _tool == _EditTool.circle),
+        _moreItem('box', Icons.crop_square_rounded, 'Focus box',
+            _tool == _EditTool.box),
+        _moreItem('arrow', Icons.north_east_rounded, 'Arrow',
+            _tool == _EditTool.arrow),
+        _moreItem('text', Icons.title_rounded, 'Add text', false),
+        const PopupMenuDivider(),
+        _moreItem('thin', Icons.remove_rounded, 'Thin line', _strokeWidth == 3),
+        _moreItem('medium', Icons.remove_rounded, 'Medium line',
+            _strokeWidth == 6),
+        _moreItem(
+            'thick', Icons.remove_rounded, 'Thick line', _strokeWidth == 10),
+        const PopupMenuDivider(),
+        _moreItem('clear', Icons.delete_sweep_rounded, 'Clear all', false),
+      ],
+    );
+  }
+
+  PopupMenuItem<String> _moreItem(
+      String value, IconData icon, String label, bool active) {
+    const accent = Color(0xFFFF3B30);
+    return PopupMenuItem<String>(
+      value: value,
+      height: 42,
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: active ? accent : Colors.white70),
+          const SizedBox(width: 12),
+          Text(label,
+              style:
+                  TextStyle(color: active ? Colors.white : Colors.white70)),
+          if (active) ...[
+            const Spacer(),
+            const Icon(Icons.check_rounded, size: 16, color: accent),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -560,16 +740,23 @@ class _AnnotationPainter extends CustomPainter {
       final paint = Paint()
         ..color = sh.color
         ..strokeWidth = sh.width
-        ..style = PaintingStyle.stroke;
-      final rect = Rect.fromPoints(
-        Offset(sh.start.dx * size.width, sh.start.dy * size.height),
-        Offset(sh.end.dx * size.width, sh.end.dy * size.height),
-      );
-      if (sh.oval) {
-        canvas.drawOval(rect, paint);
-      } else {
-        canvas.drawRRect(
-            RRect.fromRectAndRadius(rect, const Radius.circular(8)), paint);
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round;
+      final a = Offset(sh.start.dx * size.width, sh.start.dy * size.height);
+      final b = Offset(sh.end.dx * size.width, sh.end.dy * size.height);
+      switch (sh.kind) {
+        case _ShapeKind.oval:
+          canvas.drawOval(Rect.fromPoints(a, b), paint);
+          break;
+        case _ShapeKind.box:
+          canvas.drawRRect(
+              RRect.fromRectAndRadius(
+                  Rect.fromPoints(a, b), const Radius.circular(8)),
+              paint);
+          break;
+        case _ShapeKind.arrow:
+          _drawArrow(canvas, a, b, paint, 22, 12);
+          break;
       }
     }
 

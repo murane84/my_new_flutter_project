@@ -54,9 +54,10 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     if (s == CallState.idle) {
       _dismiss();
     } else if (s == CallState.ended && !_showFallback) {
-      // Clean end (no phone-fallback prompt) → auto-close shortly.
+      // Clean end (no phone-fallback prompt) → auto-close shortly. Kept short so
+      // the "Call ended" state reads as a brief flash before the fade-out.
       _endTimer?.cancel();
-      _endTimer = Timer(const Duration(milliseconds: 1600), _dismiss);
+      _endTimer = Timer(const Duration(milliseconds: 1300), _dismiss);
     }
   }
 
@@ -89,6 +90,8 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       _isUnreachable &&
       (_call.fallbackPhone?.trim().isNotEmpty ?? false);
 
+  bool get _ended => _call.state == CallState.ended;
+
   @override
   Widget build(BuildContext context) {
     // Rebuild whenever the call state/mute/speaker changes (was _call's
@@ -116,7 +119,12 @@ class _CallScreenState extends ConsumerState<CallScreen> {
               child: Column(
                 children: [
                   const Spacer(flex: 2),
-                  _avatar(),
+                  // Dim the avatar once the call has ended for a calm wind-down.
+                  AnimatedOpacity(
+                    duration: const Duration(milliseconds: 300),
+                    opacity: _ended ? 0.55 : 1,
+                    child: _avatar(),
+                  ),
                   const SizedBox(height: 24),
                   Text(
                     _call.peerName.isEmpty ? 'Aluta call' : _call.peerName,
@@ -242,13 +250,26 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       );
     }
 
-    // Ended → outcome + (for the caller who couldn't get through) a phone
-    // fallback, honouring "call out of Aluta when not reachable".
+    // Ended → a calm, balanced wind-down: a dim (non-interactive) end marker
+    // sits where the hang-up button was — instead of the controls abruptly
+    // collapsing to a bare "Close" link — then the screen fades itself out.
+    // For a caller who couldn't get through, offer the phone fallback + Close.
     if (_call.state == CallState.ended) {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          Container(
+            width: 68,
+            height: 68,
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(28),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.call_end_rounded,
+                color: Colors.white70, size: 30),
+          ),
           if (_showFallback) ...[
+            const SizedBox(height: 22),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
@@ -261,13 +282,13 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                 label: const Text('Call on phone instead'),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: _dismiss,
+              child: const Text('Close',
+                  style: TextStyle(color: Colors.white70, fontSize: 16)),
+            ),
           ],
-          TextButton(
-            onPressed: _dismiss,
-            child: const Text('Close',
-                style: TextStyle(color: Colors.white70, fontSize: 16)),
-          ),
         ],
       );
     }

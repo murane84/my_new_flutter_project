@@ -3987,10 +3987,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
                             size: 14, color: scheme.primary),
                         const SizedBox(width: 5),
                         Text(
-                          // Show just the first name on EVERY platform (phone,
-                          // web, desktop) for consistency — the wide desktop
-                          // window used to show the full "First Last".
-                          _username.trim().split(RegExp(r'\s+')).first,
+                          // Narrow layouts (phones, or a shrunk web window)
+                          // show just the first name so a full "First Last"
+                          // doesn't eat the footer's space; wide screens
+                          // (desktop) have room for the full name.
+                          MediaQuery.of(context).size.width < 640
+                              ? _username.trim().split(RegExp(r'\s+')).first
+                              : _username,
                           style: TextStyle(
                             color: scheme.onSurface,
                             fontSize: 12,

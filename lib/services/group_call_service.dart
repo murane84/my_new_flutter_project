@@ -92,6 +92,9 @@ class GroupCallService {
   final Map<int, RTCPeerConnection> _peers = {};
   final Map<int, List<RTCIceCandidate>> _pendingIce = {};
   final Map<int, bool> _remoteSet = {};
+  // WEB ONLY: one offscreen renderer per participant so the browser plays their
+  // remote audio (web can't auto-play a remote WebRTC track like native does).
+  final Map<int, RTCVideoRenderer> _renderers = {};
   MediaStream? _localStream;
   Timer? _ringTimeout;
 
@@ -460,9 +463,20 @@ class GroupCallService {
         },
       });
     };
-    pc.onTrack = (RTCTrackEvent e) {
-      // Remote audio plays automatically; keep a handle for future UI use.
-      if (e.streams.isNotEmpty) participants[pid]?.stream = e.streams.first;
+    pc.onTrack = (RTCTrackEvent e) async {
+      if (e.streams.isEmpty) return;
+      participants[pid]?.stream = e.streams.first;
+      // Native plays remote audio automatically; on WEB each participant's
+      // stream must be attached to a media element or their voice is silent.
+      if (kIsWeb) {
+        var r = _renderers[pid];
+        if (r == null) {
+          r = RTCVideoRenderer();
+          await r.initialize();
+          _renderers[pid] = r;
+        }
+        r.srcObject = e.streams.first;
+      }
     };
     pc.onConnectionState = (RTCPeerConnectionState s) {
       if (s == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
@@ -533,6 +547,11 @@ class GroupCallService {
     try {
       await pc?.close();
     } catch (_) {}
+    final r = _renderers.remove(pid);
+    try {
+      r?.srcObject = null;
+      await r?.dispose();
+    } catch (_) {}
     _remoteSet.remove(pid);
     _pendingIce.remove(pid);
     participants.remove(pid);
@@ -569,6 +588,13 @@ class GroupCallService {
         await pc.close();
       } catch (_) {}
     }
+    for (final r in _renderers.values) {
+      try {
+        r.srcObject = null;
+        await r.dispose();
+      } catch (_) {}
+    }
+    _renderers.clear();
     _peers.clear();
     _pendingIce.clear();
     _remoteSet.clear();

@@ -841,23 +841,38 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
   }
 
-  /// Cold-start: if we were launched by tapping Accept on a call notification,
-  /// reconnect. For a 1:1 call the offer was missed (app was killed), so ask the
-  /// caller to re-send it via prepareAcceptFromNotification.
+  /// Cold-start: the app was launched by tapping a call notification (killed
+  /// app, so the WebRTC offer was missed). Depending on WHAT was tapped:
+  ///   • Accept  → reconnect and auto-answer (prepareAcceptFromNotification).
+  ///   • Decline → hang up.
+  ///   • the body (no action) → show the in-app ringing screen with
+  ///     Accept/Decline, since tapping the body dismisses the notification and
+  ///     the full-screen intent was blocked (MIUI etc.).
   Future<void> _consumeCallLaunch() async {
     final launch = await consumeCallLaunchAction();
-    if (launch == null || launch.actionId != kCallAccept) return;
+    if (launch == null) return;
     final isGroup = launch.payload['group'] == true;
     if (isGroup) {
-      // Group re-join: opening the group shows the "call in progress · Join"
-      // banner (see ongoingCalls); nothing more to do reliably from a cold
-      // launch without the member list.
+      // Group: opening the group shows the "call in progress · Join" banner.
       return;
     }
     final cid = int.tryParse('${launch.payload['caller_id'] ?? ''}');
     if (cid == null) return;
+    final action = launch.actionId;
+    if (action == kCallDecline) {
+      CallService.instance.showIncomingFromNotification(
+          cid, (launch.payload['caller_name'] ?? '').toString());
+      CallService.instance.declineCall();
+      return;
+    }
     _openCallScreen();
-    CallService.instance.prepareAcceptFromNotification(cid);
+    if (action == kCallAccept) {
+      CallService.instance.prepareAcceptFromNotification(cid);
+    } else {
+      // Body tap → show the ring screen so the user can act on the call.
+      CallService.instance.showIncomingFromNotification(
+          cid, (launch.payload['caller_name'] ?? '').toString());
+    }
   }
 
   bool _callScreenOpen = false;

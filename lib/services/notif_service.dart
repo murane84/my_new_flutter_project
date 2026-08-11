@@ -73,7 +73,9 @@ void _onNotifBgResponse(NotificationResponse r) {
 /// On cold start, returns the call action the user tapped in the notification
 /// that launched the app (e.g. Accept from a killed state), or null. The app
 /// uses this to reconnect and auto-answer. Safe to call once at startup.
-Future<({String actionId, Map<String, dynamic> payload})?>
+/// [actionId] is the tapped action (kCallAccept / kCallDecline) or null when the
+/// user tapped the notification BODY (they expect the full-screen call UI).
+Future<({String? actionId, Map<String, dynamic> payload})?>
     consumeCallLaunchAction() async {
   if (kIsWeb) return null;
   try {
@@ -81,8 +83,13 @@ Future<({String actionId, Map<String, dynamic> payload})?>
     if (details == null || !details.didNotificationLaunchApp) return null;
     final resp = details.notificationResponse;
     final a = resp?.actionId;
-    if (a == kCallAccept || a == kCallDecline) {
-      return (actionId: a!, payload: _decodePayload(resp?.payload));
+    final payload = _decodePayload(resp?.payload);
+    // A call notification carries caller_id (1:1) or group=true. Return it
+    // whether the user tapped Accept/Decline OR just the notification body —
+    // a body tap dismisses the notification, so the app must show the call UI.
+    final isCall = payload.containsKey('caller_id') || payload['group'] == true;
+    if (a == kCallAccept || a == kCallDecline || isCall) {
+      return (actionId: a, payload: payload);
     }
     return null;
   } catch (_) {
@@ -201,7 +208,7 @@ Future<void> showCallNotification({
     if (!_ready) await initNotifications();
     // Attach who's calling so the Accept/Decline actions (and a cold-start
     // launch) can route back to the right caller / group room.
-    final payloadMap = <String, dynamic>{'group': isGroup};
+    final payloadMap = <String, dynamic>{'group': isGroup, 'caller_name': caller};
     if (callerId != null) payloadMap['caller_id'] = callerId;
     if (room != null) payloadMap['room'] = room;
     final payload = jsonEncode(payloadMap);

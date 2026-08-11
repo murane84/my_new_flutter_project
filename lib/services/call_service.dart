@@ -257,23 +257,50 @@ class CallService {
   /// The user tapped "Accept" on the ringing notification while the app was
   /// KILLED, so we launched with no offer in memory. Show a connecting screen
   /// and ask the caller to re-send their offer; [_handleOffer] auto-answers it.
-  /// Retries the request for a while to cover WebSocket connect latency.
   void prepareAcceptFromNotification(int callerId) {
     if (isActive) return; // a live offer already arrived — nothing to recover
     _reset();
     // The ringing notification may still be up (some OEMs don't honour the
     // action's cancel) — clear it now that we're answering.
     cancelCallNotification();
+    _beginAcceptViaReoffer(callerId);
+  }
+
+  /// The app was opened by tapping the call NOTIFICATION BODY while it was
+  /// killed (no offer in memory, and the full-screen intent was blocked — MIUI
+  /// etc.). Show the in-app ringing screen so the user can Accept/Decline right
+  /// there. Accept then requests the offer (see [acceptCall]); Decline hangs up.
+  void showIncomingFromNotification(int callerId, String callerName) {
+    if (isActive) {
+      onShowCallUI?.call(); // a call is already up — just surface it
+      return;
+    }
+    _reset();
+    peerId = callerId;
+    peerName = callerName;
+    isCaller = false;
+    state = CallState.ringing; // ring UI (Accept/Decline) — but no offer yet
+    endReason = CallEndReason.none;
+    _publish();
+    onShowCallUI?.call();
+    // If nobody answers in-app within 45s, clean up.
+    _ringTimeout = Timer(const Duration(seconds: 45), () {
+      if (state == CallState.ringing) _finish(CallEndReason.unanswered);
+    });
+  }
+
+  /// Enter "connecting" and pull a fresh offer from the caller (call_rejoin),
+  /// retrying until it arrives; [_handleOffer] auto-answers it. Shared by the
+  /// killed-app accept paths.
+  void _beginAcceptViaReoffer(int callerId) {
     peerId = callerId;
     isCaller = false;
     _pendingAutoAccept = true;
+    _reoffered = false;
     state = CallState.connecting;
     endReason = CallEndReason.none;
     _publish();
     onShowCallUI?.call();
-    // Ask the caller to re-send the offer; repeat until it arrives (their app is
-    // still on "calling") or we give up. WS may not be connected on the first
-    // tick right after a cold launch, hence the retries.
     void ask() => _signal({'type': 'call_rejoin'});
     ask();
     _rejoinTimer = Timer.periodic(const Duration(seconds: 2), (_) {
@@ -283,7 +310,6 @@ class CallService {
         _rejoinTimer?.cancel();
       }
     });
-    // Give up after 25s if the caller never re-offers (they hung up / left).
     _ringTimeout = Timer(const Duration(seconds: 25), () {
       if (_pendingAutoAccept) {
         _rejoinTimer?.cancel();
@@ -294,9 +320,20 @@ class CallService {
 
   /// Accept the incoming call (build answer, send it back).
   Future<void> acceptCall() async {
-    if (state != CallState.ringing || _pendingOffer == null) return;
+    if (state != CallState.ringing) return;
     _ringTimeout?.cancel();
     cancelCallNotification(); // stop the ringing notification once we answer
+    // Rang from a notification body-tap (killed app) → no offer in memory yet.
+    // Ask the caller to re-send it and auto-answer on arrival.
+    if (_pendingOffer == null) {
+      final cid = peerId;
+      if (cid == null) {
+        _finish(CallEndReason.failed);
+        return;
+      }
+      _beginAcceptViaReoffer(cid);
+      return;
+    }
     state = CallState.connecting;
     _publish();
     try {

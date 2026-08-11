@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -6,6 +8,66 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 /// calls are best-effort / guarded.
 final FlutterLocalNotificationsPlugin _fln = FlutterLocalNotificationsPlugin();
 bool _ready = false;
+
+// Action-button ids on the ringing call notification.
+const String kCallAccept = 'call_accept';
+const String kCallDecline = 'call_decline';
+
+/// Wired by the app (home) so tapping Accept / Decline on the ringing
+/// notification routes into the live call engine — this is what gives the
+/// receiver working call controls even when the app is only in the background
+/// (not actively on screen). `payload` is the JSON we attached to the
+/// notification (caller id, group flag). Null while the app process isn't
+/// running (killed) — that path is handled via [consumeCallLaunchAction].
+void Function(String actionId, Map<String, dynamic> payload)? onCallAction;
+
+Map<String, dynamic> _decodePayload(String? raw) {
+  if (raw == null || raw.isEmpty) return const {};
+  try {
+    final v = jsonDecode(raw);
+    return v is Map<String, dynamic> ? v : const {};
+  } catch (_) {
+    return const {};
+  }
+}
+
+/// Foreground / app-alive tap handler. A tapped Accept/Decline action (or the
+/// notification body) lands here; we hand call actions to [onCallAction].
+void _onNotifResponse(NotificationResponse r) {
+  final a = r.actionId;
+  if (a == kCallAccept || a == kCallDecline) {
+    onCallAction?.call(a!, _decodePayload(r.payload));
+  }
+}
+
+/// Background isolate tap handler (app killed). Must be a top-level, AOT entry.
+/// We can't touch app state here; declining just lets the notification cancel
+/// itself (cancelNotification: true) and the caller times out. Accept is picked
+/// up on next launch via [consumeCallLaunchAction].
+@pragma('vm:entry-point')
+void _onNotifBgResponse(NotificationResponse r) {
+  // Intentionally minimal — see doc comment above.
+}
+
+/// On cold start, returns the call action the user tapped in the notification
+/// that launched the app (e.g. Accept from a killed state), or null. The app
+/// uses this to reconnect and auto-answer. Safe to call once at startup.
+Future<({String actionId, Map<String, dynamic> payload})?>
+    consumeCallLaunchAction() async {
+  if (kIsWeb) return null;
+  try {
+    final details = await _fln.getNotificationAppLaunchDetails();
+    if (details == null || !details.didNotificationLaunchApp) return null;
+    final resp = details.notificationResponse;
+    final a = resp?.actionId;
+    if (a == kCallAccept || a == kCallDecline) {
+      return (actionId: a!, payload: _decodePayload(resp?.payload));
+    }
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
 
 const _channelId = 'aluta_messages';
 const _channelName = 'Messages';
@@ -31,7 +93,10 @@ Future<void> initNotifications() async {
     const android =
         AndroidInitializationSettings('@mipmap/launcher_icon');
     await _fln.initialize(
-        settings: const InitializationSettings(android: android));
+      settings: const InitializationSettings(android: android),
+      onDidReceiveNotificationResponse: _onNotifResponse,
+      onDidReceiveBackgroundNotificationResponse: _onNotifBgResponse,
+    );
     final android_ = _fln.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     await android_?.requestNotificationsPermission();
@@ -105,15 +170,26 @@ Future<void> showMessageNotification({
 /// dismiss can never ring forever. Tapping it opens the app.
 Future<void> showCallNotification({
   required String caller,
+  String? callerId,
+  bool isGroup = false,
+  int? room,
   int id = _callNotifId,
 }) async {
   if (kIsWeb) return;
   try {
     if (!_ready) await initNotifications();
+    // Attach who's calling so the Accept/Decline actions (and a cold-start
+    // launch) can route back to the right caller / group room.
+    final payload = jsonEncode({
+      if (callerId != null) 'caller_id': callerId,
+      'group': isGroup,
+      if (room != null) 'room': room,
+    });
     await _fln.show(
       id: id,
       title: 'Incoming call',
       body: '$caller is calling…',
+      payload: payload,
       notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           _callChannelId,
@@ -141,6 +217,23 @@ Future<void> showCallNotification({
           visibility: NotificationVisibility.public,
           ticker: 'Incoming call',
           icon: '@mipmap/launcher_icon',
+          // The whole point of this change: give the receiver working call
+          // controls right on the notification, even when the app isn't on
+          // screen. Decline cancels the ring locally; Accept brings the app
+          // up to answer.
+          actions: <AndroidNotificationAction>[
+            const AndroidNotificationAction(
+              kCallDecline,
+              'Decline',
+              cancelNotification: true,
+            ),
+            const AndroidNotificationAction(
+              kCallAccept,
+              'Accept',
+              showsUserInterface: true,
+              cancelNotification: true,
+            ),
+          ],
         ),
       ),
     );

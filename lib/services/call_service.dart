@@ -104,6 +104,11 @@ class CallService {
   final List<RTCIceCandidate> _pendingRemote = []; // ICE before remote SDP set
   bool _remoteDescSet = false;
   Timer? _ringTimeout;
+  // Set when the user tapped "Accept" on the call notification while the app was
+  // KILLED: we launched fresh with no offer in memory, so we ask the caller to
+  // re-send it (call_rejoin) and auto-answer the moment it arrives.
+  bool _pendingAutoAccept = false;
+  Timer? _rejoinTimer;
 
   // STUN keeps it free for same-network / simple NATs; the TURN entries relay
   // media when a direct path can't be punched (common on cellular). These are
@@ -194,6 +199,21 @@ class CallService {
   Future<void> _handleOffer(Map<String, dynamic> msg) async {
     final from = _asInt(msg['from']);
     if (from == null) return;
+    // Re-offer we requested after accepting from a killed-app notification:
+    // wire it up and answer immediately instead of ringing again.
+    if (_pendingAutoAccept && from == peerId) {
+      _pendingAutoAccept = false;
+      _rejoinTimer?.cancel();
+      _ringTimeout?.cancel();
+      peerName = (msg['caller_name'] ?? peerName).toString();
+      final av = (msg['caller_avatar'] as String?)?.trim();
+      if (av != null && av.isNotEmpty) peerAvatar = av;
+      _pendingOffer = RTCSessionDescription(msg['sdp'] as String?, 'offer');
+      state = CallState.ringing; // acceptCall() requires ringing + a pending offer
+      _publish();
+      await acceptCall();
+      return;
+    }
     if (isActive) {
       sendSignal?.call({'type': 'call_busy', 'to': from});
       return;
@@ -217,6 +237,41 @@ class CallService {
       if (state == CallState.ringing) {
         _signal({'type': 'call_decline'});
         _finish(CallEndReason.unanswered);
+      }
+    });
+  }
+
+  /// The user tapped "Accept" on the ringing notification while the app was
+  /// KILLED, so we launched with no offer in memory. Show a connecting screen
+  /// and ask the caller to re-send their offer; [_handleOffer] auto-answers it.
+  /// Retries the request for a while to cover WebSocket connect latency.
+  void prepareAcceptFromNotification(int callerId) {
+    if (isActive) return; // a live offer already arrived — nothing to recover
+    _reset();
+    peerId = callerId;
+    isCaller = false;
+    _pendingAutoAccept = true;
+    state = CallState.connecting;
+    endReason = CallEndReason.none;
+    _publish();
+    onShowCallUI?.call();
+    // Ask the caller to re-send the offer; repeat until it arrives (their app is
+    // still on "calling") or we give up. WS may not be connected on the first
+    // tick right after a cold launch, hence the retries.
+    void ask() => _signal({'type': 'call_rejoin'});
+    ask();
+    _rejoinTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (_pendingAutoAccept && state == CallState.connecting) {
+        ask();
+      } else {
+        _rejoinTimer?.cancel();
+      }
+    });
+    // Give up after 25s if the caller never re-offers (they hung up / left).
+    _ringTimeout = Timer(const Duration(seconds: 25), () {
+      if (_pendingAutoAccept) {
+        _rejoinTimer?.cancel();
+        _finish(CallEndReason.failed);
       }
     });
   }
@@ -295,6 +350,24 @@ class CallService {
         if (isCaller && state == CallState.calling) {
           outgoing = CallOutgoing.ringing;
           _publish();
+        }
+        break;
+      case 'call_rejoin':
+        // The callee accepted from a notification but launched fresh and missed
+        // our original offer — re-send it so they can answer.
+        if (isCaller && state == CallState.calling && _pc != null) {
+          final desc = await _pc!.getLocalDescription();
+          if (desc != null) {
+            outgoing = CallOutgoing.ringing;
+            _publish();
+            _signal({
+              'type': 'call_offer',
+              'sdp': desc.sdp,
+              'call_type': 'voice',
+              'caller_name': _myName,
+              if (_myAvatar != null) 'caller_avatar': _myAvatar,
+            });
+          }
         }
         break;
       case 'call_delivered':
@@ -423,6 +496,7 @@ class CallService {
   void _finish(CallEndReason reason) {
     if (state == CallState.idle) return;
     _ringTimeout?.cancel();
+    _rejoinTimer?.cancel();
     cancelCallNotification(); // stop any ringing call notification
     endReason = reason;
     state = CallState.ended;
@@ -487,6 +561,8 @@ class CallService {
 
   void _reset() {
     _ringTimeout?.cancel();
+    _rejoinTimer?.cancel();
+    _pendingAutoAccept = false;
     _pendingOffer = null;
     _pendingRemote.clear();
     _remoteDescSet = false;

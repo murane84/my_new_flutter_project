@@ -22,11 +22,20 @@ Future<void> handleFcmData(Map<String, dynamic> data) async {
     final type = (data['type'] ?? '').toString();
     if (type == 'call_offer') {
       final caller = (data['caller_name'] ?? 'Someone').toString();
-      await showCallNotification(caller: caller);
+      final callerId = (data['caller_id'] ?? '').toString();
+      await showCallNotification(
+        caller: caller,
+        callerId: callerId.isEmpty ? null : callerId,
+      );
     } else if (type == 'group_call') {
       final caller = (data['caller_name'] ?? 'Someone').toString();
       final title = (data['title'] ?? 'Group').toString();
-      await showCallNotification(caller: '$caller · $title');
+      final room = int.tryParse((data['room'] ?? '').toString());
+      await showCallNotification(
+        caller: '$caller · $title',
+        isGroup: true,
+        room: room,
+      );
     } else if (type == 'call_end' ||
         type == 'call_cancel' ||
         type == 'call_decline' ||

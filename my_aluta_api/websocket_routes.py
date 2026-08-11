@@ -18,6 +18,7 @@ router = APIRouter()
 _CALL_SIGNALS = {
     "call_offer",     # caller → callee: SDP offer (starts ringing)
     "call_ringing",   # callee → caller: my device received it and is ringing
+    "call_rejoin",    # callee → caller: I accepted from a notification, re-offer
     "call_answer",    # callee → caller: SDP answer (accepted)
     "call_ice",       # both ways: an ICE candidate
     "call_decline",   # callee → caller: rejected

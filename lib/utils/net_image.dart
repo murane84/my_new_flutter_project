@@ -38,6 +38,13 @@ Widget authNetworkImage({
   BoxFit fit = BoxFit.cover,
   Widget Function(BuildContext context)? placeholder,
   Widget Function(BuildContext context)? error,
+  // Decode the image DOWN to at most this many pixels wide/tall in memory. A
+  // phone photo is ~4000px (~48MB decoded); shown in a 240px chat bubble that's
+  // pure waste, and dozens of them exhaust memory → GC thrash → UI freeze/ANR.
+  // Pass the on-screen size × devicePixelRatio for thumbnails; leave null for
+  // the full-screen zoomable viewer that actually needs full resolution.
+  int? cacheWidth,
+  int? cacheHeight,
 }) {
   if (kIsWeb) {
     return Image.network(
@@ -45,6 +52,8 @@ Widget authNetworkImage({
       width: width,
       height: height,
       fit: fit,
+      cacheWidth: cacheWidth,
+      cacheHeight: cacheHeight,
       loadingBuilder: (ctx, child, progress) => progress == null
           ? child
           : (placeholder?.call(ctx) ?? _fallbackLoader()),
@@ -58,6 +67,8 @@ Widget authNetworkImage({
       width: width,
       height: height,
       fit: fit,
+      cacheWidth: cacheWidth,
+      cacheHeight: cacheHeight,
       loadingBuilder: (ctx, child, progress) => progress == null
           ? child
           : (placeholder?.call(ctx) ?? _fallbackLoader()),
@@ -70,6 +81,8 @@ Widget authNetworkImage({
     width: width,
     height: height,
     fit: fit,
+    memCacheWidth: cacheWidth,
+    memCacheHeight: cacheHeight,
     placeholder: placeholder != null ? (c, _) => placeholder(c) : null,
     errorWidget: (c, _, _) => error?.call(c) ?? _fallbackError(),
   );
@@ -78,11 +91,26 @@ Widget authNetworkImage({
 /// Cross-platform authenticated [ImageProvider] — for CircleAvatar.backgroundImage
 /// and the like. On web the token rides in the URL (no header); NetworkImage on
 /// desktop (no sqflite cache); CachedNetworkImage provider on mobile.
+///
+/// Pass [cacheSize] for avatars/thumbnails so the bitmap is decoded down to that
+/// many pixels instead of full resolution — a screen full of full-res avatars is
+/// a leading cause of the memory-pressure UI freeze. Leave it null where full
+/// resolution is required (the zoomable full-screen image viewer).
 ImageProvider authNetworkImageProvider(
-    String url, Map<String, String> headers) {
-  if (kIsWeb) return NetworkImage(_tokenUrl(url, headers));
-  if (_useNativeImage) return NetworkImage(url, headers: headers);
-  return CachedNetworkImageProvider(url, headers: headers);
+    String url, Map<String, String> headers,
+    {int? cacheSize}) {
+  final ImageProvider base;
+  if (kIsWeb) {
+    base = NetworkImage(_tokenUrl(url, headers));
+  } else if (_useNativeImage) {
+    base = NetworkImage(url, headers: headers);
+  } else {
+    base = CachedNetworkImageProvider(url, headers: headers);
+  }
+  if (cacheSize != null) {
+    return ResizeImage(base, width: cacheSize, height: cacheSize);
+  }
+  return base;
 }
 
 Widget _fallbackLoader() => const Center(

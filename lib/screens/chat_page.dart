@@ -3171,6 +3171,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   Widget _callLogContent(Map<String, dynamic> msg, bool isMe, Color textColor) {
     final secs = (msg['media_duration'] as num?)?.toInt() ?? 0;
     final connected = secs > 0;
+    // Outcome tag stored in content (answered/declined/busy/unreachable/failed/
+    // cancelled/missed). Empty on older logs → fall back to duration only.
+    final outcome = (msg['content'] as String?)?.trim() ?? '';
     final IconData icon;
     final String label;
     if (connected) {
@@ -3178,8 +3181,32 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       label =
           '${isMe ? 'Outgoing' : 'Incoming'} call · ${_fmtCallDur(secs)}';
     } else {
-      icon = isMe ? Icons.call_made_rounded : Icons.call_missed_rounded;
-      label = isMe ? 'Call — no answer' : 'Missed call';
+      // Not connected → describe why, from the caller's and callee's viewpoint.
+      switch (outcome) {
+        case 'declined':
+          icon = isMe ? Icons.call_end_rounded : Icons.call_missed_rounded;
+          label = isMe ? 'Call declined' : 'Missed call';
+          break;
+        case 'busy':
+          icon = Icons.phone_disabled_rounded;
+          label = isMe ? 'Line busy' : 'Missed call';
+          break;
+        case 'unreachable':
+          icon = Icons.signal_cellular_off_rounded;
+          label = isMe ? 'Couldn’t reach — offline' : 'Missed call';
+          break;
+        case 'failed':
+          icon = Icons.phone_disabled_rounded;
+          label = isMe ? 'Call failed' : 'Missed call';
+          break;
+        case 'cancelled':
+          icon = isMe ? Icons.call_made_rounded : Icons.call_missed_rounded;
+          label = isMe ? 'Call cancelled' : 'Missed call';
+          break;
+        default: // 'missed' / unknown
+          icon = isMe ? Icons.call_made_rounded : Icons.call_missed_rounded;
+          label = isMe ? 'Call — no answer' : 'Missed call';
+      }
     }
     // Highlight a genuinely missed incoming call in red; otherwise match bubble.
     final color = (!connected && !isMe) ? const Color(0xFFE53935) : textColor;

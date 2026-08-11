@@ -156,15 +156,29 @@ class _GroupCallScreenState extends ConsumerState<GroupCallScreen> {
                   if (!ringing)
                     Expanded(
                       flex: 5,
-                      child: SingleChildScrollView(
-                        child: Wrap(
-                          alignment: WrapAlignment.center,
-                          spacing: 18,
-                          runSpacing: 18,
-                          children: [
-                            for (final p in peers) _peerChip(p),
-                          ],
-                        ),
+                      // Adaptive, scrollable grid of members — glows the tile of
+                      // whoever is talking. Scrolls when the group is large.
+                      child: ValueListenableBuilder<Set<int>>(
+                        valueListenable: _call.speakingIds,
+                        builder: (context, speaking, _) {
+                          if (peers.isEmpty) return const SizedBox.shrink();
+                          return GridView.builder(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            gridDelegate:
+                                const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 112,
+                              mainAxisExtent: 116,
+                              crossAxisSpacing: 6,
+                              mainAxisSpacing: 10,
+                            ),
+                            itemCount: peers.length,
+                            itemBuilder: (_, i) {
+                              final p = peers[i];
+                              return _peerTile(p, speaking.contains(p.id));
+                            },
+                          );
+                        },
                       ),
                     )
                   else
@@ -180,32 +194,56 @@ class _GroupCallScreenState extends ConsumerState<GroupCallScreen> {
     );
   }
 
-  Widget _peerChip(GroupParticipant p) {
+  Widget _peerTile(GroupParticipant p, bool talking) {
     final name = _display(p);
     final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
-    return SizedBox(
-      width: 84,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircleAvatar(
-            radius: 32,
-            backgroundColor: Colors.white.withAlpha(30),
+    const green = Color(0xFF34D058);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Glowing ring while this member is talking.
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: talking ? green : Colors.white.withAlpha(28),
+              width: talking ? 3 : 1.5,
+            ),
+            boxShadow: talking
+                ? [
+                    BoxShadow(
+                      color: green.withAlpha(150),
+                      blurRadius: 16,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : null,
+          ),
+          child: CircleAvatar(
+            radius: 30,
+            backgroundColor: Colors.white.withAlpha(28),
             child: Text(initial,
                 style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 26,
+                    fontSize: 24,
                     fontWeight: FontWeight.bold)),
           ),
-          const SizedBox(height: 8),
-          Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: talking ? green : Colors.white70,
+            fontSize: 12,
+            fontWeight: talking ? FontWeight.w600 : FontWeight.w400,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

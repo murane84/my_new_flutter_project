@@ -801,6 +801,63 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Group (mesh) calling rides the same socket.
     GroupCallService.instance.sendSignal = (msg) => _notifyWs?.sendEvent(msg);
     GroupCallService.instance.onShowUI = _openGroupCallScreen;
+
+    // Accept/Decline tapped on the ringing NOTIFICATION (app backgrounded but
+    // still running): route it into the live call engine. This is what gives
+    // the receiver working call controls without opening the app first.
+    onCallAction = _handleCallNotificationAction;
+    // If the app was launched cold by tapping Accept on a call notification
+    // (app was killed), pick that up once and reconnect the call — after the
+    // first frame so the root navigator exists. Guarded so socket reconnects
+    // don't re-trigger it.
+    if (!_callLaunchConsumed) {
+      _callLaunchConsumed = true;
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _consumeCallLaunch());
+    }
+  }
+
+  bool _callLaunchConsumed = false;
+
+  /// Handle Accept/Decline tapped on the ringing notification while the app is
+  /// alive (the offer is already in memory).
+  void _handleCallNotificationAction(
+      String actionId, Map<String, dynamic> payload) {
+    final isGroup = payload['group'] == true;
+    if (actionId == kCallAccept) {
+      if (isGroup) {
+        _openGroupCallScreen();
+        GroupCallService.instance.accept();
+      } else {
+        _openCallScreen();
+        CallService.instance.acceptCall();
+      }
+    } else if (actionId == kCallDecline) {
+      if (isGroup) {
+        GroupCallService.instance.leave();
+      } else {
+        CallService.instance.declineCall();
+      }
+    }
+  }
+
+  /// Cold-start: if we were launched by tapping Accept on a call notification,
+  /// reconnect. For a 1:1 call the offer was missed (app was killed), so ask the
+  /// caller to re-send it via prepareAcceptFromNotification.
+  Future<void> _consumeCallLaunch() async {
+    final launch = await consumeCallLaunchAction();
+    if (launch == null || launch.actionId != kCallAccept) return;
+    final isGroup = launch.payload['group'] == true;
+    if (isGroup) {
+      // Group re-join: opening the group shows the "call in progress · Join"
+      // banner (see ongoingCalls); nothing more to do reliably from a cold
+      // launch without the member list.
+      return;
+    }
+    final cid = int.tryParse('${launch.payload['caller_id'] ?? ''}');
+    if (cid == null) return;
+    _openCallScreen();
+    CallService.instance.prepareAcceptFromNotification(cid);
   }
 
   bool _callScreenOpen = false;

@@ -57,6 +57,9 @@ class _CallReliabilityScreenState extends State<CallReliabilityScreen>
       return;
     }
     final notifs = await notificationsEnabled();
+    // Real OS query (via the native channel) — so this tile reflects the actual
+    // grant and stops falsely reverting to "Enable" every time the screen opens.
+    final fullScreen = await fullScreenIntentAllowed();
     bool battery = true;
     try {
       battery = await Permission.ignoreBatteryOptimizations.isGranted;
@@ -64,6 +67,7 @@ class _CallReliabilityScreenState extends State<CallReliabilityScreen>
     if (!mounted) return;
     setState(() {
       _notifs = notifs;
+      _fullScreen = fullScreen;
       _battery = battery;
       _loading = false;
     });
@@ -80,8 +84,11 @@ class _CallReliabilityScreenState extends State<CallReliabilityScreen>
   }
 
   Future<void> _fixFullScreen() async {
-    final res = await askFullScreenIntentPermission();
-    if (mounted) setState(() => _fullScreen = res ?? true);
+    // Opens the system "Full-screen intents" settings page. When the user
+    // returns, didChangeAppLifecycleState(resumed) → _refresh() re-reads the
+    // real grant, so the tile reflects what they actually did (no false tick).
+    await askFullScreenIntentPermission();
+    await _refresh();
   }
 
   Future<void> _fixBattery() async {

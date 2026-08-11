@@ -1,7 +1,28 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+/// Native bridge (see android MainActivity) for OS state the notification
+/// plugin can't report — currently the full-screen-intent grant.
+const MethodChannel _reliabilityChannel = MethodChannel('aluta/reliability');
+
+/// Whether the app may currently show full-screen incoming-call intents (ring
+/// over the lock screen). True on non-Android and pre-Android-14 (not gated);
+/// on Android 14+ it reflects the real user-controlled grant. This is a genuine
+/// OS query, unlike the notification plugin which can only *request* it.
+Future<bool> fullScreenIntentAllowed() async {
+  if (kIsWeb) return true;
+  try {
+    final ok =
+        await _reliabilityChannel.invokeMethod<bool>('canUseFullScreenIntent');
+    return ok ?? true;
+  } catch (_) {
+    // iOS / channel not registered / older OS → treat as allowed.
+    return true;
+  }
+}
 
 /// Thin wrapper around flutter_local_notifications for showing new-message
 /// alerts + incoming-call rings while the app is backgrounded / killed. All
@@ -180,11 +201,10 @@ Future<void> showCallNotification({
     if (!_ready) await initNotifications();
     // Attach who's calling so the Accept/Decline actions (and a cold-start
     // launch) can route back to the right caller / group room.
-    final payload = jsonEncode({
-      if (callerId != null) 'caller_id': callerId,
-      'group': isGroup,
-      if (room != null) 'room': room,
-    });
+    final payloadMap = <String, dynamic>{'group': isGroup};
+    if (callerId != null) payloadMap['caller_id'] = callerId;
+    if (room != null) payloadMap['room'] = room;
+    final payload = jsonEncode(payloadMap);
     await _fln.show(
       id: id,
       title: 'Incoming call',

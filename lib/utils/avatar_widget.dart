@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../screens/token_helper.dart' show mediaAuthHeaders;
+import 'net_image.dart';
 
 class InitialsAvatar extends StatelessWidget {
   final String name;
@@ -57,16 +57,21 @@ class InitialsAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
+    // Use the cross-platform loader so avatars load on WEB too: a browser <img>
+    // can't send the Authorization header, so on web this moves the token into
+    // the URL (?token=). Raw CachedNetworkImage here loaded inconsistently on
+    // web. Decode small (avatar-sized) to keep memory low in long lists.
     final avatar = hasImage
         ? ClipOval(
-            child: CachedNetworkImage(
-              imageUrl: imageUrl!,
-              httpHeaders: mediaAuthHeaders(imageUrl!),
+            child: authNetworkImage(
+              url: imageUrl!,
+              headers: mediaAuthHeaders(imageUrl!),
               width: radius * 2,
               height: radius * 2,
               fit: BoxFit.cover,
-              placeholder: (_, _) => _initialsCircle(),
-              errorWidget: (_, _, _) => _initialsCircle(),
+              cacheWidth: (radius * 2 * 3).round(),
+              placeholder: (_) => _initialsCircle(),
+              error: (_) => _initialsCircle(),
             ),
           )
         : _initialsCircle();

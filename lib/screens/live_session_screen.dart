@@ -467,6 +467,11 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
             8, 40, 8, 8 + MediaQuery.of(context).padding.bottom),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        // Drop the app-wide dialogTheme border here — this sheet draws its own
+        // (inner) card border, so the theme border was doubling it up.
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(20)),
+        ),
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: 520, maxHeight: maxSheetH),
           child: Container(

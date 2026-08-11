@@ -18,6 +18,11 @@ Future<void> showSongIdentifier(BuildContext context) {
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
+    // This sheet draws its own (inner) card border — drop the app-wide
+    // bottomSheetTheme border so it isn't doubled.
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+    ),
     builder: (_) => const _SongIdentifierSheet(),
   );
 }

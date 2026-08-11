@@ -65,10 +65,9 @@ class MetadataStore extends ChangeNotifier {
   // --- account backup state ---
   // We only push the full map to the server AFTER a successful pull+merge, so a
   // race (user edits before the pull lands) can never overwrite the server's
-  // copy with a near-empty local map. `_dirty` remembers an edit made before
-  // the first pull so it isn't lost.
+  // copy with a near-empty local map. Any edit made before the first pull is
+  // still captured, because pullFromServer() pushes the merged union at the end.
   bool _synced = false;
-  bool _dirty = false;
   Timer? _pushTimer;
 
   Future<void> load() async {
@@ -97,14 +96,10 @@ class MetadataStore extends ChangeNotifier {
     }
     notifyListeners();
     await _persistLocal();
-    // Back the change up to the account (debounced). Before the first server
-    // pull completes, just remember we're dirty and let pullFromServer() push
-    // the merged result.
-    if (_synced) {
-      _schedulePush();
-    } else {
-      _dirty = true;
-    }
+    // Back the change up to the account (debounced) once the initial pull+merge
+    // has happened. Before that, pullFromServer() will push the merged union
+    // (which includes this edit), so nothing is lost.
+    if (_synced) _schedulePush();
   }
 
   /// Effective title with fallback to the file-derived name.
@@ -151,8 +146,9 @@ class MetadataStore extends ChangeNotifier {
         notifyListeners();
       }
     } catch (_) {
-      // Offline / not logged in — try again next launch; leave _synced false so
-      // edits stay queued as _dirty.
+      // Offline / not logged in — leave _synced false so the next launch pulls
+      // again and then pushes the merged union (any edits made meanwhile ride
+      // along in that push).
       return;
     }
     _synced = true;
@@ -177,7 +173,6 @@ class MetadataStore extends ChangeNotifier {
 
   void _pushNow() {
     _pushTimer?.cancel();
-    _dirty = false;
     final map = _m.map((k, v) => MapEntry(k, v.toJson()));
     // Fire-and-forget; a failed upload just means we retry on the next edit or
     // next launch's pull-then-push.

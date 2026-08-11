@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -18,10 +20,32 @@ class GroupCallScreen extends ConsumerStatefulWidget {
 class _GroupCallScreenState extends ConsumerState<GroupCallScreen> {
   final GroupCallService _call = GroupCallService.instance;
   bool _closing = false;
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    // Refresh once a second so the "MM:SS" elapsed label keeps counting.
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
 
   void _dismiss() {
     if (_closing) return;
     _closing = true;
+    if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
+  }
+
+  /// Close the call screen but STAY in the call — home shows a "return to call"
+  /// banner. Distinct from Leave (which tears the call down).
+  void _minimize() {
     if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
   }
 
@@ -45,8 +69,25 @@ class _GroupCallScreenState extends ConsumerState<GroupCallScreen> {
     final ringing = snap.phase == GroupCallPhase.ringing;
     final peers = _call.participants.values.toList();
 
+    // While connected, show a live MM:SS timer; before anyone connects, the
+    // "waiting" line; when ringing, the incoming-call line.
+    final elapsed = _call.elapsedLabel;
+    final String statusLine = ringing
+        ? (_call.incomingCaller.isEmpty
+            ? 'Incoming group call'
+            : '${_call.incomingCaller} started a group call')
+        : peers.isEmpty
+            ? (elapsed.isEmpty
+                ? 'Waiting for others to join…'
+                : '$elapsed · waiting for others…')
+            : (elapsed.isEmpty
+                ? '${peers.length + 1} in call'
+                : '$elapsed · ${peers.length + 1} in call');
+
     return PopScope(
-      canPop: false,
+      // Back gesture / button MINIMIZES the call (keeps it running) rather than
+      // blocking. The call only ends via the Leave button.
+      canPop: true,
       child: Scaffold(
         backgroundColor: const Color(0xFF12131A),
         body: Container(
@@ -66,6 +107,22 @@ class _GroupCallScreenState extends ConsumerState<GroupCallScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 children: [
+                  // Top bar: a minimize chevron so the user can drop back to
+                  // chat while staying connected (hidden during the ring).
+                  SizedBox(
+                    height: 44,
+                    child: ringing
+                        ? null
+                        : Align(
+                            alignment: Alignment.centerLeft,
+                            child: IconButton(
+                              tooltip: 'Minimize',
+                              icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                                  color: Colors.white, size: 30),
+                              onPressed: _minimize,
+                            ),
+                          ),
+                  ),
                   const Spacer(flex: 2),
                   Container(
                     width: 96,
@@ -90,13 +147,7 @@ class _GroupCallScreenState extends ConsumerState<GroupCallScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    ringing
-                        ? (_call.incomingCaller.isEmpty
-                            ? 'Incoming group call'
-                            : '${_call.incomingCaller} started a group call')
-                        : peers.isEmpty
-                            ? 'Waiting for others to join…'
-                            : '${peers.length + 1} in call',
+                    statusLine,
                     style: TextStyle(
                         color: Colors.white.withAlpha(180), fontSize: 15),
                     textAlign: TextAlign.center,

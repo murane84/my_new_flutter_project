@@ -55,6 +55,7 @@ def _conversation_out(db: Session, conv: Conversation, me: int) -> schemas.Conve
                 user_id=u.id,
                 username=u.username,
                 avatar_url=u.avatar_url,
+                phone=u.phone,
                 is_online=bool(u.is_online),
                 role=m.role,
             )
@@ -126,6 +127,27 @@ def get_one(
 ):
     conv = _require_member(db, cid, current_user.id)
     return _conversation_out(db, conv, current_user.id)
+
+
+@router.get("/{cid}/call")
+def get_call_state(
+    cid: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Whether a GROUP call is live in this conversation right now. The client
+    polls this when a group opens so a member who missed or declined the ring
+    still sees a 'call in progress · Join' banner and can reconnect."""
+    conv = _require_member(db, cid, current_user.id)
+    # Import here to avoid a circular import at module load.
+    from websocket_routes import _group_rooms
+    participants = _group_rooms.get(cid) or set()
+    title = getattr(conv, "title", None) or "Group call"
+    return {
+        "active": len(participants) > 0,
+        "count": len(participants),
+        "title": title,
+    }
 
 
 # ── Messages ───────────────────────────────────────────────────────────────────

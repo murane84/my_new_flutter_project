@@ -993,6 +993,29 @@ class ApiService {
     }
   }
 
+  /// Whether a GROUP call is currently active in [cid] (a member is in the
+  /// room). Used to show the "call in progress · Join" banner when a group is
+  /// opened, so someone who missed/declined the ring can still reconnect.
+  /// Returns {'active': bool, 'title': String, 'count': int} or null on error.
+  Future<Map<String, dynamic>?> getGroupCallState(int cid) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/conversations/$cid/call'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.e('getGroupCallState exception: $e');
+      return null;
+    }
+  }
+
   /// A page of a conversation's messages (same shape as DM messages).
   Future<List<Map<String, dynamic>>> fetchConversationMessages(
     int cid, {

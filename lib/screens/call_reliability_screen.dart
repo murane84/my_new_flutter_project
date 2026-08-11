@@ -28,9 +28,22 @@ class _CallReliabilityScreenState extends State<CallReliabilityScreen>
   bool? _fullScreen; // null = unknown (older OS / can't query)
   bool _battery = true;
   bool _loading = true;
+  String _manufacturer = '';
 
   bool get _isAndroid =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  // Manufacturers that aggressively block background launch / full-screen call
+  // intents and need extra OEM toggles (Autostart, pop-up permission) the app
+  // can only deep-link to — the user must flip them.
+  bool get _needsOemSteps {
+    const oems = [
+      'xiaomi', 'redmi', 'poco', 'oppo', 'realme', 'oneplus', 'vivo', 'iqoo',
+      'huawei', 'honor', 'tecno', 'infinix', 'itel', 'transsion', 'meizu',
+      'asus', 'letv', 'samsung',
+    ];
+    return _isAndroid && oems.any(_manufacturer.contains);
+  }
 
   @override
   void initState() {
@@ -60,6 +73,7 @@ class _CallReliabilityScreenState extends State<CallReliabilityScreen>
     // Real OS query (via the native channel) — so this tile reflects the actual
     // grant and stops falsely reverting to "Enable" every time the screen opens.
     final fullScreen = await fullScreenIntentAllowed();
+    final maker = await deviceManufacturer();
     bool battery = true;
     try {
       battery = await Permission.ignoreBatteryOptimizations.isGranted;
@@ -69,6 +83,7 @@ class _CallReliabilityScreenState extends State<CallReliabilityScreen>
       _notifs = notifs;
       _fullScreen = fullScreen;
       _battery = battery;
+      _manufacturer = maker;
       _loading = false;
     });
   }
@@ -159,6 +174,41 @@ class _CallReliabilityScreenState extends State<CallReliabilityScreen>
                       ok: _battery,
                       onFix: _fixBattery,
                     ),
+                    // OEM-specific steps (Xiaomi/Oppo/Vivo/Tecno…). These can't
+                    // be checked or toggled by the app — only deep-linked — so
+                    // they're guided "open settings" actions, not status tiles.
+                    if (_needsOemSteps) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Your phone (${_manufacturer.isEmpty ? 'this brand' : _manufacturer}) '
+                        'needs two extra toggles turned on by hand for calls to '
+                        'ring when Aluta is closed:',
+                        style: TextStyle(
+                            color: scheme.onSurfaceVariant, fontSize: 12.5),
+                      ),
+                      const SizedBox(height: 10),
+                      _oemTile(
+                        scheme,
+                        icon: Icons.rocket_launch_rounded,
+                        title: 'Autostart',
+                        subtitle:
+                            'Let Aluta start on its own so a call can wake it. '
+                            'Opens your phone’s Autostart list — find Aluta '
+                            'and turn it ON.',
+                        onOpen: openAutostartSettings,
+                      ),
+                      _oemTile(
+                        scheme,
+                        icon: Icons.open_in_new_rounded,
+                        title: 'Show over lock screen / pop-up',
+                        subtitle:
+                            'Allow Aluta to display over the lock screen while in '
+                            'the background. Opens the permission screen — enable '
+                            '“Display pop-up windows while running in the '
+                            'background” (and “Show on lock screen”).',
+                        onOpen: openPopupPermissionSettings,
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     Center(
                       child: TextButton.icon(
@@ -230,6 +280,56 @@ class _CallReliabilityScreenState extends State<CallReliabilityScreen>
                         child: Text(ok == null ? 'Enable' : 'Fix'),
                       ),
                     ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // A guided OEM step: no status (the app can't read OEM toggles), just an
+  // "Open settings" action that deep-links to the right screen.
+  Widget _oemTile(
+    ColorScheme scheme, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Future<void> Function() onOpen,
+  }) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: scheme.primary),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 15),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                        color: scheme.onSurfaceVariant, fontSize: 13),
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () => onOpen(),
+                      icon: const Icon(Icons.settings_rounded, size: 16),
+                      label: const Text('Open settings'),
+                    ),
+                  ),
                 ],
               ),
             ),

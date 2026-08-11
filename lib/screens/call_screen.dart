@@ -196,7 +196,16 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   String _statusText() {
     switch (_call.state) {
       case CallState.calling:
-        return 'Calling…';
+        // Be honest about what's actually happening on the other end.
+        switch (_call.outgoing) {
+          case CallOutgoing.ringing:
+            return 'Ringing…';
+          case CallOutgoing.notified:
+            return 'Ringing their phone…';
+          case CallOutgoing.dialing:
+          case CallOutgoing.none:
+            return 'Calling…';
+        }
       case CallState.ringing:
         return 'Incoming Aluta call';
       case CallState.connecting:
@@ -211,6 +220,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   }
 
   String _endedText() {
+    final name = _call.peerName.isEmpty ? 'They' : _call.peerName;
     switch (_call.endReason) {
       case CallEndReason.declined:
         return 'Call declined';
@@ -218,6 +228,8 @@ class _CallScreenState extends ConsumerState<CallScreen> {
         return '${_call.peerName} is on another call';
       case CallEndReason.unanswered:
         return 'No answer';
+      case CallEndReason.unreachable:
+        return '$name can’t be reached — offline';
       case CallEndReason.failed:
         return 'Couldn’t connect';
       case CallEndReason.cancelled:
@@ -232,6 +244,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       _call.endReason == CallEndReason.unanswered ||
       _call.endReason == CallEndReason.busy ||
       _call.endReason == CallEndReason.failed ||
+      _call.endReason == CallEndReason.unreachable ||
       _call.endReason == CallEndReason.declined;
 
   Widget _controls() {

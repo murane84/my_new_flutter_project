@@ -10,13 +10,14 @@ from config import SECRET_KEY, ALGORITHM
 from database import SessionLocal
 from models import User, Conversation, ConversationMember
 from websocket_manager import connected_users, disconnect_user, notify_user
-from push import send_push_to_user
+from push import send_push_to_user, _tokens_for
 
 router = APIRouter()
 
 # Aluta in-app voice-call signaling message types, relayed peer-to-peer.
 _CALL_SIGNALS = {
     "call_offer",     # caller → callee: SDP offer (starts ringing)
+    "call_ringing",   # callee → caller: my device received it and is ringing
     "call_answer",    # callee → caller: SDP answer (accepted)
     "call_ice",       # both ways: an ICE candidate
     "call_decline",   # callee → caller: rejected
@@ -253,22 +254,61 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                     # Runs off the event loop so a slow FCM call never stalls
                     # signaling.
                     if etype == "call_offer":
+                        # Give the caller honest feedback about whether the
+                        # friend can even be rung, instead of a silent 45s
+                        # ring-out. Two facts decide it:
+                        #   ws_online  — the friend has a live app socket, so the
+                        #                offer we just relayed will ring in-app
+                        #                (their client also sends call_ringing).
+                        #   has_token  — the friend has a device push token, so a
+                        #                closed/backgrounded app can still be woken
+                        #                to ring.
+                        ws_online = bool(connected_users.get(int(to)))
                         try:
-                            asyncio.create_task(asyncio.to_thread(
-                                send_push_to_user,
-                                int(to),
-                                {
-                                    "type": "call_offer",
-                                    # NB: 'from' is a RESERVED FCM data key —
-                                    # including it makes FCM reject the whole
-                                    # message with HTTP 400, so the ringing push
-                                    # never rings. Use 'caller_id' instead.
-                                    "caller_id": str(user_id),
-                                    "caller_name": caller_name,
-                                },
-                            ))
+                            has_token = len(_tokens_for(int(to))) > 0
                         except Exception:
-                            pass
+                            has_token = False
+
+                        if not ws_online and not has_token:
+                            # No live app AND no way to push — the friend is
+                            # fully offline. Tell the caller now; it never rang.
+                            try:
+                                await notify_user(int(user_id), {
+                                    "type": "call_unreachable",
+                                    "to": int(to),
+                                })
+                            except Exception:
+                                pass
+                        else:
+                            if not ws_online and has_token:
+                                # Their app is closed; only a push can reach them.
+                                # Let the caller know we're ringing their phone
+                                # (we can't confirm it actually rings).
+                                try:
+                                    await notify_user(int(user_id), {
+                                        "type": "call_delivered",
+                                        "to": int(to),
+                                    })
+                                except Exception:
+                                    pass
+                            if has_token:
+                                try:
+                                    asyncio.create_task(asyncio.to_thread(
+                                        send_push_to_user,
+                                        int(to),
+                                        {
+                                            # NB: 'from' is a RESERVED FCM data
+                                            # key — including it makes FCM reject
+                                            # the whole message with HTTP 400, so
+                                            # the ringing push never rings. Use
+                                            # 'caller_id' instead.
+                                            "type": "call_offer",
+                                            "caller_id": str(user_id),
+                                            "caller_name": caller_name,
+                                        },
+                                    ))
+                                except Exception:
+                                    pass
                     elif etype in (
                         "call_cancel", "call_end",
                         "call_decline", "call_busy",

@@ -19,7 +19,25 @@ enum CallState {
 
 /// Why a call ended — lets the UI show the right message / offer a phone
 /// fallback when the friend couldn't be reached over the internet.
-enum CallEndReason { none, hangup, declined, busy, cancelled, failed, unanswered }
+/// `unreachable` = the friend's device is offline / not reachable at all (no
+/// live app, no push token), so it never even rang.
+enum CallEndReason {
+  none,
+  hangup,
+  declined,
+  busy,
+  cancelled,
+  failed,
+  unanswered,
+  unreachable,
+}
+
+/// The caller's OUTGOING progress before the callee answers, so the UI can be
+/// honest about what's happening instead of a blind "Calling…":
+///   dialing   → offer sent, no confirmation yet
+///   notified  → their app is closed; we've pushed a ring to their phone
+///   ringing   → their device actually received the call and is ringing now
+enum CallOutgoing { none, dialing, notified, ringing }
 
 /// Aluta in-app **voice** calling over WebRTC.
 ///
@@ -43,6 +61,7 @@ class CallService {
           endReason: endReason,
           muted: muted,
           speakerOn: speakerOn,
+          outgoing: outgoing,
         ));
   }
 
@@ -55,6 +74,8 @@ class CallService {
   bool muted = false;
   bool speakerOn = false;
   CallEndReason endReason = CallEndReason.none;
+  // Caller-side: how far the outgoing call has progressed (see CallOutgoing).
+  CallOutgoing outgoing = CallOutgoing.none;
   DateTime? connectedAt;
   // Guards against posting more than one call-log message per call (the caller
   // posts it when the call ends). Reset when the call is torn down.
@@ -137,6 +158,7 @@ class CallService {
     isCaller = true;
     state = CallState.calling;
     endReason = CallEndReason.none;
+    outgoing = CallOutgoing.dialing;
     _publish();
     onShowCallUI?.call();
 
@@ -186,6 +208,10 @@ class CallService {
     endReason = CallEndReason.none;
     _publish();
     onShowCallUI?.call();
+    // Tell the caller our device actually received the call and is ringing NOW,
+    // so their screen can show a confirmed "Ringing…" instead of a blind
+    // "Calling…". (The caller flips to CallOutgoing.ringing on this.)
+    _signal({'type': 'call_ringing'});
     // Auto-miss if we don't answer in 45s.
     _ringTimeout = Timer(const Duration(seconds: 45), () {
       if (state == CallState.ringing) {
@@ -262,6 +288,32 @@ class CallService {
           } else {
             _pendingRemote.add(cand); // queue until remote SDP is set
           }
+        }
+        break;
+      case 'call_ringing':
+        // The callee's device confirmed it's ringing — real ring, not a guess.
+        if (isCaller && state == CallState.calling) {
+          outgoing = CallOutgoing.ringing;
+          _publish();
+        }
+        break;
+      case 'call_delivered':
+        // Server pushed a ring to the callee's phone (their app was closed). We
+        // can't confirm it rang, so show "Ringing their phone…" — but never
+        // downgrade a confirmed "ringing" back to this.
+        if (isCaller &&
+            state == CallState.calling &&
+            outgoing != CallOutgoing.ringing) {
+          outgoing = CallOutgoing.notified;
+          _publish();
+        }
+        break;
+      case 'call_unreachable':
+        // Server says the friend is fully offline (no live app, no push token)
+        // — the call never rang anywhere. End now with a clear reason instead
+        // of ringing out the 45s timeout in silence.
+        if (isCaller && state == CallState.calling) {
+          _finish(CallEndReason.unreachable);
         }
         break;
       case 'call_decline':
@@ -442,6 +494,7 @@ class CallService {
     speakerOn = false;
     connectedAt = null;
     endReason = CallEndReason.none;
+    outgoing = CallOutgoing.none;
     _callLogged = false;
   }
 

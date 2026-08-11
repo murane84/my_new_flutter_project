@@ -9,7 +9,8 @@
 // the call screen watches that provider instead of add/removeListener.
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../services/call_service.dart' show CallState, CallEndReason;
+import '../services/call_service.dart'
+    show CallState, CallEndReason, CallOutgoing;
 
 /// The parts of the call that CHANGE while it's live and must trigger UI
 /// rebuilds. Stable descriptors (peer name/avatar, isCaller, fallback phone)
@@ -20,12 +21,15 @@ class CallSnapshot {
   final CallEndReason endReason;
   final bool muted;
   final bool speakerOn;
+  // Caller-side outgoing progress (dialing → notified → ringing).
+  final CallOutgoing outgoing;
 
   const CallSnapshot({
     this.state = CallState.idle,
     this.endReason = CallEndReason.none,
     this.muted = false,
     this.speakerOn = false,
+    this.outgoing = CallOutgoing.none,
   });
 
   @override
@@ -34,10 +38,12 @@ class CallSnapshot {
       other.state == state &&
       other.endReason == endReason &&
       other.muted == muted &&
-      other.speakerOn == speakerOn;
+      other.speakerOn == speakerOn &&
+      other.outgoing == outgoing;
 
   @override
-  int get hashCode => Object.hash(state, endReason, muted, speakerOn);
+  int get hashCode =>
+      Object.hash(state, endReason, muted, speakerOn, outgoing);
 }
 
 class CallNotifier extends Notifier<CallSnapshot> {

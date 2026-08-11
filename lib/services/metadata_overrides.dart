@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../screens/api_service.dart';
 
 /// User-edited track details, keyed by file path.
 ///
@@ -9,6 +12,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// details are stored by the app and applied everywhere a song is shown
 /// (playlist, now-playing bar, footer, media notification, live share). This is
 /// permission-free and Play-compliant.
+///
+/// These edits are ALSO backed up to the user's account (see [pullFromServer] /
+/// [_schedulePush]) so they survive an app reinstall/update or a move to a new
+/// device on the same account — otherwise they'd live only in local prefs and
+/// vanish whenever the app's private storage is wiped.
 class TrackMeta {
   final String? title;
   final String? artist;
@@ -49,15 +57,26 @@ class TrackMeta {
 }
 
 class MetadataStore extends ChangeNotifier {
+  static const _prefsKey = 'track_meta_overrides';
+
   final Map<String, TrackMeta> _m = {};
   bool _loaded = false;
+
+  // --- account backup state ---
+  // We only push the full map to the server AFTER a successful pull+merge, so a
+  // race (user edits before the pull lands) can never overwrite the server's
+  // copy with a near-empty local map. `_dirty` remembers an edit made before
+  // the first pull so it isn't lost.
+  bool _synced = false;
+  bool _dirty = false;
+  Timer? _pushTimer;
 
   Future<void> load() async {
     if (_loaded) return;
     _loaded = true;
     try {
       final p = await SharedPreferences.getInstance();
-      final raw = p.getString('track_meta_overrides');
+      final raw = p.getString(_prefsKey);
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw) as Map<String, dynamic>;
         decoded.forEach((k, v) {
@@ -77,11 +96,15 @@ class MetadataStore extends ChangeNotifier {
       _m[path] = meta;
     }
     notifyListeners();
-    try {
-      final p = await SharedPreferences.getInstance();
-      final map = _m.map((k, v) => MapEntry(k, v.toJson()));
-      await p.setString('track_meta_overrides', jsonEncode(map));
-    } catch (_) {}
+    await _persistLocal();
+    // Back the change up to the account (debounced). Before the first server
+    // pull completes, just remember we're dirty and let pullFromServer() push
+    // the merged result.
+    if (_synced) {
+      _schedulePush();
+    } else {
+      _dirty = true;
+    }
   }
 
   /// Effective title with fallback to the file-derived name.
@@ -94,6 +117,77 @@ class MetadataStore extends ChangeNotifier {
   String artist(String path, String fallback) {
     final a = _m[path]?.artist;
     return (a != null && a.trim().isNotEmpty) ? a.trim() : fallback;
+  }
+
+  // -------------------------------------------------------------------------
+  // Account backup / restore
+  // -------------------------------------------------------------------------
+
+  /// Pull the account's backed-up edits and MERGE them in (local edits win on
+  /// conflict), then push the merged result back once so the server converges
+  /// and any pre-existing local-only edits get backed up. Call this after login
+  /// (e.g. when Home mounts). Safe to call more than once — it only pulls once.
+  Future<void> pullFromServer() async {
+    if (_synced) return;
+    // Make sure local prefs are loaded first so "local wins" is meaningful.
+    await load();
+    try {
+      final remote = await ApiService().fetchTrackOverrides();
+      var changed = false;
+      remote.forEach((path, json) {
+        // Local edit for this path always wins; only fill in what we don't have.
+        if (!_m.containsKey(path)) {
+          try {
+            final meta = TrackMeta.fromJson(json.cast<String, dynamic>());
+            if (!meta.isEmpty) {
+              _m[path] = meta;
+              changed = true;
+            }
+          } catch (_) {}
+        }
+      });
+      if (changed) {
+        await _persistLocal();
+        notifyListeners();
+      }
+    } catch (_) {
+      // Offline / not logged in — try again next launch; leave _synced false so
+      // edits stay queued as _dirty.
+      return;
+    }
+    _synced = true;
+    // Converge the server with the merged union (covers first-run migration of
+    // existing local-only edits and any edits made during the pull).
+    _pushNow();
+  }
+
+  Future<void> _persistLocal() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final map = _m.map((k, v) => MapEntry(k, v.toJson()));
+      await p.setString(_prefsKey, jsonEncode(map));
+    } catch (_) {}
+  }
+
+  // Debounce rapid successive edits into a single upload.
+  void _schedulePush() {
+    _pushTimer?.cancel();
+    _pushTimer = Timer(const Duration(milliseconds: 1200), _pushNow);
+  }
+
+  void _pushNow() {
+    _pushTimer?.cancel();
+    _dirty = false;
+    final map = _m.map((k, v) => MapEntry(k, v.toJson()));
+    // Fire-and-forget; a failed upload just means we retry on the next edit or
+    // next launch's pull-then-push.
+    ApiService().uploadTrackOverrides(map);
+  }
+
+  @override
+  void dispose() {
+    _pushTimer?.cancel();
+    super.dispose();
   }
 }
 

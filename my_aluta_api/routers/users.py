@@ -6,7 +6,7 @@ import re
 import json
 from models import BlockStatus
 from database import get_db
-from models import User, MuteStatus, Friend, UserContactBook
+from models import User, MuteStatus, Friend, UserContactBook, UserTrackOverrides
 import crud, schemas
 from schemas import UserOut  # Ensure this contains fields like id, email, username, is_online
 from auth import get_current_user, get_password_hash, verify_password
@@ -117,6 +117,62 @@ def get_contact_names(
         except Exception:
             names = {}
     return schemas.ContactNamesOut(names=names)
+
+
+@router.post("/users/track-overrides", tags=["Users"])
+def upload_track_overrides(
+    payload: schemas.TrackOverridesUpload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The app backs up the user's edited song details (custom title/artist/…)
+    so they survive a reinstall/update or a new device on the same account.
+    Private to the user — one row per user, replaced on each sync. The client
+    only pushes AFTER it has pulled and merged the server copy, so a full
+    replace here never loses server-side edits."""
+    overrides = payload.overrides or {}
+    # Store verbatim (values are the client's compact {t,a,al,g,y} maps).
+    data = json.dumps({str(k): v for k, v in overrides.items() if isinstance(v, dict)})
+    row = (
+        db.query(UserTrackOverrides)
+        .filter(UserTrackOverrides.user_id == current_user.id)
+        .first()
+    )
+    if row:
+        row.data = data
+    else:
+        db.add(UserTrackOverrides(user_id=current_user.id, data=data))
+    db.commit()
+    return {"ok": True, "count": len(overrides)}
+
+
+@router.get(
+    "/users/track-overrides",
+    response_model=schemas.TrackOverridesOut,
+    tags=["Users"],
+)
+def get_track_overrides(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The app pulls the user's backed-up song-detail edits after login and
+    merges them into local storage (local edits win on conflict)."""
+    row = (
+        db.query(UserTrackOverrides)
+        .filter(UserTrackOverrides.user_id == current_user.id)
+        .first()
+    )
+    overrides = {}
+    if row and row.data:
+        try:
+            parsed = json.loads(row.data)
+            if isinstance(parsed, dict):
+                overrides = {
+                    str(k): v for k, v in parsed.items() if isinstance(v, dict)
+                }
+        except Exception:
+            overrides = {}
+    return schemas.TrackOverridesOut(overrides=overrides)
 
 
 # ---------------------------

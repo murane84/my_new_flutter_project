@@ -31,6 +31,12 @@ Future<void> showUserProfile(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
+    // Drop the app-wide bottomSheetTheme's outer red border for THIS sheet only
+    // — the profile card already draws its own (inner) border, so the theme
+    // border was doubling it up. No side = no outer line.
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+    ),
     builder: (_) => _UserProfileSheet(
       username: username,
       userId: userId,

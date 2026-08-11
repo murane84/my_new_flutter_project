@@ -1152,6 +1152,11 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        // This dialog draws its own (inner) card border — drop the app-wide
+        // dialogTheme border so it isn't doubled.
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(22)),
+        ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 300),
           child: Container(

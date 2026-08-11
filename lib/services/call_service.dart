@@ -256,6 +256,9 @@ class CallService {
   void prepareAcceptFromNotification(int callerId) {
     if (isActive) return; // a live offer already arrived — nothing to recover
     _reset();
+    // The ringing notification may still be up (some OEMs don't honour the
+    // action's cancel) — clear it now that we're answering.
+    cancelCallNotification();
     peerId = callerId;
     isCaller = false;
     _pendingAutoAccept = true;
@@ -386,6 +389,10 @@ class CallService {
                 'call_type': 'voice',
                 'caller_name': _myName,
                 if (_myAvatar != null) 'caller_avatar': _myAvatar,
+                // The callee is already online (they asked us to rejoin) — this
+                // is a re-negotiation, NOT a fresh ring. Flag it so the server
+                // doesn't push another ringing notification to their phone.
+                'reoffer': true,
               });
             } catch (_) {
               _finish(CallEndReason.failed);
@@ -399,6 +406,7 @@ class CallService {
                 'call_type': 'voice',
                 'caller_name': _myName,
                 if (_myAvatar != null) 'caller_avatar': _myAvatar,
+                'reoffer': true,
               });
             }
           }
@@ -555,11 +563,36 @@ class CallService {
     final secs = connectedAt != null
         ? DateTime.now().difference(connectedAt!).inSeconds
         : 0;
+    // Record the OUTCOME in `content` so the thread can show success /
+    // unsuccessful / rejected distinctly (renderer falls back to duration for
+    // older logs without this tag).
+    final outcome = connectedAt != null ? 'answered' : _outcomeTag(endReason);
     unawaited(
       ApiService()
-          .sendMessage(to, '', messageType: 'call', mediaDuration: secs)
+          .sendMessage(to, outcome,
+              messageType: 'call', mediaDuration: secs)
           .catchError((_) => null),
     );
+  }
+
+  // Map an end reason to a short outcome tag stored on the call-log message.
+  static String _outcomeTag(CallEndReason r) {
+    switch (r) {
+      case CallEndReason.declined:
+        return 'declined';
+      case CallEndReason.busy:
+        return 'busy';
+      case CallEndReason.unreachable:
+        return 'unreachable';
+      case CallEndReason.failed:
+        return 'failed';
+      case CallEndReason.cancelled:
+      case CallEndReason.hangup:
+        return 'cancelled';
+      case CallEndReason.unanswered:
+      case CallEndReason.none:
+        return 'missed';
+    }
   }
 
   /// Return to idle once the UI has finished showing the end state.

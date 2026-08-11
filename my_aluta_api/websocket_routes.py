@@ -254,7 +254,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                     # for the initial offer (that's what starts the ringing).
                     # Runs off the event loop so a slow FCM call never stalls
                     # signaling.
-                    if etype == "call_offer":
+                    # A re-offer (killed-app rejoin re-negotiation) must NOT ring
+                    # again — the callee is already online and connecting. Skip
+                    # the push + reachability signals; the WS relay above is all
+                    # it needs. Otherwise the callee gets a fresh ringing
+                    # notification mid-call.
+                    if etype == "call_offer" and not data.get("reoffer"):
                         # Give the caller honest feedback about whether the
                         # friend can even be rung, instead of a silent 45s
                         # ring-out. Two facts decide it:

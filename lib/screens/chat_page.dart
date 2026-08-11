@@ -1829,6 +1829,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   Widget _imageBubble(String url) {
+    // Decode the thumbnail at ~bubble-size × pixel ratio instead of the photo's
+    // full resolution. A full-res decode is ~48MB each; dozens of them in a
+    // thread exhaust memory and freeze the UI. Full res is still loaded in the
+    // tap-to-open viewer. Cap the multiplier so huge-DPR devices stay bounded.
+    final dpr = MediaQuery.of(context).devicePixelRatio.clamp(1.0, 3.0);
+    final thumbW = (240 * dpr).round();
     return GestureDetector(
       onTap: () => _openImageViewer(url),
       child: ClipRRect(
@@ -1840,6 +1846,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             url: url,
             headers: mediaAuthHeaders(url),
             fit: BoxFit.cover,
+            cacheWidth: thumbW,
             placeholder: (_) => Container(
               width: 200,
               height: 150,

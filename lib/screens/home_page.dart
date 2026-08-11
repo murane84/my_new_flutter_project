@@ -1103,7 +1103,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
     if (sessionId == null) return;
     final track =
         (data['track'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
-    final hostName = data['host_username']?.toString() ?? 'Someone';
+    final rawHostName = data['host_username']?.toString() ?? 'Someone';
+    // Show the host by the name the user has for them in their friend list /
+    // phone book (saved contact name), falling back to the app username — so the
+    // "listening with …" label matches everything else the user sees.
+    final hostName =
+        _contactDisplayName(_friendPhoneById(data['host_id']), rawHostName);
 
     final accept = await showGeneralDialog<bool>(
       context: context,
@@ -1448,6 +1453,18 @@ class HomePageState extends rp.ConsumerState<HomePage>
       if (saved != null && saved.isNotEmpty) return saved;
     }
     return username;
+  }
+
+  /// The saved phone number for a friend by their user id, looked up in the
+  /// loaded friend list — so a live-session host (identified only by id/username
+  /// in the invite) can still be shown by the user's saved contact name.
+  String? _friendPhoneById(dynamic id) {
+    if (id == null) return null;
+    final key = id.toString();
+    for (final f in _allFriends) {
+      if (f['id']?.toString() == key) return f['phone'] as String?;
+    }
+    return null;
   }
 
   // ── Chat open/close ───────────────────────────────────────────────────────

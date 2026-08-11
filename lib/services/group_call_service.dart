@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import '../screens/api_service.dart';
 import '../state/group_call_state.dart';
 import '../state/playback_state.dart' show providerContainer;
 import 'notif_service.dart';
@@ -94,8 +95,91 @@ class GroupCallService {
   MediaStream? _localStream;
   Timer? _ringTimeout;
 
+  // Active-speaker detection. We poll each peer's WebRTC audio level and expose
+  // the set of participant ids currently talking so the UI can glow their tile.
+  final ValueNotifier<Set<int>> speakingIds = ValueNotifier<Set<int>>({});
+  Timer? _levelTimer;
+  // Per-peer "hold" ticks so a glowing tile doesn't flicker between words.
+  final Map<int, int> _speakHold = {};
+  // Audio level (0..1) above which a peer counts as speaking.
+  static const double _speakThreshold = 0.02;
+
+  // Call-history logging: the STARTER posts one call-log message to the group
+  // thread when the call ends (single source of truth), with the duration and
+  // whether anyone actually joined.
+  bool _starter = false;
+  bool _everConnected = false;
+  bool _groupLogged = false;
+
+  void _logGroupCallIfStarter() {
+    if (!_starter || _groupLogged) return;
+    final r = room;
+    if (r == null) return;
+    _groupLogged = true;
+    final secs = connectedAt != null
+        ? DateTime.now().difference(connectedAt!).inSeconds
+        : 0;
+    // 'answered' if others joined (success), else 'missed' (no one picked up).
+    final outcome = (_everConnected && secs > 0) ? 'answered' : 'missed';
+    unawaited(
+      ApiService()
+          .sendMessage(0, outcome,
+              messageType: 'call', mediaDuration: secs, conversationId: r)
+          .catchError((_) => null),
+    );
+  }
+
   bool get isActive =>
       phase == GroupCallPhase.active || phase == GroupCallPhase.ringing;
+
+  /// Poll every peer connection's inbound audio level and publish who's talking.
+  void _startLevelMonitor() {
+    _levelTimer?.cancel();
+    _levelTimer =
+        Timer.periodic(const Duration(milliseconds: 350), (_) async {
+      if (_peers.isEmpty) {
+        if (speakingIds.value.isNotEmpty) speakingIds.value = <int>{};
+        return;
+      }
+      final speaking = <int>{};
+      for (final entry in _peers.entries) {
+        final pid = entry.key;
+        double level = 0;
+        try {
+          final reports = await entry.value.getStats();
+          for (final r in reports) {
+            // Only the REMOTE (inbound) audio level — this pc also carries our
+            // own outbound mic level (media-source/outbound-rtp), which would
+            // otherwise glow this peer when WE talk.
+            final isInbound = r.type == 'inbound-rtp' ||
+                (r.type == 'track' && r.values['remoteSource'] == true);
+            if (!isInbound) continue;
+            final a = r.values['audioLevel'];
+            if (a is num && a.toDouble() > level) level = a.toDouble();
+          }
+        } catch (_) {/* stats unavailable this tick */}
+        if (level > _speakThreshold) {
+          _speakHold[pid] = 2; // ~700ms hold at a 350ms tick
+        } else if ((_speakHold[pid] ?? 0) > 0) {
+          _speakHold[pid] = _speakHold[pid]! - 1;
+        }
+        if ((_speakHold[pid] ?? 0) > 0) speaking.add(pid);
+      }
+      // Only publish on change so listeners don't rebuild needlessly.
+      final cur = speakingIds.value;
+      if (speaking.length != cur.length ||
+          !speaking.every(cur.contains)) {
+        speakingIds.value = speaking;
+      }
+    });
+  }
+
+  void _stopLevelMonitor() {
+    _levelTimer?.cancel();
+    _levelTimer = null;
+    _speakHold.clear();
+    if (speakingIds.value.isNotEmpty) speakingIds.value = <int>{};
+  }
 
   // Same ICE config as 1:1 calls (STUN + free Open Relay TURN).
   static const Map<String, dynamic> _iceConfig = {
@@ -162,10 +246,12 @@ class GroupCallService {
     }
     phase = GroupCallPhase.active;
     connectedAt = DateTime.now();
+    _starter = true; // I started this call → I post the call-log entry.
     clearOngoing(room);
     _publish();
     onShowUI?.call();
     await _ensureLocalStream();
+    _startLevelMonitor();
     sendSignal?.call({'type': 'group_call_start', 'room': room});
     return true;
   }
@@ -194,6 +280,7 @@ class GroupCallService {
     _publish();
     onShowUI?.call();
     await _ensureLocalStream();
+    _startLevelMonitor();
     sendSignal?.call({'type': 'group_call_join', 'room': room});
     return true;
   }
@@ -230,6 +317,7 @@ class GroupCallService {
     clearOngoing(room!);
     _publish();
     await _ensureLocalStream();
+    _startLevelMonitor();
     sendSignal?.call({'type': 'group_call_join', 'room': room});
   }
 
@@ -247,6 +335,9 @@ class GroupCallService {
     if (r != null && leftOthersBehind) {
       _setOngoing(r, title);
     }
+    // Post the group's call-log entry (starter only) while room + connectedAt
+    // are still valid.
+    _logGroupCallIfStarter();
     _ringTimeout?.cancel();
     cancelCallNotification();
     await _teardown();
@@ -320,6 +411,7 @@ class GroupCallService {
   }
 
   void _addParticipant(int pid, Map? info) {
+    _everConnected = true; // someone else joined → the call actually happened
     final r = roster[pid];
     final name = (info?['name'] ?? r?.name ?? '').toString();
     final avatar = (info?['avatar'] as String?) ?? r?.avatar;
@@ -471,6 +563,7 @@ class GroupCallService {
 
   // ── Teardown ───────────────────────────────────────────────────────────────
   Future<void> _teardown() async {
+    _stopLevelMonitor();
     for (final pc in _peers.values) {
       try {
         await pc.close();
@@ -494,6 +587,10 @@ class GroupCallService {
 
   void _reset() {
     _ringTimeout?.cancel();
+    _stopLevelMonitor();
+    _starter = false;
+    _everConnected = false;
+    _groupLogged = false;
     _peers.clear();
     _pendingIce.clear();
     _remoteSet.clear();

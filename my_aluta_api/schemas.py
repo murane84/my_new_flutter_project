@@ -167,6 +167,7 @@ class ConversationMemberOut(BaseModel):
     user_id: int
     username: str
     avatar_url: Optional[str] = None
+    phone: Optional[str] = None
     is_online: Optional[bool] = False
     role: str = "member"
 

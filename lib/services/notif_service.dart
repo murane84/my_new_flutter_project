@@ -24,6 +24,36 @@ Future<bool> fullScreenIntentAllowed() async {
   }
 }
 
+/// The device manufacturer (Build.MANUFACTURER), lowercased. Used to show the
+/// OEM-specific "Autostart" steps on phones that need them (Xiaomi, Oppo…).
+Future<String> deviceManufacturer() async {
+  if (kIsWeb) return '';
+  try {
+    final m = await _reliabilityChannel.invokeMethod<String>('manufacturer');
+    return (m ?? '').toLowerCase();
+  } catch (_) {
+    return '';
+  }
+}
+
+/// Open the OEM "Autostart / Auto-launch" settings screen (falls back to the
+/// app details page if the manufacturer screen can't be found).
+Future<void> openAutostartSettings() async {
+  if (kIsWeb) return;
+  try {
+    await _reliabilityChannel.invokeMethod('openAutostartSettings');
+  } catch (_) {}
+}
+
+/// Open the "Display pop-up / show over lock screen" permission screen (MIUI
+/// "Other permissions"; falls back to app details elsewhere).
+Future<void> openPopupPermissionSettings() async {
+  if (kIsWeb) return;
+  try {
+    await _reliabilityChannel.invokeMethod('openPopupPermissionSettings');
+  } catch (_) {}
+}
+
 /// Thin wrapper around flutter_local_notifications for showing new-message
 /// alerts + incoming-call rings while the app is backgrounded / killed. All
 /// calls are best-effort / guarded.

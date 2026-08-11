@@ -109,6 +109,10 @@ class CallService {
   // re-send it (call_rejoin) and auto-answer the moment it arrives.
   bool _pendingAutoAccept = false;
   Timer? _rejoinTimer;
+  // Caller side: have we already rebuilt+re-sent the offer for a killed-app
+  // rejoin? Guards against re-sending on every retry (which made the callee
+  // reply busy) and against rebuilding the peer more than once.
+  bool _reoffered = false;
 
   // STUN keeps it free for same-network / simple NATs; the TURN entries relay
   // media when a direct path can't be punched (common on cellular). These are
@@ -215,6 +219,10 @@ class CallService {
       return;
     }
     if (isActive) {
+      // A repeat offer from the peer we're ALREADY in/establishing a call with
+      // (the killed-app rejoin handshake can send more than one) is the same
+      // call — ignore it. Only a DIFFERENT caller means we're busy.
+      if (from == peerId) return;
       sendSignal?.call({'type': 'call_busy', 'to': from});
       return;
     }
@@ -353,20 +361,46 @@ class CallService {
         }
         break;
       case 'call_rejoin':
-        // The callee accepted from a notification but launched fresh and missed
-        // our original offer — re-send it so they can answer.
-        if (isCaller && state == CallState.calling && _pc != null) {
-          final desc = await _pc!.getLocalDescription();
-          if (desc != null) {
+        // The callee accepted from a notification but launched fresh: they
+        // missed BOTH our original offer AND the ICE candidates we gathered
+        // while they were offline (those went to a dead socket). Re-using the
+        // old offer/ICE can't connect. So the FIRST time, rebuild the peer so
+        // ICE is gathered fresh now that they're online, then re-offer. On any
+        // later retry, just re-send that same fresh offer (recovers a dropped
+        // packet) — never rebuild again, or reply busy.
+        if (isCaller && state == CallState.calling && peerId != null) {
+          if (!_reoffered) {
+            _reoffered = true;
             outgoing = CallOutgoing.ringing;
             _publish();
-            _signal({
-              'type': 'call_offer',
-              'sdp': desc.sdp,
-              'call_type': 'voice',
-              'caller_name': _myName,
-              if (_myAvatar != null) 'caller_avatar': _myAvatar,
-            });
+            try {
+              await _teardownMedia();
+              _remoteDescSet = false;
+              _pendingRemote.clear();
+              await _createPeer();
+              final offer = await _pc!.createOffer(_offerAnswerConstraints);
+              await _pc!.setLocalDescription(offer);
+              _signal({
+                'type': 'call_offer',
+                'sdp': offer.sdp,
+                'call_type': 'voice',
+                'caller_name': _myName,
+                if (_myAvatar != null) 'caller_avatar': _myAvatar,
+              });
+            } catch (_) {
+              _finish(CallEndReason.failed);
+            }
+          } else if (_pc != null) {
+            final desc = await _pc!.getLocalDescription();
+            if (desc != null) {
+              _signal({
+                'type': 'call_offer',
+                'sdp': desc.sdp,
+                'call_type': 'voice',
+                'caller_name': _myName,
+                if (_myAvatar != null) 'caller_avatar': _myAvatar,
+              });
+            }
           }
         }
         break;
@@ -563,6 +597,7 @@ class CallService {
     _ringTimeout?.cancel();
     _rejoinTimer?.cancel();
     _pendingAutoAccept = false;
+    _reoffered = false;
     _pendingOffer = null;
     _pendingRemote.clear();
     _remoteDescSet = false;

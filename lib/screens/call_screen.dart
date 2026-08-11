@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/call_service.dart';
 import '../state/call_state.dart';
 import '../utils/app_config.dart';
+import '../utils/net_image.dart';
 import 'token_helper.dart' show mediaAuthHeaders;
 
 /// Full-screen UI for the single active Aluta voice call. It simply reflects
@@ -175,11 +175,18 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       ),
       clipBehavior: Clip.antiAlias,
       child: url != null
-          ? CachedNetworkImage(
-              imageUrl: url,
-              httpHeaders: mediaAuthHeaders(url),
+          // Use the cross-platform loader: on WEB it moves the token into the
+          // URL (?token=) since a browser <img> can't send the auth header —
+          // that's why Windows/Android showed the photo but web fell back to
+          // the initial.
+          ? authNetworkImage(
+              url: url,
+              headers: mediaAuthHeaders(url),
+              width: 128,
+              height: 128,
               fit: BoxFit.cover,
-              errorWidget: (_, _, _) => _initial(initial),
+              placeholder: (_) => _initial(initial),
+              error: (_) => _initial(initial),
             )
           : _initial(initial),
     );

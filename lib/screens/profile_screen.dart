@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../utils/net_image.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:phone_numbers_parser/phone_numbers_parser.dart';
 import 'api_service.dart';
@@ -521,9 +521,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 CircleAvatar(
                   radius: 42,
                   backgroundColor: scheme.primaryContainer,
+                  // Web-safe + desktop-safe loader (raw CachedNetworkImage fails
+                  // on Windows — no sqflite — and can't send auth on web).
                   backgroundImage: full != null
-                      ? CachedNetworkImageProvider(full,
-                          headers: mediaAuthHeaders(full))
+                      ? authNetworkImageProvider(full, mediaAuthHeaders(full))
                       : null,
                   child: full == null
                       ? Text(

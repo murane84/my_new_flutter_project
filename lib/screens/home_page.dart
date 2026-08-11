@@ -2559,12 +2559,29 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final scheme = Theme.of(context).colorScheme;
     final textColor = scheme.onSurface;
 
-    // Groups sit at the TOP of the same list as DMs (WhatsApp-style unified
-    // chat list). Each item carries is_group so the builder picks the right row.
+    // Groups and DMs share one unified chat list (WhatsApp-style). Each item
+    // carries is_group so the builder picks the right row.
     final combined = <Map<String, dynamic>>[
       ..._filteredGroups,
       ..._filteredFriends,
     ];
+    // Order by MOST-RECENT activity, not group-first — a group must not pin
+    // above a DM that has a newer message. Conversations with no messages yet
+    // (no timestamp) fall to the bottom; ties break by name for a stable order
+    // that doesn't reshuffle on every rebuild.
+    int lastMillis(Map<String, dynamic> m) =>
+        DateTime.tryParse((m['last_timestamp'] ?? '').toString())
+            ?.millisecondsSinceEpoch ??
+        0;
+    String nameKey(Map<String, dynamic> m) => (m['is_group'] == true
+            ? (m['title'] ?? '')
+            : (m['username'] ?? ''))
+        .toString()
+        .toLowerCase();
+    combined.sort((a, b) {
+      final byTime = lastMillis(b).compareTo(lastMillis(a));
+      return byTime != 0 ? byTime : nameKey(a).compareTo(nameKey(b));
+    });
 
     return Column(
       key: const ValueKey('friendList'),

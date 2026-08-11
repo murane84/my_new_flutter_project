@@ -149,7 +149,6 @@ class LiveSessionController {
   int? _logConversationId; // … or group conversation
   DateTime? _sessionStartAt;
   bool _hadListener = false;
-  bool _declined = false;
   bool _outcomeLogged = false;
 
   /// The host learned a listener declined — log 'declined' and suppress the
@@ -157,7 +156,6 @@ class LiveSessionController {
   void markDeclined() {
     if (role != LiveRole.host || _outcomeLogged) return;
     _outcomeLogged = true;
-    _declined = true;
     _postLiveLog('declined', 0);
   }
 
@@ -298,7 +296,6 @@ class LiveSessionController {
     _logConversationId = null;
     _sessionStartAt = DateTime.now();
     _hadListener = false;
-    _declined = false;
     _outcomeLogged = false;
 
     // 1) Create the session on the server (metadata only — no audio uploaded).

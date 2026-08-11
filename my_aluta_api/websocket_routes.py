@@ -213,6 +213,24 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
     connected_users[uid].append(websocket)
     print(f"✅ User {uid} connected. Total sockets: {len(connected_users[uid])}")
 
+    # Re-deliver any "listen together" invite that arrived while this user was
+    # offline. The invite is otherwise a fire-and-forget WS event, so a listener
+    # who was closed when it was sent never saw it and the host waited forever.
+    try:
+        from live_session import MANAGER as _LIVE
+        for s in _LIVE.pending_invites_for(uid):
+            await notify_user(uid, {
+                "type": "live_invite",
+                "data": {
+                    "session_id": s.session_id,
+                    "host_id": s.host_id,
+                    "host_username": s.host_username,
+                    "track": s.track,
+                },
+            })
+    except Exception:
+        pass
+
     try:
         while True:
             # Client may send lightweight realtime events (e.g. "typing").

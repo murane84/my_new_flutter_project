@@ -27,9 +27,14 @@ HOST_GRACE_SECONDS = 45
 
 
 class LiveSession:
-    def __init__(self, session_id: str, host_id: int, invited_ids: List[int], track: dict):
+    def __init__(self, session_id: str, host_id: int, invited_ids: List[int],
+                 track: dict, host_username: str = ""):
         self.session_id = session_id
         self.host_id = host_id
+        # Shown in the invite prompt (also when re-delivering a pending invite
+        # to a listener who was offline when it was first sent).
+        self.host_username = host_username
+        self.invited_ids: List[int] = list(invited_ids)
         # Everyone allowed in the session (host + invited listeners).
         self.allowed_ids: set[int] = {host_id, *invited_ids}
         # Metadata only — title/duration/mime. NOT the audio itself.
@@ -53,10 +58,25 @@ class LiveSessionManager:
         self.sessions: Dict[str, LiveSession] = {}
 
     # ---- lifecycle ---------------------------------------------------------
-    def create(self, session_id: str, host_id: int, invited_ids: List[int], track: dict) -> LiveSession:
-        session = LiveSession(session_id, host_id, invited_ids, track)
+    def create(self, session_id: str, host_id: int, invited_ids: List[int],
+               track: dict, host_username: str = "") -> LiveSession:
+        session = LiveSession(session_id, host_id, invited_ids, track,
+                              host_username=host_username)
         self.sessions[session_id] = session
         return session
+
+    def pending_invites_for(self, user_id: int) -> List[LiveSession]:
+        """Open invites waiting for [user_id]: they're an invited listener (not
+        the host), the host IS connected, and they haven't joined yet. Used to
+        re-deliver an invite to a listener who was offline when it was sent."""
+        out: List[LiveSession] = []
+        for s in self.sessions.values():
+            if (user_id in s.allowed_ids
+                    and user_id != s.host_id
+                    and user_id not in s.connections
+                    and s.host_id in s.connections):
+                out.append(s)
+        return out
 
     def get(self, session_id: str) -> Optional[LiveSession]:
         return self.sessions.get(session_id)
@@ -128,20 +148,6 @@ class LiveSessionManager:
         if session is None:
             return
         for ws in session.other_connections(sender_id):
-            try:
-                await ws.send_text(message)
-            except Exception:
-                pass
-
-    async def relay_to(self, session_id: str, target_user_id: int, message: str) -> None:
-        """Deliver a text message to ONE participant (peer-addressed WebRTC
-        signaling). The broadcast sync clock still goes through relay_text.
-        Keyed by user id, so it fans out cleanly to a room later."""
-        session = self.sessions.get(session_id)
-        if session is None:
-            return
-        ws = session.connections.get(target_user_id)
-        if ws is not None:
             try:
                 await ws.send_text(message)
             except Exception:

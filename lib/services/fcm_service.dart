@@ -36,6 +36,15 @@ Future<void> handleFcmData(Map<String, dynamic> data) async {
         isGroup: true,
         room: room,
       );
+    } else if (type == 'live_invite') {
+      // "Listen together" invite while the app was closed/backgrounded. Show a
+      // heads-up so the user opens the app; on open, the notification socket
+      // reconnects and the server re-delivers the invite → the prompt appears.
+      final host = (data['host_username'] ?? 'Someone').toString();
+      await showMessageNotification(
+        title: '$host · Listen together',
+        body: 'wants to listen to music with you',
+      );
     } else if (type == 'call_end' ||
         type == 'call_cancel' ||
         type == 'call_decline' ||

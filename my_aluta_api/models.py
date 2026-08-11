@@ -356,6 +356,25 @@ class UserContactBook(Base):
     user = relationship("User", foreign_keys=[user_id], passive_deletes=True)
 
 
+class UserTrackOverrides(Base):
+    """The user's edited song details (custom title/artist/album/genre/year),
+    keyed by track path, backed up to their account so they survive an app
+    reinstall / update or a move to a new device on the same account. Private to
+    the user; one row per user, stored as a JSON string (same shape the client
+    keeps in local prefs)."""
+    __tablename__ = "user_track_overrides"
+
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    data = Column(Text, nullable=False, default="{}")
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user = relationship("User", foreign_keys=[user_id], passive_deletes=True)
+
+
 class DeviceSession(Base):
     """A revocable session for a device linked via QR (WhatsApp "linked devices").
 

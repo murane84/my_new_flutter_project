@@ -235,6 +235,17 @@ class ContactNamesOut(BaseModel):
     names: dict[str, str] = {}
 
 
+class TrackOverridesUpload(BaseModel):
+    # Track path → edited details ({t,a,al,g,y}), backed up so the user's song
+    # title/artist edits survive a reinstall or new device on the same account.
+    # Values are opaque to the server (stored verbatim as JSON).
+    overrides: dict[str, dict] = {}
+
+
+class TrackOverridesOut(BaseModel):
+    overrides: dict[str, dict] = {}
+
+
 # ---------------------- PUSH / DEVICE SCHEMAS ----------------------
 
 class DeviceTokenIn(BaseModel):

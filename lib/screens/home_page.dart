@@ -40,6 +40,7 @@ import '../services/notif_service.dart';
 import '../services/fcm_service.dart';
 import '../services/share_inbox.dart';
 import '../services/contact_names.dart';
+import '../services/metadata_overrides.dart';
 import '../utils/net_image.dart';
 import 'token_helper.dart';
 import '../utils/avatar_widget.dart';
@@ -206,6 +207,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // the friend list, DM header and group headers can show your SAVED names for
     // known numbers. Repaint once it's ready so names resolve on first view.
     ContactNames.instance.ensureLoaded().then((_) {
+      if (mounted) setState(() {});
+    });
+    // Restore the user's backed-up song-detail edits (custom titles/artists) for
+    // this account, so they survive a reinstall/update or a new device. Merges
+    // into local storage (local edits win), then repaint so titles show at once.
+    metadataStore.pullFromServer().then((_) {
       if (mounted) setState(() {});
     });
     _loadUserData();

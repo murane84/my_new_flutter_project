@@ -489,6 +489,55 @@ class ApiService {
     }
   }
 
+  /// Back up the user's edited song details (path → {t,a,al,g,y}) to their
+  /// account so they survive a reinstall/update or a new device. Full-map
+  /// replace — the client only calls this after pulling+merging the server copy.
+  Future<bool> uploadTrackOverrides(Map<String, dynamic> overrides) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/users/track-overrides'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'overrides': overrides}),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.e('uploadTrackOverrides exception: $e');
+      return false;
+    }
+  }
+
+  /// Fetch the account's backed-up song-detail edits after login. Returns a
+  /// map of track path → compact meta map ({t,a,al,g,y}).
+  Future<Map<String, Map<String, dynamic>>> fetchTrackOverrides() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return {};
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/users/track-overrides'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        final m = (data is Map) ? data['overrides'] : null;
+        if (m is Map) {
+          final out = <String, Map<String, dynamic>>{};
+          m.forEach((k, v) {
+            if (v is Map) {
+              out[k.toString()] = v.cast<String, dynamic>();
+            }
+          });
+          return out;
+        }
+      }
+      return {};
+    } catch (e) {
+      _logger.e('fetchTrackOverrides exception: $e');
+      return {};
+    }
+  }
+
   // LOGOUT
   Future<void> logoutUser() async {
     // If biometric quick-unlock is enrolled, KEEP the enrollment + refresh token

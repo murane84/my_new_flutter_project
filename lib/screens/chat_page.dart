@@ -171,6 +171,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   String _friendAvatar = '';
   String _myName = '';
   String? _myAvatar;
+
+  /// The name to show for this friend in live-session labels (banner / pill /
+  /// now-playing), resolved the SAME way as the friend list: if their number is
+  /// saved in the user's phone book, use that saved name; otherwise fall back to
+  /// the display name we were opened with. Keeps the "streaming to …" label
+  /// consistent with everything else the user sees for this contact.
+  String get _livePeerLabel =>
+      ContactNames.instance.nameFor(_friendPhone) ?? widget.friendName;
   bool _friendTyping = false;
 
   List<Map<String, dynamic>> _messages = [];
@@ -834,7 +842,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         receiverId: widget.friendId,
         audioBytes: bytes,
         title: _titleFromPath(chosenPath),
-        peerName: widget.friendName,
+        peerName: _livePeerLabel,
         startPositionMs: startPositionMs,
       ),
     );
@@ -895,7 +903,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                               ),
                               const SizedBox(height: 1),
                               Text(
-                                'Pick a song to stream to ${widget.friendName}',
+                                'Pick a song to stream to $_livePeerLabel',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
@@ -1054,7 +1062,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         receiverId: widget.friendId,
         audioBytes: bytes,
         title: picked.name,
-        peerName: widget.friendName,
+        peerName: _livePeerLabel,
       ),
     );
   }

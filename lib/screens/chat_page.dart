@@ -1885,7 +1885,25 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     var initial = images.indexOf(tappedUrl);
     if (initial < 0) initial = 0;
     final controller = PageController(initialPage: initial);
+    // Thumbnail filmstrip (desktop/web): its own scroll controller so we can
+    // keep the active thumbnail centred as the user pages through.
+    final stripCtrl = ScrollController();
     var current = initial;
+    var didInitCenter = false;
+    // Each filmstrip thumbnail occupies this much horizontal space (56 tile +
+    // 2×3 margin). Used to centre the active thumbnail in the strip.
+    const stripItem = 62.0;
+    void centerStrip(int i) {
+      if (!stripCtrl.hasClients) return;
+      final target =
+          (i * stripItem) - (stripCtrl.position.viewportDimension / 2) +
+              stripItem / 2;
+      stripCtrl.animateTo(
+        target.clamp(0.0, stripCtrl.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    }
 
     // Desktop (Windows/Linux/macOS) + web: a mouse can't drag a PageView by
     // default (Flutter's desktop scroll behaviour excludes the mouse from drag
@@ -1899,6 +1917,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       if (i >= 0 && i < images.length) {
         controller.animateToPage(i,
             duration: const Duration(milliseconds: 260), curve: Curves.easeOut);
+        centerStrip(i);
       }
     }
 
@@ -1921,7 +1940,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           transitionDuration: const Duration(milliseconds: 200),
           reverseTransitionDuration: const Duration(milliseconds: 200),
           pageBuilder: (_, _, _) => StatefulBuilder(
-            builder: (ctx, setSB) => Scaffold(
+            builder: (ctx, setSB) {
+              // Once, after first layout, scroll the strip so the image the
+              // user actually tapped is centred instead of starting at #1.
+              if (!didInitCenter) {
+                didInitCenter = true;
+                WidgetsBinding.instance
+                    .addPostFrameCallback((_) => centerStrip(initial));
+              }
+              return Scaffold(
               backgroundColor: Colors.black,
               body: Focus(
                 autofocus: true,
@@ -1958,7 +1985,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                       child: PhotoViewGallery.builder(
                         pageController: controller,
                         itemCount: images.length,
-                        onPageChanged: (i) => setSB(() => current = i),
+                        onPageChanged: (i) {
+                          setSB(() => current = i);
+                          WidgetsBinding.instance
+                              .addPostFrameCallback((_) => centerStrip(i));
+                        },
                         backgroundDecoration:
                             const BoxDecoration(color: Colors.black),
                         loadingBuilder: (_, _) => const Center(
@@ -2049,15 +2080,80 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                           ),
                         ),
                       ),
+                    // Thumbnail filmstrip along the bottom (desktop/web only):
+                    // every image in the thread, active one ringed, click to
+                    // jump. Phones skip it — too little screen and touch paging
+                    // already covers it.
+                    if (onDesktopOrWeb && images.length > 1)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 18,
+                        child: Center(
+                          child: Container(
+                            height: 68,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 6),
+                            constraints: BoxConstraints(
+                              maxWidth: (images.length * stripItem)
+                                  .clamp(0.0,
+                                      MediaQuery.of(ctx).size.width - 24)
+                                  .toDouble(),
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withAlpha(140),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: ListView.builder(
+                              controller: stripCtrl,
+                              scrollDirection: Axis.horizontal,
+                              itemCount: images.length,
+                              itemBuilder: (_, i) {
+                                final selected = i == current;
+                                return GestureDetector(
+                                  onTap: () => goTo(i),
+                                  child: Container(
+                                    width: 56,
+                                    margin: const EdgeInsets.symmetric(
+                                        horizontal: 3),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(7),
+                                      border: Border.all(
+                                        color: selected
+                                            ? const Color(0xFF34D058)
+                                            : Colors.white24,
+                                        width: selected ? 2.5 : 1,
+                                      ),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(5),
+                                      child: authNetworkImage(
+                                        url: images[i],
+                                        headers: mediaAuthHeaders(images[i]),
+                                        fit: BoxFit.cover,
+                                        cacheWidth: 140,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
-            ),
+            );
+            },
           ),
           transitionsBuilder: (_, anim, _, child) =>
               FadeTransition(opacity: anim, child: child),
         ))
-        .then((_) => controller.dispose());
+        .then((_) {
+      controller.dispose();
+      stripCtrl.dispose();
+    });
   }
 
   Widget _fileBubble(String url, Map<String, dynamic> msg, Color textColor,

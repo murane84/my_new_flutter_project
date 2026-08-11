@@ -1133,6 +1133,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// decide whether to end the (still-open) session or keep waiting.
   Future<void> _showLiveDeclined(Map<String, dynamic> event) async {
     if (!mounted || activeLiveSession == null) return;
+    // Record the decline on the thread (and suppress the end-of-session log).
+    activeLiveSession?.controller.markDeclined();
     final data =
         (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
     final who = (data['listener_username'] ?? 'Your friend').toString();

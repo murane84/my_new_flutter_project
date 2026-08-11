@@ -3224,6 +3224,48 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     );
   }
 
+  // Renders a "listen together" log message (message_type 'live'). The outcome
+  // is stored in content: listened / declined / noanswer. media_duration holds
+  // the session length in seconds.
+  Widget _liveLogContent(Map<String, dynamic> msg, bool isMe, Color textColor) {
+    final outcome = (msg['content'] as String?)?.trim() ?? '';
+    final secs = (msg['media_duration'] as num?)?.toInt() ?? 0;
+    IconData icon = Icons.headphones_rounded;
+    String label;
+    Color color = textColor;
+    switch (outcome) {
+      case 'listened':
+        label = secs > 0
+            ? 'Listened together · ${_fmtCallDur(secs)}'
+            : 'Listened together';
+        break;
+      case 'declined':
+        icon = Icons.headset_off_rounded;
+        label = isMe ? 'Listen together declined' : 'You declined to listen';
+        color = !isMe ? const Color(0xFFE53935) : textColor;
+        break;
+      case 'noanswer':
+        icon = Icons.headset_off_rounded;
+        label = isMe ? 'Listen together — no answer' : 'Missed listen invite';
+        color = !isMe ? const Color(0xFFE53935) : textColor;
+        break;
+      default:
+        label = 'Listen together ended';
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(
+              color: color, fontSize: 14, fontWeight: FontWeight.w500),
+        ),
+      ],
+    );
+  }
+
   // Open a tapped link from a message bubble in the external browser.
   Future<void> _openLink(String url) async {
     try {
@@ -3309,6 +3351,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         msgType != 'text' && mediaRel != null && mediaRel.isNotEmpty;
     // A call-log entry (auto-posted when an Aluta call ends).
     final isCall = !tomb && msgType == 'call';
+    // A "listen together" log entry (posted when a live session ends/declines).
+    final isLive = !tomb && msgType == 'live';
     final emojiOnly =
         !tomb && !hasQuote && !isMedia && _isEmojiOnly(mainText);
 
@@ -3578,13 +3622,17 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
                         // ── Message body (media and/or text) ──────────
                         if (isCall) _callLogContent(msg, isMe, textColor),
+                        if (isLive) _liveLogContent(msg, isMe, textColor),
                         if (isMedia)
                           _mediaContent(
                               msgType, mediaRel, msg, isMe, textColor, scheme),
                         // A shared song shows its title inside the card, so skip
-                        // the duplicate text line (content == the song label).
+                        // the duplicate text line. Call/live logs store their
+                        // outcome in `content` (rendered above), so skip that too.
                         if (!tomb &&
                             msgType != 'song' &&
+                            msgType != 'call' &&
+                            msgType != 'live' &&
                             mainText.trim().isNotEmpty)
                           Padding(
                             padding: EdgeInsets.only(top: isMedia ? 6 : 0),

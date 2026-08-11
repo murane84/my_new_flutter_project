@@ -111,8 +111,27 @@ async def _group_join(room_id: int, uid: int):
             pass
 
 
+def _group_is_active(room_id: int) -> bool:
+    """True if at least one member is currently in the room's call."""
+    return bool(_group_rooms.get(room_id))
+
+
+async def _broadcast_group_ended(room_id: int):
+    """Tell EVERY member of the conversation the call is over, so any 'call in
+    progress · Join' banner clears everywhere (not just for the participants)."""
+    members, _ = _room_members_and_title(room_id)
+    for m in members:
+        try:
+            await notify_user(m, {
+                "type": "group_call_ended", "room": room_id,
+            })
+        except Exception:
+            pass
+
+
 async def _group_leave(room_id: int, uid: int):
-    """A participant leaves: drop them and tell the rest to close that peer."""
+    """A participant leaves: drop them and tell the rest to close that peer.
+    When the room empties, broadcast group_call_ended to ALL members."""
     room = _group_rooms.get(room_id)
     if not room or uid not in room:
         return
@@ -127,6 +146,8 @@ async def _group_leave(room_id: int, uid: int):
             pass
     if not room:
         _group_rooms.pop(room_id, None)
+        # Room is empty — the call is over. Clear the Join banner for everyone.
+        await _broadcast_group_ended(room_id)
 
 
 async def _group_cleanup_user(uid: int):

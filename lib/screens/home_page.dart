@@ -46,6 +46,7 @@ import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
 import '../services/call_service.dart';
 import '../services/group_call_service.dart';
+import '../state/group_call_state.dart' show groupCallProvider;
 import 'call_screen.dart';
 import 'group_call_screen.dart';
 import '../main.dart' show navigatorKey;
@@ -823,7 +824,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
             child: child,
           ),
         ))
-        .then((_) => _groupCallScreenOpen = false);
+        .then((_) {
+          _groupCallScreenOpen = false;
+          // The screen was popped (minimized or ended). Rebuild so the global
+          // "return to call" banner appears while the call is still active.
+          if (mounted) setState(() {});
+        });
+    if (mounted) setState(() {});
   }
 
   Future<void> _startGroupCall(Map g) async {
@@ -859,6 +866,50 @@ class HomePageState extends rp.ConsumerState<HomePage>
     if (!ok && mounted) {
       showToast(context, 'You’re already in a call', type: ToastType.info);
     }
+  }
+
+  /// Join an ONGOING group call from the "call in progress · Join" banner — a
+  /// member who missed or declined the ring reconnecting. Same member wiring as
+  /// [_startGroupCall] but routes to joinRoom() (announces a join, not a start).
+  Future<void> _joinGroupCall(Map g) async {
+    final room = (g['id'] as num?)?.toInt();
+    final myId = _myUserId;
+    if (room == null || myId == null) return;
+    if (GroupCallService.instance.isActive) {
+      // Already in a call — just resurface the screen.
+      _openGroupCallScreen();
+      return;
+    }
+    if (!ConnectionStatus.instance.isOnline) {
+      if (mounted) {
+        showToast(context, 'No internet — can’t join the call',
+            type: ToastType.info);
+      }
+      return;
+    }
+    final members = <GroupParticipant>[];
+    for (final m in (g['members'] as List?) ?? const []) {
+      if (m is! Map) continue;
+      final id = (m['user_id'] as num?)?.toInt();
+      if (id == null || id == myId) continue;
+      members.add(GroupParticipant(
+        id,
+        (m['username'] ?? '').toString(),
+        m['avatar_url'] as String?,
+        phone: m['phone'] as String?,
+      ));
+    }
+    final title = (g['title'] ??
+            GroupCallService.instance.ongoingCalls.value[room] ??
+            'Group')
+        .toString();
+    await GroupCallService.instance.joinRoom(
+      room: room,
+      title: title,
+      myId: myId,
+      myName: _username.isNotEmpty ? _username : 'Aluta user',
+      members: members,
+    );
   }
 
   /// One row inside the group header's ⋮ options menu.
@@ -1312,6 +1363,22 @@ class HomePageState extends rp.ConsumerState<HomePage>
       _avatarExpanded = false;
       _playerExpanded = false; // make sure the chat panel is the front surface
     });
+    // Ask the server whether a call is already live in this group, so the
+    // "call in progress · Join" banner shows even if we missed the ring.
+    _refreshGroupCallState(conv);
+  }
+
+  /// Poll the backend for whether a group call is live in [conv] and seed the
+  /// ongoing-call flag (drives the in-group Join banner).
+  Future<void> _refreshGroupCallState(Map<String, dynamic> conv) async {
+    final cid = (conv['id'] as num?)?.toInt();
+    if (cid == null) return;
+    final state = await ApiService().getGroupCallState(cid);
+    if (state == null) return;
+    final active = state['active'] == true;
+    final title =
+        (state['title'] ?? conv['title'] ?? 'Group call').toString();
+    GroupCallService.instance.setOngoingFromServer(cid, title, active);
   }
 
   void _closeGroupPanel() => setState(() => _activeGroup = null);
@@ -2155,6 +2222,73 @@ class HomePageState extends rp.ConsumerState<HomePage>
     );
   }
 
+  /// Inside an open GROUP: a "Group call in progress · Join" bar shown when a
+  /// call is ringing/ongoing in THIS group and the user isn't in it yet — so a
+  /// member who missed or declined the ring can still reconnect. Backed by
+  /// GroupCallService.ongoingCalls (seeded from the ring + a REST check on open).
+  Widget _buildGroupJoinBanner(BuildContext context) {
+    final g = _activeGroup;
+    if (g == null) return const SizedBox.shrink();
+    final room = (g['id'] as num?)?.toInt();
+    if (room == null) return const SizedBox.shrink();
+    return ValueListenableBuilder<Map<int, String>>(
+      valueListenable: GroupCallService.instance.ongoingCalls,
+      builder: (context, ongoing, _) {
+        final call = GroupCallService.instance;
+        // If I'm already in this room's call, the global return bar covers it.
+        final inThisCall = call.isActive && call.room == room;
+        if (!ongoing.containsKey(room) || inThisCall) {
+          return const SizedBox.shrink();
+        }
+        return Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Material(
+            color: const Color(0xFF1F8B4C),
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => _joinGroupCall(g),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.call_rounded,
+                        size: 18, color: Colors.white),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Group call in progress',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => _joinGroupCall(g),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: Colors.white.withAlpha(38),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('Join',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildChatContent(BuildContext context, {bool phone = false}) {
     final scheme = Theme.of(context).colorScheme;
     final textColor = scheme.onSurface;
@@ -2164,6 +2298,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       Column(
         children: [
           _buildChatHeader(context),
+          _buildGroupJoinBanner(context),
           const SizedBox(height: 10),
           if (_activeFriendId != null) _buildExpandedAvatar(context),
           Expanded(
@@ -3070,6 +3205,75 @@ class HomePageState extends rp.ConsumerState<HomePage>
     );
   }
 
+  /// A persistent "return to call" bar shown when a GROUP call is active but its
+  /// full-screen UI is minimized — lets the user keep chatting and jump back in,
+  /// with a live MM:SS timer, plus a one-tap Leave. Sits above every surface.
+  Widget _buildCallReturnBanner(BuildContext context) {
+    return rp.Consumer(
+      builder: (context, ref, _) {
+        // Rebuild whenever the group-call phase changes.
+        ref.watch(groupCallProvider);
+        final call = GroupCallService.instance;
+        // Only when a call is live AND its screen is minimized (not on top).
+        if (!call.isActive || _groupCallScreenOpen) {
+          return const SizedBox.shrink();
+        }
+        // Tick the elapsed label once a second while this bar is showing.
+        return _CallTicker(
+          builder: () {
+            final elapsed = call.elapsedLabel;
+            final title = call.title.isEmpty ? 'Group call' : call.title;
+            return Material(
+              color: const Color(0xFF1F8B4C),
+              child: InkWell(
+                onTap: _openGroupCallScreen,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 7, 6, 7),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.call_rounded,
+                          size: 17, color: Colors.white),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          elapsed.isEmpty
+                              ? 'Ongoing call · $title'
+                              : '$elapsed · $title',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Text('Tap to return',
+                          style:
+                              TextStyle(color: Colors.white70, fontSize: 11)),
+                      const SizedBox(width: 4),
+                      TextButton(
+                        onPressed: () => GroupCallService.instance.leave(),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          minimumSize: const Size(0, 32),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('Leave',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _reopenLiveSession() {
     if (activeLiveSession == null) return;
     showDialog<void>(
@@ -3786,6 +3990,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       body: Column(
         children: [
           _buildLiveBanner(context),
+          _buildCallReturnBanner(context),
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -3872,5 +4077,36 @@ class HomePageState extends rp.ConsumerState<HomePage>
       ),
     );
   }
+}
+
+/// Rebuilds [builder] once a second — drives the live MM:SS label on the
+/// minimized-call "return to call" banner without a Timer living in the page.
+class _CallTicker extends StatefulWidget {
+  const _CallTicker({required this.builder});
+  final Widget Function() builder;
+
+  @override
+  State<_CallTicker> createState() => _CallTickerState();
+}
+
+class _CallTickerState extends State<_CallTicker> {
+  Timer? _t;
+
+  @override
+  void initState() {
+    super.initState();
+    _t = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _t?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder();
 }
 

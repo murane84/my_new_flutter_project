@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../state/group_call_state.dart';
@@ -38,9 +39,49 @@ class GroupCallService {
   int? myId;
   bool muted = false;
   bool speakerOn = false;
+  DateTime? connectedAt; // when I joined — drives the elapsed-time label
 
   // Incoming-call caller info (for the ring screen).
   String incomingCaller = '';
+
+  // Group calls currently ACTIVE somewhere that I could join (roomId → title).
+  // Populated from group_call_incoming (a call started/ongoing) and a REST
+  // check when opening a group; cleared on group_call_ended. The group chat
+  // surface watches this to show a "call in progress · Join" banner so a member
+  // who missed or declined the ring can still reconnect.
+  final ValueNotifier<Map<int, String>> ongoingCalls =
+      ValueNotifier<Map<int, String>>({});
+
+  void _setOngoing(int room, String title) {
+    final next = Map<int, String>.from(ongoingCalls.value);
+    next[room] = title.isEmpty ? 'Group call' : title;
+    ongoingCalls.value = next;
+  }
+
+  void clearOngoing(int room) {
+    if (!ongoingCalls.value.containsKey(room)) return;
+    final next = Map<int, String>.from(ongoingCalls.value)..remove(room);
+    ongoingCalls.value = next;
+  }
+
+  /// Seed/refresh the ongoing flag for a room (called after a REST check when a
+  /// group opens, so a call that started while I was away still shows a banner).
+  void setOngoingFromServer(int room, String title, bool active) {
+    if (active) {
+      _setOngoing(room, title);
+    } else {
+      clearOngoing(room);
+    }
+  }
+
+  String get elapsedLabel {
+    final t = connectedAt;
+    if (t == null) return '';
+    final s = DateTime.now().difference(t).inSeconds;
+    final m = (s ~/ 60).toString().padLeft(2, '0');
+    final ss = (s % 60).toString().padLeft(2, '0');
+    return '$m:$ss';
+  }
 
   // Known group members (for showing names/avatars even before they connect).
   final Map<int, GroupParticipant> roster = {};
@@ -120,6 +161,8 @@ class GroupCallService {
       roster[m.id] = m;
     }
     phase = GroupCallPhase.active;
+    connectedAt = DateTime.now();
+    clearOngoing(room);
     _publish();
     onShowUI?.call();
     await _ensureLocalStream();
@@ -127,14 +170,46 @@ class GroupCallService {
     return true;
   }
 
+  /// Join an ONGOING group call from the "call in progress · Join" banner — a
+  /// member who missed or declined the initial ring reconnecting. Same as
+  /// accept() but seeded with the room/title/members directly instead of a ring.
+  Future<bool> joinRoom({
+    required int room,
+    required String title,
+    required int myId,
+    required String myName,
+    List<GroupParticipant> members = const [],
+  }) async {
+    if (isActive) return false;
+    _reset();
+    this.room = room;
+    this.title = title;
+    this.myId = myId;
+    for (final m in members) {
+      roster[m.id] = m;
+    }
+    phase = GroupCallPhase.active;
+    connectedAt = DateTime.now();
+    clearOngoing(room);
+    _publish();
+    onShowUI?.call();
+    await _ensureLocalStream();
+    sendSignal?.call({'type': 'group_call_join', 'room': room});
+    return true;
+  }
+
   /// An inbound group-call ring (from WS or a tapped push).
   void handleIncoming(Map<String, dynamic> msg) {
     final r = _asInt(msg['room']);
     if (r == null) return;
-    if (isActive) return; // already busy
+    final t = (msg['title'] ?? 'Group call').toString();
+    // Remember there's a live call in this group — powers the "Join" banner even
+    // if the ring is missed or declined.
+    _setOngoing(r, t);
+    if (isActive) return; // already busy in a call; the banner lets me switch
     _reset();
     room = r;
-    title = (msg['title'] ?? 'Group call').toString();
+    title = t;
     incomingCaller = (msg['caller_name'] ?? '').toString();
     phase = GroupCallPhase.ringing;
     _publish();
@@ -151,6 +226,8 @@ class GroupCallService {
     _ringTimeout?.cancel();
     cancelCallNotification();
     phase = GroupCallPhase.active;
+    connectedAt = DateTime.now();
+    clearOngoing(room!);
     _publish();
     await _ensureLocalStream();
     sendSignal?.call({'type': 'group_call_join', 'room': room});
@@ -159,12 +236,21 @@ class GroupCallService {
   /// Leave / decline / hang up the group call.
   Future<void> leave() async {
     final r = room;
+    final leftOthersBehind =
+        phase == GroupCallPhase.active && participants.isNotEmpty;
     if (r != null && phase == GroupCallPhase.active) {
       sendSignal?.call({'type': 'group_call_leave', 'room': r});
+    }
+    // If the call is still going on (others remain), keep a Join banner so I can
+    // hop back in. If I was the last one, the server broadcasts
+    // group_call_ended which clears it for everyone.
+    if (r != null && leftOthersBehind) {
+      _setOngoing(r, title);
     }
     _ringTimeout?.cancel();
     cancelCallNotification();
     await _teardown();
+    connectedAt = null;
     phase = GroupCallPhase.idle;
     _publish();
   }
@@ -221,7 +307,14 @@ class GroupCallService {
         await _onIce(msg);
         break;
       case 'group_call_ended':
-        await leave();
+        final er = _asInt(msg['room']);
+        if (er != null) {
+          clearOngoing(er);
+          if (isActive && room == er) await leave();
+        } else {
+          // Legacy/no-room payload: only leave if we're actually in a call.
+          if (isActive) await leave();
+        }
         break;
     }
   }

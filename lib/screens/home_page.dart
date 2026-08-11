@@ -1024,6 +1024,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
       _showLiveInvite(event);
       return;
     }
+    if (type == 'live_declined') {
+      _showLiveDeclined(event);
+      return;
+    }
     // A new chat message arriving on the per-user notify socket. When the app
     // is backgrounded (e.g. music playing in the car), pop a local
     // notification so the user is prompted back. Requires the backend to emit
@@ -1099,7 +1103,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
         ),
       ),
     );
-    if (accept != true) return;
+    if (accept != true) {
+      // Explicit Decline (false) → tell the host so they can end or keep
+      // waiting. Barrier-dismiss (null) leaves it pending, no notification.
+      if (accept == false) {
+        ApiService().declineLiveSession(sessionId);
+      }
+      return;
+    }
 
     final token = await getToken();
     final myUserId = _myUserId;
@@ -1116,6 +1127,33 @@ class HomePageState extends rp.ConsumerState<HomePage>
         peerName: hostName,
       ),
     );
+  }
+
+  /// Host side: a friend declined our Listen Together invite. Let the host
+  /// decide whether to end the (still-open) session or keep waiting.
+  Future<void> _showLiveDeclined(Map<String, dynamic> event) async {
+    if (!mounted || activeLiveSession == null) return;
+    final data =
+        (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final who = (data['listener_username'] ?? 'Your friend').toString();
+    final end = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('Invite declined'),
+        content: Text('$who declined your Listen Together invite.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, false),
+            child: const Text('Dismiss'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dctx, true),
+            child: const Text('End session'),
+          ),
+        ],
+      ),
+    );
+    if (end == true) await _endLiveSession();
   }
 
   Future<void> _loadUserData() async {

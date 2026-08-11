@@ -92,6 +92,32 @@ def create_session(
     return {"session_id": session_id, "host_id": current_user.id, "track": track}
 
 
+@router.post("/sessions/{session_id}/decline")
+def decline_session(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """An invited listener declines. We stop re-delivering the invite to them
+    and tell the host, who can then choose to end the session or keep waiting."""
+    session = MANAGER.get(session_id)
+    if not session:
+        # Already gone (host ended / expired) — nothing to do.
+        return {"detail": "ok"}
+    if current_user.id not in session.allowed_ids or current_user.id == session.host_id:
+        raise HTTPException(status_code=403, detail="Not an invited listener")
+    session.declined_ids.add(current_user.id)
+    # Notify the host over their notification socket so they can decide.
+    safe_notify_user(session.host_id, {
+        "type": "live_declined",
+        "data": {
+            "session_id": session_id,
+            "listener_id": current_user.id,
+            "listener_username": current_user.username,
+        },
+    })
+    return {"detail": "ok"}
+
+
 @router.post("/sessions/{session_id}/end")
 async def end_session(
     session_id: str,

@@ -1016,6 +1016,21 @@ class ApiService {
     }
   }
 
+  /// Decline a "listen together" invite: stops the server re-delivering it to us
+  /// and notifies the host so they can end or keep waiting. Best-effort.
+  Future<void> declineLiveSession(String sessionId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return;
+      await http.post(
+        Uri.parse('${await _baseUrl}/live/sessions/$sessionId/decline'),
+        headers: _authHeaders(token),
+      );
+    } catch (e) {
+      _logger.w('declineLiveSession exception: $e');
+    }
+  }
+
   /// A page of a conversation's messages (same shape as DM messages).
   Future<List<Map<String, dynamic>>> fetchConversationMessages(
     int cid, {

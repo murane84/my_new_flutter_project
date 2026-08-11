@@ -35,6 +35,8 @@ class LiveSession:
         # to a listener who was offline when it was first sent).
         self.host_username = host_username
         self.invited_ids: List[int] = list(invited_ids)
+        # Listeners who explicitly declined — don't re-deliver the invite to them.
+        self.declined_ids: set[int] = set()
         # Everyone allowed in the session (host + invited listeners).
         self.allowed_ids: set[int] = {host_id, *invited_ids}
         # Metadata only — title/duration/mime. NOT the audio itself.
@@ -73,6 +75,7 @@ class LiveSessionManager:
         for s in self.sessions.values():
             if (user_id in s.allowed_ids
                     and user_id != s.host_id
+                    and user_id not in s.declined_ids
                     and user_id not in s.connections
                     and s.host_id in s.connections):
                 out.append(s)

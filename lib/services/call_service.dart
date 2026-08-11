@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../screens/api_service.dart';
@@ -100,6 +101,10 @@ class CallService {
   // ── Internals ─────────────────────────────────────────────────────────────
   RTCPeerConnection? _pc;
   MediaStream? _localStream;
+  // WEB ONLY: an offscreen renderer that the remote audio stream is attached to
+  // so the browser actually plays the friend's voice (web can't auto-play a
+  // remote WebRTC track the way native does).
+  RTCVideoRenderer? _remoteRenderer;
   RTCSessionDescription? _pendingOffer; // incoming offer awaiting accept
   final List<RTCIceCandidate> _pendingRemote = []; // ICE before remote SDP set
   bool _remoteDescSet = false;
@@ -478,6 +483,13 @@ class CallService {
     final pc = await createPeerConnection(_iceConfig);
     _pc = pc;
 
+    // Web needs a media element to play the remote audio; prepare it up-front.
+    if (kIsWeb) {
+      final r = RTCVideoRenderer();
+      await r.initialize();
+      _remoteRenderer = r;
+    }
+
     for (final track in _localStream!.getTracks()) {
       await pc.addTrack(track, _localStream!);
     }
@@ -515,7 +527,16 @@ class CallService {
         });
       }
     };
-    // Remote audio plays automatically once the track arrives; nothing to wire.
+    // Native plays remote audio automatically. On WEB we must route the remote
+    // stream into a media element or the friend's voice is silent — attach it
+    // to the renderer created above.
+    if (kIsWeb) {
+      pc.onTrack = (RTCTrackEvent e) {
+        if (e.streams.isNotEmpty) {
+          _remoteRenderer?.srcObject = e.streams.first;
+        }
+      };
+    }
   }
 
   Future<void> _drainPendingCandidates() async {
@@ -621,6 +642,11 @@ class CallService {
       await _pc?.close();
     } catch (_) {}
     _pc = null;
+    try {
+      _remoteRenderer?.srcObject = null;
+      await _remoteRenderer?.dispose();
+    } catch (_) {}
+    _remoteRenderer = null;
     try {
       await Helper.setSpeakerphoneOn(false);
     } catch (_) {}

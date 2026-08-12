@@ -14,6 +14,11 @@ REM ---------------------------------------------------------------------------
 setlocal
 cd /d %~dp0
 
+REM Clear any stale git locks left by cloud-side commits on this folder — they
+REM can block the commit below with "cannot lock ref 'HEAD': ...HEAD.lock exists".
+REM Harmless if the files aren't there (2>nul swallows "not found").
+del /f /q ".git\HEAD.lock" ".git\index.lock" ".git\refs\heads\main.lock" 2>nul
+
 echo == flutter pub get ==
 call flutter pub get || goto :err
 

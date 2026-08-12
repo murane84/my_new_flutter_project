@@ -43,6 +43,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import '../utils/app_config.dart';
 import '../utils/loose_url_linkifier.dart';
+import '../services/app_busy.dart';
 import 'chat/attach_sheet.dart';
 import 'chat/contact_picker_sheet.dart';
 
@@ -386,13 +387,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     if (uid == null) return;
 
     try {
-      final msgs = _isGroup
-          ? await ApiService()
-              .fetchConversationMessages(_cid, skip: 0, limit: 60)
-          : await ApiService().fetchMessagesBetween(
+      final msgs = await appBusy.run(() => _isGroup
+          ? ApiService().fetchConversationMessages(_cid, skip: 0, limit: 60)
+          : ApiService().fetchMessagesBetween(
               uid, widget.friendId,
               skip: 0, limit: 60,
-            );
+            ));
 
       final unread = _isGroup
           ? msgs.any((m) => m['sender_id'].toString() != _myId)
@@ -1425,8 +1425,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _scrollToBottom();
 
     try {
-      final sent = await ApiService().sendMessage(widget.friendId, content,
-          conversationId: widget.conversationId);
+      final sent = await appBusy.run(() => ApiService().sendMessage(
+          widget.friendId, content,
+          conversationId: widget.conversationId));
       if (sent == null) {
         if (mounted) {
           _showErrorSnack('Message failed to send. Tap to retry.');
@@ -1632,12 +1633,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   /// JSON payload lives in `content`. Mirrors [_sendGif]'s optimistic insert.
   Future<void> _sendStructured(String type, String content) async {
     try {
-      final sent = await ApiService().sendMessage(
-        widget.friendId,
-        content,
-        messageType: type,
-        conversationId: widget.conversationId,
-      );
+      final sent = await appBusy.run(() => ApiService().sendMessage(
+            widget.friendId,
+            content,
+            messageType: type,
+            conversationId: widget.conversationId,
+          ));
       if (sent != null && mounted) {
         setState(() {
           if (!_messages.any((m) => m['id'] == sent['id'])) {
@@ -1660,15 +1661,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   Future<void> _sendGif(String url) async {
     setState(() => _showEmoji = false);
     try {
-      final sent = await ApiService().sendMessage(
-        widget.friendId,
-        '',
-        messageType: 'image',
-        mediaUrl: url,
-        mediaName: 'sticker.gif',
-        mediaMime: 'image/gif',
-        conversationId: widget.conversationId,
-      );
+      final sent = await appBusy.run(() => ApiService().sendMessage(
+            widget.friendId,
+            '',
+            messageType: 'image',
+            mediaUrl: url,
+            mediaName: 'sticker.gif',
+            mediaMime: 'image/gif',
+            conversationId: widget.conversationId,
+          ));
       if (sent != null && mounted) {
         setState(() {
           if (!_messages.any((m) => m['id'] == sent['id'])) {
@@ -1910,25 +1911,25 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           }
         } catch (_) {/* keep the original bytes on any failure */}
       }
-      final up = await ApiService()
-          .uploadMedia(bytes: bytes, filename: filename, mime: mime);
+      final up = await appBusy.run(() =>
+          ApiService().uploadMedia(bytes: bytes, filename: filename, mime: mime));
       if (up == null || up['url'] == null) {
         if (mounted) showToast(context, 'Upload failed', type: ToastType.error);
         return;
       }
-      final sent = await ApiService().sendMessage(
-        widget.friendId,
-        // Caption travels as the message content, so an image + text render in
-        // ONE bubble (the bubble builder shows the image, then this text below).
-        caption,
-        messageType: type,
-        mediaUrl: up['url'] as String,
-        mediaName: (up['name'] ?? filename) as String?,
-        mediaMime: (up['mime'] ?? mime) as String?,
-        mediaSize: (up['size'] as num?)?.toInt(),
-        mediaDuration: durationMs,
-        conversationId: widget.conversationId,
-      );
+      final sent = await appBusy.run(() => ApiService().sendMessage(
+            widget.friendId,
+            // Caption travels as the message content, so an image + text render
+            // in ONE bubble (the bubble shows the image, then this text below).
+            caption,
+            messageType: type,
+            mediaUrl: up['url'] as String,
+            mediaName: (up['name'] ?? filename) as String?,
+            mediaMime: (up['mime'] ?? mime) as String?,
+            mediaSize: (up['size'] as num?)?.toInt(),
+            mediaDuration: durationMs,
+            conversationId: widget.conversationId,
+          ));
       if (sent != null && mounted) {
         setState(() {
           if (!_messages.any((m) => m['id'] == sent['id'])) {
@@ -2434,7 +2435,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   Future<void> _saveImage(String url) async {
     try {
       if (mounted) showToast(context, 'Downloading…');
-      final res = await http.get(Uri.parse(url), headers: mediaAuthHeaders(url));
+      final res = await appBusy
+          .run(() => http.get(Uri.parse(url), headers: mediaAuthHeaders(url)));
       if (res.statusCode != 200) {
         if (mounted) showToast(context, 'Download failed', type: ToastType.error);
         return;
@@ -2480,8 +2482,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       // Otherwise pull from the server while it still has the bytes.
       if (bytes == null || bytes.isEmpty) {
         final url = fullMediaUrl(rel);
-        final res =
-            await http.get(Uri.parse(url), headers: mediaAuthHeaders(url));
+        final res = await appBusy
+            .run(() => http.get(Uri.parse(url), headers: mediaAuthHeaders(url)));
         if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
           bytes = res.bodyBytes;
         }

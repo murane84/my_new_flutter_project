@@ -42,6 +42,7 @@ import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import '../utils/app_config.dart';
+import '../utils/loose_url_linkifier.dart';
 import 'chat/attach_sheet.dart';
 
 // Split out for maintainability (Dart parts — same library, shared
@@ -3578,7 +3579,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   // Open a tapped link from a message bubble in the external browser.
   Future<void> _openLink(String url) async {
     try {
-      final uri = Uri.parse(url);
+      // Bare www./domain links (from LooseUrlLinkifier) carry no scheme — assume
+      // https so the OS opens them in a browser rather than rejecting them.
+      // Emails come through as mailto: from EmailLinkifier and are left as-is.
+      var target = url.trim();
+      if (!target.contains('://') && !target.startsWith('mailto:')) {
+        target = 'https://$target';
+      }
+      final uri = Uri.parse(target);
       final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!ok && mounted) {
         showToast(context, 'Could not open link', type: ToastType.error);
@@ -3958,6 +3966,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             child: Linkify(
                               text: mainText,
                               onOpen: (link) => _openLink(link.url),
+                              // Also catch www.* and bare domains (foo.com) that
+                              // lack an http(s):// scheme, after the built-in
+                              // url/email detectors.
+                              linkifiers: const [
+                                UrlLinkifier(),
+                                EmailLinkifier(),
+                                LooseUrlLinkifier(),
+                              ],
                               options:
                                   const LinkifyOptions(humanize: false),
                               style: TextStyle(

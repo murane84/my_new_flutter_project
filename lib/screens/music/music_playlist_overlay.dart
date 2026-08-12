@@ -752,14 +752,13 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 Navigator.pop(ctx);
                 widget.onShare(path);
               }),
-              _optionTile(scheme, Icons.edit_rounded, 'Edit details', () async {
+              _optionTile(scheme, Icons.edit_rounded, 'Edit details', () {
+                // Close the options sheet and open the edit sheet in the SAME
+                // frame so they cross-fade (options slides down as edit slides
+                // up) — no dead gap where the screen just sits on the playlist,
+                // which is what made this feel stuck/slow. The Title field
+                // autofocuses so the keyboard rises with the sheet.
                 Navigator.pop(ctx);
-                // Let the options sheet finish closing BEFORE opening the edit
-                // sheet — otherwise the two modal transitions (and then the
-                // keyboard) animate on top of each other, dropping frames and
-                // making the edit UI feel stuck on open.
-                await Future.delayed(const Duration(milliseconds: 210));
-                if (!context.mounted) return;
                 _showEditDetails(context, path);
               }),
               _optionTile(

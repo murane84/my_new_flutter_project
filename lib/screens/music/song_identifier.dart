@@ -7,19 +7,23 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api_service.dart';
+import '../../services/audio_capture.dart';
 import '../../utils/toast_helper.dart';
 
-/// Shazam-style "what's this song?" flow. Records a short clip from the mic,
-/// sends it to the backend (which asks AudD to identify it), then shows the
-/// title/artist with links to open it elsewhere. Available from anywhere via
+/// Shazam-style "what's this song?" flow. The user first picks a SOURCE:
+///  - "From this phone" — captures the device's own audio output (what another
+///    app is playing) via Android's MediaProjection playback capture. Android
+///    10+; apps that block capture (some DRM players) can't be grabbed.
+///  - "Around me" — records a short clip from the microphone (ambient / a song
+///    playing on a speaker nearby).
+/// The clip is sent to the backend (AudD / AcoustID) and the title/artist is
+/// shown with links to open it elsewhere. Available anywhere via
 /// [showSongIdentifier].
 Future<void> showSongIdentifier(BuildContext context) {
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    // This sheet draws its own (inner) card border — drop the app-wide
-    // bottomSheetTheme border so it isn't doubled.
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
     ),
@@ -27,7 +31,18 @@ Future<void> showSongIdentifier(BuildContext context) {
   );
 }
 
-enum _Phase { listening, identifying, result, noMatch, error, notConfigured, denied }
+enum _Phase {
+  choose,
+  listening, // mic
+  capturing, // device audio
+  identifying,
+  result,
+  noMatch,
+  error,
+  notConfigured,
+  denied,
+  captureFailed, // device capture cancelled / blocked / empty
+}
 
 class _SongIdentifierSheet extends StatefulWidget {
   const _SongIdentifierSheet();
@@ -50,7 +65,9 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
   String? _clipPath;
   bool _stopping = false;
 
-  _Phase _phase = _Phase.listening;
+  bool _deviceSupported = false;
+
+  _Phase _phase = _Phase.choose;
   Map<String, dynamic>? _result;
 
   @override
@@ -60,19 +77,23 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
       vsync: this,
       duration: const Duration(milliseconds: 1100),
     )..repeat(reverse: true);
-    _start();
+    // Show the source chooser first; check whether internal capture is possible
+    // so we can enable/disable that option.
+    AudioCapture.isSupported().then((ok) {
+      if (mounted) setState(() => _deviceSupported = ok);
+    });
   }
 
   @override
   void dispose() {
     _tick?.cancel();
     _pulse.dispose();
-    // Best-effort: make sure the recorder is released.
     _recorder.dispose();
     super.dispose();
   }
 
-  Future<void> _start() async {
+  // ── Mic ("around me") ───────────────────────────────────────────────────
+  Future<void> _startMic() async {
     setState(() {
       _phase = _Phase.listening;
       _elapsedMs = 0;
@@ -126,8 +147,51 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
         if (mounted) setState(() => _phase = _Phase.error);
         return;
       }
+      await _identifyBytes(bytes, 'clip.m4a', 'audio/mp4');
+    } catch (_) {
+      if (mounted) setState(() => _phase = _Phase.error);
+    } finally {
+      _stopping = false;
+    }
+  }
+
+  // ── Device ("from this phone") ──────────────────────────────────────────
+  Future<void> _startDevice() async {
+    setState(() {
+      _phase = _Phase.capturing;
+      _result = null;
+    });
+    try {
+      final path = await AudioCapture.captureInternal(durationMs: _maxMs);
+      if (!mounted) return;
+      if (path == null) {
+        // User cancelled the capture consent, the source app blocks capture, or
+        // nothing was playing.
+        setState(() => _phase = _Phase.captureFailed);
+        return;
+      }
+      final file = File(path);
+      final bytes = await file.readAsBytes();
+      try {
+        await file.delete();
+      } catch (_) {}
+      if (bytes.isEmpty) {
+        if (mounted) setState(() => _phase = _Phase.captureFailed);
+        return;
+      }
+      setState(() => _phase = _Phase.identifying);
+      await _identifyBytes(bytes, 'clip.wav', 'audio/wav');
+    } catch (_) {
+      if (mounted) setState(() => _phase = _Phase.captureFailed);
+    }
+  }
+
+  // ── Shared identify ─────────────────────────────────────────────────────
+  Future<void> _identifyBytes(
+      List<int> bytes, String filename, String mime) async {
+    try {
       final res = await ApiService()
-          .recognizeSong(bytes: bytes, filename: 'clip.m4a', mime: 'audio/mp4');
+          .recognizeSong(bytes: bytes, filename: filename, mime: mime);
       if (!mounted) return;
       if (res == null) {
         setState(() => _phase = _Phase.error);
@@ -143,14 +207,19 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
       }
     } catch (_) {
       if (mounted) setState(() => _phase = _Phase.error);
-    } finally {
-      _stopping = false;
     }
   }
 
-  Future<void> _retry() async {
-    // Fresh recorder session.
-    await _start();
+  // Return to the source chooser (used by every "Try again" / "Close" retry).
+  void _backToChooser() {
+    _tick?.cancel();
+    if (mounted) {
+      setState(() {
+        _phase = _Phase.choose;
+        _elapsedMs = 0;
+        _result = null;
+      });
+    }
   }
 
   Future<void> _open(String? url) async {
@@ -196,8 +265,12 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
 
   Widget _body(ColorScheme scheme) {
     switch (_phase) {
+      case _Phase.choose:
+        return _chooser(scheme);
       case _Phase.listening:
         return _listening(scheme);
+      case _Phase.capturing:
+        return _capturing(scheme);
       case _Phase.identifying:
         return _identifying(scheme);
       case _Phase.result:
@@ -225,6 +298,14 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
           'Allow microphone access so Aluta can listen to the song.',
           retry: true,
         );
+      case _Phase.captureFailed:
+        return _message(
+          scheme,
+          Icons.music_off_rounded,
+          'Couldn\'t capture this phone',
+          'Make sure something is actually playing, then allow "Start capturing" when asked. Some apps (Spotify, Netflix and other protected players) block capture — for those, use "Around me" instead.',
+          retry: true,
+        );
       case _Phase.error:
         return _message(
           scheme,
@@ -236,15 +317,116 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
     }
   }
 
-  Widget _pulsingMic(ColorScheme scheme, {bool active = true}) {
+  // ── Source chooser ──────────────────────────────────────────────────────
+  Widget _chooser(ColorScheme scheme) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.graphic_eq_rounded, size: 40, color: scheme.primary),
+        const SizedBox(height: 10),
+        Text('Identify a song',
+            style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurface)),
+        const SizedBox(height: 4),
+        Text('Where is the music playing?',
+            style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 18),
+        _sourceTile(
+          scheme,
+          icon: Icons.smartphone_rounded,
+          title: 'From this phone',
+          subtitle: _deviceSupported
+              ? 'Recognise audio playing on this device (another app, or Aluta).'
+              : 'Needs Android 10 or newer.',
+          enabled: _deviceSupported,
+          onTap: _deviceSupported ? _startDevice : null,
+        ),
+        const SizedBox(height: 10),
+        _sourceTile(
+          scheme,
+          icon: Icons.mic_rounded,
+          title: 'Around me',
+          subtitle: 'Listen with the microphone to music playing nearby.',
+          enabled: true,
+          onTap: _startMic,
+        ),
+        const SizedBox(height: 14),
+        TextButton(
+          onPressed: () => Navigator.maybePop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
+    );
+  }
+
+  Widget _sourceTile(
+    ColorScheme scheme, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool enabled,
+    required VoidCallback? onTap,
+  }) {
+    final fg = enabled ? scheme.onSurface : scheme.onSurfaceVariant;
+    return Opacity(
+      opacity: enabled ? 1 : 0.55,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: scheme.outlineVariant.withAlpha(120)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: scheme.primary.withAlpha(30),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: scheme.primary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: fg)),
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded,
+                  color: scheme.onSurfaceVariant.withAlpha(150)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _pulsingIcon(ColorScheme scheme, IconData icon) {
     return AnimatedBuilder(
       animation: _pulse,
       builder: (_, _) {
-        final t = active ? _pulse.value : 0.0;
-        return Container(
+        final t = _pulse.value;
+        return SizedBox(
           width: 120,
           height: 120,
-          alignment: Alignment.center,
           child: Stack(
             alignment: Alignment.center,
             children: [
@@ -270,8 +452,7 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
                     ),
                   ],
                 ),
-                child: Icon(Icons.mic_rounded,
-                    size: 38, color: scheme.onPrimary),
+                child: Icon(icon, size: 38, color: scheme.onPrimary),
               ),
             ],
           ),
@@ -295,7 +476,7 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
         Text('Point the phone toward the music',
             style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
         const SizedBox(height: 18),
-        _pulsingMic(scheme),
+        _pulsingIcon(scheme, Icons.mic_rounded),
         const SizedBox(height: 16),
         Text('$remaining s',
             style: TextStyle(
@@ -312,9 +493,34 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
           ),
         ),
         TextButton(
-          onPressed: () => Navigator.maybePop(context),
-          child: const Text('Cancel'),
+          onPressed: _backToChooser,
+          child: const Text('Back'),
         ),
+      ],
+    );
+  }
+
+  Widget _capturing(ColorScheme scheme) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('Listening to this phone…',
+            style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurface)),
+        const SizedBox(height: 4),
+        Text('Keep the audio playing',
+            style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 18),
+        _pulsingIcon(scheme, Icons.smartphone_rounded),
+        const SizedBox(height: 18),
+        Text('Capturing the sound…',
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 10),
       ],
     );
   }
@@ -426,7 +632,7 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: _retry,
+                onPressed: _backToChooser,
                 icon: const Icon(Icons.refresh_rounded, size: 18),
                 label: const Text('Again'),
               ),
@@ -492,8 +698,8 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
               const SizedBox(width: 10),
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: _retry,
-                  icon: const Icon(Icons.mic_rounded, size: 18),
+                  onPressed: _backToChooser,
+                  icon: const Icon(Icons.tune_rounded, size: 18),
                   label: const Text('Try again'),
                 ),
               ),

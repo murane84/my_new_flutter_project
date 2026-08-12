@@ -4278,6 +4278,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
       child: Listener(
         onPointerDown: (_) => _onUserActivity(),
         child: Scaffold(
+      // Don't resize the (heavy) home body for the keyboard while the MUSIC
+      // panel is the front surface. The only keyboard there is the edit-details
+      // sheet, which positions itself above the keyboard via its own viewInsets
+      // padding (unaffected by this). Resizing would relayout the whole album-art
+      // playlist on every keyboard frame, stalling the keyboard's rise — the
+      // "slow/stuck keyboard" when editing song details. Chats (panel collapsed)
+      // still resize so the message input rides above the keyboard.
+      resizeToAvoidBottomInset: !_playerExpanded,
       // Match the header colour so the rounded-top chat/music panels appear to
       // emerge seamlessly from the header — no visible "triangle pocket" of a
       // different shade behind their top corners in either light or dark theme.

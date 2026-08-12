@@ -1529,7 +1529,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   // ── Contact share ──────────────────────────────────────────────────────────
   /// Pick a phone contact and share it as a `contact` message (content is JSON
-  /// `{name, phone, phones}`). Uses the OS contact picker.
+  /// `{name, phone, phones}`). Uses an IN-APP picker that reads the phone book
+  /// directly — NOT the OS "external pick" intent, which some OEMs (MIUI/Xiaomi)
+  /// misroute to the file/document chooser instead of the People app.
   Future<void> _shareContact() async {
     if (!_isMobile) {
       if (mounted) showToast(context, 'Contact sharing is available on mobile');
@@ -1543,15 +1545,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         }
         return;
       }
-      final picked = await FlutterContacts.openExternalPick();
-      if (picked == null) return;
-      // The external pick returns a lightweight contact — fetch full props for
-      // the phone number(s).
-      final full =
-          await FlutterContacts.getContact(picked.id, withProperties: true) ??
-              picked;
-      final name = full.displayName.trim();
-      final phones = full.phones
+      if (mounted) showToast(context, 'Loading contacts…');
+      final contacts =
+          await FlutterContacts.getContacts(withProperties: true);
+      if (!mounted) return;
+      final picked = await _showContactPicker(contacts);
+      if (picked == null) return; // user backed out
+      final name = picked.displayName.trim();
+      final phones = picked.phones
           .map((p) => p.number.trim())
           .where((n) => n.isNotEmpty)
           .toList();
@@ -1559,9 +1560,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         if (mounted) showToast(context, 'That contact had no details to share');
         return;
       }
+      var phone = phones.isNotEmpty ? phones.first : '';
+      // Multiple numbers → let the user pick which one to share.
+      if (phones.length > 1 && mounted) {
+        final chosen = await _chooseNumber(name, phones);
+        if (chosen == null) return;
+        phone = chosen;
+      }
       final payload = jsonEncode({
         'name': name,
-        'phone': phones.isNotEmpty ? phones.first : '',
+        'phone': phone,
         'phones': phones,
       });
       await _sendStructured('contact', payload);
@@ -1571,6 +1579,153 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             type: ToastType.error);
       }
     }
+  }
+
+  /// In-app, searchable phone-book picker. Returns the chosen [Contact] or null.
+  Future<Contact?> _showContactPicker(List<Contact> contacts) {
+    final scheme = Theme.of(context).colorScheme;
+    final list = contacts
+        .where((c) => c.displayName.trim().isNotEmpty)
+        .toList()
+      ..sort((a, b) =>
+          a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+    return showModalBottomSheet<Contact>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        var query = '';
+        return StatefulBuilder(
+          builder: (ctx, setSt) {
+            final q = query.trim().toLowerCase();
+            final filtered = q.isEmpty
+                ? list
+                : list
+                    .where((c) => c.displayName.toLowerCase().contains(q))
+                    .toList();
+            return DraggableScrollableSheet(
+              expand: false,
+              initialChildSize: 0.7,
+              minChildSize: 0.4,
+              maxChildSize: 0.95,
+              builder: (ctx, controller) => Container(
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(22)),
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(top: 10, bottom: 6),
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: scheme.onSurfaceVariant.withAlpha(80),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+                      child: Row(
+                        children: [
+                          Icon(Icons.person_rounded, color: scheme.primary),
+                          const SizedBox(width: 8),
+                          const Text('Share a contact',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 16)),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: TextField(
+                        onChanged: (v) => setSt(() => query = v),
+                        decoration: InputDecoration(
+                          hintText: 'Search contacts',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? Center(
+                              child: Text('No contacts found',
+                                  style: TextStyle(
+                                      color: scheme.onSurfaceVariant)),
+                            )
+                          : ListView.builder(
+                              controller: controller,
+                              itemCount: filtered.length,
+                              itemBuilder: (ctx, i) {
+                                final c = filtered[i];
+                                final phone = c.phones.isNotEmpty
+                                    ? c.phones.first.number
+                                    : '';
+                                final initial = c.displayName.isNotEmpty
+                                    ? c.displayName[0].toUpperCase()
+                                    : '?';
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor:
+                                        scheme.primary.withAlpha(35),
+                                    child: Text(initial,
+                                        style: TextStyle(
+                                            color: scheme.primary,
+                                            fontWeight: FontWeight.bold)),
+                                  ),
+                                  title: Text(c.displayName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis),
+                                  subtitle: phone.isEmpty
+                                      ? null
+                                      : Text(phone,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis),
+                                  onTap: () => Navigator.pop(ctx, c),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// When a chosen contact has several numbers, ask which one to share.
+  Future<String?> _chooseNumber(String name, List<String> phones) {
+    return showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+              child: Text('$name — choose a number',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 15)),
+            ),
+            ...phones.map((p) => ListTile(
+                  leading: const Icon(Icons.phone_rounded),
+                  title: Text(p),
+                  onTap: () => Navigator.pop(ctx, p),
+                )),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Send a structured (non-media) message — `location` / `contact` — whose

@@ -2698,10 +2698,24 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // above a DM that has a newer message. Conversations with no messages yet
     // (no timestamp) fall to the bottom; ties break by name for a stable order
     // that doesn't reshuffle on every rebuild.
-    int lastMillis(Map<String, dynamic> m) =>
-        DateTime.tryParse((m['last_timestamp'] ?? '').toString())
-            ?.millisecondsSinceEpoch ??
-        0;
+    int lastMillis(Map<String, dynamic> m) {
+      final s = (m['last_timestamp'] ?? '').toString().trim();
+      if (s.isEmpty) return 0;
+      final dt = DateTime.tryParse(s);
+      if (dt == null) return 0;
+      // Timestamps arrive in TWO shapes: groups send tz-aware ISO
+      // ("…T09:24:33+00:00"); DMs send a NAIVE "YYYY-MM-DD HH:MM" (UTC wall-
+      // clock, no zone). Dart reads a no-zone string as LOCAL time, which shifts
+      // DMs by the device's UTC offset and lets groups float above DMs that are
+      // actually newer. If the string carried no zone, read it as UTC so both
+      // sort on the same absolute scale.
+      final hasZone = s.endsWith('Z') || RegExp(r'[+-]\d\d:?\d\d$').hasMatch(s);
+      final norm = hasZone
+          ? dt
+          : DateTime.utc(dt.year, dt.month, dt.day, dt.hour, dt.minute,
+              dt.second, dt.millisecond);
+      return norm.millisecondsSinceEpoch;
+    }
     String nameKey(Map<String, dynamic> m) => (m['is_group'] == true
             ? (m['title'] ?? '')
             : (m['username'] ?? ''))

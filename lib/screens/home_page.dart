@@ -48,6 +48,7 @@ import '../utils/app_config.dart';
 import '../services/call_service.dart';
 import '../services/group_call_service.dart';
 import '../state/group_call_state.dart' show groupCallProvider;
+import '../state/call_state.dart' show callProvider, CallSnapshot;
 import 'call_screen.dart';
 import 'group_call_screen.dart';
 import '../main.dart' show navigatorKey;
@@ -3427,6 +3428,82 @@ class HomePageState extends rp.ConsumerState<HomePage>
     );
   }
 
+  /// Return-to-call banner for a MINIMIZED 1:1 (DM) call — the sibling of the
+  /// group-call banner above. Shows only while a call is live and its full-
+  /// screen UI is minimized; tap to reopen, End to hang up. If the call ends
+  /// while minimized, the screen isn't mounted to reset CallService, so we do
+  /// it here (otherwise the "ended" state would linger).
+  Widget _buildDmCallReturnBanner(BuildContext context) {
+    return rp.Consumer(
+      builder: (context, ref, _) {
+        ref.watch(callProvider);
+        ref.listen<CallSnapshot>(callProvider, (prev, next) {
+          if (next.state == CallState.ended && !_callScreenOpen) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              CallService.instance.reset();
+            });
+          }
+        });
+        final call = CallService.instance;
+        if (!call.isActive || _callScreenOpen) {
+          return const SizedBox.shrink();
+        }
+        return _CallTicker(
+          builder: () {
+            final elapsed = call.elapsedLabel;
+            final name = call.peerName.isEmpty ? 'Aluta call' : call.peerName;
+            return Material(
+              // Call-red, to read distinctly from the group-call green banner.
+              color: const Color(0xFFB4322E),
+              child: InkWell(
+                onTap: _openCallScreen,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 7, 6, 7),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.call_rounded,
+                          size: 17, color: Colors.white),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          elapsed.isEmpty
+                              ? 'Ongoing call · $name'
+                              : '$elapsed · $name',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Text('Tap to return',
+                          style:
+                              TextStyle(color: Colors.white70, fontSize: 11)),
+                      const SizedBox(width: 4),
+                      TextButton(
+                        onPressed: () => CallService.instance.hangUp(),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          minimumSize: const Size(0, 32),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('End',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _reopenLiveSession() {
     if (activeLiveSession == null) return;
     showDialog<void>(
@@ -4146,6 +4223,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         children: [
           _buildLiveBanner(context),
           _buildCallReturnBanner(context),
+          _buildDmCallReturnBanner(context),
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {

@@ -68,6 +68,21 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
   }
 
+  /// Drop back to the app WITHOUT ending the call — the call keeps running in
+  /// CallService (a singleton), and Home shows a "tap to return" banner. Unlike
+  /// [_dismiss] this must NOT reset the call. Mirrors the group-call minimize.
+  void _minimize() {
+    if (_closing) return;
+    if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
+  }
+
+  // Minimizable only while the call is actually live (not while ringing, where
+  // the user needs to accept/decline, or after it has ended).
+  bool get _canMinimize =>
+      _call.state == CallState.calling ||
+      _call.state == CallState.connecting ||
+      _call.state == CallState.connected;
+
   String? _avatarUrl() {
     final a = _call.peerAvatar;
     if (a == null || a.isEmpty) return null;
@@ -102,7 +117,10 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       _onCallStateChanged(next.state);
     });
     return PopScope(
-      canPop: false,
+      // Back gesture minimizes a live call (keeps talking) instead of being
+      // swallowed — the pop itself is the minimize: CallService keeps the call
+      // alive and Home's banner brings the user back.
+      canPop: true,
       child: Scaffold(
         backgroundColor: const Color(0xFF1A1012),
         body: Container(
@@ -124,6 +142,26 @@ class _CallScreenState extends ConsumerState<CallScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 children: [
+                  // Minimize handle — drop back to the app and keep talking; a
+                  // banner up top returns you here. Fixed height so the layout
+                  // doesn't jump when it's hidden (ringing / ended).
+                  SizedBox(
+                    height: 44,
+                    child: _canMinimize
+                        ? Align(
+                            alignment: Alignment.centerLeft,
+                            child: IconButton(
+                              onPressed: _minimize,
+                              tooltip: 'Minimize',
+                              icon: const Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                color: Colors.white,
+                                size: 32,
+                              ),
+                            ),
+                          )
+                        : null,
+                  ),
                   const Spacer(flex: 2),
                   // Dim the avatar once the call has ended for a calm wind-down.
                   AnimatedOpacity(

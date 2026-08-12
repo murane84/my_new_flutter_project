@@ -42,6 +42,11 @@
          registered Aluta users (auto-add matches as friends). -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
+    <!-- Attach sheet "Location": share the user's current location in chat.
+         Requested at share time; coarse is enough for a shareable pin. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <!-- Chat media sharing: voice-note recording + camera capture -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />

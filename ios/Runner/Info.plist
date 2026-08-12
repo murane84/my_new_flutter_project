@@ -49,5 +49,11 @@
 		<true/>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
+		<!-- Attach sheet: share current location in a chat (geolocator). -->
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>Aluta uses your location only when you choose to share it in a chat.</string>
+		<!-- Attach sheet: recent-photos quick-access strip (photo_manager). -->
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Aluta shows your recent photos so you can quickly share them in a chat.</string>
 	</dict>
 </plist>

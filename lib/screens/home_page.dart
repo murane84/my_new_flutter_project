@@ -41,6 +41,7 @@ import '../services/fcm_service.dart';
 import '../services/share_inbox.dart';
 import '../services/contact_names.dart';
 import '../services/metadata_overrides.dart';
+import '../services/app_busy.dart';
 import '../utils/net_image.dart';
 import 'token_helper.dart';
 import '../utils/avatar_widget.dart';
@@ -1216,6 +1217,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   }
 
   Future<void> _loadUserData() async {
+    appBusy.begin();
     try {
       final data = await ApiService().getUserData();
       final prefs = await SharedPreferences.getInstance();
@@ -1234,6 +1236,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     } catch (_) {
       final prefs = await SharedPreferences.getInstance();
       if (mounted) setState(() => _username = prefs.getString('username') ?? 'User');
+    } finally {
+      appBusy.end();
     }
   }
 
@@ -1265,6 +1269,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   }
 
   Future<void> _fetchFriends({bool quiet = false}) async {
+    appBusy.begin();
     try {
       final friends = await ApiService().getFriends();
       if (!mounted) return;
@@ -1320,6 +1325,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
         });
         ConnectionStatus.instance.set(false);
       }
+    } finally {
+      appBusy.end();
     }
   }
 
@@ -1327,6 +1334,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// `_groups` (they render at the top of the friend list). Silent on failure —
   /// a group fetch error must never disturb the DM list.
   Future<void> _fetchGroups() async {
+    appBusy.begin();
     try {
       final convs = await ApiService().listConversations();
       if (!mounted) return;
@@ -1339,6 +1347,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
       });
     } catch (_) {
       // Keep whatever groups we already have.
+    } finally {
+      appBusy.end();
     }
   }
 
@@ -2340,14 +2350,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Color(0xFF2FA84F),
-                  ),
-                ),
+                _statusDot(const Color(0xFF2FA84F)),
                 const SizedBox(width: 6),
                 Text(
                   '${ref.watch(presenceProvider).onlineCount} online',
@@ -2681,6 +2684,35 @@ class HomePageState extends rp.ConsumerState<HomePage>
           },
         );
       },
+    );
+  }
+
+  /// The header status dot. Normally a solid [color] dot; while any background
+  /// task is running (see [appBusy]) it becomes a small spinner in the same
+  /// colour, so the user can see the app IS working (not frozen). Fixed 11×11
+  /// footprint so the pill doesn't jump between states.
+  Widget _statusDot(Color color) {
+    return SizedBox(
+      width: 11,
+      height: 11,
+      child: ValueListenableBuilder<int>(
+        valueListenable: appBusy.count,
+        builder: (_, busy, __) {
+          if (busy > 0) {
+            return CircularProgressIndicator(
+              strokeWidth: 1.6,
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            );
+          }
+          return Center(
+            child: Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+            ),
+          );
+        },
+      ),
     );
   }
 

@@ -44,6 +44,7 @@ import 'package:flutter_contacts/flutter_contacts.dart';
 import '../utils/app_config.dart';
 import '../utils/loose_url_linkifier.dart';
 import 'chat/attach_sheet.dart';
+import 'chat/contact_picker_sheet.dart';
 
 // Split out for maintainability (Dart parts — same library, shared
 // imports & privacy, zero behaviour change):
@@ -1528,10 +1529,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   // ── Contact share ──────────────────────────────────────────────────────────
+  /// Session cache of the phone book (names only) so re-opening the picker is
+  /// instant after the first load.
+  List<Contact>? _contactsCache;
+
   /// Pick a phone contact and share it as a `contact` message (content is JSON
   /// `{name, phone, phones}`). Uses an IN-APP picker that reads the phone book
   /// directly — NOT the OS "external pick" intent, which some OEMs (MIUI/Xiaomi)
-  /// misroute to the file/document chooser instead of the People app.
+  /// misroute to the file/document chooser. The picker opens instantly and loads
+  /// names first (fast on large phone books); the chosen contact's number is
+  /// fetched only on selection.
   Future<void> _shareContact() async {
     if (!_isMobile) {
       if (mounted) showToast(context, 'Contact sharing is available on mobile');
@@ -1545,14 +1552,27 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         }
         return;
       }
-      if (mounted) showToast(context, 'Loading contacts…');
-      final contacts =
-          await FlutterContacts.getContacts(withProperties: true);
-      if (!mounted) return;
-      final picked = await _showContactPicker(contacts);
+      // Opens immediately (spinner while it loads names only) — no UI freeze.
+      final picked = await showModalBottomSheet<Contact>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => ContactPickerSheet(
+          initial: _contactsCache,
+          onLoaded: (list) => _contactsCache = list,
+        ),
+      );
       if (picked == null) return; // user backed out
-      final name = picked.displayName.trim();
-      final phones = picked.phones
+      // The list was loaded names-only for speed — fetch THIS contact's
+      // numbers now (a single fast lookup).
+      var contact = picked;
+      if (contact.phones.isEmpty) {
+        final full =
+            await FlutterContacts.getContact(picked.id, withProperties: true);
+        if (full != null) contact = full;
+      }
+      final name = contact.displayName.trim();
+      final phones = contact.phones
           .map((p) => p.number.trim())
           .where((n) => n.isNotEmpty)
           .toList();
@@ -1579,127 +1599,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             type: ToastType.error);
       }
     }
-  }
-
-  /// In-app, searchable phone-book picker. Returns the chosen [Contact] or null.
-  Future<Contact?> _showContactPicker(List<Contact> contacts) {
-    final scheme = Theme.of(context).colorScheme;
-    final list = contacts
-        .where((c) => c.displayName.trim().isNotEmpty)
-        .toList()
-      ..sort((a, b) =>
-          a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
-    return showModalBottomSheet<Contact>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        var query = '';
-        return StatefulBuilder(
-          builder: (ctx, setSt) {
-            final q = query.trim().toLowerCase();
-            final filtered = q.isEmpty
-                ? list
-                : list
-                    .where((c) => c.displayName.toLowerCase().contains(q))
-                    .toList();
-            return DraggableScrollableSheet(
-              expand: false,
-              initialChildSize: 0.7,
-              minChildSize: 0.4,
-              maxChildSize: 0.95,
-              builder: (ctx, controller) => Container(
-                decoration: BoxDecoration(
-                  color: scheme.surface,
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(22)),
-                ),
-                child: Column(
-                  children: [
-                    Container(
-                      margin: const EdgeInsets.only(top: 10, bottom: 6),
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: scheme.onSurfaceVariant.withAlpha(80),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
-                      child: Row(
-                        children: [
-                          Icon(Icons.person_rounded, color: scheme.primary),
-                          const SizedBox(width: 8),
-                          const Text('Share a contact',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 16)),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      child: TextField(
-                        onChanged: (v) => setSt(() => query = v),
-                        decoration: InputDecoration(
-                          hintText: 'Search contacts',
-                          prefixIcon: const Icon(Icons.search_rounded),
-                          isDense: true,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Expanded(
-                      child: filtered.isEmpty
-                          ? Center(
-                              child: Text('No contacts found',
-                                  style: TextStyle(
-                                      color: scheme.onSurfaceVariant)),
-                            )
-                          : ListView.builder(
-                              controller: controller,
-                              itemCount: filtered.length,
-                              itemBuilder: (ctx, i) {
-                                final c = filtered[i];
-                                final phone = c.phones.isNotEmpty
-                                    ? c.phones.first.number
-                                    : '';
-                                final initial = c.displayName.isNotEmpty
-                                    ? c.displayName[0].toUpperCase()
-                                    : '?';
-                                return ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor:
-                                        scheme.primary.withAlpha(35),
-                                    child: Text(initial,
-                                        style: TextStyle(
-                                            color: scheme.primary,
-                                            fontWeight: FontWeight.bold)),
-                                  ),
-                                  title: Text(c.displayName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis),
-                                  subtitle: phone.isEmpty
-                                      ? null
-                                      : Text(phone,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis),
-                                  onTap: () => Navigator.pop(ctx, c),
-                                );
-                              },
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
   }
 
   /// When a chosen contact has several numbers, ask which one to share.

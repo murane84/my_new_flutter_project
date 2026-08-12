@@ -752,8 +752,14 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 Navigator.pop(ctx);
                 widget.onShare(path);
               }),
-              _optionTile(scheme, Icons.edit_rounded, 'Edit details', () {
+              _optionTile(scheme, Icons.edit_rounded, 'Edit details', () async {
                 Navigator.pop(ctx);
+                // Let the options sheet finish closing BEFORE opening the edit
+                // sheet — otherwise the two modal transitions (and then the
+                // keyboard) animate on top of each other, dropping frames and
+                // making the edit UI feel stuck on open.
+                await Future.delayed(const Duration(milliseconds: 210));
+                if (!mounted) return;
                 _showEditDetails(context, path);
               }),
               _optionTile(
@@ -854,12 +860,15 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     final yearC = TextEditingController(text: o?.year ?? '');
 
     Widget field(String label, TextEditingController c,
-        {TextInputType? kb, IconData? icon}) {
+        {TextInputType? kb, IconData? icon, bool autofocus = false}) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: TextField(
           controller: c,
           keyboardType: kb,
+          // Focus the first field on open so the keyboard rises together with
+          // the sheet (one smooth motion) instead of on a second tap.
+          autofocus: autofocus,
           decoration: InputDecoration(
             labelText: label,
             prefixIcon: icon != null ? Icon(icon, size: 20) : null,
@@ -927,7 +936,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 ],
               ),
               const SizedBox(height: 12),
-              field('Title', titleC, icon: Icons.music_note_rounded),
+              field('Title', titleC,
+                  icon: Icons.music_note_rounded, autofocus: true),
               field('Artist', artistC, icon: Icons.person_rounded),
               field('Album', albumC, icon: Icons.album_rounded),
               Row(

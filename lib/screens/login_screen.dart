@@ -560,14 +560,18 @@ class LoginPageState extends State<LoginPage> {
                                     ),
                                   ),
                                 ],
-                                // Desktop: sign in by scanning a QR with the
-                                // phone (inherits the phone's saved contact
-                                // names for name personalisation).
-                                if (!kIsWeb &&
-                                    defaultTargetPlatform !=
-                                        TargetPlatform.android &&
-                                    defaultTargetPlatform !=
-                                        TargetPlatform.iOS) ...[
+                                // Desktop & WEB: sign in by scanning a QR with
+                                // the phone (inherits the phone's saved contact
+                                // names for name personalisation). Web has no
+                                // fingerprint/Face (that needs WebAuthn), so this
+                                // QR "log in with your phone" is its passwordless
+                                // option — the same flow the desktop app uses.
+                                // Hidden only on native mobile (you ARE the phone).
+                                if (kIsWeb ||
+                                    (defaultTargetPlatform !=
+                                            TargetPlatform.android &&
+                                        defaultTargetPlatform !=
+                                            TargetPlatform.iOS)) ...[
                                   const SizedBox(height: 18),
                                   Center(
                                     child: OutlinedButton.icon(

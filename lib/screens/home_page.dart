@@ -2697,7 +2697,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       height: 11,
       child: ValueListenableBuilder<int>(
         valueListenable: appBusy.count,
-        builder: (_, busy, __) {
+        builder: (_, busy, _) {
           if (busy > 0) {
             return CircularProgressIndicator(
               strokeWidth: 1.6,

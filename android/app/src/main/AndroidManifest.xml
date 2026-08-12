@@ -13,6 +13,9 @@
     <!-- Foreground service (audio playback) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- "Identify song" → "from this phone": capture the device's own audio
+         output via MediaProjection playback capture (Android 10+). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
     <!-- Media / storage -->
     <!-- Android 13+ (API 33+) granular media access -->
@@ -147,6 +150,13 @@
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </receiver>
+
+        <!-- Internal-audio capture for "identify song → from this phone".
+             Foreground service of type mediaProjection (required Android 14+). -->
+        <service
+            android:name=".AudioCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
     </application>
 
     <queries>

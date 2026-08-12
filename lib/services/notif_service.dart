@@ -72,6 +72,12 @@ const String kCallDecline = 'call_decline';
 /// running (killed) — that path is handled via [consumeCallLaunchAction].
 void Function(String actionId, Map<String, dynamic> payload)? onCallAction;
 
+/// Set by the home screen: tapping a MESSAGE notification (app alive/backgrounded)
+/// routes here so we can open the sender's thread directly instead of just
+/// landing on the chat list. `payload` carries `friend_id` + `sender_name`. The
+/// killed-app (cold start) equivalent is [consumeMessageLaunchAction].
+void Function(Map<String, dynamic> payload)? onMessageTap;
+
 Map<String, dynamic> _decodePayload(String? raw) {
   if (raw == null || raw.isEmpty) return const {};
   try {
@@ -88,6 +94,12 @@ void _onNotifResponse(NotificationResponse r) {
   final a = r.actionId;
   if (a == kCallAccept || a == kCallDecline) {
     onCallAction?.call(a!, _decodePayload(r.payload));
+    return;
+  }
+  // Tapping a message notification's body → open that thread.
+  final p = _decodePayload(r.payload);
+  if (p['type'] == 'message') {
+    onMessageTap?.call(p);
   }
 }
 
@@ -200,14 +212,27 @@ Future<void> showMessageNotification({
   required String title,
   required String body,
   int id = 1001,
+  // When set, tapping the notification opens this sender's thread (both while
+  // the app is alive and on cold start) instead of just the chat list.
+  String? senderId,
+  String? senderName,
 }) async {
   if (kIsWeb) return;
   try {
     if (!_ready) await initNotifications();
+    String? payload;
+    if (senderId != null && senderId.isNotEmpty) {
+      payload = jsonEncode({
+        'type': 'message',
+        'friend_id': senderId,
+        'sender_name': senderName ?? title,
+      });
+    }
     await _fln.show(
       id: id,
       title: title,
       body: body,
+      payload: payload,
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           _channelId,
@@ -219,6 +244,21 @@ Future<void> showMessageNotification({
       ),
     );
   } catch (_) {/* best-effort */}
+}
+
+/// On cold start, returns the message-notification payload the user tapped to
+/// launch the app (so home can open that thread), or null. Mirrors
+/// [consumeCallLaunchAction] but for `type: 'message'` payloads.
+Future<Map<String, dynamic>?> consumeMessageLaunchAction() async {
+  if (kIsWeb) return null;
+  try {
+    final details = await _fln.getNotificationAppLaunchDetails();
+    if (details == null || !details.didNotificationLaunchApp) return null;
+    final p = _decodePayload(details.notificationResponse?.payload);
+    return p['type'] == 'message' ? p : null;
+  } catch (_) {
+    return null;
+  }
 }
 
 /// Show a ringing incoming-call notification (from an FCM `call_offer` push).

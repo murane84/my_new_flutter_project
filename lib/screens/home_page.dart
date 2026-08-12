@@ -814,15 +814,44 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // still running): route it into the live call engine. This is what gives
     // the receiver working call controls without opening the app first.
     onCallAction = _handleCallNotificationAction;
+    // Tapping a message notification (app alive/backgrounded) → open that thread.
+    onMessageTap = _handleMessageTap;
     // If the app was launched cold by tapping Accept on a call notification
     // (app was killed), pick that up once and reconnect the call — after the
     // first frame so the root navigator exists. Guarded so socket reconnects
     // don't re-trigger it.
     if (!_callLaunchConsumed) {
       _callLaunchConsumed = true;
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _consumeCallLaunch());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _consumeCallLaunch();
+        // …and if it was a message notification that launched us, open its thread.
+        _consumeMessageLaunch();
+      });
     }
+  }
+
+  /// Open the sender's thread from a tapped message notification. Uses the
+  /// loaded friend list when available (so avatar/phone are correct), else a
+  /// minimal record from the payload — ChatPage fetches the rest by id.
+  void _handleMessageTap(Map<String, dynamic> payload) {
+    final fid = int.tryParse((payload['friend_id'] ?? '').toString());
+    if (fid == null || !mounted) return;
+    Map<String, dynamic> friend = _allFriends.firstWhere(
+      (e) => (e['id']).toString() == fid.toString(),
+      orElse: () => <String, dynamic>{},
+    );
+    if (friend.isEmpty) {
+      friend = {
+        'id': fid,
+        'username': (payload['sender_name'] ?? 'Friend').toString(),
+      };
+    }
+    openChat(friend);
+  }
+
+  Future<void> _consumeMessageLaunch() async {
+    final payload = await consumeMessageLaunchAction();
+    if (payload != null) _handleMessageTap(payload);
   }
 
   bool _callLaunchConsumed = false;

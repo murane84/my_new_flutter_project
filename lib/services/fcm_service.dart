@@ -55,9 +55,13 @@ Future<void> handleFcmData(Map<String, dynamic> data) async {
     } else {
       final title = (data['sender_name'] ?? 'New message').toString();
       final body = (data['body'] ?? '').toString();
+      final senderId = (data['sender_id'] ?? '').toString();
       await showMessageNotification(
         title: title,
         body: body.isEmpty ? 'Sent you a message' : body,
+        // Lets a tap open the sender's thread directly (not just the chat list).
+        senderId: senderId.isEmpty ? null : senderId,
+        senderName: title,
       );
     }
   } catch (_) {/* best-effort */}

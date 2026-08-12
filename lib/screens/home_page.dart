@@ -1456,6 +1456,26 @@ class HomePageState extends rp.ConsumerState<HomePage>
     return username;
   }
 
+  /// Friendly one-line preview for a conversation's last message. Location and
+  /// contact shares store JSON in the message body; show a label in the chat
+  /// list instead of the raw JSON.
+  String _previewText(String raw) {
+    final s = raw.trim();
+    if (s.startsWith('{') && s.endsWith('}')) {
+      try {
+        final j = jsonDecode(s);
+        if (j is Map) {
+          if (j['lat'] is num && j['lng'] is num) return '📍 Location';
+          if (j.containsKey('phones') &&
+              (j.containsKey('name') || j.containsKey('phone'))) {
+            return '👤 Contact';
+          }
+        }
+      } catch (_) {/* not our JSON — show as-is */}
+    }
+    return raw;
+  }
+
   /// The saved phone number for a friend by their user id, looked up in the
   /// loaded friend list — so a live-session host (identified only by id/username
   /// in the invite) can still be shown by the user's saved contact name.
@@ -2801,7 +2821,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         f['phone']?.toString(), f['username'] as String? ?? '');
     // Online dot now comes from Riverpod (single source of truth for presence).
     final isOnline = ref.watch(presenceProvider).isOnline((f['id'] as num).toInt());
-    final lastMsg = f['last_message'] as String? ?? '';
+    final lastMsg = _previewText(f['last_message'] as String? ?? '');
     final lastTime = f['last_timestamp'] as String? ?? '';
     // Unread now comes from Riverpod (single source of truth for the badge).
     final unread = ref.watch(unreadProvider).countFor((f['id'] as num).toInt());
@@ -2912,7 +2932,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       Map<String, dynamic> g, Color textColor, ColorScheme scheme) {
     final title = (g['title'] as String?)?.trim();
     final name = (title == null || title.isEmpty) ? 'Group' : title;
-    final lastMsg = g['last_message'] as String? ?? '';
+    final lastMsg = _previewText(g['last_message'] as String? ?? '');
     final lastTime = (g['last_timestamp'] ?? '').toString();
     final unread = (g['unread_count'] as num?)?.toInt() ?? 0;
     final hasUnread = unread > 0;

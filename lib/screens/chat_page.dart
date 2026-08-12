@@ -39,7 +39,10 @@ import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import '../utils/app_config.dart';
+import 'chat/attach_sheet.dart';
 
 // Split out for maintainability (Dart parts — same library, shared
 // imports & privacy, zero behaviour change):
@@ -1447,54 +1450,152 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   String fullMediaUrl(String rel) =>
       rel.startsWith('http') ? rel : '$_apiBase$rel';
 
+  bool get _isMobile =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
   void _openAttachSheet() {
-    final scheme = Theme.of(context).colorScheme;
+    // Run an action after closing the sheet (so the picker/preview isn't shown
+    // behind it).
+    void act(VoidCallback fn) {
+      Navigator.of(context).pop();
+      fn();
+    }
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: scheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              margin: const EdgeInsets.only(top: 10, bottom: 6),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: scheme.onSurfaceVariant.withAlpha(80),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            _attachTile(ctx, Icons.photo_rounded, 'Photo', const Color(0xFF7C4DFF),
-                () => _pickImage(ImageSource.gallery)),
-            _attachTile(ctx, Icons.insert_drive_file_rounded, 'Document',
-                const Color(0xFF3D5AFE), _pickDocument),
-            _attachTile(ctx, Icons.headphones_rounded, 'Listen together',
-                scheme.primary, _startListenTogether),
-            const SizedBox(height: 8),
-          ],
-        ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => AttachSheet(
+        isMobile: _isMobile,
+        onGallery: () => act(() => _pickImage(ImageSource.gallery)),
+        onCamera: () => act(() => _pickImage(ImageSource.camera)),
+        onLocation: () => act(_shareLocation),
+        onContact: () => act(_shareContact),
+        onDocument: () => act(_pickDocument),
+        onListenTogether: () => act(_startListenTogether),
+        onPickPhoto: (bytes, name) =>
+            act(() => _previewAndSendImage(bytes, name, 'image/jpeg')),
       ),
     );
   }
 
-  Widget _attachTile(BuildContext ctx, IconData icon, String label, Color color,
-      VoidCallback onTap) {
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: color.withAlpha(32),
-        child: Icon(icon, color: color),
-      ),
-      title: Text(label),
-      onTap: () {
-        Navigator.pop(ctx);
-        onTap();
-      },
-    );
+  // ── Location share ─────────────────────────────────────────────────────────
+  /// Share the user's current location as a `location` message (content is a
+  /// small JSON `{lat,lng}`). Asks for permission at share time; the bubble
+  /// renders a pin card with "Open in Maps".
+  Future<void> _shareLocation() async {
+    if (!_isMobile) {
+      if (mounted) showToast(context, 'Location sharing is available on mobile');
+      return;
+    }
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        if (mounted) {
+          showToast(context, 'Turn on location to share it',
+              type: ToastType.info);
+        }
+        return;
+      }
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.denied ||
+          perm == LocationPermission.deniedForever) {
+        if (mounted) {
+          showToast(context, 'Location permission needed to share it',
+              type: ToastType.info);
+        }
+        return;
+      }
+      if (mounted) showToast(context, 'Getting your location…');
+      final pos = await Geolocator.getCurrentPosition()
+          .timeout(const Duration(seconds: 15));
+      final payload = jsonEncode({
+        'lat': pos.latitude,
+        'lng': pos.longitude,
+      });
+      await _sendStructured('location', payload);
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not get your location',
+            type: ToastType.error);
+      }
+    }
+  }
+
+  // ── Contact share ──────────────────────────────────────────────────────────
+  /// Pick a phone contact and share it as a `contact` message (content is JSON
+  /// `{name, phone, phones}`). Uses the OS contact picker.
+  Future<void> _shareContact() async {
+    if (!_isMobile) {
+      if (mounted) showToast(context, 'Contact sharing is available on mobile');
+      return;
+    }
+    try {
+      if (!await FlutterContacts.requestPermission(readonly: true)) {
+        if (mounted) {
+          showToast(context, 'Contacts permission needed to share a contact',
+              type: ToastType.info);
+        }
+        return;
+      }
+      final picked = await FlutterContacts.openExternalPick();
+      if (picked == null) return;
+      // The external pick returns a lightweight contact — fetch full props for
+      // the phone number(s).
+      final full =
+          await FlutterContacts.getContact(picked.id, withProperties: true) ??
+              picked;
+      final name = full.displayName.trim();
+      final phones = full.phones
+          .map((p) => p.number.trim())
+          .where((n) => n.isNotEmpty)
+          .toList();
+      if (name.isEmpty && phones.isEmpty) {
+        if (mounted) showToast(context, 'That contact had no details to share');
+        return;
+      }
+      final payload = jsonEncode({
+        'name': name,
+        'phone': phones.isNotEmpty ? phones.first : '',
+        'phones': phones,
+      });
+      await _sendStructured('contact', payload);
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not share that contact',
+            type: ToastType.error);
+      }
+    }
+  }
+
+  /// Send a structured (non-media) message — `location` / `contact` — whose
+  /// JSON payload lives in `content`. Mirrors [_sendGif]'s optimistic insert.
+  Future<void> _sendStructured(String type, String content) async {
+    try {
+      final sent = await ApiService().sendMessage(
+        widget.friendId,
+        content,
+        messageType: type,
+        conversationId: widget.conversationId,
+      );
+      if (sent != null && mounted) {
+        setState(() {
+          if (!_messages.any((m) => m['id'] == sent['id'])) {
+            _messages.insert(0, sent);
+          }
+        });
+        _scrollToBottom();
+        _saveMessagesCache();
+      } else if (mounted) {
+        showToast(context, 'Could not send', type: ToastType.error);
+      }
+    } catch (_) {
+      if (mounted) showToast(context, 'Could not send', type: ToastType.error);
+    }
   }
 
   /// Send a GIF sticker chosen from the GIF tab. The GIF lives on GIPHY's CDN,
@@ -3173,6 +3274,206 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     return '$m:${s.toString().padLeft(2, '0')}';
   }
 
+  // Renders a shared location (message_type 'location'); content is JSON
+  // {lat,lng}. A compact pin card that opens the coordinates in the device's
+  // maps app.
+  Widget _locationContent(Map<String, dynamic> msg, bool isMe, Color textColor,
+      ColorScheme scheme) {
+    double? lat, lng;
+    try {
+      final j = jsonDecode((msg['content'] ?? '{}').toString());
+      if (j is Map) {
+        lat = (j['lat'] as num?)?.toDouble();
+        lng = (j['lng'] as num?)?.toDouble();
+      }
+    } catch (_) {}
+    final coords = (lat != null && lng != null)
+        ? '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}'
+        : 'Shared location';
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: (lat != null && lng != null) ? () => _openMap(lat!, lng!) : null,
+      child: Container(
+        width: 232,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: textColor.withAlpha(18),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xFF26A69A).withAlpha(40),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.location_on_rounded,
+                  color: Color(0xFF26A69A)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Location',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: textColor)),
+                  const SizedBox(height: 2),
+                  Text(coords,
+                      style: TextStyle(
+                          fontSize: 12, color: textColor.withAlpha(170))),
+                  const SizedBox(height: 4),
+                  const Text('Open in Maps',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF26A69A))),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openMap(double lat, double lng) async {
+    final geo = Uri.parse('geo:$lat,$lng?q=$lat,$lng');
+    final web = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    try {
+      if (await canLaunchUrl(geo)) {
+        await launchUrl(geo, mode: LaunchMode.externalApplication);
+      } else {
+        await launchUrl(web, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not open maps', type: ToastType.error);
+      }
+    }
+  }
+
+  // Renders a shared contact (message_type 'contact'); content is JSON
+  // {name, phone, phones}. A contact card with call + save actions.
+  Widget _contactContent(Map<String, dynamic> msg, bool isMe, Color textColor,
+      ColorScheme scheme) {
+    String name = 'Contact';
+    String phone = '';
+    try {
+      final j = jsonDecode((msg['content'] ?? '{}').toString());
+      if (j is Map) {
+        final n = (j['name'] ?? '').toString().trim();
+        if (n.isNotEmpty) name = n;
+        phone = (j['phone'] ?? '').toString().trim();
+      }
+    } catch (_) {}
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+    return Container(
+      width: 244,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: textColor.withAlpha(18),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: const Color(0xFF42A5F5).withAlpha(45),
+                child: Text(initial,
+                    style: const TextStyle(
+                        color: Color(0xFF1E88E5),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: textColor)),
+                    if (phone.isNotEmpty)
+                      Text(phone,
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              color: textColor.withAlpha(170))),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (phone.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _dialNumber(phone),
+                    icon: const Icon(Icons.call_rounded, size: 16),
+                    label: const Text('Call'),
+                    style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        visualDensity: VisualDensity.compact),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _saveContact(name, phone),
+                    icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
+                    label: const Text('Save'),
+                    style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        visualDensity: VisualDensity.compact),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _dialNumber(String phone) async {
+    try {
+      await launchUrl(Uri(scheme: 'tel', path: phone));
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not open dialer', type: ToastType.error);
+      }
+    }
+  }
+
+  Future<void> _saveContact(String name, String phone) async {
+    if (!_isMobile) return;
+    try {
+      final c = Contact()
+        ..name.first = name
+        ..phones = [Phone(phone)];
+      // Opens the OS "new contact" editor prefilled — the user confirms.
+      await FlutterContacts.openExternalInsert(c);
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not open contacts', type: ToastType.error);
+      }
+    }
+  }
+
   // Renders a call-log message (message_type 'call'). media_duration holds the
   // connected length in SECONDS; 0 means the call never connected (no answer /
   // missed). isMe = I placed the call (outgoing), else incoming.
@@ -3361,6 +3662,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final isCall = !tomb && msgType == 'call';
     // A "listen together" log entry (posted when a live session ends/declines).
     final isLive = !tomb && msgType == 'live';
+    // Shared location / contact cards (attach sheet). Their JSON lives in
+    // `content`; the card renders it, so the raw text is suppressed below.
+    final isLocation = !tomb && msgType == 'location';
+    final isContact = !tomb && msgType == 'contact';
     final emojiOnly =
         !tomb && !hasQuote && !isMedia && _isEmojiOnly(mainText);
 
@@ -3631,6 +3936,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         // ── Message body (media and/or text) ──────────
                         if (isCall) _callLogContent(msg, isMe, textColor),
                         if (isLive) _liveLogContent(msg, isMe, textColor),
+                        if (isLocation)
+                          _locationContent(msg, isMe, textColor, scheme),
+                        if (isContact)
+                          _contactContent(msg, isMe, textColor, scheme),
                         if (isMedia)
                           _mediaContent(
                               msgType, mediaRel, msg, isMe, textColor, scheme),
@@ -3641,6 +3950,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             msgType != 'song' &&
                             msgType != 'call' &&
                             msgType != 'live' &&
+                            msgType != 'location' &&
+                            msgType != 'contact' &&
                             mainText.trim().isNotEmpty)
                           Padding(
                             padding: EdgeInsets.only(top: isMedia ? 6 : 0),
@@ -3857,6 +4168,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           return '📎 ${(msg['media_name'] as String?) ?? 'File'}';
       }
     }
+    // Structured cards store JSON in `content`; show a friendly label instead.
+    if (type == 'location') return '📍 Location';
+    if (type == 'contact') return '👤 Contact';
     return caption;
   }
 
@@ -3887,6 +4201,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               ? caption
               : (msg['media_name'] as String? ?? 'File');
       }
+    } else if (msgType == 'location') {
+      typeIcon = Icons.location_on_rounded;
+      label = 'Location';
+    } else if (msgType == 'contact') {
+      typeIcon = Icons.person_rounded;
+      label = 'Contact';
     }
 
     return Container(

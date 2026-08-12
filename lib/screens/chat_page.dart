@@ -1552,6 +1552,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         }
         return;
       }
+      if (!mounted) return;
       // Opens immediately (spinner while it loads names only) — no UI freeze.
       final picked = await showModalBottomSheet<Contact>(
         context: context,

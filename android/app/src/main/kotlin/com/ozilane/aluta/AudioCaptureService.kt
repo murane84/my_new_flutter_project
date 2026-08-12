@@ -77,6 +77,10 @@ class AudioCaptureService : Service() {
             val mpm =
                 getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             val proj = mpm.getMediaProjection(code, data)
+            if (proj == null) {
+                finish(null)
+                return START_NOT_STICKY
+            }
             projection = proj
             proj.registerCallback(object : MediaProjection.Callback() {
                 override fun onStop() {

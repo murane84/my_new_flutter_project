@@ -759,7 +759,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 // keyboard) animate on top of each other, dropping frames and
                 // making the edit UI feel stuck on open.
                 await Future.delayed(const Duration(milliseconds: 210));
-                if (!mounted) return;
+                if (!context.mounted) return;
                 _showEditDetails(context, path);
               }),
               _optionTile(

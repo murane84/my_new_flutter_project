@@ -8,7 +8,13 @@ import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.Settings
+import android.telecom.CallAudioState
+import android.telecom.DisconnectCause
+import android.telecom.PhoneAccount
+import android.telecom.PhoneAccountHandle
+import android.telecom.TelecomManager
 import com.ryanheise.audioservice.AudioServiceFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -19,11 +25,15 @@ import java.io.File
 class MainActivity : AudioServiceFragmentActivity() {
     private val reliabilityChannel = "aluta/reliability"
     private val audioCaptureChannel = "aluta/audiocapture"
+    private val telecomChannel = "aluta/telecom"
 
     // MediaProjection consent → internal audio capture ("identify song").
     private val reqCapture = 7331
     private var captureResult: MethodChannel.Result? = null
     private var captureDurationMs = 9000
+
+    // Channel for pushing telecom events (car/BT answer/end) up to Dart.
+    private var telecomMc: MethodChannel? = null
 
     // OEM "Autostart" / "Auto-launch" screens. Component names differ per
     // manufacturer (and ROM version), so we try each until one resolves.
@@ -65,6 +75,117 @@ class MainActivity : AudioServiceFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        val tmc = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, telecomChannel)
+        telecomMc = tmc
+        tmc.setMethodCallHandler { call, result -> handleTelecom(call, result) }
+        // Forward system-driven call events (answer/end from the car / Bluetooth
+        // device, mute changes) up to the Dart call engine.
+        CallRegistry.listener = { event, callId, muted ->
+            telecomMc?.invokeMethod(
+                event, mapOf("callId" to callId, "muted" to muted)
+            )
+        }
+    }
+
+    // ── Telecom (self-managed calls: car / Bluetooth answer-hangup) ──────────
+
+    private fun handleTelecom(
+        call: io.flutter.plugin.common.MethodCall,
+        result: MethodChannel.Result
+    ) {
+        when (call.method) {
+            "isSupported" ->
+                result.success(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            "register" -> result.success(registerTelecom())
+            "reportIncoming" -> result.success(
+                reportIncoming(
+                    call.argument<String>("callId") ?: "",
+                    call.argument<String>("name") ?: "Aluta"
+                )
+            )
+            "startOutgoing" -> result.success(
+                startOutgoing(
+                    call.argument<String>("callId") ?: "",
+                    call.argument<String>("name") ?: "Aluta"
+                )
+            )
+            "setActive" -> {
+                CallRegistry.get(call.argument<String>("callId") ?: "")?.setActive()
+                result.success(true)
+            }
+            "endCall" -> {
+                CallRegistry.get(call.argument<String>("callId") ?: "")
+                    ?.close(DisconnectCause.LOCAL)
+                result.success(true)
+            }
+            "setAudioRoute" -> {
+                val id = call.argument<String>("callId") ?: ""
+                val route = call.argument<Int>("route") ?: CallAudioState.ROUTE_EARPIECE
+                try {
+                    CallRegistry.get(id)?.setAudioRoute(route)
+                } catch (_: Exception) {}
+                result.success(true)
+            }
+            else -> result.notImplemented()
+        }
+    }
+
+    private fun telecomHandle(): PhoneAccountHandle =
+        PhoneAccountHandle(ComponentName(this, AlutaConnectionService::class.java), "aluta_voice")
+
+    private fun registerTelecom(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+        return try {
+            val tm = getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+            val account = PhoneAccount.builder(telecomHandle(), "Aluta")
+                .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED)
+                .build()
+            tm.registerPhoneAccount(account)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun reportIncoming(callId: String, name: String): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || callId.isEmpty()) return false
+        return try {
+            val tm = getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+            val app = Bundle().apply {
+                putString(AlutaConnectionService.EXTRA_CALL_ID, callId)
+                putString(AlutaConnectionService.EXTRA_CALLER_NAME, name)
+            }
+            val extras = Bundle().apply {
+                putBundle(TelecomManager.EXTRA_INCOMING_CALL_EXTRAS, app)
+            }
+            tm.addNewIncomingCall(telecomHandle(), extras)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun startOutgoing(callId: String, name: String): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || callId.isEmpty()) return false
+        return try {
+            val tm = getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+            val app = Bundle().apply {
+                putString(AlutaConnectionService.EXTRA_CALL_ID, callId)
+                putString(AlutaConnectionService.EXTRA_CALLER_NAME, name)
+            }
+            val extras = Bundle().apply {
+                putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, telecomHandle())
+                putBundle(TelecomManager.EXTRA_OUTGOING_CALL_EXTRAS, app)
+            }
+            val uri = Uri.fromParts(PhoneAccount.SCHEME_SIP, "aluta", null)
+            tm.placeCall(uri, extras)
+            true
+        } catch (e: SecurityException) {
+            false
+        } catch (e: Exception) {
+            false
+        }
     }
 
     // ── Internal audio capture ("identify song" → "from this phone") ─────────

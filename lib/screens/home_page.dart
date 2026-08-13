@@ -53,6 +53,7 @@ import '../state/call_state.dart' show callProvider, CallSnapshot;
 import 'call_screen.dart';
 import 'group_call_screen.dart';
 import 'stories/stories_tray.dart';
+import '../services/telecom_service.dart';
 import '../main.dart' show navigatorKey;
 import '../utils/time_utils.dart';
 // Prefixed: this file also imports package:provider, which exports colliding
@@ -823,6 +824,25 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // friend list + group rosters — proper identities on every entry path
     // (start/join/accept), on mobile, desktop and web.
     GroupCallService.instance.resolveIdentity = _identityForUser;
+
+    // Bridge calls to the system telecom stack so a car / Bluetooth device can
+    // answer & hang up (and route call audio over hands-free). Android-only and
+    // fully additive — a system answer/end just drives the existing engine.
+    TelecomService.instance.init();
+    TelecomService.instance.onAnswer = (id) {
+      if (id.startsWith('grp_')) {
+        GroupCallService.instance.accept();
+      } else {
+        CallService.instance.acceptCall();
+      }
+    };
+    TelecomService.instance.onDisconnect = (id) {
+      if (id.startsWith('grp_')) {
+        GroupCallService.instance.leave();
+      } else {
+        CallService.instance.hangUp();
+      }
+    };
 
     // Accept/Decline tapped on the ringing NOTIFICATION (app backgrounded but
     // still running): route it into the live call engine. This is what gives

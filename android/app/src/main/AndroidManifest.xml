@@ -57,6 +57,10 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Self-managed telecom: registers each Aluta call with the system so a
+         car head-unit / Bluetooth device can answer & end it and route call
+         audio over the hands-free profile (see AlutaConnectionService). -->
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
@@ -157,6 +161,18 @@
             android:name=".AudioCaptureService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
+
+        <!-- Self-managed telecom ConnectionService: the platform binds this to
+             create a system-visible connection per Aluta call, so a car /
+             Bluetooth device can answer & hang up and route the call audio. -->
+        <service
+            android:name=".AlutaConnectionService"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.telecom.ConnectionService" />
+            </intent-filter>
+        </service>
     </application>
 
     <queries>

@@ -7,6 +7,7 @@ import '../screens/api_service.dart';
 import '../state/group_call_state.dart';
 import '../state/playback_state.dart' show providerContainer;
 import 'notif_service.dart';
+import 'telecom_service.dart';
 
 /// One participant in a group call (a peer, or a known roster member).
 class GroupParticipant {
@@ -143,6 +144,9 @@ class GroupCallService {
   bool get isActive =>
       phase == GroupCallPhase.active || phase == GroupCallPhase.ringing;
 
+  // Stable id for mirroring this group call into the system telecom stack.
+  String get _telecomId => 'grp_${room ?? 0}';
+
   /// Poll every peer connection's inbound audio level and publish who's talking.
   void _startLevelMonitor() {
     _levelTimer?.cancel();
@@ -261,6 +265,8 @@ class GroupCallService {
     clearOngoing(room);
     _publish();
     onShowUI?.call();
+    TelecomService.instance.startOutgoing(_telecomId, title);
+    TelecomService.instance.setActive(_telecomId);
     await _ensureLocalStream();
     _startLevelMonitor();
     sendSignal?.call({'type': 'group_call_start', 'room': room});
@@ -290,6 +296,8 @@ class GroupCallService {
     clearOngoing(room);
     _publish();
     onShowUI?.call();
+    TelecomService.instance.startOutgoing(_telecomId, title);
+    TelecomService.instance.setActive(_telecomId);
     await _ensureLocalStream();
     _startLevelMonitor();
     sendSignal?.call({'type': 'group_call_join', 'room': room});
@@ -312,6 +320,7 @@ class GroupCallService {
     phase = GroupCallPhase.ringing;
     _publish();
     onShowUI?.call();
+    TelecomService.instance.reportIncoming(_telecomId, title);
     _ringTimeout = Timer(const Duration(seconds: 45), () {
       if (phase == GroupCallPhase.ringing) leave();
     });
@@ -327,6 +336,7 @@ class GroupCallService {
     connectedAt = DateTime.now();
     clearOngoing(room!);
     _publish();
+    TelecomService.instance.setActive(_telecomId);
     await _ensureLocalStream();
     _startLevelMonitor();
     sendSignal?.call({'type': 'group_call_join', 'room': room});
@@ -349,6 +359,7 @@ class GroupCallService {
     // Post the group's call-log entry (starter only) while room + connectedAt
     // are still valid.
     _logGroupCallIfStarter();
+    TelecomService.instance.endCall(_telecomId);
     _ringTimeout?.cancel();
     cancelCallNotification();
     await _teardown();

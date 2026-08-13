@@ -373,7 +373,24 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     );
   }
 
+  /// Legible foreground "ink" for a stored background ("hex1,hex2" or "#hex"):
+  /// near-black on light backgrounds (warm white / cream), white on dark ones.
+  Color _inkFor(String? bg) {
+    final cs = <Color>[];
+    if (bg != null) {
+      for (final part in bg.split(',')) {
+        final c = _parseHex(part.trim());
+        if (c != null) cs.add(c);
+      }
+    }
+    if (cs.isEmpty) return Colors.white;
+    final l = cs.map((c) => c.computeLuminance()).reduce((a, b) => a + b) /
+        cs.length;
+    return l > 0.55 ? const Color(0xFF15171C) : Colors.white;
+  }
+
   Widget _textContent(StoryItem item) {
+    final ink = _inkFor(item.background);
     return Container(
       decoration: _bgDecoration(
           item.background, const [Color(0xFF5B2C83), Color(0xFF1D1040)]),
@@ -382,8 +399,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       child: Text(
         item.caption ?? '',
         textAlign: TextAlign.center,
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          color: ink,
           fontSize: 26,
           fontWeight: FontWeight.w600,
           height: 1.3,
@@ -395,6 +412,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   Widget _musicContent(StoryItem item) {
     final art = item.musicArtUrl;
     final hasArt = art != null && art.startsWith('http');
+    final ink = _inkFor(item.background);
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -415,10 +433,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                     : Container(
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(20),
-                          color: Colors.white.withValues(alpha: 0.12),
+                          color: ink.withValues(alpha: 0.12),
                         ),
-                        child: const Icon(Icons.music_note_rounded,
-                            color: Colors.white, size: 72),
+                        child: Icon(Icons.music_note_rounded,
+                            color: ink, size: 72),
                       ),
               ),
               const SizedBox(height: 22),
@@ -429,8 +447,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      color: Colors.white,
+                  style: TextStyle(
+                      color: ink,
                       fontSize: 20,
                       fontWeight: FontWeight.bold),
                 ),
@@ -440,7 +458,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                 Text(
                   item.musicArtist!,
                   style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.8), fontSize: 15),
+                      color: ink.withValues(alpha: 0.8), fontSize: 15),
                 ),
               ],
               const SizedBox(height: 10),
@@ -448,11 +466,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.graphic_eq_rounded,
-                      color: Colors.white.withValues(alpha: 0.7), size: 18),
+                      color: ink.withValues(alpha: 0.7), size: 18),
                   const SizedBox(width: 6),
                   Text('Now playing',
                       style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.7),
+                          color: ink.withValues(alpha: 0.7),
                           fontSize: 12)),
                 ],
               ),

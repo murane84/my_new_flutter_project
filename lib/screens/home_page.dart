@@ -3583,9 +3583,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
                     Icon(Icons.music_note_rounded,
                         color: scheme.primary, size: 20),
                     const SizedBox(width: 6),
-                    const Text('Now Playing',
+                    // Theme-aware so the title stays legible in dark mode (an
+                    // uncoloured Text here fell back to black → invisible on the
+                    // dark panel surface).
+                    Text('Now Playing',
                         style: TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 16)),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                            color: scheme.onSurface)),
                     const Spacer(),
                     // Live badge in the sheet header too, for context.
                     if (ref.read(liveSessionProvider).active) _liveChip(context),

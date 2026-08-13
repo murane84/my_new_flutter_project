@@ -810,6 +810,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Group (mesh) calling rides the same socket.
     GroupCallService.instance.sendSignal = (msg) => _notifyWs?.sendEvent(msg);
     GroupCallService.instance.onShowUI = _openGroupCallScreen;
+    // The mesh's "smaller id offers" rule needs our OWN id on every entry
+    // path. startGroupCall()/joinRoom() set it, but accept() (answering an
+    // incoming ring) does not — so on a fresh launch the acceptor's myId was
+    // null, _maybeOffer() bailed out, and any peer with a higher id sat
+    // waiting for an offer that never came → no audio. Set it here once the
+    // user is known; _reset() deliberately preserves it across calls.
+    GroupCallService.instance.myId = id;
 
     // Accept/Decline tapped on the ringing NOTIFICATION (app backgrounded but
     // still running): route it into the live call engine. This is what gives

@@ -120,6 +120,17 @@ def create_story(
     # Housekeeping: clear out anyone's expired stories on this write.
     purge_expired_stories(db)
 
+    # "Now playing" is a LIVE state, not a feed: a user only ever has one active
+    # music story. Posting a new one supersedes the previous, so a friend never
+    # appears to be "playing" two songs at once. (photo/video/text still append,
+    # each living its own 24h.) StoryView rows cascade-delete with the old story.
+    if kind == "music":
+        db.query(Story).filter(
+            Story.author_id == current_user.id,
+            Story.kind == "music",
+        ).delete(synchronize_session=False)
+        db.flush()
+
     now = _now()
     story = Story(
         id=uuid.uuid4().hex,

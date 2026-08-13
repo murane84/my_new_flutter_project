@@ -58,6 +58,7 @@ Future<void> handleFcmData(Map<String, dynamic> data) async {
       final senderId = (data['sender_id'] ?? '').toString();
       final convId = (data['conversation_id'] ?? '').toString();
       final groupTitle = (data['group_title'] ?? '').toString();
+      final messageId = (data['message_id'] ?? '').toString();
       final isGroup = convId.isNotEmpty;
       // For a group message show the group name as the title and "Sender: text"
       // as the body; a tap opens the GROUP thread (via conversation_id) instead
@@ -71,6 +72,7 @@ Future<void> handleFcmData(Map<String, dynamic> data) async {
         senderName: sender,
         conversationId: convId.isEmpty ? null : convId,
         groupTitle: groupTitle.isEmpty ? null : groupTitle,
+        messageId: messageId.isEmpty ? null : messageId,
       );
     }
   } catch (_) {/* best-effort */}

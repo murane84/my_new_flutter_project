@@ -129,6 +129,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // same seen-state. Refreshed on init, after posting/viewing, and on the
   // 'story_posted' WebSocket nudge.
   List<StoryGroup> _storyGroups = [];
+  // When a chat is opened from a message notification, the id of the message to
+  // scroll to + highlight once the thread loads (null for normal opens). Passed
+  // to ChatPage; cleared to null on every ordinary open so it fires once.
+  String? _pendingJumpMessageId;
   List<Map<String, dynamic>> _filteredGroups = [];
   final TextEditingController _searchCtrl = TextEditingController();
   bool _isLoadingFriends = false;
@@ -877,6 +881,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// minimal record from the payload — ChatPage fetches the rest by id.
   void _handleMessageTap(Map<String, dynamic> payload) {
     if (!mounted) return;
+    // The exact message that was notified — the thread scrolls to + highlights
+    // it once open (completes the deep-link, not just landing in the thread).
+    final jumpMsg = (payload['message_id'] ?? '').toString();
+    final jump = jumpMsg.isEmpty ? null : jumpMsg;
     // Group message → land directly in the group thread (mirrors the DM path).
     final convId =
         int.tryParse((payload['conversation_id'] ?? '').toString());
@@ -895,7 +903,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         };
         _fetchGroups();
       }
-      openGroupInPanel(group);
+      openGroupInPanel(group, jumpToMessageId: jump);
       return;
     }
     final fid = int.tryParse((payload['friend_id'] ?? '').toString());
@@ -910,7 +918,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         'username': (payload['sender_name'] ?? 'Friend').toString(),
       };
     }
-    openChat(friend);
+    openChat(friend, jumpToMessageId: jump);
   }
 
   Future<void> _consumeMessageLaunch() async {
@@ -1185,6 +1193,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       if (!_appForeground) {
         final convId = (data['conversation_id'] ?? '').toString();
         final gTitle = (data['group_title'] ?? '').toString();
+        final msgId = (data['id'] ?? data['message_id'] ?? '').toString();
         final isGroup = convId.isNotEmpty;
         showMessageNotification(
           title: isGroup && gTitle.isNotEmpty ? gTitle : sender,
@@ -1195,6 +1204,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           senderName: sender,
           conversationId: convId.isEmpty ? null : convId,
           groupTitle: gTitle.isEmpty ? null : gTitle,
+          messageId: msgId.isEmpty ? null : msgId,
         );
       }
       if (senderId != null && senderId.toString() != _activeFriendId) {
@@ -1677,6 +1687,35 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// A friend-list avatar, wrapped in a story ring when they have an active
   /// status: a colourful gradient while unseen, a neutral grey once viewed.
   /// Tapping the ring opens their story (the rest of the tile opens the chat).
+  /// Wrap [avatar] in a status ring for [story] — a colourful gradient while
+  /// unseen, a neutral grey once viewed — or return it unchanged when there's
+  /// no active story. Shared by the friend-list tiles and the DM chat header.
+  Widget _statusRing(Widget avatar, StoryGroup? story) {
+    if (story == null) return avatar;
+    final scheme = Theme.of(context).colorScheme;
+    final gradient = story.hasUnseen
+        ? const LinearGradient(
+            colors: [Color(0xFFF9A825), Color(0xFFE91E63), Color(0xFF7B1FA2)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          )
+        : null;
+    return Container(
+      padding: const EdgeInsets.all(2.5),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: gradient,
+        color: gradient == null ? Colors.grey.shade400 : null,
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(2),
+        decoration:
+            BoxDecoration(shape: BoxShape.circle, color: scheme.surface),
+        child: avatar,
+      ),
+    );
+  }
+
   Widget _storyRingAvatar(
       Map<String, dynamic> f, String name, bool isOnline) {
     final avatar = InitialsAvatar(
@@ -1687,37 +1726,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
     );
     final story = _friendStory(f['id']);
     if (story == null) return avatar;
-    final scheme = Theme.of(context).colorScheme;
-    final gradient = story.hasUnseen
-        ? const LinearGradient(
-            colors: [Color(0xFFF9A825), Color(0xFFE91E63), Color(0xFF7B1FA2)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          )
-        : null;
     return GestureDetector(
       onTap: () => _openFriendStory(story),
-      child: Container(
-        padding: const EdgeInsets.all(2.5),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: gradient,
-          color: gradient == null ? Colors.grey.shade400 : null,
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(2),
-          decoration:
-              BoxDecoration(shape: BoxShape.circle, color: scheme.surface),
-          child: avatar,
-        ),
-      ),
+      child: _statusRing(avatar, story),
     );
   }
 
   // ── Chat open/close ───────────────────────────────────────────────────────
 
-  void openChat(Map<String, dynamic> friend) {
+  void openChat(Map<String, dynamic> friend, {String? jumpToMessageId}) {
     setState(() {
+      _pendingJumpMessageId = jumpToMessageId;
       _clearSearchState();
       _activeFriendId = friend['id'].toString();
       _activeFriendName = friend['username'] ?? 'Friend';
@@ -1734,8 +1753,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   /// Open a GROUP conversation inside the chat panel (leaving the music panel
   /// visible on desktop). Called from the Groups popup / after creating a group.
-  void openGroupInPanel(Map<String, dynamic> conv) {
+  void openGroupInPanel(Map<String, dynamic> conv, {String? jumpToMessageId}) {
     setState(() {
+      _pendingJumpMessageId = jumpToMessageId;
       _clearSearchState();
       _activeGroup = conv;
       // Groups and DMs are mutually exclusive in the panel.
@@ -2408,17 +2428,25 @@ class HomePageState extends rp.ConsumerState<HomePage>
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () {
-              // Only expand when there's an actual photo to show.
-              if (_avatarFull(_activeFriendAvatar) != null) {
+              // If this friend has an active status, tap opens it; otherwise
+              // tap expands the profile photo (when there's one to show).
+              final story = _friendStory(_activeFriendId);
+              if (story != null) {
+                _openFriendStory(story);
+              } else if (_avatarFull(_activeFriendAvatar) != null) {
                 setState(() => _avatarExpanded = !_avatarExpanded);
               }
             },
-            child: InitialsAvatar(
-              name: _contactDisplayName(
-                  _activeFriendPhone, _activeFriendName ?? ''),
-              radius: 17,
-              isOnline: _activeFriendOnline == true,
-              imageUrl: _avatarFull(_activeFriendAvatar),
+            // Same status ring as the friend list (colourful=unseen, grey=seen).
+            child: _statusRing(
+              InitialsAvatar(
+                name: _contactDisplayName(
+                    _activeFriendPhone, _activeFriendName ?? ''),
+                radius: 17,
+                isOnline: _activeFriendOnline == true,
+                imageUrl: _avatarFull(_activeFriendAvatar),
+              ),
+              _friendStory(_activeFriendId),
             ),
           ),
           const SizedBox(width: 10),
@@ -2713,6 +2741,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                               .length,
                       initialSharePaths: _shareToSend,
                       onShareConsumed: () => _shareToSend = null,
+                      initialJumpMessageId: _pendingJumpMessageId,
                     )
                   : _activeFriendId != null
                   ? ChatPage(
@@ -2740,6 +2769,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       },
                       initialSharePaths: _shareToSend,
                       onShareConsumed: () => _shareToSend = null,
+                      initialJumpMessageId: _pendingJumpMessageId,
                     )
                   : _buildFriendList(context),
                 ),

@@ -142,6 +142,9 @@ class ChatPage extends StatefulWidget {
   // them and never re-send on a later rebuild.
   final List<String>? initialSharePaths;
   final VoidCallback? onShareConsumed;
+  // When set (opened from a message notification), scroll to + highlight this
+  // message once the thread has loaded.
+  final String? initialJumpMessageId;
 
   const ChatPage({
     super.key,
@@ -158,6 +161,7 @@ class ChatPage extends StatefulWidget {
     this.memberCount = 0,
     this.initialSharePaths,
     this.onShareConsumed,
+    this.initialJumpMessageId,
   });
 
   @override
@@ -349,7 +353,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         _messages.clear();
         _replyTo = null;
       });
-      _initChat();
+      _initChat(); // _initChat runs _maybeInitialJump after the load
+    } else if (widget.initialJumpMessageId != null &&
+        widget.initialJumpMessageId != old.initialJumpMessageId) {
+      // Same thread already open + a notification for a NEW message tapped →
+      // jump to it (no reload needed).
+      _maybeInitialJump(widget.initialJumpMessageId);
     }
   }
 
@@ -365,6 +374,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
     await _loadCachedMessages(); // show cached messages instantly
     await _loadMessages();        // then fetch fresh from network
+    _maybeInitialJump();          // opened from a notification → jump to it
     _checkOnlineStatus();
     _startPolling();
     _startKeepAlive();
@@ -3240,6 +3250,28 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           type: ok ? ToastType.info : ToastType.error);
     }
     _saveMessagesCache();
+  }
+
+  /// Opened from a message notification: scroll to + highlight that message
+  /// once it's rendered. The target is usually the newest message (bottom), so
+  /// after the initial load + auto-scroll its key is built; retry a few times
+  /// in case the list is still settling.
+  void _maybeInitialJump([String? id]) {
+    final target = id ?? widget.initialJumpMessageId;
+    if (target == null || target.isEmpty) return;
+    var tries = 0;
+    void attempt() {
+      if (!mounted) return;
+      if (_msgKeys[target]?.currentContext != null) {
+        _jumpToMessage(target);
+        return;
+      }
+      if (tries++ < 8) {
+        Future.delayed(const Duration(milliseconds: 250), attempt);
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => attempt());
   }
 
   /// Scroll to a message by id and briefly highlight it.

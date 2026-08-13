@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
@@ -93,10 +94,27 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
     if (item.isVideo && item.mediaUrl != null) {
       final url = _absUrl(item.mediaUrl!);
-      final ctrl = VideoPlayerController.networkUrl(
-        Uri.parse(url),
-        httpHeaders: mediaAuthHeaders(url),
-      );
+      final headers = mediaAuthHeaders(url);
+      // On WEB the browser <video> can't send an Authorization header, so move
+      // the bearer token into a ?token= query param (the backend accepts it via
+      // get_current_user_flexible). Native keeps sending the header.
+      final Uri uri;
+      final Map<String, String> hdrs;
+      if (kIsWeb) {
+        final auth = headers['Authorization'] ?? '';
+        final tok = auth.startsWith('Bearer ') ? auth.substring(7).trim() : '';
+        if (tok.isEmpty) {
+          uri = Uri.parse(url);
+        } else {
+          final sep = url.contains('?') ? '&' : '?';
+          uri = Uri.parse('$url${sep}token=${Uri.encodeQueryComponent(tok)}');
+        }
+        hdrs = const {};
+      } else {
+        uri = Uri.parse(url);
+        hdrs = headers;
+      }
+      final ctrl = VideoPlayerController.networkUrl(uri, httpHeaders: hdrs);
       _video = ctrl;
       try {
         await ctrl.initialize();

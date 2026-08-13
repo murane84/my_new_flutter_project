@@ -430,15 +430,33 @@ class _MusicStoryPage extends StatefulWidget {
 }
 
 class _MusicStoryPageState extends State<_MusicStoryPage> {
-  // Tap-to-cycle background gradients (stored as "hex1,hex2").
+  // Tap-to-cycle background gradients (stored as "hex1,hex2"). A wide vibe
+  // range — deep/vivid, neon, romantic, warm-white and black — so the text ink
+  // adapts to each (see _ink) and stays readable on light backgrounds too.
   static const List<List<Color>> _palettes = [
-    [Color(0xFF5B2C83), Color(0xFF1D1040)],
-    [Color(0xFF11998E), Color(0xFF38EF7D)],
-    [Color(0xFFEE0979), Color(0xFFFF6A00)],
-    [Color(0xFF2193B0), Color(0xFF6DD5ED)],
-    [Color(0xFF373B44), Color(0xFF4286F4)],
-    [Color(0xFFCB356B), Color(0xFFBD3F32)],
-    [Color(0xFF0F2027), Color(0xFF2C5364)],
+    // Deep & vivid
+    [Color(0xFF5B2C83), Color(0xFF1D1040)], // purple night
+    [Color(0xFF11998E), Color(0xFF38EF7D)], // emerald
+    [Color(0xFFEE0979), Color(0xFFFF6A00)], // sunset
+    [Color(0xFF2193B0), Color(0xFF6DD5ED)], // sky
+    [Color(0xFF373B44), Color(0xFF4286F4)], // steel blue
+    [Color(0xFF0F2027), Color(0xFF2C5364)], // deep sea
+    // Neon
+    [Color(0xFFFF2FB9), Color(0xFF00E5FF)], // neon pink → cyan
+    [Color(0xFF39FF14), Color(0xFF00E5A0)], // neon green
+    [Color(0xFF7F00FF), Color(0xFFE100FF)], // electric violet
+    // Romantic
+    [Color(0xFFB24592), Color(0xFFF15F79)], // rose wine
+    [Color(0xFF870000), Color(0xFF190A05)], // deep love
+    [Color(0xFFDA4453), Color(0xFF89216B)], // blush
+    // Sun & gold
+    [Color(0xFFFFB75E), Color(0xFFED8F03)], // gold sunrise
+    // Warm white / cream (light — ink flips dark)
+    [Color(0xFFFFF6EC), Color(0xFFFCE9D6)], // warm white
+    [Color(0xFFF7F3E9), Color(0xFFF5D9A8)], // gold cream
+    // Black & charcoal
+    [Color(0xFF000000), Color(0xFF1A1A1A)], // black
+    [Color(0xFF232526), Color(0xFF414345)], // charcoal
   ];
 
   final TextEditingController _title = TextEditingController();
@@ -472,6 +490,14 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
 
   String _hex(Color c) => '#${c.toARGB32().toRadixString(16).padLeft(8, '0')}';
   String _bgValue() => '${_hex(_palettes[_bg][0])},${_hex(_palettes[_bg][1])}';
+
+  /// Foreground "ink" for a gradient: near-black on light backgrounds (warm
+  /// white / cream), white on dark ones — so overlaid text is always legible.
+  static Color _ink(List<Color> pair) {
+    final l =
+        (pair[0].computeLuminance() + pair[1].computeLuminance()) / 2;
+    return l > 0.55 ? const Color(0xFF15171C) : Colors.white;
+  }
 
   Future<void> _pickSticker() async {
     final url = await showModalBottomSheet<String>(
@@ -526,11 +552,12 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final ink = _ink(_palettes[_bg]);
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        foregroundColor: Colors.white,
+        foregroundColor: ink,
         title: const Text('Now playing'),
         actions: [
           IconButton(
@@ -602,19 +629,19 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                                 : Container(
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(18),
-                                      color:
-                                          Colors.white.withValues(alpha: 0.12),
+                                      color: ink.withValues(alpha: 0.12),
                                     ),
-                                    child: const Column(
+                                    child: Column(
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
                                       children: [
                                         Icon(Icons.gif_box_outlined,
-                                            color: Colors.white, size: 46),
-                                        SizedBox(height: 6),
+                                            color: ink, size: 46),
+                                        const SizedBox(height: 6),
                                         Text('Add a sticker',
                                             style: TextStyle(
-                                                color: Colors.white70,
+                                                color: ink
+                                                    .withValues(alpha: 0.7),
                                                 fontSize: 12)),
                                       ],
                                     ),
@@ -622,11 +649,11 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                           ),
                         ),
                         const SizedBox(height: 22),
-                        _field(_title, 'Song title'),
+                        _field(_title, 'Song title', ink),
                         const SizedBox(height: 12),
-                        _field(_artist, 'Artist (optional)'),
+                        _field(_artist, 'Artist (optional)', ink),
                         const SizedBox(height: 12),
-                        _field(_caption, 'Say something (optional)',
+                        _field(_caption, 'Say something (optional)', ink,
                             onEmoji: _toggleEmoji),
                         const SizedBox(height: 24),
                         SizedBox(
@@ -662,18 +689,19 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
     );
   }
 
-  Widget _field(TextEditingController c, String hint, {VoidCallback? onEmoji}) {
+  Widget _field(TextEditingController c, String hint, Color ink,
+      {VoidCallback? onEmoji}) {
     return TextField(
       controller: c,
-      style: const TextStyle(color: Colors.white),
+      style: TextStyle(color: ink),
       onTap: () {
         if (_showEmoji) setState(() => _showEmoji = false);
       },
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+        hintStyle: TextStyle(color: ink.withValues(alpha: 0.6)),
         filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.12),
+        fillColor: ink.withValues(alpha: 0.12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
@@ -685,7 +713,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                     _showEmoji
                         ? Icons.keyboard_rounded
                         : Icons.emoji_emotions_outlined,
-                    color: Colors.white.withValues(alpha: 0.75)),
+                    color: ink.withValues(alpha: 0.75)),
                 tooltip: _showEmoji ? 'Keyboard' : 'Add emoji',
                 onPressed: onEmoji,
               ),

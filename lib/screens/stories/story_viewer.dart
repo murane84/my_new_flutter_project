@@ -398,7 +398,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                 width: 180,
                 height: 180,
                 child: hasArt
-                    ? Image.network(art!, fit: BoxFit.contain)
+                    ? Image.network(art, fit: BoxFit.contain)
                     : Container(
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(20),

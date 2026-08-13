@@ -153,6 +153,7 @@ class _CallReliabilityScreenState extends State<CallReliabilityScreen>
                           'Allow Aluta to show call and message notifications.',
                       ok: _notifs,
                       onFix: _fixNotifications,
+                      onManage: () => openAppSettings(),
                     ),
                     _tile(
                       scheme,
@@ -163,6 +164,7 @@ class _CallReliabilityScreenState extends State<CallReliabilityScreen>
                           'the phone is locked (Android 14+).',
                       ok: _fullScreen,
                       onFix: _fixFullScreen,
+                      onManage: () => openAppSettings(),
                     ),
                     _tile(
                       scheme,
@@ -173,6 +175,7 @@ class _CallReliabilityScreenState extends State<CallReliabilityScreen>
                           'call alerts to save power.',
                       ok: _battery,
                       onFix: _fixBattery,
+                      onManage: () => openAppSettings(),
                     ),
                     // OEM-specific steps (Xiaomi/Oppo/Vivo/Tecno…). These can't
                     // be checked or toggled by the app — only deep-linked — so
@@ -229,6 +232,7 @@ class _CallReliabilityScreenState extends State<CallReliabilityScreen>
     required String subtitle,
     required bool? ok,
     required VoidCallback onFix,
+    required VoidCallback onManage,
   }) {
     // ok == null → unknown status (show a neutral "Enable" action).
     final isOk = ok == true;
@@ -272,14 +276,22 @@ class _CallReliabilityScreenState extends State<CallReliabilityScreen>
                     style: TextStyle(
                         color: scheme.onSurfaceVariant, fontSize: 13),
                   ),
-                  if (!isOk)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: onFix,
-                        child: Text(ok == null ? 'Enable' : 'Fix'),
-                      ),
-                    ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    // Granted → a "Manage in Settings" deep-link (the app can't
+                    // revoke its own permissions, so turning one OFF happens in
+                    // Android's own screen). Missing → the grant action.
+                    child: isOk
+                        ? TextButton.icon(
+                            onPressed: onManage,
+                            icon: const Icon(Icons.settings_rounded, size: 16),
+                            label: const Text('Manage in Settings'),
+                          )
+                        : TextButton(
+                            onPressed: onFix,
+                            child: Text(ok == null ? 'Enable' : 'Fix'),
+                          ),
+                  ),
                 ],
               ),
             ),

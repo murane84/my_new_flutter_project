@@ -400,3 +400,69 @@ class DeviceSession(Base):
 
     def __repr__(self):
         return f"<DeviceSession(user_id={self.user_id}, label='{self.label}', revoked={self.revoked})>"
+
+
+class Story(Base):
+    """An ephemeral 24-hour "Story": a photo, a short video clip, or a
+    "now playing" music moment posted by a user and shown to their friends.
+
+    Media (photo/video) bytes live in a MediaAsset (uploaded via /upload/media
+    with ephemeral=true); `media_asset_id` references it and the stories router
+    serves those bytes friend-scoped at /stories/media/<asset_id>. A "music"
+    story carries no uploaded media — just the track fields below.
+
+    There is no scheduler: a story is "active" while `expires_at > now`, and
+    expired rows are swept opportunistically on write (see routers/stories.py),
+    mirroring the ephemeral-media purge pattern.
+    """
+    __tablename__ = "stories"
+
+    id = Column(String, primary_key=True, index=True)   # uuid hex
+    author_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        index=True, nullable=False,
+    )
+    # "photo" | "video" | "music"
+    kind = Column(String, nullable=False, default="photo")
+    # For photo/video: the MediaAsset holding the bytes. Null for music stories.
+    media_asset_id = Column(String, nullable=True)
+    media_mime = Column(String, nullable=True)
+    # Optional caption overlaid on the story.
+    caption = Column(Text, nullable=True)
+    # "Now playing" fields (music stories, or a caption's track badge).
+    music_title = Column(String, nullable=True)
+    music_artist = Column(String, nullable=True)
+    music_art_url = Column(String, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), index=True, nullable=False)
+
+    author = relationship("User", foreign_keys=[author_id], passive_deletes=True)
+
+    def __repr__(self):
+        return f"<Story(id={self.id}, author_id={self.author_id}, kind='{self.kind}')>"
+
+
+class StoryView(Base):
+    """One "seen" record: `viewer_id` watched `story_id`. Unique per pair so a
+    repeat view is idempotent; drives the author's "who viewed" list and the
+    unseen-ring state on each viewer's tray."""
+    __tablename__ = "story_views"
+
+    id = Column(Integer, primary_key=True, index=True)
+    story_id = Column(
+        String, ForeignKey("stories.id", ondelete="CASCADE"),
+        index=True, nullable=False,
+    )
+    viewer_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        index=True, nullable=False,
+    )
+    viewed_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('story_id', 'viewer_id', name='_story_viewer_uc'),
+    )
+
+    def __repr__(self):
+        return f"<StoryView(story_id={self.story_id}, viewer_id={self.viewer_id})>"

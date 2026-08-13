@@ -46,6 +46,7 @@ import '../utils/loose_url_linkifier.dart';
 import '../services/app_busy.dart';
 import 'chat/attach_sheet.dart';
 import 'chat/contact_picker_sheet.dart';
+import 'stories/camera_capture.dart';
 
 // Split out for maintainability (Dart parts — same library, shared
 // imports & privacy, zero behaviour change):
@@ -1700,8 +1701,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     try {
       // Pick at high quality; the compress-on-upload step (or the HD toggle in
       // the preview) decides final size, so HD can send near-original quality.
-      final x = await ImagePicker()
-          .pickImage(source: source, imageQuality: 92, maxWidth: 2560);
+      // Camera goes through the shared capturePhoto helper so web/desktop get a
+      // real camera (not a file picker) and accurate, cause-specific messages
+      // (https-needed, allow-permission, in-use, or truly no camera).
+      final x = source == ImageSource.camera
+          ? await capturePhoto(context, imageQuality: 92, maxWidth: 2560)
+          : await ImagePicker()
+              .pickImage(source: source, imageQuality: 92, maxWidth: 2560);
       if (x == null) return;
       final bytes = await x.readAsBytes();
       await _previewAndSendImage(bytes, x.name, 'image/jpeg');

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ties the Aluta account type to the Contacts provider so its raw contacts
+     are a valid, syncable source. Referenced by AlutaContactsSyncService via
+     the android.content.SyncAdapter meta-data. -->
+<sync-adapter xmlns:android="http://schemas.android.com/apk/res/android"
+    android:contentAuthority="com.android.contacts"
+    android:accountType="com.ozilane.aluta"
+    android:supportsUploading="false"
+    android:userVisible="false"
+    android:allowParallelSyncs="false"
+    android:isAlwaysSyncable="true" />

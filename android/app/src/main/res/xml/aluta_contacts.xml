@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Declares Aluta's custom contact data rows so the system Contacts app renders
+     them under a matched contact (the "Connected apps" section), like WhatsApp /
+     Telegram. Attached to AlutaContactsSyncService via the
+     android.provider.CONTACTS_STRUCTURE meta-data.
+
+     summaryColumn (data2) = the app name shown; detailColumn (data3) = the action
+     label. Tapping a row fires ACTION_VIEW with the row's mimeType, handled by
+     MainActivity. -->
+<ContactsAccountType xmlns:android="http://schemas.android.com/apk/res/android">
+    <ContactsDataKind
+        android:mimeType="vnd.android.cursor.item/vnd.com.ozilane.aluta.call"
+        android:icon="@mipmap/launcher_icon"
+        android:summaryColumn="data2"
+        android:detailColumn="data3" />
+    <ContactsDataKind
+        android:mimeType="vnd.android.cursor.item/vnd.com.ozilane.aluta.message"
+        android:icon="@mipmap/launcher_icon"
+        android:summaryColumn="data2"
+        android:detailColumn="data3" />
+</ContactsAccountType>

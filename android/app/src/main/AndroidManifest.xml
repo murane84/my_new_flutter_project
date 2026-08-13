@@ -44,6 +44,11 @@
     <!-- Find-friends: read the address book to match contacts against
          registered Aluta users (auto-add matches as friends). -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- "Connected apps": write Aluta's call/message rows onto matched contacts
+         (like WhatsApp/Telegram) via a stub sync account. -->
+    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
+    <uses-permission android:name="android.permission.READ_SYNC_SETTINGS" />
+    <uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS" />
 
     <!-- Attach sheet "Location": share the user's current location in chat.
          Requested at share time; coarse is enough for a shareable pin. -->
@@ -112,6 +117,20 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
             </intent-filter>
+
+            <!-- "Connected apps": tapping the Aluta "Voice call" / "Message" row
+                 under a contact opens Aluta via ACTION_VIEW on these custom
+                 mimetypes; MainActivity reads the row and routes the call/chat. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="vnd.android.cursor.item/vnd.com.ozilane.aluta.call" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="vnd.android.cursor.item/vnd.com.ozilane.aluta.message" />
+            </intent-filter>
         </activity>
 
         <meta-data
@@ -172,6 +191,34 @@
             <intent-filter>
                 <action android:name="android.telecom.ConnectionService" />
             </intent-filter>
+        </service>
+
+        <!-- "Connected apps" account + sync source. The authenticator owns the
+             stub "Aluta" account; the sync service attaches the custom contact
+             rows (aluta_contacts.xml) so they render under matched contacts. -->
+        <service
+            android:name=".AuthenticatorService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.accounts.AccountAuthenticator" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accounts.AccountAuthenticator"
+                android:resource="@xml/aluta_authenticator" />
+        </service>
+
+        <service
+            android:name=".AlutaContactsSyncService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.content.SyncAdapter" />
+            </intent-filter>
+            <meta-data
+                android:name="android.content.SyncAdapter"
+                android:resource="@xml/aluta_syncadapter" />
+            <meta-data
+                android:name="android.provider.CONTACTS_STRUCTURE"
+                android:resource="@xml/aluta_contacts" />
         </service>
     </application>
 

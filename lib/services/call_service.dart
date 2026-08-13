@@ -7,6 +7,7 @@ import '../screens/api_service.dart';
 import '../state/call_state.dart';
 import '../state/playback_state.dart' show providerContainer;
 import 'notif_service.dart';
+import 'telecom_service.dart';
 
 /// High-level state of the single active Aluta voice call.
 enum CallState {
@@ -98,6 +99,10 @@ class CallService {
 
   bool get isActive => state != CallState.idle && state != CallState.ended;
 
+  // Stable id for mirroring this call into the system telecom stack (car / BT
+  // answer-hangup). Only one 1:1 call is ever active.
+  String get _telecomId => 'dm_${peerId ?? 0}';
+
   // ── Internals ─────────────────────────────────────────────────────────────
   RTCPeerConnection? _pc;
   MediaStream? _localStream;
@@ -175,6 +180,8 @@ class CallService {
     outgoing = CallOutgoing.dialing;
     _publish();
     onShowCallUI?.call();
+    // Mirror to the system so a car / BT device sees the outgoing call.
+    TelecomService.instance.startOutgoing(_telecomId, peerName);
 
     try {
       await _createPeer();
@@ -241,6 +248,8 @@ class CallService {
     endReason = CallEndReason.none;
     _publish();
     onShowCallUI?.call();
+    // Mirror as a system incoming call so a car / BT device can ring + answer it.
+    TelecomService.instance.reportIncoming(_telecomId, peerName);
     // Tell the caller our device actually received the call and is ringing NOW,
     // so their screen can show a confirmed "Ringing…" instead of a blind
     // "Calling…". (The caller flips to CallOutgoing.ringing on this.)
@@ -549,6 +558,7 @@ class CallService {
           state = CallState.connected;
           connectedAt = DateTime.now();
           _publish();
+          TelecomService.instance.setActive(_telecomId);
         }
       } else if (s == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
         _finish(CallEndReason.failed);
@@ -601,6 +611,7 @@ class CallService {
     endReason = reason;
     state = CallState.ended;
     _publish();
+    TelecomService.instance.endCall(_telecomId);
     _teardownMedia();
     _maybeLogCall();
     // NOTE: we stay in `ended` (not `idle`) so the call screen can show the

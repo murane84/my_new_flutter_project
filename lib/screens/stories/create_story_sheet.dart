@@ -1,6 +1,7 @@
-import 'dart:io' show File;
+import 'dart:io' show File, Platform;
 import 'dart:typed_data';
 
+import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,6 +11,7 @@ import '../../services/audio_handler.dart';
 import '../../utils/emoji_field.dart';
 import '../api_service.dart';
 import '../gif_picker.dart';
+import 'camera_capture.dart';
 
 /// Entry point: a bottom sheet offering the four ways to post a story
 /// (photo from gallery, camera photo, a short video clip, or a "now playing"
@@ -23,44 +25,57 @@ Future<void> showCreateStorySheet(
   final choice = await showModalBottomSheet<String>(
     context: context,
     showDragHandle: true,
+    // Scroll-controlled so the sheet sizes to its content and never clips the
+    // last option (the old fixed height cut off "Now playing").
+    isScrollControlled: true,
     builder: (ctx) {
-      Widget tile(IconData icon, String label, String value, String sub) =>
+      final scheme = Theme.of(ctx).colorScheme;
+      Widget tile(IconData icon, String label, String value, String sub,
+              {bool highlight = false}) =>
           ListTile(
             leading: CircleAvatar(
               backgroundColor:
-                  Theme.of(ctx).colorScheme.primaryContainer,
+                  highlight ? scheme.primary : scheme.primaryContainer,
               child: Icon(icon,
-                  color: Theme.of(ctx).colorScheme.onPrimaryContainer),
+                  color: highlight
+                      ? scheme.onPrimary
+                      : scheme.onPrimaryContainer),
             ),
-            title: Text(label),
+            title: Text(label,
+                style: TextStyle(
+                    fontWeight:
+                        highlight ? FontWeight.bold : FontWeight.w500)),
             subtitle: Text(sub),
             onTap: () => Navigator.pop(ctx, value),
           );
       return SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Add to your story',
-                    style: TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold)),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Add to your story',
+                      style: TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
               ),
-            ),
-            tile(Icons.text_fields_rounded, 'Text', 'text',
-                'A colourful text status'),
-            tile(Icons.photo_library_rounded, 'Photo', 'gallery',
-                'Pick a picture from your gallery'),
-            tile(Icons.photo_camera_rounded, 'Camera', 'camera',
-                'Take a photo now'),
-            tile(Icons.videocam_rounded, 'Video clip', 'video',
-                'A short clip (up to 30s)'),
-            tile(Icons.music_note_rounded, 'Now playing', 'music',
-                'Share what you\'re listening to'),
-            const SizedBox(height: 8),
-          ],
+              // Now playing first — it's Aluta's signature status.
+              tile(Icons.music_note_rounded, 'Now playing', 'music',
+                  'Share what you\'re listening to', highlight: true),
+              tile(Icons.text_fields_rounded, 'Text', 'text',
+                  'A colourful text status'),
+              tile(Icons.photo_library_rounded, 'Photo', 'gallery',
+                  'Pick a picture from your gallery'),
+              tile(Icons.photo_camera_rounded, 'Camera', 'camera',
+                  'Take a photo now'),
+              tile(Icons.videocam_rounded, 'Video clip', 'video',
+                  'A short clip (up to 30s)'),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       );
     },
@@ -108,9 +123,11 @@ Future<void> showCreateStorySheet(
         source: ImageSource.gallery,
         maxDuration: const Duration(seconds: 30),
       );
+    } else if (choice == 'camera') {
+      file = await _capturePhoto(context);
     } else {
       file = await picker.pickImage(
-        source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
+        source: ImageSource.gallery,
         imageQuality: 90,
         maxWidth: 1600,
       );
@@ -129,6 +146,45 @@ Future<void> showCreateStorySheet(
         file: file!,
         onPosted: onPosted,
       ),
+    ),
+  );
+}
+
+/// Take a photo with the device camera. Mobile uses image_picker's camera
+/// (proven). Web/desktop use the `camera` package (image_picker has no camera
+/// there — that's why tapping "Camera" used to open a folder). If the device
+/// has no usable camera (or the platform has no camera backend, e.g. Linux),
+/// show a graceful toast and return null instead of a confusing file picker.
+Future<XFile?> _capturePhoto(BuildContext context) async {
+  final mobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+  if (mobile) {
+    return ImagePicker().pickImage(
+      source: ImageSource.camera,
+      imageQuality: 90,
+      maxWidth: 1600,
+    );
+  }
+  List<CameraDescription> cameras = const [];
+  try {
+    cameras = await availableCameras();
+  } catch (_) {
+    cameras = const [];
+  }
+  if (cameras.isEmpty) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("This device has no built-in camera to use."),
+        ),
+      );
+    }
+    return null;
+  }
+  if (!context.mounted) return null;
+  return Navigator.push<XFile?>(
+    context,
+    MaterialPageRoute(
+      builder: (_) => CameraCaptureScreen(camera: cameras.first),
     ),
   );
 }
@@ -431,6 +487,12 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
   int _bg = 0;
   String? _stickerUrl; // chosen GIF/sticker (animates with the song)
   bool _posting = false;
+  bool _showEmoji = false; // inline emoji panel (field stays visible above it)
+
+  void _toggleEmoji() {
+    setState(() => _showEmoji = !_showEmoji);
+    if (_showEmoji) FocusManager.instance.primaryFocus?.unfocus();
+  }
 
   @override
   void initState() {
@@ -525,7 +587,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
         ],
       ),
       extendBodyBehindAppBar: true,
-      body: Container(
+      body: DecoratedBox(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -533,83 +595,105 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
             colors: _palettes[_bg],
           ),
         ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
+        // Fill the whole screen so the gradient has no black blank below the
+        // short form on tall desktop/web windows.
+        child: SizedBox.expand(
+          child: SafeArea(
             child: Column(
               children: [
-                const SizedBox(height: 8),
-                // Sticker/GIF (animates) if chosen, else a tappable note tile.
-                GestureDetector(
-                  onTap: _pickSticker,
-                  child: SizedBox(
-                    width: 150,
-                    height: 150,
-                    child: _stickerUrl != null
-                        ? Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(18),
-                                child: Image.network(
-                                  _stickerUrl!,
-                                  width: 150,
-                                  height: 150,
-                                  fit: BoxFit.contain,
-                                ),
-                              ),
-                              Positioned(
-                                top: -8,
-                                right: -8,
-                                child: IconButton(
-                                  icon: const Icon(Icons.cancel,
-                                      color: Colors.white),
-                                  onPressed: () =>
-                                      setState(() => _stickerUrl = null),
-                                ),
-                              ),
-                            ],
-                          )
-                        : Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(18),
-                              color: Colors.white.withValues(alpha: 0.12),
-                            ),
-                            child: const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.gif_box_outlined,
-                                    color: Colors.white, size: 46),
-                                SizedBox(height: 6),
-                                Text('Add a sticker',
-                                    style: TextStyle(
-                                        color: Colors.white70, fontSize: 12)),
-                              ],
-                            ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 8),
+                        // Sticker/GIF (animates) if chosen, else a note tile.
+                        GestureDetector(
+                          onTap: _pickSticker,
+                          child: SizedBox(
+                            width: 150,
+                            height: 150,
+                            child: _stickerUrl != null
+                                ? Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(18),
+                                        child: Image.network(
+                                          _stickerUrl!,
+                                          width: 150,
+                                          height: 150,
+                                          fit: BoxFit.contain,
+                                        ),
+                                      ),
+                                      Positioned(
+                                        top: -8,
+                                        right: -8,
+                                        child: IconButton(
+                                          icon: const Icon(Icons.cancel,
+                                              color: Colors.white),
+                                          onPressed: () => setState(
+                                              () => _stickerUrl = null),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Container(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(18),
+                                      color:
+                                          Colors.white.withValues(alpha: 0.12),
+                                    ),
+                                    child: const Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.gif_box_outlined,
+                                            color: Colors.white, size: 46),
+                                        SizedBox(height: 6),
+                                        Text('Add a sticker',
+                                            style: TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 12)),
+                                      ],
+                                    ),
+                                  ),
                           ),
+                        ),
+                        const SizedBox(height: 22),
+                        _field(_title, 'Song title'),
+                        const SizedBox(height: 12),
+                        _field(_artist, 'Artist (optional)'),
+                        const SizedBox(height: 12),
+                        _field(_caption, 'Say something (optional)',
+                            onEmoji: _toggleEmoji),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: _posting ? null : _post,
+                            icon: _posting
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.send_rounded),
+                            label: const Text('Share to story'),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 22),
-                _field(_title, 'Song title'),
-                const SizedBox(height: 12),
-                _field(_artist, 'Artist (optional)'),
-                const SizedBox(height: 12),
-                _field(_caption, 'Say something (optional)', emoji: true),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _posting ? null : _post,
-                    icon: _posting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.send_rounded),
-                    label: const Text('Share to story'),
+                // Inline emoji panel: the caption stays visible above and
+                // updates live as emojis are tapped (no covering modal).
+                if (_showEmoji)
+                  SizedBox(
+                    height: 300,
+                    child: inlineEmojiPicker(context, _caption),
                   ),
-                ),
               ],
             ),
           ),
@@ -618,10 +702,13 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
     );
   }
 
-  Widget _field(TextEditingController c, String hint, {bool emoji = false}) {
+  Widget _field(TextEditingController c, String hint, {VoidCallback? onEmoji}) {
     return TextField(
       controller: c,
       style: const TextStyle(color: Colors.white),
+      onTap: () {
+        if (_showEmoji) setState(() => _showEmoji = false);
+      },
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
@@ -631,14 +718,17 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
-        suffixIcon: emoji
-            ? IconButton(
-                icon: Icon(Icons.emoji_emotions_outlined,
+        suffixIcon: onEmoji == null
+            ? null
+            : IconButton(
+                icon: Icon(
+                    _showEmoji
+                        ? Icons.keyboard_rounded
+                        : Icons.emoji_emotions_outlined,
                     color: Colors.white.withValues(alpha: 0.75)),
-                tooltip: 'Add emoji',
-                onPressed: () => showEmojiPickerSheet(context, c),
-              )
-            : null,
+                tooltip: _showEmoji ? 'Keyboard' : 'Add emoji',
+                onPressed: onEmoji,
+              ),
       ),
     );
   }

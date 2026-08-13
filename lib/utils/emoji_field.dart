@@ -62,6 +62,49 @@ Future<void> showEmojiPickerSheet(
   );
 }
 
+/// The emoji picker as an INLINE widget (not a modal), so the target field
+/// stays visible above it and updates live as emojis are tapped. The caller
+/// sizes it (e.g. wrap in a SizedBox ~300 high) and places it below the field.
+Widget inlineEmojiPicker(
+    BuildContext context, TextEditingController controller) {
+  final scheme = Theme.of(context).colorScheme;
+  return EmojiPicker(
+    onEmojiSelected: (_, _) {},
+    textEditingController: controller,
+    config: Config(
+      height: 300,
+      emojiViewConfig: EmojiViewConfig(
+        emojiSizeMax: 26,
+        columns: 8,
+        backgroundColor: scheme.surface,
+        buttonMode: ButtonMode.MATERIAL,
+        recentsLimit: 40,
+        noRecents: Text(
+          'No recent emoji yet',
+          style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+        ),
+      ),
+      categoryViewConfig: CategoryViewConfig(
+        backgroundColor: scheme.surfaceContainerHighest,
+        indicatorColor: scheme.primary,
+        iconColor: scheme.onSurfaceVariant,
+        iconColorSelected: scheme.primary,
+        dividerColor: scheme.outlineVariant.withAlpha(80),
+      ),
+      bottomActionBarConfig: BottomActionBarConfig(
+        backgroundColor: scheme.surfaceContainerHighest,
+        buttonColor: scheme.surfaceContainerHighest,
+        buttonIconColor: scheme.primary,
+      ),
+      searchViewConfig: SearchViewConfig(
+        backgroundColor: scheme.surfaceContainerHighest,
+        buttonIconColor: scheme.primary,
+        hintText: 'Search emoji',
+      ),
+    ),
+  );
+}
+
 /// A ready-made emoji button for a TextField's suffixIcon.
 Widget emojiSuffixButton(
     BuildContext context, TextEditingController controller) {

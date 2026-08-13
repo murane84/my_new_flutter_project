@@ -108,6 +108,11 @@ dependencies:
   # Windows implementation; this federates one in so clips play on the desktop
   # app). Android/iOS/web/macOS already have their own implementations.
   video_player_win: ^3.1.1
+  # Camera capture for stories on web + desktop, where image_picker has no
+  # camera (it would silently open a file picker). Mobile keeps image_picker's
+  # camera. camera_windows adds the Windows backend (not endorsed by `camera`).
+  camera: ^0.11.0+2
+  camera_windows: ^0.2.6+2
 
   # Utilities
   logger: ^2.6.1

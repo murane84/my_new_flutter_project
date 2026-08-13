@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../services/contact_names.dart';
 import '../../utils/net_image.dart';
-import '../api_service.dart';
 import '../token_helper.dart' show mediaAuthHeaders;
 import 'create_story_sheet.dart';
 import 'story_models.dart';
@@ -17,6 +16,8 @@ class StoriesTray extends StatefulWidget {
   final int? myUserId;
   final String myName;
   final String? myAvatarUrl;
+  final List<StoryGroup> groups;
+  final Future<void> Function() onReload;
 
   const StoriesTray({
     super.key,
@@ -24,6 +25,8 @@ class StoriesTray extends StatefulWidget {
     required this.myUserId,
     required this.myName,
     required this.myAvatarUrl,
+    required this.groups,
+    required this.onReload,
   });
 
   @override
@@ -31,33 +34,15 @@ class StoriesTray extends StatefulWidget {
 }
 
 class _StoriesTrayState extends State<StoriesTray> {
-  List<StoryGroup> _groups = [];
-  bool _loaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final raw = await ApiService().fetchStoriesFeed();
-    if (!mounted) return;
-    setState(() {
-      _groups = raw.map(StoryGroup.fromJson).toList();
-      _loaded = true;
-    });
-  }
-
   StoryGroup? get _myGroup {
-    for (final g in _groups) {
+    for (final g in widget.groups) {
       if (g.isMe) return g;
     }
     return null;
   }
 
   List<StoryGroup> get _friendGroups =>
-      _groups.where((g) => !g.isMe).toList();
+      widget.groups.where((g) => !g.isMe).toList();
 
   String _absUrl(String rel) =>
       rel.startsWith('http') ? rel : '${widget.apiBase}$rel';
@@ -86,27 +71,20 @@ class _StoriesTrayState extends State<StoriesTray> {
       ),
     );
     // Returning from the viewer: seen-state may have changed (or my story was
-    // deleted). Refresh so the rings update.
-    _load();
+    // deleted). Ask home to refresh so the tray + friend-tile rings update.
+    await widget.onReload();
   }
 
   Future<void> _addStory() async {
     await showCreateStorySheet(
       context,
       apiBase: widget.apiBase,
-      onPosted: _load,
+      onPosted: widget.onReload,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Nothing to show and no story of my own yet → hide the strip entirely so
-    // it doesn't eat space before there's any story activity. (Once loaded, the
-    // "Your story" add-tile always shows.)
-    if (!_loaded && _groups.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
     final friends = _friendGroups;
     return Container(
       height: 104,

@@ -328,15 +328,42 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     return const SizedBox.shrink();
   }
 
-  Widget _textContent(StoryItem item) {
-    Color bg = const Color(0xFF5B2C83);
-    final h = item.background;
-    if (h != null && h.startsWith('#')) {
-      final v = int.tryParse(h.substring(1), radix: 16);
-      if (v != null) bg = Color(v);
+  static Color? _parseHex(String? h) {
+    if (h == null || !h.startsWith('#')) return null;
+    final v = int.tryParse(h.substring(1), radix: 16);
+    return v == null ? null : Color(v);
+  }
+
+  /// Story background: "hex1,hex2" → gradient, a single "#hex" → solid colour,
+  /// null/invalid → the [fallback] gradient.
+  BoxDecoration _bgDecoration(String? bg, List<Color> fallback) {
+    if (bg != null && bg.contains(',')) {
+      final cs = bg.split(',').map(_parseHex).whereType<Color>().toList();
+      if (cs.length >= 2) {
+        return BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [cs[0], cs[1]],
+          ),
+        );
+      }
     }
+    final one = _parseHex(bg);
+    if (one != null) return BoxDecoration(color: one);
+    return BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: fallback,
+      ),
+    );
+  }
+
+  Widget _textContent(StoryItem item) {
     return Container(
-      color: bg,
+      decoration: _bgDecoration(
+          item.background, const [Color(0xFF5B2C83), Color(0xFF1D1040)]),
       alignment: Alignment.center,
       padding: const EdgeInsets.all(28),
       child: Text(
@@ -358,34 +385,28 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     return Stack(
       fit: StackFit.expand,
       children: [
-        const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF5B2C83), Color(0xFF1D1040)],
-            ),
-          ),
+        DecoratedBox(
+          decoration: _bgDecoration(
+              item.background, const [Color(0xFF5B2C83), Color(0xFF1D1040)]),
         ),
         Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 168,
-                height: 168,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  color: Colors.white.withValues(alpha: 0.12),
-                  image: hasArt
-                      ? DecorationImage(
-                          image: NetworkImage(art), fit: BoxFit.cover)
-                      : null,
-                ),
+              // A chosen GIF/sticker animates (Image.network); otherwise a note.
+              SizedBox(
+                width: 180,
+                height: 180,
                 child: hasArt
-                    ? null
-                    : const Icon(Icons.music_note_rounded,
-                        color: Colors.white, size: 72),
+                    ? Image.network(art!, fit: BoxFit.contain)
+                    : Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          color: Colors.white.withValues(alpha: 0.12),
+                        ),
+                        child: const Icon(Icons.music_note_rounded,
+                            color: Colors.white, size: 72),
+                      ),
               ),
               const SizedBox(height: 22),
               Padding(

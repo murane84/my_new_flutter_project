@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../utils/emoji_field.dart';
 import '../api_service.dart';
 
 /// Entry point: a bottom sheet offering the four ways to post a story
@@ -238,6 +239,13 @@ class _MediaComposePageState extends State<_MediaComposePage> {
                       ),
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 10),
+                      suffixIcon: IconButton(
+                        icon: Icon(Icons.emoji_emotions_outlined,
+                            color: Colors.white.withValues(alpha: 0.75)),
+                        tooltip: 'Add emoji',
+                        onPressed: () =>
+                            showEmojiPickerSheet(context, _caption),
+                      ),
                     ),
                   ),
                 ),
@@ -375,7 +383,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                 const SizedBox(height: 12),
                 _field(_artist, 'Artist (optional)'),
                 const SizedBox(height: 12),
-                _field(_caption, 'Say something (optional)'),
+                _field(_caption, 'Say something (optional)', emoji: true),
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
@@ -399,7 +407,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
     );
   }
 
-  Widget _field(TextEditingController c, String hint) {
+  Widget _field(TextEditingController c, String hint, {bool emoji = false}) {
     return TextField(
       controller: c,
       style: const TextStyle(color: Colors.white),
@@ -412,6 +420,14 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
+        suffixIcon: emoji
+            ? IconButton(
+                icon: Icon(Icons.emoji_emotions_outlined,
+                    color: Colors.white.withValues(alpha: 0.75)),
+                tooltip: 'Add emoji',
+                onPressed: () => showEmojiPickerSheet(context, c),
+              )
+            : null,
       ),
     );
   }

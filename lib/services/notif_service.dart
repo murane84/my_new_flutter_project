@@ -220,6 +220,8 @@ Future<void> showMessageNotification({
   // (conversation) rather than a DM with the sender.
   String? conversationId,
   String? groupTitle,
+  // When set, tapping scrolls to + highlights this exact message in the thread.
+  String? messageId,
 }) async {
   if (kIsWeb) return;
   try {
@@ -235,6 +237,7 @@ Future<void> showMessageNotification({
         if (hasGroup) 'conversation_id': conversationId,
         if (hasGroup && groupTitle != null && groupTitle.isNotEmpty)
           'group_title': groupTitle,
+        if (messageId != null && messageId.isNotEmpty) 'message_id': messageId,
       });
     }
     await _fln.show(

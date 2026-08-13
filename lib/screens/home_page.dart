@@ -817,6 +817,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // waiting for an offer that never came → no audio. Set it here once the
     // user is known; _reset() deliberately preserves it across calls.
     GroupCallService.instance.myId = id;
+    // Group-call signaling carries only bare user ids, so the call service
+    // resolves each participant's name/phone/avatar through this from our own
+    // friend list + group rosters — proper identities on every entry path
+    // (start/join/accept), on mobile, desktop and web.
+    GroupCallService.instance.resolveIdentity = _identityForUser;
 
     // Accept/Decline tapped on the ringing NOTIFICATION (app backgrounded but
     // still running): route it into the live call engine. This is what gives
@@ -1530,6 +1535,37 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final key = id.toString();
     for (final f in _allFriends) {
       if (f['id']?.toString() == key) return f['phone'] as String?;
+    }
+    return null;
+  }
+
+  /// Resolve a user id → {name, phone, avatar} from the app's own data so a
+  /// group-call participant (the backend sends only ids) shows a proper
+  /// identity. Prefers the friend list (whose phone drives the phonebook-name
+  /// lookup), then any group's member roster; returns the registered username
+  /// as the fallback name so tiles never read "Member". Wired into
+  /// GroupCallService.resolveIdentity.
+  Map<String, dynamic>? _identityForUser(int userId) {
+    final key = userId.toString();
+    for (final f in _allFriends) {
+      if (f['id']?.toString() == key) {
+        return {
+          'name': (f['username'] ?? '').toString(),
+          'phone': f['phone'] as String?,
+          'avatar': f['avatar_url'] as String?,
+        };
+      }
+    }
+    for (final g in _groups) {
+      for (final m in (g['members'] as List?) ?? const []) {
+        if (m is Map && m['user_id']?.toString() == key) {
+          return {
+            'name': (m['username'] ?? '').toString(),
+            'phone': m['phone'] as String?,
+            'avatar': m['avatar_url'] as String?,
+          };
+        }
+      }
     }
     return null;
   }

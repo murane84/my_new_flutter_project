@@ -34,6 +34,14 @@ class GroupCallService {
   void Function(Map<String, dynamic> msg)? sendSignal;
   void Function()? onShowUI;
 
+  /// Resolve a user id → {'name', 'phone', 'avatar'} from the app's own roster
+  /// (friend list + group members). Wired by the app layer. The backend's
+  /// group-call signaling carries only bare user ids — no names — so identities
+  /// must be filled locally; this makes proper names/phones appear on EVERY
+  /// entry path, including accepting a ring (which seeds no member list), and
+  /// immediately as each peer appears rather than only once the call connects.
+  Map<String, dynamic>? Function(int userId)? resolveIdentity;
+
   GroupCallPhase phase = GroupCallPhase.idle;
   int? room; // conversation id acting as the call room
   String title = '';
@@ -416,9 +424,25 @@ class GroupCallService {
   void _addParticipant(int pid, Map? info) {
     _everConnected = true; // someone else joined → the call actually happened
     final r = roster[pid];
-    final name = (info?['name'] ?? r?.name ?? '').toString();
-    final avatar = (info?['avatar'] as String?) ?? r?.avatar;
-    final phone = (info?['phone'] as String?) ?? r?.phone;
+    var name = (info?['name'] ?? r?.name ?? '').toString();
+    var avatar = (info?['avatar'] as String?) ?? r?.avatar;
+    var phone = (info?['phone'] as String?) ?? r?.phone;
+    // The signaling (and the accept-a-ring path) may give us only an id. Fill
+    // any missing identity from the app's own friend/group roster keyed by id,
+    // so the tile shows the person's saved/registered name — never "Member".
+    if (name.trim().isEmpty || (phone == null || phone.trim().isEmpty)) {
+      final res = resolveIdentity?.call(pid);
+      if (res != null) {
+        if (name.trim().isEmpty) name = (res['name'] ?? '').toString();
+        final rp = res['phone'] as String?;
+        if ((phone == null || phone.trim().isEmpty) &&
+            rp != null &&
+            rp.trim().isNotEmpty) {
+          phone = rp;
+        }
+        avatar ??= res['avatar'] as String?;
+      }
+    }
     final existing = participants[pid];
     if (existing == null) {
       participants[pid] = GroupParticipant(pid, name, avatar, phone: phone);

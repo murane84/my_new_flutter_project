@@ -848,8 +848,30 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// loaded friend list when available (so avatar/phone are correct), else a
   /// minimal record from the payload — ChatPage fetches the rest by id.
   void _handleMessageTap(Map<String, dynamic> payload) {
+    if (!mounted) return;
+    // Group message → land directly in the group thread (mirrors the DM path).
+    final convId =
+        int.tryParse((payload['conversation_id'] ?? '').toString());
+    if (convId != null) {
+      Map<String, dynamic> group = _groups.firstWhere(
+        (g) => (g['id']).toString() == convId.toString(),
+        orElse: () => <String, dynamic>{},
+      );
+      if (group.isEmpty) {
+        // Not in the loaded list yet — open a minimal record and refresh so the
+        // header (name/members) fills in.
+        group = {
+          'id': convId,
+          'title': (payload['group_title'] ?? 'Group').toString(),
+          'members': const [],
+        };
+        _fetchGroups();
+      }
+      openGroupInPanel(group);
+      return;
+    }
     final fid = int.tryParse((payload['friend_id'] ?? '').toString());
-    if (fid == null || !mounted) return;
+    if (fid == null) return;
     Map<String, dynamic> friend = _allFriends.firstWhere(
       (e) => (e['id']).toString() == fid.toString(),
       orElse: () => <String, dynamic>{},
@@ -1122,14 +1144,25 @@ class HomePageState extends rp.ConsumerState<HomePage>
           .toString();
       final text =
           (data['content'] ?? data['text'] ?? data['message'] ?? '').toString();
-      if (!_appForeground) {
-        showMessageNotification(
-            title: sender, body: text.isEmpty ? 'Sent you a message' : text);
-      }
       // Badge the sender immediately (unless their chat is open) — the fetch
       // below reconciles to the server's authoritative count a moment later.
       final senderId = (senderObj?['id'] as num?)?.toInt() ??
           (data['sender_id'] as num?)?.toInt();
+      if (!_appForeground) {
+        final convId = (data['conversation_id'] ?? '').toString();
+        final gTitle = (data['group_title'] ?? '').toString();
+        final isGroup = convId.isNotEmpty;
+        showMessageNotification(
+          title: isGroup && gTitle.isNotEmpty ? gTitle : sender,
+          body: isGroup
+              ? '$sender: ${text.isEmpty ? 'Sent a message' : text}'
+              : (text.isEmpty ? 'Sent you a message' : text),
+          senderId: senderId?.toString(),
+          senderName: sender,
+          conversationId: convId.isEmpty ? null : convId,
+          groupTitle: gTitle.isEmpty ? null : gTitle,
+        );
+      }
       if (senderId != null && senderId.toString() != _activeFriendId) {
         ref.read(unreadProvider.notifier).bump(senderId);
       }

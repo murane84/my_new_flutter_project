@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About Aluta</title>
+<style>
+  :root{
+    --brand:#E23744; --ink:#1a1c22; --muted:#5b616e; --line:#e7e9ee;
+    --bg:#ffffff; --soft:#f7f8fa; --badge:#FFF0F1;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--soft);color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:820px;margin:0 auto;padding:40px 22px 80px;}
+  header{border-bottom:3px solid var(--brand);padding-bottom:18px;margin-bottom:8px;}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .dot{width:14px;height:14px;border-radius:50%;background:var(--brand);
+    box-shadow:0 0 0 4px var(--badge);}
+  h1{font-size:30px;margin:14px 0 4px;letter-spacing:-.02em;}
+  h2{font-size:20px;margin:34px 0 8px;letter-spacing:-.01em;}
+  h3{font-size:15px;margin:16px 0 4px;color:var(--brand);}
+  p,li{color:var(--ink);}
+  .muted{color:var(--muted);}
+  .meta{color:var(--muted);font-size:14px;margin-top:2px;}
+  .badge{display:inline-block;background:var(--badge);color:var(--brand);
+    font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;
+    padding:5px 10px;border-radius:999px;margin-top:14px;}
+  .note{background:#fff;border:1px solid var(--line);border-left:4px solid var(--brand);
+    border-radius:10px;padding:14px 16px;margin:18px 0;color:var(--muted);font-size:14.5px;}
+  section{background:var(--bg);border:1px solid var(--line);border-radius:14px;
+    padding:6px 22px 18px;margin-top:16px;}
+  .feat{border-bottom:1px solid var(--line);padding:14px 0;}
+  .feat:last-child{border-bottom:none;}
+  .feat p{margin:2px 0 0;color:var(--muted);font-size:14.5px;}
+  a{color:var(--brand);}
+  .pill{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;
+    letter-spacing:.05em;color:var(--brand);background:var(--badge);
+    border-radius:999px;padding:2px 8px;margin-left:8px;vertical-align:middle;}
+  footer{margin-top:30px;color:var(--muted);font-size:13px;text-align:center;}
+  ul{padding-left:20px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><span class="dot"></span><strong>Aluta</strong></div>
+    <h1>About Aluta</h1>
+    <div class="meta">Updated: 13 August 2026 · Version 0.1 (development)</div>
+    <span class="badge">Development / Beta build</span>
+  </header>
+
+  <div class="note">
+    Aluta is in <strong>active development</strong>. This page describes what the
+    current build can do today; features are added and refined often, so what you
+    see in the app may be a little ahead of, or behind, this page. For the rules
+    around using these features, and more on how they work, see the
+    <a href="/terms">Terms of Use</a>.
+  </div>
+
+  <section>
+    <h2>What Aluta is</h2>
+    <p>Aluta is a social app that brings your conversations and your music into one
+    place. It combines private and group chat, voice and group calling, ephemeral
+    Stories, and a built-in music player with a shared “Listen Together” mode — so
+    talking to friends and sharing what you're listening to happen side by side,
+    not in separate apps. It runs on Android, Windows desktop, and in the browser.</p>
+  </section>
+
+  <section>
+    <h2>What you can do today</h2>
+
+    <div class="feat">
+      <h3>Chat &amp; media</h3>
+      <p>One-to-one and group chats with photos, files, voice notes and GIFs.
+      Reactions, replies, edit and delete-for-everyone, pinned messages, typing
+      indicators, and delivered/read receipts with “seen by” in groups. You can
+      also share your location and contact cards. Messages are sent over encrypted
+      connections but are <em>not</em> end-to-end encrypted in this beta.</p>
+    </div>
+
+    <div class="feat">
+      <h3>Voice &amp; group calls</h3>
+      <p>Peer-to-peer voice calls, one-to-one and in groups, that are never
+      recorded. Calls can be answered and hung up from Bluetooth and car head
+      units, just like a normal phone call.</p>
+    </div>
+
+    <div class="feat">
+      <h3>Stories / Status <span class="pill">new</span></h3>
+      <p>Post a photo, a short video, a text card, or a “now playing” music moment
+      that disappears after about 24 hours. Friends' stories appear in a tray above
+      your chats with a coloured ring while unseen, and you can see who viewed
+      yours.</p>
+    </div>
+
+    <div class="feat">
+      <h3>Music player &amp; Listen Together</h3>
+      <p>Play the music on your device with full lock-screen, Bluetooth and car
+      controls. Tidy up song details (title, artist, and more) and have those edits
+      follow your account. Identify a song that's playing around you, share a track
+      into a chat, and start a “Listen Together” session to play in sync with a
+      friend.</p>
+    </div>
+
+    <div class="feat">
+      <h3>Presence &amp; friends</h3>
+      <p>Online and last-seen presence, a friends list you can build from your
+      contacts (with your permission), and status rings that show at a glance who
+      has something new to share.</p>
+    </div>
+
+    <div class="feat">
+      <h3>Your account &amp; devices</h3>
+      <p>Sign up with an email, add an optional phone number for one-tap calls and
+      a profile picture. Protect your account with two-factor authentication, and
+      recover it by email or authenticator code. Link a computer by QR — WhatsApp-
+      Web style — and sign linked devices out remotely. On phones, an optional
+      fingerprint/face lock keeps the app private, handled entirely on-device.</p>
+    </div>
+
+    <div class="feat">
+      <h3>Notifications</h3>
+      <p>Push notifications wake your device for new messages and incoming calls
+      even when the app is closed, and tapping one takes you straight to the right
+      chat or group.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Where Aluta is headed</h2>
+    <p>Aluta is being built in stages. Recent work has focused on Stories, richer
+    call controls, and tighter music sharing; upcoming stages explore shared
+    “listening rooms” and more ways to enjoy music together. Because it's a beta,
+    expect rough edges and occasional changes — your feedback shapes what comes
+    next.</p>
+  </section>
+
+  <section>
+    <h2>Learn more</h2>
+    <p>How to use these features in more detail, along with the rules for using
+    them, lives in the <a href="/terms">Terms of Use</a>. How your information is
+    handled is described in the <a href="/privacy">Privacy Policy</a>.</p>
+    <p class="muted">Questions or feedback:
+    <a href="mailto:support@ozilane.com">support@ozilane.com</a>.</p>
+  </section>
+
+  <footer>
+    Aluta — About · Development build · Features are evolving.
+  </footer>
+</div>
+</body>
+</html>

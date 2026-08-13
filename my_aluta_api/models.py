@@ -33,6 +33,13 @@ class User(Base):
     totp_secret = Column(String, nullable=True)
     totp_enabled = Column(Boolean, default=False, nullable=False)
 
+    # Legal consent: the highest Privacy Policy / Terms version this user has
+    # accepted (see legal.py). 0 means "never accepted"; whenever the server's
+    # CURRENT_POLICY_VERSION is higher than this, the app re-prompts the user to
+    # read and agree before they can continue. `policy_accepted_at` records when.
+    policy_version = Column(Integer, default=0, nullable=False, server_default="0")
+    policy_accepted_at = Column(DateTime(timezone=True), nullable=True)
+
     sent_messages = relationship(
         "Message",
         foreign_keys="[Message.sender_id]",

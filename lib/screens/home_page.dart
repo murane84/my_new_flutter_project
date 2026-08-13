@@ -2199,9 +2199,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
               ),
             ),
           ),
-          // All group actions live under one ⋮ menu (WhatsApp-style).
+          // All group actions live under one HORIZONTAL ⋯ menu. Deliberately
+          // different from the app-wide vertical ⋮ menu (top-right of the
+          // window) so the two — which sit close together and did the same
+          // thing visually — read as distinct: ⋮ = app menu, ⋯ = this chat.
           PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert_rounded),
+            icon: const Icon(Icons.more_horiz_rounded),
             tooltip: 'Group options',
             onSelected: (v) {
               switch (v) {

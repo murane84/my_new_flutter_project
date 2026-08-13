@@ -433,6 +433,9 @@ class Story(Base):
     music_title = Column(String, nullable=True)
     music_artist = Column(String, nullable=True)
     music_art_url = Column(String, nullable=True)
+    # Background colour (hex like "#RRGGBB" or "#AARRGGBB") for a text-only
+    # story (kind == "text"); the caption holds the text.
+    background = Column(String, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), index=True, nullable=False)

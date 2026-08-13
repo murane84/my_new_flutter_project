@@ -117,6 +117,9 @@ def ensure_media_schema():
         # link (added here too in case login_links was created before these).
         "ALTER TABLE login_links ADD COLUMN IF NOT EXISTS device_label VARCHAR",
         "ALTER TABLE login_links ADD COLUMN IF NOT EXISTS device_platform VARCHAR",
+        # Text-only stories: background colour (kind == "text"); added here in
+        # case the stories table was created before this column existed.
+        "ALTER TABLE stories ADD COLUMN IF NOT EXISTS background VARCHAR",
     ]
     try:
         with engine.begin() as conn:

@@ -245,7 +245,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                   _progressBars(),
                   _topBar(),
                   const Spacer(),
-                  if ((item.caption ?? '').isNotEmpty) _captionBar(item),
+                  // Text stories already show the caption as the full-screen
+                  // content, so skip the bottom caption bar for them.
+                  if (!item.isText && (item.caption ?? '').isNotEmpty)
+                    _captionBar(item),
                   if (_group.isMe) _authorFooter(item),
                   const SizedBox(height: 12),
                 ],
@@ -258,6 +261,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   }
 
   Widget _content(StoryItem item) {
+    if (item.isText) return _textContent(item);
     if (item.isMusic) return _musicContent(item);
     if (item.isVideo) {
       final v = _video;
@@ -304,6 +308,30 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       );
     }
     return const SizedBox.shrink();
+  }
+
+  Widget _textContent(StoryItem item) {
+    Color bg = const Color(0xFF5B2C83);
+    final h = item.background;
+    if (h != null && h.startsWith('#')) {
+      final v = int.tryParse(h.substring(1), radix: 16);
+      if (v != null) bg = Color(v);
+    }
+    return Container(
+      color: bg,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(28),
+      child: Text(
+        item.caption ?? '',
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 26,
+          fontWeight: FontWeight.w600,
+          height: 1.3,
+        ),
+      ),
+    );
   }
 
   Widget _musicContent(StoryItem item) {

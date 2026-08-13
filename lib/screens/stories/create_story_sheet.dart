@@ -47,6 +47,8 @@ Future<void> showCreateStorySheet(
                         fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ),
+            tile(Icons.text_fields_rounded, 'Text', 'text',
+                'A colourful text status'),
             tile(Icons.photo_library_rounded, 'Photo', 'gallery',
                 'Pick a picture from your gallery'),
             tile(Icons.photo_camera_rounded, 'Camera', 'camera',
@@ -69,6 +71,16 @@ Future<void> showCreateStorySheet(
       context,
       MaterialPageRoute(
         builder: (_) => _MusicStoryPage(apiBase: apiBase, onPosted: onPosted),
+      ),
+    );
+    return;
+  }
+
+  if (choice == 'text') {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _TextStoryPage(onPosted: onPosted),
       ),
     );
     return;
@@ -501,6 +513,126 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                 onPressed: () => showEmojiPickerSheet(context, c),
               )
             : null,
+      ),
+    );
+  }
+}
+
+// ── Text-only status ─────────────────────────────────────────────────────────
+class _TextStoryPage extends StatefulWidget {
+  final VoidCallback onPosted;
+
+  const _TextStoryPage({required this.onPosted});
+
+  @override
+  State<_TextStoryPage> createState() => _TextStoryPageState();
+}
+
+class _TextStoryPageState extends State<_TextStoryPage> {
+  static const List<Color> _colors = [
+    Color(0xFF5B2C83),
+    Color(0xFF0F2027),
+    Color(0xFFEE5522),
+    Color(0xFF11998E),
+    Color(0xFF3A2CA0),
+    Color(0xFFED213A),
+    Color(0xFF232526),
+    Color(0xFF1E88E5),
+  ];
+
+  final TextEditingController _text = TextEditingController();
+  int _bg = 0;
+  bool _posting = false;
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  String _hex(Color c) => '#${c.toARGB32().toRadixString(16).padLeft(8, '0')}';
+
+  Future<void> _post() async {
+    final text = _text.text.trim();
+    if (text.isEmpty) {
+      _toast('Type something first');
+      return;
+    }
+    setState(() => _posting = true);
+    final created = await ApiService().createStory(
+      kind: 'text',
+      caption: text,
+      background: _hex(_colors[_bg]),
+    );
+    if (!mounted) return;
+    setState(() => _posting = false);
+    if (created == null) {
+      _toast('Could not post status');
+      return;
+    }
+    widget.onPosted();
+    Navigator.pop(context);
+  }
+
+  void _toast(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _colors[_bg],
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: Colors.white,
+        title: const Text('Text status'),
+        actions: [
+          IconButton(
+            tooltip: 'Background colour',
+            icon: const Icon(Icons.palette_rounded),
+            onPressed: () =>
+                setState(() => _bg = (_bg + 1) % _colors.length),
+          ),
+          IconButton(
+            tooltip: 'Add emoji',
+            icon: const Icon(Icons.emoji_emotions_outlined),
+            onPressed: () => showEmojiPickerSheet(context, _text),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: TextField(
+              controller: _text,
+              autofocus: true,
+              textAlign: TextAlign.center,
+              maxLines: null,
+              cursorColor: Colors.white,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w600),
+              decoration: const InputDecoration(
+                hintText: 'Type a status',
+                hintStyle: TextStyle(color: Colors.white54, fontSize: 24),
+                border: InputBorder.none,
+              ),
+            ),
+          ),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _posting ? null : _post,
+        child: _posting
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white))
+            : const Icon(Icons.send_rounded),
       ),
     );
   }

@@ -31,7 +31,7 @@ router = APIRouter(prefix="/stories", tags=["Stories"])
 # A story lives for 24 hours from posting.
 STORY_TTL = timedelta(hours=24)
 
-VALID_KINDS = {"photo", "video", "music"}
+VALID_KINDS = {"photo", "video", "music", "text"}
 
 
 def _now() -> datetime:
@@ -76,6 +76,7 @@ def _story_out(story: Story, *, viewed: bool, view_count: int = 0) -> schemas.St
         music_title=story.music_title,
         music_artist=story.music_artist,
         music_art_url=story.music_art_url,
+        background=story.background,
         created_at=story.created_at,
         expires_at=story.expires_at,
         viewed=viewed,
@@ -108,6 +109,9 @@ def create_story(
             asset.uploader_id is not None and asset.uploader_id != current_user.id
         ):
             raise HTTPException(status_code=400, detail="Unknown media for story")
+    elif kind == "text":
+        if not (payload.caption and payload.caption.strip()):
+            raise HTTPException(status_code=400, detail="Nothing to post")
     else:  # music
         if not (payload.music_title or payload.caption):
             raise HTTPException(status_code=400, detail="Nothing to post")
@@ -126,6 +130,7 @@ def create_story(
         music_title=(payload.music_title or None),
         music_artist=(payload.music_artist or None),
         music_art_url=(payload.music_art_url or None),
+        background=(payload.background or None),
         created_at=now,
         expires_at=now + STORY_TTL,
     )

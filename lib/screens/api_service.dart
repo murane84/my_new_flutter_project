@@ -1608,6 +1608,7 @@ class ApiService {
     String? musicTitle,
     String? musicArtist,
     String? musicArtUrl,
+    String? background,
   }) async {
     try {
       final token = await _getToken();
@@ -1623,6 +1624,7 @@ class ApiService {
           'music_title': ?musicTitle,
           'music_artist': ?musicArtist,
           'music_art_url': ?musicArtUrl,
+          'background': ?background,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {

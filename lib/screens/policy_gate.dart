@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'api_service.dart';
-import '../utils/app_config.dart';
+import 'legal_document_page.dart';
 
 /// A blocking "read & agree" consent gate for the Privacy Policy + Terms of Use.
 ///
@@ -40,7 +40,6 @@ class _PolicyGateDialog extends StatefulWidget {
 class _PolicyGateDialogState extends State<_PolicyGateDialog> {
   bool _agreed = false;
   bool _busy = false;
-  String? _base;
 
   int get _version =>
       (widget.status['current_version'] as num?)?.toInt() ?? 1;
@@ -48,32 +47,19 @@ class _PolicyGateDialogState extends State<_PolicyGateDialog> {
   String get _summary => (widget.status['summary'] as String?)?.trim() ?? '';
   String get _effectiveDate =>
       (widget.status['effective_date'] as String?) ?? '';
-  String get _privacyPath =>
-      (widget.status['privacy_url'] as String?) ?? '/privacy';
-  String get _termsPath => (widget.status['terms_url'] as String?) ?? '/terms';
 
-  @override
-  void initState() {
-    super.initState();
-    AppConfig.baseUrl.then((b) {
-      if (mounted) setState(() => _base = b);
-    });
+  /// Open a legal document in an in-app reader page (no browser hop), so the
+  /// user can read it and come straight back to tick the box.
+  void _openDoc(LegalDoc doc) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => LegalDocumentPage(doc: doc)),
+    );
   }
 
-  Future<void> _open(String path) async {
-    final base = _base ?? await AppConfig.baseUrl;
-    // Only app-relative doc paths ("/privacy", "/terms") get the API origin
-    // prefixed; anything with its own scheme (mailto:, https:) is used as-is.
-    final url = path.startsWith('/') ? '$base$path' : path;
+  Future<void> _mail() async {
     try {
-      final ok = await launchUrl(
-        Uri.parse(url),
-        mode: LaunchMode.externalApplication,
-      );
-      if (!ok && mounted) _snack('Couldn’t open $url');
-    } catch (_) {
-      if (mounted) _snack('Couldn’t open $url');
-    }
+      await launchUrl(Uri(scheme: 'mailto', path: 'support@ozilane.com'));
+    } catch (_) {/* no mail app — non-fatal */}
   }
 
   Future<void> _accept() async {
@@ -174,13 +160,13 @@ class _PolicyGateDialogState extends State<_PolicyGateDialog> {
                         _DocLink(
                           icon: Icons.privacy_tip_rounded,
                           label: 'Read the Privacy Policy',
-                          onTap: () => _open(_privacyPath),
+                          onTap: () => _openDoc(legalPrivacyDoc),
                         ),
                         const SizedBox(height: 10),
                         _DocLink(
                           icon: Icons.gavel_rounded,
                           label: 'Read the Terms of Use',
-                          onTap: () => _open(_termsPath),
+                          onTap: () => _openDoc(legalTermsDoc),
                         ),
                       ],
                     ),
@@ -254,9 +240,7 @@ class _PolicyGateDialogState extends State<_PolicyGateDialog> {
                 ),
                 Center(
                   child: TextButton(
-                    onPressed: _busy
-                        ? null
-                        : () => _open('mailto:support@ozilane.com'),
+                    onPressed: _busy ? null : _mail,
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 2),
                       minimumSize: const Size(0, 0),
@@ -317,8 +301,8 @@ class _DocLink extends StatelessWidget {
                   fontSize: 14, fontWeight: FontWeight.w600),
             ),
           ),
-          Icon(Icons.open_in_new_rounded,
-              size: 16, color: scheme.onSurfaceVariant),
+          Icon(Icons.chevron_right_rounded,
+              size: 20, color: scheme.onSurfaceVariant),
         ],
       ),
     );

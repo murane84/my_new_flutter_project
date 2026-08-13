@@ -933,8 +933,25 @@ class LiveSessionController {
     _myUserId = myUserId;
     final wsBase = await AppConfig.wsBaseUrl; // wss://aluta.ozilane.com (release)
     final uri = Uri.parse('$wsBase/live/ws/$sessionId?token=$token&user_id=$myUserId');
-    _channel = WebSocketChannel.connect(uri);
-    _socketSub = _channel!.stream.listen(
+    final ch = WebSocketChannel.connect(uri);
+    // WebSocketChannel.connect is LAZY: it returns immediately and connects in
+    // the background. Without awaiting readiness, callers (startHost /
+    // joinAsListener / the reconnect paths) proceed as if connected, so a
+    // failed or blocked connect just hangs on "Connecting…" — the error only
+    // surfaces later, out-of-band, via onError, and onDone can't tell a failed
+    // connect from a clean close. Awaiting .ready makes the failure throw HERE,
+    // where those callers already catch it and show a real "couldn't connect"
+    // state; the timeout bounds a dead network instead of waiting forever.
+    try {
+      await ch.ready.timeout(const Duration(seconds: 10));
+    } catch (e) {
+      try {
+        await ch.sink.close();
+      } catch (_) {}
+      rethrow; // startHost/joinAsListener/reconnect* surface this to the UI.
+    }
+    _channel = ch;
+    _socketSub = ch.stream.listen(
       _onSocketMessage,
       onError: (e) => onError?.call(e),
       onDone: () => onEnded?.call('disconnected'),

@@ -486,10 +486,32 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
   String? _stickerUrl; // chosen GIF/sticker (animates with the song)
   bool _posting = false;
   bool _showEmoji = false; // inline emoji panel (field stays visible above it)
+  final ScrollController _scroll = ScrollController();
 
   void _toggleEmoji() {
-    setState(() => _showEmoji = !_showEmoji);
-    if (_showEmoji) FocusManager.instance.primaryFocus?.unfocus();
+    final opening = !_showEmoji;
+    setState(() => _showEmoji = opening);
+    if (opening) {
+      // Hide the keyboard, then scroll the caption field (bottom of the form)
+      // into view just above the panel so you can see what you're typing.
+      FocusManager.instance.primaryFocus?.unfocus();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scroll.hasClients) {
+          _scroll.animateTo(
+            _scroll.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
+  }
+
+  /// Tap anywhere on the form (outside a field / the panel) → drop the keyboard
+  /// and the emoji panel.
+  void _dismissInput() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (_showEmoji) setState(() => _showEmoji = false);
   }
 
   @override
@@ -505,6 +527,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
     _title.dispose();
     _artist.dispose();
     _caption.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -609,7 +632,11 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
             child: Column(
               children: [
                 Expanded(
-                  child: SingleChildScrollView(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _dismissInput,
+                    child: SingleChildScrollView(
+                    controller: _scroll,
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
@@ -692,6 +719,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                         ),
                       ],
                     ),
+                  ),
                   ),
                 ),
                 // Inline emoji panel: the caption stays visible above and

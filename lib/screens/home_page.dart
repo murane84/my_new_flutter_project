@@ -52,6 +52,7 @@ import '../state/group_call_state.dart' show groupCallProvider;
 import '../state/call_state.dart' show callProvider, CallSnapshot;
 import 'call_screen.dart';
 import 'group_call_screen.dart';
+import 'stories/stories_tray.dart';
 import '../main.dart' show navigatorKey;
 import '../utils/time_utils.dart';
 // Prefixed: this file also imports package:provider, which exports colliding
@@ -2824,6 +2825,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
           ),
         ),
         const SizedBox(height: 10),
+        // Ephemeral 24h Stories strip, atop the conversation list.
+        if (_myUserId != null)
+          StoriesTray(
+            apiBase: _apiBase,
+            myUserId: _myUserId,
+            myName: _username.isNotEmpty ? _username : 'You',
+            myAvatarUrl: _myAvatar,
+          ),
         Expanded(
           child: _isLoadingFriends
               ? const Center(child: CircularProgressIndicator())

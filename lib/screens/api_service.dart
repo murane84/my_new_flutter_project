@@ -1553,6 +1553,142 @@ class ApiService {
     return [];
   }
 
+  // ── Stories (ephemeral 24h) ────────────────────────────────────────────────
+
+  /// My + friends' active stories, grouped by author. Returns the raw group
+  /// maps ([] on failure); the UI parses them into StoryGroup models.
+  Future<List<Map<String, dynamic>>> fetchStoriesFeed() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return [];
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/stories/feed'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map && data['groups'] is List) {
+          return (data['groups'] as List)
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        }
+      }
+      return [];
+    } catch (e) {
+      _logger.w('fetchStoriesFeed failed: $e');
+      return [];
+    }
+  }
+
+  /// Upload a story's photo/video bytes and return its asset id (or null).
+  /// Reuses the ephemeral media store; the story then references this id.
+  Future<String?> uploadStoryMedia({
+    required List<int> bytes,
+    required String filename,
+    required String mime,
+  }) async {
+    final up = await uploadMedia(
+        bytes: bytes, filename: filename, mime: mime, ephemeral: true);
+    final url = up?['url'];
+    if (url is String && url.isNotEmpty) {
+      // url is "/attachments/<id>" — the story only wants the <id>.
+      final idx = url.lastIndexOf('/');
+      return idx >= 0 ? url.substring(idx + 1) : url;
+    }
+    return null;
+  }
+
+  /// Post a story (photo/video/music). Returns the created story map, or null.
+  Future<Map<String, dynamic>?> createStory({
+    required String kind,
+    String? mediaAssetId,
+    String? mediaMime,
+    String? caption,
+    String? musicTitle,
+    String? musicArtist,
+    String? musicArtUrl,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/stories'),
+        headers: _authHeaders(token),
+        body: jsonEncode({
+          'kind': kind,
+          'media_asset_id': ?mediaAssetId,
+          'media_mime': ?mediaMime,
+          if (caption != null && caption.isNotEmpty) 'caption': caption,
+          'music_title': ?musicTitle,
+          'music_artist': ?musicArtist,
+          'music_art_url': ?musicArtUrl,
+        }),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return _tryDecode(resp.body);
+      }
+      _logger.w('createStory failed: ${resp.statusCode} ${resp.body}');
+      return null;
+    } catch (e) {
+      _logger.e('createStory exception: $e');
+      return null;
+    }
+  }
+
+  /// Mark a story as viewed (idempotent, best-effort).
+  Future<void> markStoryViewed(String storyId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return;
+      await http.post(
+        Uri.parse('${await _baseUrl}/stories/$storyId/view'),
+        headers: _authHeaders(token),
+      );
+    } catch (_) {/* best-effort */}
+  }
+
+  /// Who viewed my story (author only). Raw maps; [] on failure.
+  Future<List<Map<String, dynamic>>> fetchStoryViewers(String storyId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return [];
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/stories/$storyId/viewers'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is List) {
+          return data
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        }
+      }
+      return [];
+    } catch (e) {
+      _logger.w('fetchStoryViewers failed: $e');
+      return [];
+    }
+  }
+
+  /// Delete my own story.
+  Future<bool> deleteStory(String storyId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.delete(
+        Uri.parse('${await _baseUrl}/stories/$storyId'),
+        headers: _authHeaders(token),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.w('deleteStory failed: $e');
+      return false;
+    }
+  }
+
   Map<String, dynamic>? _tryDecode(String body) {
     try {
       return jsonDecode(body) as Map<String, dynamic>?;

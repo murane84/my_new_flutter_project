@@ -101,6 +101,9 @@ dependencies:
   # WhatsApp-grade photo viewer: per-image pinch-zoom with correct swipe-vs-zoom
   # gesture arbitration in a paged gallery (the chat image viewer).
   photo_view: ^0.15.0
+  # Playback of short video-clip Stories (also used by the story viewer's
+  # progress bar, which tracks the clip's position).
+  video_player: ^2.9.2
 
   # Utilities
   logger: ^2.6.1

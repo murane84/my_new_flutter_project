@@ -251,3 +251,62 @@ class TrackOverridesOut(BaseModel):
 class DeviceTokenIn(BaseModel):
     token: str
     platform: Optional[str] = None  # "android" | "ios" | "web"
+
+
+# ---------------------- STORIES SCHEMAS ----------------------
+
+class StoryCreate(BaseModel):
+    # "photo" | "video" | "music"
+    kind: str = "photo"
+    # For photo/video: the asset id returned by /upload/media (the trailing
+    # segment of its "/attachments/<id>" url). Null/omitted for music stories.
+    media_asset_id: Optional[str] = None
+    media_mime: Optional[str] = None
+    caption: Optional[str] = None
+    music_title: Optional[str] = None
+    music_artist: Optional[str] = None
+    music_art_url: Optional[str] = None
+
+
+class StoryOut(BaseModel):
+    id: str
+    author_id: int
+    kind: str
+    # Friend-scoped media URL (/stories/media/<asset_id>) for photo/video; null
+    # for music stories.
+    media_url: Optional[str] = None
+    media_mime: Optional[str] = None
+    caption: Optional[str] = None
+    music_title: Optional[str] = None
+    music_artist: Optional[str] = None
+    music_art_url: Optional[str] = None
+    created_at: datetime
+    expires_at: datetime
+    # Has the requesting user already viewed this story?
+    viewed: bool = False
+    # How many people viewed it (only populated for the author's own stories).
+    view_count: int = 0
+
+
+class StoryGroupOut(BaseModel):
+    # One author's active stories, newest last (viewer plays oldest→newest).
+    author_id: int
+    username: str
+    avatar_url: Optional[str] = None
+    phone: Optional[str] = None
+    is_me: bool = False
+    # True if the requester hasn't seen every story in this group yet.
+    has_unseen: bool = False
+    stories: list[StoryOut] = []
+
+
+class StoryFeedOut(BaseModel):
+    groups: list[StoryGroupOut] = []
+
+
+class StoryViewerOut(BaseModel):
+    user_id: int
+    username: str
+    avatar_url: Optional[str] = None
+    phone: Optional[str] = None
+    viewed_at: Optional[datetime] = None

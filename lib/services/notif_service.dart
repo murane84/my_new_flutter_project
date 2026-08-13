@@ -212,20 +212,29 @@ Future<void> showMessageNotification({
   required String title,
   required String body,
   int id = 1001,
-  // When set, tapping the notification opens this sender's thread (both while
-  // the app is alive and on cold start) instead of just the chat list.
+  // When set, tapping the notification opens this sender's DM thread (both
+  // while the app is alive and on cold start) instead of just the chat list.
   String? senderId,
   String? senderName,
+  // When set, this is a GROUP message: tapping opens the group thread
+  // (conversation) rather than a DM with the sender.
+  String? conversationId,
+  String? groupTitle,
 }) async {
   if (kIsWeb) return;
   try {
     if (!_ready) await initNotifications();
     String? payload;
-    if (senderId != null && senderId.isNotEmpty) {
+    final hasGroup = conversationId != null && conversationId.isNotEmpty;
+    final hasSender = senderId != null && senderId.isNotEmpty;
+    if (hasGroup || hasSender) {
       payload = jsonEncode({
         'type': 'message',
-        'friend_id': senderId,
+        if (hasSender) 'friend_id': senderId,
         'sender_name': senderName ?? title,
+        if (hasGroup) 'conversation_id': conversationId,
+        if (hasGroup && groupTitle != null && groupTitle.isNotEmpty)
+          'group_title': groupTitle,
       });
     }
     await _fln.show(

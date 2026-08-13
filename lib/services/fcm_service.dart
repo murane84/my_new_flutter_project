@@ -53,15 +53,24 @@ Future<void> handleFcmData(Map<String, dynamic> data) async {
       // killed callee's phone so it doesn't keep ringing.
       await cancelCallNotification();
     } else {
-      final title = (data['sender_name'] ?? 'New message').toString();
+      final sender = (data['sender_name'] ?? 'New message').toString();
       final body = (data['body'] ?? '').toString();
       final senderId = (data['sender_id'] ?? '').toString();
+      final convId = (data['conversation_id'] ?? '').toString();
+      final groupTitle = (data['group_title'] ?? '').toString();
+      final isGroup = convId.isNotEmpty;
+      // For a group message show the group name as the title and "Sender: text"
+      // as the body; a tap opens the GROUP thread (via conversation_id) instead
+      // of a DM with the sender.
       await showMessageNotification(
-        title: title,
-        body: body.isEmpty ? 'Sent you a message' : body,
-        // Lets a tap open the sender's thread directly (not just the chat list).
+        title: isGroup && groupTitle.isNotEmpty ? groupTitle : sender,
+        body: isGroup
+            ? '$sender: ${body.isEmpty ? 'Sent a message' : body}'
+            : (body.isEmpty ? 'Sent you a message' : body),
         senderId: senderId.isEmpty ? null : senderId,
-        senderName: title,
+        senderName: sender,
+        conversationId: convId.isEmpty ? null : convId,
+        groupTitle: groupTitle.isEmpty ? null : groupTitle,
       );
     }
   } catch (_) {/* best-effort */}

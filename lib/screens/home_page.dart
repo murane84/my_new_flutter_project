@@ -2199,13 +2199,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
               ),
             ),
           ),
-          // Group actions live under a bulleted-list glyph — deliberately NOT
-          // a kebab: the app-wide menu (top-right) already owns the vertical ⋮,
-          // and a horizontal ⋯ would read like the typing indicator. A little
-          // "list of things you can do here" keeps the two menus distinct:
-          // ⋮ = app menu, ☰• (list) = this chat's options.
+          // Group actions live under a hamburger ☰ — the classic partner to a
+          // kebab. The app-wide menu (top-right) owns the vertical ⋮, so pairing
+          // ☰ (this chat) with ⋮ (app) makes the two instantly distinct, and a
+          // hamburger avoids the dots that would echo the typing indicator.
           PopupMenuButton<String>(
-            icon: const Icon(Icons.format_list_bulleted_rounded),
+            icon: const Icon(Icons.menu_rounded),
             tooltip: 'Group options',
             onSelected: (v) {
               switch (v) {

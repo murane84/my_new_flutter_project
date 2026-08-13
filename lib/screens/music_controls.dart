@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:just_audio/just_audio.dart';
@@ -1377,6 +1378,15 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   /// opens the drawer with a loader and scans the device (Android) or opens the
   /// file picker (desktop/web).
   Future<void> _openOrScanPlaylist() async {
+    // Web has no access to the device's music library, so there's nothing to
+    // scan or play — tell the user which apps DO support it instead of silently
+    // failing. (Reading `_isMobile` here would touch dart:io's Platform, which
+    // throws on web — this guard also sidesteps that.)
+    if (kIsWeb) {
+      _snack('Playlists use the music saved on your device — open Aluta on your '
+          'phone or desktop app to build and play your library.');
+      return;
+    }
     if (_playlist.isNotEmpty) {
       _openPlaylistDrawer();
       return;

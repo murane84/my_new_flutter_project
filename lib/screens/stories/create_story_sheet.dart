@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../services/audio_handler.dart';
 import '../../utils/emoji_field.dart';
 import '../api_service.dart';
 
@@ -67,10 +68,22 @@ Future<void> showCreateStorySheet(
   if (choice == null || !context.mounted) return;
 
   if (choice == 'music') {
+    // Auto-capture whatever is playing right now (the handler's placeholder is
+    // 'Aluta' when nothing real is loaded → treat that as empty).
+    final mi = audioHandler?.mediaItem.value;
+    var t = (mi?.title ?? '').trim();
+    var a = (mi?.artist ?? '').trim();
+    if (t == 'Aluta') t = '';
+    if (a == 'Aluta') a = '';
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => _MusicStoryPage(apiBase: apiBase, onPosted: onPosted),
+        builder: (_) => _MusicStoryPage(
+          apiBase: apiBase,
+          onPosted: onPosted,
+          initialTitle: t,
+          initialArtist: a,
+        ),
       ),
     );
     return;
@@ -385,8 +398,15 @@ class _MediaComposePageState extends State<_MediaComposePage> {
 class _MusicStoryPage extends StatefulWidget {
   final String apiBase;
   final VoidCallback onPosted;
+  final String initialTitle;
+  final String initialArtist;
 
-  const _MusicStoryPage({required this.apiBase, required this.onPosted});
+  const _MusicStoryPage({
+    required this.apiBase,
+    required this.onPosted,
+    this.initialTitle = '',
+    this.initialArtist = '',
+  });
 
   @override
   State<_MusicStoryPage> createState() => _MusicStoryPageState();
@@ -397,6 +417,14 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
   final TextEditingController _artist = TextEditingController();
   final TextEditingController _caption = TextEditingController();
   bool _posting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-fill from the currently playing track (empty if nothing is playing).
+    _title.text = widget.initialTitle;
+    _artist.text = widget.initialArtist;
+  }
 
   @override
   void dispose() {

@@ -256,16 +256,18 @@ class DeviceTokenIn(BaseModel):
 # ---------------------- STORIES SCHEMAS ----------------------
 
 class StoryCreate(BaseModel):
-    # "photo" | "video" | "music"
+    # "photo" | "video" | "music" | "text"
     kind: str = "photo"
     # For photo/video: the asset id returned by /upload/media (the trailing
-    # segment of its "/attachments/<id>" url). Null/omitted for music stories.
+    # segment of its "/attachments/<id>" url). Null/omitted for music/text.
     media_asset_id: Optional[str] = None
     media_mime: Optional[str] = None
     caption: Optional[str] = None
     music_title: Optional[str] = None
     music_artist: Optional[str] = None
     music_art_url: Optional[str] = None
+    # Text-only story: background colour hex ("#RRGGBB" / "#AARRGGBB").
+    background: Optional[str] = None
 
 
 class StoryOut(BaseModel):
@@ -280,6 +282,7 @@ class StoryOut(BaseModel):
     music_title: Optional[str] = None
     music_artist: Optional[str] = None
     music_art_url: Optional[str] = None
+    background: Optional[str] = None
     created_at: datetime
     expires_at: datetime
     # Has the requesting user already viewed this story?

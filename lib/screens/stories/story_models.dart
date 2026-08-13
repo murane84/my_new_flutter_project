@@ -13,6 +13,7 @@ class StoryItem {
   final String? musicTitle;
   final String? musicArtist;
   final String? musicArtUrl;
+  final String? background; // text-only story background colour hex
   final DateTime? createdAt;
   final DateTime? expiresAt;
   bool viewed; // mutable so the viewer can flip it locally
@@ -28,6 +29,7 @@ class StoryItem {
     this.musicTitle,
     this.musicArtist,
     this.musicArtUrl,
+    this.background,
     this.createdAt,
     this.expiresAt,
     this.viewed = false,
@@ -37,6 +39,7 @@ class StoryItem {
   bool get isVideo => kind == 'video';
   bool get isMusic => kind == 'music';
   bool get isPhoto => kind == 'photo';
+  bool get isText => kind == 'text';
 
   static DateTime? _dt(dynamic v) =>
       v == null ? null : DateTime.tryParse(v.toString())?.toLocal();
@@ -51,6 +54,7 @@ class StoryItem {
         musicTitle: j['music_title'] as String?,
         musicArtist: j['music_artist'] as String?,
         musicArtUrl: j['music_art_url'] as String?,
+        background: j['background'] as String?,
         createdAt: _dt(j['created_at']),
         expiresAt: _dt(j['expires_at']),
         viewed: j['viewed'] == true,

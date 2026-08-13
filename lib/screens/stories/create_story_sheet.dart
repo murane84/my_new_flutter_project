@@ -1,7 +1,6 @@
-import 'dart:io' show File, Platform;
+import 'dart:io' show File;
 import 'dart:typed_data';
 
-import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -124,7 +123,7 @@ Future<void> showCreateStorySheet(
         maxDuration: const Duration(seconds: 30),
       );
     } else if (choice == 'camera') {
-      file = await _capturePhoto(context);
+      file = await capturePhoto(context, maxWidth: 1600);
     } else {
       file = await picker.pickImage(
         source: ImageSource.gallery,
@@ -146,45 +145,6 @@ Future<void> showCreateStorySheet(
         file: file!,
         onPosted: onPosted,
       ),
-    ),
-  );
-}
-
-/// Take a photo with the device camera. Mobile uses image_picker's camera
-/// (proven). Web/desktop use the `camera` package (image_picker has no camera
-/// there — that's why tapping "Camera" used to open a folder). If the device
-/// has no usable camera (or the platform has no camera backend, e.g. Linux),
-/// show a graceful toast and return null instead of a confusing file picker.
-Future<XFile?> _capturePhoto(BuildContext context) async {
-  final mobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
-  if (mobile) {
-    return ImagePicker().pickImage(
-      source: ImageSource.camera,
-      imageQuality: 90,
-      maxWidth: 1600,
-    );
-  }
-  List<CameraDescription> cameras = const [];
-  try {
-    cameras = await availableCameras();
-  } catch (_) {
-    cameras = const [];
-  }
-  if (cameras.isEmpty) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("This device has no built-in camera to use."),
-        ),
-      );
-    }
-    return null;
-  }
-  if (!context.mounted) return null;
-  return Navigator.push<XFile?>(
-    context,
-    MaterialPageRoute(
-      builder: (_) => CameraCaptureScreen(camera: cameras.first),
     ),
   );
 }

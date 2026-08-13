@@ -56,6 +56,7 @@ import 'stories/stories_tray.dart';
 import 'stories/story_models.dart';
 import 'stories/story_viewer.dart';
 import 'policy_gate.dart';
+import '../services/connected_contacts_service.dart';
 import '../services/telecom_service.dart';
 import '../main.dart' show navigatorKey;
 import '../utils/time_utils.dart';
@@ -251,6 +252,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // authed home only mounts after login, so this doubles as "register on
     // login" and re-registers on every relaunch (token can rotate).
     FcmService.instance.registerToken();
+
+    // Android "Connected apps": surface Aluta actions ("Voice call on Aluta",
+    // "Message on Aluta") under matched phone-book contacts, like WhatsApp /
+    // Telegram. Register the tap-router + drain any cold-start action now, then
+    // refresh the matched rows shortly after launch (self-gates on the contacts
+    // permission; a no-op off Android).
+    ConnectedContactsService.instance.onAction = _onConnectedContactAction;
+    ConnectedContactsService.instance.init();
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) ConnectedContactsService.instance.refresh();
+    });
 
     // Foreground heartbeat: keep the server-side presence alive while the app
     // is open, so idling no longer silently drops the user offline.
@@ -1687,6 +1699,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     try {
       await FcmService.instance.unregisterToken();
     } catch (_) {}
+    await ConnectedContactsService.instance.clear();
     await ApiService().logoutUser();
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -2059,6 +2072,37 @@ class HomePageState extends rp.ConsumerState<HomePage>
     );
   }
 
+  /// Routed from the phone's Contacts app when the user taps Aluta's "Voice
+  /// call" / "Message" row under a contact. Resolves the friend (falling back to
+  /// a minimal record if not loaded yet) and opens the call or chat.
+  void _onConnectedContactAction(String action, int userId, String number) {
+    if (userId <= 0) return;
+    Map<String, dynamic>? friend;
+    for (final f in _allFriends) {
+      if ((f['id']?.toString() ?? '') == userId.toString()) {
+        friend = Map<String, dynamic>.from(f);
+        break;
+      }
+    }
+    friend ??= <String, dynamic>{
+      'id': userId,
+      'username': 'Aluta user',
+      'phone': number.isNotEmpty ? number : null,
+      'avatar_url': null,
+      'is_online': false,
+    };
+    if (action == 'message') {
+      openChat(friend);
+    } else if (action == 'call') {
+      _startAlutaCall(
+        userId,
+        (friend['username'] ?? 'Aluta user').toString(),
+        friend['avatar_url'] as String?,
+        (friend['phone'] as String?) ?? (number.isNotEmpty ? number : null),
+      );
+    }
+  }
+
   Future<void> _startAlutaCall(
       int friendId, String name, String? avatar, String? phone) async {
     if (!ConnectionStatus.instance.isOnline) {
@@ -2116,6 +2160,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Stop pushes reaching this device for the account we're leaving (done while
     // the token is still valid, before logoutUser clears it). Best-effort.
     await FcmService.instance.unregisterToken();
+    // Remove Aluta's "Connected apps" contact rows for the account we're leaving.
+    await ConnectedContactsService.instance.clear();
     await ApiService().logoutUser();
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();

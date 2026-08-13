@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shown for the Aluta account under Settings → Accounts. -->
+    <string name="aluta_account_label">Aluta</string>
+</resources>

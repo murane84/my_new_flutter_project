@@ -26,6 +26,13 @@ class MainActivity : AudioServiceFragmentActivity() {
     private val reliabilityChannel = "aluta/reliability"
     private val audioCaptureChannel = "aluta/audiocapture"
     private val telecomChannel = "aluta/telecom"
+    private val connectedContactsChannel = "aluta/connected_contacts"
+
+    // Channel for the "Connected apps" (ContactsContract) integration, plus a
+    // stash for an action tapped from the system Contacts app before Dart is
+    // listening (cold start) — consumed via "consumePendingAction".
+    private var contactsMc: MethodChannel? = null
+    private var pendingContactAction: HashMap<String, String>? = null
 
     // MediaProjection consent → internal audio capture ("identify song").
     private val reqCapture = 7331
@@ -85,6 +92,54 @@ class MainActivity : AudioServiceFragmentActivity() {
             telecomMc?.invokeMethod(
                 event, mapOf("callId" to callId, "muted" to muted)
             )
+        }
+
+        val cmc = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, connectedContactsChannel)
+        contactsMc = cmc
+        cmc.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "ensureAccount" -> result.success(ConnectedContacts.ensureAccount(this))
+                "sync" -> {
+                    @Suppress("UNCHECKED_CAST")
+                    val list = (call.argument<List<Map<String, Any?>>>("matches")
+                        ?: emptyList())
+                    result.success(ConnectedContacts.sync(this, list))
+                }
+                "clear" -> { ConnectedContacts.clearAll(this); result.success(true) }
+                "consumePendingAction" -> {
+                    val p = pendingContactAction
+                    pendingContactAction = null
+                    result.success(p)
+                }
+                else -> result.notImplemented()
+            }
+        }
+        // If the app was cold-launched by tapping an Aluta row in the Contacts
+        // app, stash that action for Dart to pick up via consumePendingAction.
+        handleContactIntent(intent, deliver = false)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // App already running → deliver straight to Dart.
+        handleContactIntent(intent, deliver = true)
+    }
+
+    // Turn an ACTION_VIEW on one of Aluta's custom contact mimetypes into a
+    // routing payload {action, number, userId}; deliver it now (warm) or stash
+    // it for consumePendingAction (cold start).
+    private fun handleContactIntent(intent: Intent?, deliver: Boolean) {
+        if (intent == null || intent.action != Intent.ACTION_VIEW) return
+        val type = intent.type ?: return
+        if (type != ConnectedContacts.MIME_CALL && type != ConnectedContacts.MIME_MESSAGE) return
+        val uri = intent.data ?: return
+        val payload = ConnectedContacts.readAction(this, uri) ?: return
+        val mc = contactsMc
+        if (deliver && mc != null) {
+            mc.invokeMethod("onAction", payload)
+        } else {
+            pendingContactAction = payload
         }
     }
 

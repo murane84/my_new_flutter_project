@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Declares the Aluta contacts-sync account type. Referenced by
+     AuthenticatorService via the android.accounts.AccountAuthenticator
+     meta-data. -->
+<account-authenticator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accountType="com.ozilane.aluta"
+    android:icon="@mipmap/launcher_icon"
+    android:smallIcon="@mipmap/launcher_icon"
+    android:label="@string/aluta_account_label" />

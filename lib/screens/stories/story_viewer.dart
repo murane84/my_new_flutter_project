@@ -54,11 +54,23 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   void initState() {
     super.initState();
     _g = widget.startGroup.clamp(0, widget.groups.length - 1);
+    // Open directly on the first UNSEEN story so the viewer doesn't dump the
+    // user on old, already-watched ones (they can still swipe back).
+    _s = _firstUnseen(widget.groups[_g]);
     _progress = AnimationController(vsync: this, duration: _photoDuration)
       ..addStatusListener((st) {
         if (st == AnimationStatus.completed) _next();
       });
     WidgetsBinding.instance.addPostFrameCallback((_) => _startStory());
+  }
+
+  /// Index of the first not-yet-seen story in [g], or 0 when every story is
+  /// already seen (then the group just replays from the start).
+  int _firstUnseen(StoryGroup g) {
+    for (var i = 0; i < g.stories.length; i++) {
+      if (!g.stories[i].viewed) return i;
+    }
+    return 0;
   }
 
   @override
@@ -156,9 +168,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       setState(() => _s++);
       _startStory();
     } else if (_g < widget.groups.length - 1) {
+      // Advancing to the next author → start on their first unseen story too.
       setState(() {
         _g++;
-        _s = 0;
+        _s = _firstUnseen(widget.groups[_g]);
       });
       _startStory();
     } else {

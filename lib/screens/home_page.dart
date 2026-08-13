@@ -53,6 +53,8 @@ import '../state/call_state.dart' show callProvider, CallSnapshot;
 import 'call_screen.dart';
 import 'group_call_screen.dart';
 import 'stories/stories_tray.dart';
+import 'stories/story_models.dart';
+import 'stories/story_viewer.dart';
 import '../services/telecom_service.dart';
 import '../main.dart' show navigatorKey;
 import '../utils/time_utils.dart';
@@ -122,6 +124,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // Group conversations the user belongs to. They sit at the TOP of the same
   // list as DMs, so a created/joined group appears right alongside friends.
   List<Map<String, dynamic>> _groups = [];
+  // Active stories feed (mine + friends), grouped by author. Owned here so BOTH
+  // the stories tray AND the friend-list tiles (their avatar rings) reflect the
+  // same seen-state. Refreshed on init, after posting/viewing, and on the
+  // 'story_posted' WebSocket nudge.
+  List<StoryGroup> _storyGroups = [];
   List<Map<String, dynamic>> _filteredGroups = [];
   final TextEditingController _searchCtrl = TextEditingController();
   bool _isLoadingFriends = false;
@@ -222,6 +229,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _loadUserData();
     _loadCachedFriends();    // show cached list instantly (no spinner flash)
     _fetchFriends();          // then refresh from network
+    _fetchStories();          // active stories for the tray + tile rings
     _loadLayoutState();
     _discoverServer();
 
@@ -1136,6 +1144,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
       _showLiveDeclined(event);
       return;
     }
+    // A friend posted a story → refresh the feed so their ring appears on the
+    // tray + their conversation tile, without the user pulling to refresh.
+    if (type == 'story_posted') {
+      _fetchStories();
+      return;
+    }
     // A new chat message arriving on the per-user notify socket. When the app
     // is backgrounded (e.g. music playing in the car), pop a local
     // notification so the user is prompted back. Requires the backend to emit
@@ -1622,6 +1636,82 @@ class HomePageState extends rp.ConsumerState<HomePage>
       }
     }
     return null;
+  }
+
+  /// Fetch the active stories feed (mine + friends) that drives the tray AND
+  /// the friend-list avatar rings. Silent on failure.
+  Future<void> _fetchStories() async {
+    final raw = await ApiService().fetchStoriesFeed();
+    if (!mounted) return;
+    setState(() => _storyGroups = raw.map(StoryGroup.fromJson).toList());
+  }
+
+  /// The active story group for a friend id (null if none), used to draw the
+  /// coloured "unseen" / grey "seen" ring on their conversation tile.
+  StoryGroup? _friendStory(dynamic id) {
+    if (id == null) return null;
+    final key = id.toString();
+    for (final g in _storyGroups) {
+      if (!g.isMe && g.authorId.toString() == key) return g;
+    }
+    return null;
+  }
+
+  /// Open a friend's story straight from their conversation tile.
+  Future<void> _openFriendStory(StoryGroup g) async {
+    await Navigator.push(
+      navigatorKey.currentContext ?? context,
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => StoryViewerScreen(
+          groups: [g],
+          startGroup: 0,
+          apiBase: _apiBase,
+          myUserId: _myUserId,
+        ),
+      ),
+    );
+    _fetchStories();
+  }
+
+  /// A friend-list avatar, wrapped in a story ring when they have an active
+  /// status: a colourful gradient while unseen, a neutral grey once viewed.
+  /// Tapping the ring opens their story (the rest of the tile opens the chat).
+  Widget _storyRingAvatar(
+      Map<String, dynamic> f, String name, bool isOnline) {
+    final avatar = InitialsAvatar(
+      name: name,
+      radius: 22,
+      isOnline: isOnline,
+      imageUrl: _avatarFull(f['avatar_url']),
+    );
+    final story = _friendStory(f['id']);
+    if (story == null) return avatar;
+    final scheme = Theme.of(context).colorScheme;
+    final gradient = story.hasUnseen
+        ? const LinearGradient(
+            colors: [Color(0xFFF9A825), Color(0xFFE91E63), Color(0xFF7B1FA2)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          )
+        : null;
+    return GestureDetector(
+      onTap: () => _openFriendStory(story),
+      child: Container(
+        padding: const EdgeInsets.all(2.5),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: gradient,
+          color: gradient == null ? Colors.grey.shade400 : null,
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(2),
+          decoration:
+              BoxDecoration(shape: BoxShape.circle, color: scheme.surface),
+          child: avatar,
+        ),
+      ),
+    );
   }
 
   // ── Chat open/close ───────────────────────────────────────────────────────
@@ -2885,6 +2975,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
             myUserId: _myUserId,
             myName: _username.isNotEmpty ? _username : 'You',
             myAvatarUrl: _myAvatar,
+            groups: _storyGroups,
+            onReload: _fetchStories,
           ),
         Expanded(
           child: _isLoadingFriends
@@ -3017,11 +3109,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
         child: Row(
           children: [
-            InitialsAvatar(
-                name: name,
-                radius: 22,
-                isOnline: isOnline,
-                imageUrl: _avatarFull(f['avatar_url'])),
+            _storyRingAvatar(f, name, isOnline),
             const SizedBox(width: 10),
             Expanded(
               child: Column(

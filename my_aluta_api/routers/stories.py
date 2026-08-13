@@ -25,6 +25,7 @@ from models import User, MediaAsset, Story, StoryView
 from crud import _get_friend_ids
 from .users import get_current_user
 from auth import get_current_user_flexible
+from websocket_manager import safe_notify_user
 
 router = APIRouter(prefix="/stories", tags=["Stories"])
 
@@ -137,6 +138,17 @@ def create_story(
     db.add(story)
     db.commit()
     db.refresh(story)
+
+    # Live-nudge friends' clients so the new status appears on their tray/tiles
+    # without a manual refresh. The event carries no story data — clients fetch
+    # the feed themselves on this signal (keeps access control server-side).
+    try:
+        for fid in _get_friend_ids(db, current_user.id):
+            safe_notify_user(int(fid),
+                             {"type": "story_posted", "author_id": current_user.id})
+    except Exception:  # noqa: BLE001
+        pass
+
     # The author has implicitly "seen" their own post.
     return _story_out(story, viewed=True, view_count=0)
 

@@ -186,6 +186,12 @@ class _MediaComposePageState extends State<_MediaComposePage> {
   bool _posting = false;
   VideoPlayerController? _video;
   bool _videoFailed = false; // no playback backend here (e.g. Windows / web)
+  bool _showEmoji = false; // inline emoji panel (caption stays visible above)
+
+  void _toggleEmoji() {
+    setState(() => _showEmoji = !_showEmoji);
+    if (_showEmoji) FocusManager.instance.primaryFocus?.unfocus();
+  }
 
   @override
   void initState() {
@@ -303,6 +309,11 @@ class _MediaComposePageState extends State<_MediaComposePage> {
                     style: const TextStyle(color: Colors.white),
                     minLines: 1,
                     maxLines: 3,
+                    // Tapping the field to type dismisses the emoji panel so the
+                    // keyboard can take over.
+                    onTap: () {
+                      if (_showEmoji) setState(() => _showEmoji = false);
+                    },
                     decoration: InputDecoration(
                       hintText: 'Add a caption…',
                       hintStyle:
@@ -316,11 +327,13 @@ class _MediaComposePageState extends State<_MediaComposePage> {
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 10),
                       suffixIcon: IconButton(
-                        icon: Icon(Icons.emoji_emotions_outlined,
+                        icon: Icon(
+                            _showEmoji
+                                ? Icons.keyboard_rounded
+                                : Icons.emoji_emotions_outlined,
                             color: Colors.white.withValues(alpha: 0.75)),
-                        tooltip: 'Add emoji',
-                        onPressed: () =>
-                            showEmojiPickerSheet(context, _caption),
+                        tooltip: _showEmoji ? 'Keyboard' : 'Add emoji',
+                        onPressed: _toggleEmoji,
                       ),
                     ),
                   ),
@@ -346,6 +359,13 @@ class _MediaComposePageState extends State<_MediaComposePage> {
               ],
             ),
           ),
+          // Inline emoji panel: the caption bar stays visible directly above and
+          // updates live as emojis are tapped (no covering modal sheet).
+          if (_showEmoji)
+            SizedBox(
+              height: 300,
+              child: inlineEmojiPicker(context, _caption),
+            ),
         ],
       ),
     );

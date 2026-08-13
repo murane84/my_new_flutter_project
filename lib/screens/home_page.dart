@@ -3107,6 +3107,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
                 ],
               ],
             ),
+            // Quick group call — same flow as starting one from inside the
+            // group (rings every member, opens the group-call screen).
+            IconButton(
+              tooltip: 'Group call · $name',
+              icon: Icon(Icons.call_rounded, color: scheme.primary, size: 20),
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _startGroupCall(g),
+            ),
           ],
         ),
       ),

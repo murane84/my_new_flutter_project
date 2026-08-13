@@ -1,7 +1,10 @@
+import 'dart:io' show File;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../utils/emoji_field.dart';
 import '../api_service.dart';
@@ -139,11 +142,14 @@ class _MediaComposePageState extends State<_MediaComposePage> {
   final TextEditingController _caption = TextEditingController();
   Uint8List? _bytes;
   bool _posting = false;
+  VideoPlayerController? _video;
+  bool _videoFailed = false; // no playback backend here (e.g. Windows / web)
 
   @override
   void initState() {
     super.initState();
     _load();
+    if (widget.kind == 'video') _initVideo();
   }
 
   Future<void> _load() async {
@@ -152,9 +158,34 @@ class _MediaComposePageState extends State<_MediaComposePage> {
     setState(() => _bytes = b);
   }
 
+  Future<void> _initVideo() async {
+    // Preview plays from the picked file path (native only); web/desktop with
+    // no backend fall back to the filmstrip card.
+    if (kIsWeb || widget.file.path.isEmpty) {
+      setState(() => _videoFailed = true);
+      return;
+    }
+    final ctrl = VideoPlayerController.file(File(widget.file.path));
+    _video = ctrl;
+    try {
+      await ctrl.initialize();
+      if (!mounted) {
+        ctrl.dispose();
+        return;
+      }
+      await ctrl.setLooping(true);
+      await ctrl.play();
+      setState(() {});
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _videoFailed = true);
+    }
+  }
+
   @override
   void dispose() {
     _caption.dispose();
+    _video?.dispose();
     super.dispose();
   }
 
@@ -217,8 +248,11 @@ class _MediaComposePageState extends State<_MediaComposePage> {
           ),
           Container(
             color: Colors.black,
-            padding: EdgeInsets.fromLTRB(
-                12, 8, 12, MediaQuery.of(context).viewInsets.bottom + 12),
+            // The Scaffold already insets for the keyboard (resizeToAvoidBottom
+            // Inset), so DON'T add viewInsets here too — that double-counted the
+            // keyboard height (image squeezed up + a blank gap). Just a little
+            // breathing room; the Scaffold lifts this bar above the keyboard.
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
             child: Row(
               children: [
                 Expanded(
@@ -276,6 +310,45 @@ class _MediaComposePageState extends State<_MediaComposePage> {
   }
 
   Widget _videoCard() {
+    final v = _video;
+    if (v != null && v.value.isInitialized) {
+      return ValueListenableBuilder<VideoPlayerValue>(
+        valueListenable: v,
+        builder: (_, val, _) => GestureDetector(
+          onTap: () => val.isPlaying ? v.pause() : v.play(),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              AspectRatio(
+                aspectRatio: val.aspectRatio == 0 ? 9 / 16 : val.aspectRatio,
+                child: VideoPlayer(v),
+              ),
+              if (!val.isPlaying)
+                const Icon(Icons.play_circle_fill_rounded,
+                    color: Colors.white70, size: 68),
+              Positioned(
+                right: 12,
+                bottom: 12,
+                child: IconButton(
+                  icon: Icon(
+                    val.volume == 0
+                        ? Icons.volume_off_rounded
+                        : Icons.volume_up_rounded,
+                    color: Colors.white,
+                  ),
+                  onPressed: () => v.setVolume(val.volume == 0 ? 1 : 0),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_videoFailed) return _videoFallbackCard();
+    return const CircularProgressIndicator(color: Colors.white);
+  }
+
+  Widget _videoFallbackCard() {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [

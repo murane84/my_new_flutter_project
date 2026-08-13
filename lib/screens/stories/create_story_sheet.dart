@@ -9,6 +9,7 @@ import 'package:video_player/video_player.dart';
 import '../../services/audio_handler.dart';
 import '../../utils/emoji_field.dart';
 import '../api_service.dart';
+import '../gif_picker.dart';
 
 /// Entry point: a bottom sheet offering the four ways to post a story
 /// (photo from gallery, camera photo, a short video clip, or a "now playing"
@@ -413,9 +414,22 @@ class _MusicStoryPage extends StatefulWidget {
 }
 
 class _MusicStoryPageState extends State<_MusicStoryPage> {
+  // Tap-to-cycle background gradients (stored as "hex1,hex2").
+  static const List<List<Color>> _palettes = [
+    [Color(0xFF5B2C83), Color(0xFF1D1040)],
+    [Color(0xFF11998E), Color(0xFF38EF7D)],
+    [Color(0xFFEE0979), Color(0xFFFF6A00)],
+    [Color(0xFF2193B0), Color(0xFF6DD5ED)],
+    [Color(0xFF373B44), Color(0xFF4286F4)],
+    [Color(0xFFCB356B), Color(0xFFBD3F32)],
+    [Color(0xFF0F2027), Color(0xFF2C5364)],
+  ];
+
   final TextEditingController _title = TextEditingController();
   final TextEditingController _artist = TextEditingController();
   final TextEditingController _caption = TextEditingController();
+  int _bg = 0;
+  String? _stickerUrl; // chosen GIF/sticker (animates with the song)
   bool _posting = false;
 
   @override
@@ -434,6 +448,29 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
     super.dispose();
   }
 
+  String _hex(Color c) => '#${c.toARGB32().toRadixString(16).padLeft(8, '0')}';
+  String _bgValue() => '${_hex(_palettes[_bg][0])},${_hex(_palettes[_bg][1])}';
+
+  Future<void> _pickSticker() async {
+    final url = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(ctx).size.height * 0.6,
+          child: GifPicker(
+            onSelected: (gif) => Navigator.pop(ctx, gif.fullUrl),
+          ),
+        ),
+      ),
+    );
+    if (url != null && mounted) setState(() => _stickerUrl = url);
+  }
+
   Future<void> _post() async {
     if (_posting) return;
     final title = _title.text.trim();
@@ -447,6 +484,8 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
       musicTitle: title,
       musicArtist: _artist.text.trim().isEmpty ? null : _artist.text.trim(),
       caption: _caption.text.trim(),
+      background: _bgValue(),
+      musicArtUrl: _stickerUrl,
     );
     if (!mounted) return;
     setState(() => _posting = false);
@@ -466,13 +505,32 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Now playing')),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: Colors.white,
+        title: const Text('Now playing'),
+        actions: [
+          IconButton(
+            tooltip: 'Background colour',
+            icon: const Icon(Icons.palette_rounded),
+            onPressed: () =>
+                setState(() => _bg = (_bg + 1) % _palettes.length),
+          ),
+          IconButton(
+            tooltip: 'Add a GIF / sticker',
+            icon: const Icon(Icons.gif_box_outlined),
+            onPressed: _pickSticker,
+          ),
+        ],
+      ),
+      extendBodyBehindAppBar: true,
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF5B2C83), Color(0xFF1D1040)],
+            colors: _palettes[_bg],
           ),
         ),
         child: SafeArea(
@@ -481,17 +539,57 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
             child: Column(
               children: [
                 const SizedBox(height: 8),
-                Container(
-                  width: 120,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    color: Colors.white.withValues(alpha: 0.12),
+                // Sticker/GIF (animates) if chosen, else a tappable note tile.
+                GestureDetector(
+                  onTap: _pickSticker,
+                  child: SizedBox(
+                    width: 150,
+                    height: 150,
+                    child: _stickerUrl != null
+                        ? Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(18),
+                                child: Image.network(
+                                  _stickerUrl!,
+                                  width: 150,
+                                  height: 150,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                              Positioned(
+                                top: -8,
+                                right: -8,
+                                child: IconButton(
+                                  icon: const Icon(Icons.cancel,
+                                      color: Colors.white),
+                                  onPressed: () =>
+                                      setState(() => _stickerUrl = null),
+                                ),
+                              ),
+                            ],
+                          )
+                        : Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(18),
+                              color: Colors.white.withValues(alpha: 0.12),
+                            ),
+                            child: const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.gif_box_outlined,
+                                    color: Colors.white, size: 46),
+                                SizedBox(height: 6),
+                                Text('Add a sticker',
+                                    style: TextStyle(
+                                        color: Colors.white70, fontSize: 12)),
+                              ],
+                            ),
+                          ),
                   ),
-                  child: const Icon(Icons.music_note_rounded,
-                      color: Colors.white, size: 56),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 22),
                 _field(_title, 'Song title'),
                 const SizedBox(height: 12),
                 _field(_artist, 'Artist (optional)'),

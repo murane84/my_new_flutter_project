@@ -601,7 +601,13 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: ink,
-        title: const Text('Now playing'),
+        // Explicit ink colour: the app's global appBarTheme.titleTextStyle is
+        // pinned to the platform theme's onSurface, which would ignore the
+        // chosen status background (e.g. black title on a black background). Tie
+        // the title to the background's ink so it's always legible.
+        title: Text('Now playing',
+            style: TextStyle(
+                color: ink, fontWeight: FontWeight.w700, fontSize: 18)),
         actions: [
           IconButton(
             tooltip: 'Background colour',

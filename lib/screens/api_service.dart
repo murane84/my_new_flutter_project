@@ -967,6 +967,62 @@ class ApiService {
     }
   }
 
+  /// Look up ONE user to add as a friend, by exact @username or full phone
+  /// number. Returns {"user": {...}, "is_friend": bool} on a match, or null if
+  /// no user matched / on error.
+  Future<Map<String, dynamic>?> lookupUser(String query) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/users/lookup'
+            '?q=${Uri.encodeQueryComponent(query)}'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map) return Map<String, dynamic>.from(data);
+      }
+      return null;
+    } catch (e) {
+      _logger.w('lookupUser failed: $e');
+      return null;
+    }
+  }
+
+  /// Add [userId] to the caller's circle (instant + mutual). Returns true on ok.
+  Future<bool> addFriend(int userId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/users/friends/add'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'user_id': userId}),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.w('addFriend failed: $e');
+      return false;
+    }
+  }
+
+  /// Remove [userId] from the caller's circle (drops the friendship both ways).
+  Future<bool> removeFriend(int userId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.delete(
+        Uri.parse('${await _baseUrl}/users/friends/$userId'),
+        headers: _authHeaders(token),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.w('removeFriend failed: $e');
+      return false;
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Group conversations (DMs keep using the legacy /messages endpoints above)
   // ---------------------------------------------------------------------------

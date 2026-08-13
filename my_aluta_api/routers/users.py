@@ -302,6 +302,89 @@ def get_friends_with_unread_counts(
 ):
     return crud.get_friends_with_unread_counts(db, current_user.id)
 
+
+def _is_friend(db: Session, a: int, b: int) -> bool:
+    return db.query(Friend).filter(
+        ((Friend.user_id == a) & (Friend.friend_id == b))
+        | ((Friend.user_id == b) & (Friend.friend_id == a))
+    ).first() is not None
+
+
+@router.get("/users/lookup", tags=["Users"])
+def lookup_user(
+    q: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Find ONE user to add as a friend, by EXACT @username or full phone number
+    (no partial/browse search — strangers stay undiscoverable). Used by the
+    desktop/web 'Add friend' flow where there's no phone-book to scan."""
+    query = (q or "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Enter a username or phone number")
+    user = None
+    # Treat it as a phone number when it looks like one; else an exact username.
+    digits = re.sub(r"\D", "", query)
+    if query.startswith("+") or len(digits) >= 8:
+        keys = _phone_keys(query)
+        if keys:
+            candidates = (
+                db.query(User)
+                .filter(User.phone.isnot(None), User.id != current_user.id)
+                .all()
+            )
+            for u in candidates:
+                if _phone_keys(u.phone) & keys:
+                    user = u
+                    break
+    if user is None:
+        # Exact, case-insensitive username match (ilike with no wildcards).
+        user = (
+            db.query(User)
+            .filter(User.username.ilike(query), User.id != current_user.id)
+            .first()
+        )
+    if user is None:
+        raise HTTPException(status_code=404, detail="No Aluta user with that username or number")
+    return {
+        "user": UserOut.model_validate(user),
+        "is_friend": _is_friend(db, current_user.id, user.id),
+    }
+
+
+@router.post("/users/friends/add", tags=["Users"])
+def add_friend(
+    payload: schemas.FriendAdd,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Add a friend instantly (mutual — both can chat). Idempotent."""
+    target_id = payload.user_id
+    if target_id == current_user.id:
+        raise HTTPException(status_code=400, detail="You can't add yourself")
+    target = db.query(User).filter(User.id == target_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not _is_friend(db, current_user.id, target_id):
+        db.add(Friend(user_id=current_user.id, friend_id=target_id))
+        db.commit()
+    return {"ok": True, "user": UserOut.model_validate(target)}
+
+
+@router.delete("/users/friends/{friend_id}", tags=["Users"])
+def remove_friend(
+    friend_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Remove someone from your circle (drops the friendship for both sides)."""
+    db.query(Friend).filter(
+        ((Friend.user_id == current_user.id) & (Friend.friend_id == friend_id))
+        | ((Friend.user_id == friend_id) & (Friend.friend_id == current_user.id))
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"ok": True}
+
 @router.post("/users/{friend_id}/mute", tags=["Users"])
 def toggle_mute(friend_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     mute = db.query(MuteStatus).filter_by(user_id=current_user.id, muted_user_id=friend_id).first()

@@ -41,6 +41,12 @@ class UserStatus(BaseModel):
     is_online: bool
 
 
+class FriendAdd(BaseModel):
+    # Add a friend by their user id (resolved first via /users/lookup). Adding is
+    # instant and mutual — both parties can then chat.
+    user_id: int
+
+
 # ---------------------- MESSAGE SCHEMAS ----------------------
 
 class MessageCreate(BaseModel):
@@ -332,4 +338,4 @@ class PolicyStatusOut(BaseModel):
     effective_date: str
     privacy_url: str
     terms_url: str
-    summary: str = ""
+    summary: str = ""

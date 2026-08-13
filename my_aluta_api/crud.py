@@ -247,7 +247,14 @@ def get_unread_messages_with_friend(db: Session, user_id: int, friend_id: int):
 
 # ------------------ Friend Lists ------------------
 def get_all_users(db: Session, current_user_id: int):
-    return db.query(User).filter(User.id != current_user_id).all()
+    # The caller's OWN circle only — NOT the whole user table. Friends enter the
+    # circle via contacts sync (mobile phone-book match) or an explicit add
+    # (by username/phone). This is what the chat list is built from, so a user
+    # never sees every registered account by default.
+    friend_ids = _get_friend_ids(db, current_user_id)
+    if not friend_ids:
+        return []
+    return db.query(User).filter(User.id.in_(friend_ids)).all()
 
 
 def get_friends(db: Session, user_id: int):
@@ -328,11 +335,19 @@ def get_friends_with_unread_counts(db: Session, user_id: int):
 
 # ------------------ Online/Offline ------------------
 def get_online_friends(db: Session, user_id: int):
-    return db.query(User).filter(User.id != user_id, User.is_online == True).all()
+    friend_ids = _get_friend_ids(db, user_id)
+    if not friend_ids:
+        return []
+    return db.query(User).filter(
+        User.id.in_(friend_ids), User.is_online == True).all()
 
 
 def get_offline_friends(db: Session, user_id: int):
-    return db.query(User).filter(User.id != user_id, User.is_online == False).all()
+    friend_ids = _get_friend_ids(db, user_id)
+    if not friend_ids:
+        return []
+    return db.query(User).filter(
+        User.id.in_(friend_ids), User.is_online == False).all()
 
 
 def get_online_friends_count(db: Session, user_id: int) -> int:

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'api_service.dart';
-import 'legal_document_page.dart';
+import 'legal_screen.dart';
 
 /// A blocking "read & agree" consent gate for the Privacy Policy + Terms of Use.
 ///
@@ -47,14 +47,6 @@ class _PolicyGateDialogState extends State<_PolicyGateDialog> {
   String get _summary => (widget.status['summary'] as String?)?.trim() ?? '';
   String get _effectiveDate =>
       (widget.status['effective_date'] as String?) ?? '';
-
-  /// Open a legal document in an in-app reader page (no browser hop), so the
-  /// user can read it and come straight back to tick the box.
-  void _openDoc(LegalDoc doc) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => LegalDocumentPage(doc: doc)),
-    );
-  }
 
   Future<void> _mail() async {
     try {
@@ -160,13 +152,13 @@ class _PolicyGateDialogState extends State<_PolicyGateDialog> {
                         _DocLink(
                           icon: Icons.privacy_tip_rounded,
                           label: 'Read the Privacy Policy',
-                          onTap: () => _openDoc(legalPrivacyDoc),
+                          onTap: () => showPrivacyPolicy(context),
                         ),
                         const SizedBox(height: 10),
                         _DocLink(
                           icon: Icons.gavel_rounded,
-                          label: 'Read the Terms of Use',
-                          onTap: () => _openDoc(legalTermsDoc),
+                          label: 'Read the Terms of Service',
+                          onTap: () => showTermsOfUse(context),
                         ),
                       ],
                     ),

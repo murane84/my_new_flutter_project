@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aluta — Privacy Policy</title>
+<style>
+  :root{
+    --brand:#E23744; --ink:#1a1c22; --muted:#5b616e; --line:#e7e9ee;
+    --bg:#ffffff; --soft:#f7f8fa; --badge:#FFF0F1;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--soft);color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:820px;margin:0 auto;padding:40px 22px 80px;}
+  header{border-bottom:3px solid var(--brand);padding-bottom:18px;margin-bottom:8px;}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .dot{width:14px;height:14px;border-radius:50%;background:var(--brand);
+    box-shadow:0 0 0 4px var(--badge);}
+  h1{font-size:30px;margin:14px 0 4px;letter-spacing:-.02em;}
+  h2{font-size:20px;margin:34px 0 8px;letter-spacing:-.01em;}
+  h3{font-size:16px;margin:20px 0 4px;}
+  p,li{color:var(--ink);}
+  .muted{color:var(--muted);}
+  .meta{color:var(--muted);font-size:14px;margin-top:2px;}
+  .badge{display:inline-block;background:var(--badge);color:var(--brand);
+    font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;
+    padding:5px 10px;border-radius:999px;margin-top:14px;}
+  .note{background:#fff;border:1px solid var(--line);border-left:4px solid var(--brand);
+    border-radius:10px;padding:14px 16px;margin:18px 0;color:var(--muted);font-size:14.5px;}
+  section{background:var(--bg);border:1px solid var(--line);border-radius:14px;
+    padding:6px 22px 18px;margin-top:16px;}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:14.5px;}
+  th,td{text-align:left;border-bottom:1px solid var(--line);padding:9px 8px;vertical-align:top;}
+  th{color:var(--muted);font-weight:600;}
+  code{background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:13px;}
+  a{color:var(--brand);}
+  footer{margin-top:30px;color:var(--muted);font-size:13px;text-align:center;}
+  ul{padding-left:20px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><span class="dot"></span><strong>Aluta</strong></div>
+    <h1>Privacy Policy</h1>
+    <div class="meta">Effective date: 13 August 2026 · Version 0.1 (development)</div>
+    <span class="badge">Development / Beta build</span>
+  </header>
+
+  <div class="note">
+    <strong>Please read this first.</strong> Aluta is an app in active development. It is
+    provided for early testing and evaluation, features and data practices change
+    frequently, and it is <strong>not yet intended for public production use</strong>.
+    This document describes how the current build handles your information. It is a
+    good-faith draft written by the developer, <em>not legal advice</em>, and should be
+    reviewed by a qualified professional before any public launch, app-store submission,
+    or processing of other people's data at scale.
+  </div>
+
+  <section>
+    <h2>1. Who we are</h2>
+    <p>“Aluta”, “we”, “us” and “our” refer to the developer who operates the Aluta
+    application and its backend service. Aluta is a social app that combines chat,
+    voice calling, a music player with shared “listen together” sessions, ephemeral
+    Stories, and presence.</p>
+    <p class="muted">Contact for privacy questions: <a href="mailto:support@ozilane.com">support@ozilane.com</a>.</p>
+  </section>
+
+  <section>
+    <h2>2. Information we collect</h2>
+    <p>We collect only what the app needs to work. What we hold depends on the features you use.</p>
+
+    <h3>Account information</h3>
+    <ul>
+      <li>Your <strong>username</strong> and <strong>email address</strong>.</li>
+      <li>Your <strong>password</strong>, stored only as a secure one-way hash (we never store it in plain text).</li>
+      <li>Optional <strong>phone number</strong> and <strong>profile picture (avatar)</strong>.</li>
+      <li>If you enable two-factor authentication, a TOTP secret used to verify codes.</li>
+      <li>Presence signals such as <strong>online status</strong> and <strong>last-seen time</strong>.</li>
+    </ul>
+
+    <h3>Messages &amp; shared media</h3>
+    <ul>
+      <li>The content of messages you send and receive — <strong>text, photos, files, voice notes and GIFs</strong> — together with metadata such as timestamps, read/delivery status, reactions and replies.</li>
+      <li>Media you share is stored on our server so it can be delivered to the recipient. <strong>Messages and media are not end-to-end encrypted</strong> in this build; they are transmitted over encrypted connections (HTTPS/WSS) and stored server-side, and are served only to authorised participants.</li>
+      <li>Location you choose to share, and contact cards you choose to share, appear as messages and are stored like any other message content.</li>
+      <li>Ephemeral <strong>Stories</strong> you post (photo, short video, text or a “now playing” moment) and a list of which friends have viewed them. Stories are set to expire about <strong>24 hours</strong> after posting.</li>
+    </ul>
+
+    <h3>Contacts (only if you allow it)</h3>
+    <ul>
+      <li>To help you find friends, the app can read your phone's address book and check which numbers belong to registered Aluta users. This only happens with your permission.</li>
+      <li>The name-labels you have saved for contacts may be uploaded to your account so your own saved names show correctly when you sign in on another device (e.g. desktop). This map is private to your account.</li>
+    </ul>
+
+    <h3>Device &amp; technical data</h3>
+    <ul>
+      <li>A <strong>push-notification token</strong> (Firebase Cloud Messaging) so we can wake your device for new messages and calls.</li>
+      <li>Information about <strong>linked devices</strong> (e.g. a computer you link by QR), so you can review and sign them out.</li>
+      <li><strong>Diagnostics &amp; crash reports</strong> collected via Sentry to help us fix errors and stability problems.</li>
+    </ul>
+
+    <h3>Voice &amp; group calls</h3>
+    <ul>
+      <li>Calls use a direct peer-to-peer connection (WebRTC). <strong>We do not record or store call audio.</strong> Our server only relays the small signaling messages needed to connect a call, and a call log entry (duration/outcome) is saved to the conversation like a message.</li>
+    </ul>
+
+    <h3>Music &amp; “Listen Together”</h3>
+    <ul>
+      <li>Your music library is played locally from your device. Song details you edit and playback preferences may be backed up to your account so they survive a reinstall.</li>
+      <li>During a “Listen Together” session, audio is streamed between participants; in the current build this is relayed through our server for synchronisation. If you use the “identify a song” feature, a short audio sample is sent to a third-party recognition service (see §4).</li>
+    </ul>
+
+    <h3>On-device only</h3>
+    <ul>
+      <li><strong>Biometric unlock</strong> (fingerprint/face) is handled entirely by your device's operating system. Aluta never receives or stores your biometric data.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>3. How we use your information</h2>
+    <ul>
+      <li>To provide the core features: deliver messages and media, place calls, sync music, post and view Stories, and show presence.</li>
+      <li>To authenticate you, keep your account secure, and support account recovery and device linking.</li>
+      <li>To send push notifications for messages and incoming calls.</li>
+      <li>To match your contacts to friends (only with your permission).</li>
+      <li>To diagnose crashes and improve reliability and performance.</li>
+    </ul>
+    <p class="muted">We do <strong>not</strong> sell your personal information, and we do not use your messages to serve advertising.</p>
+  </section>
+
+  <section>
+    <h2>4. Third-party services</h2>
+    <p>Aluta relies on a small number of third parties to function. Your use of these features means limited data is shared with them, subject to their own privacy policies:</p>
+    <table>
+      <tr><th>Service</th><th>Purpose</th><th>What is shared</th></tr>
+      <tr><td>Google Firebase (Cloud Messaging)</td><td>Push notifications</td><td>Device push token; message/call trigger data</td></tr>
+      <tr><td>GIPHY</td><td>GIF &amp; sticker search</td><td>Your search terms; requests for GIFs you view/pick</td></tr>
+      <tr><td>Sentry</td><td>Crash &amp; error reporting</td><td>Diagnostic/crash data, device &amp; app info</td></tr>
+      <tr><td>AudD (song recognition)</td><td>“Identify a song”</td><td>A short audio sample, only when you use the feature</td></tr>
+      <tr><td>TURN/STUN relays (e.g. Open Relay, Google STUN)</td><td>Connecting calls behind firewalls/NAT</td><td>Network connection data to route call media</td></tr>
+    </table>
+    <p>We also share information with <strong>other users</strong> as an inherent part of the product — e.g. the people you message, call, or share a Story with will receive that content, and friends may see your presence and (where enabled) what you're listening to.</p>
+  </section>
+
+  <section>
+    <h2>5. How long we keep information</h2>
+    <ul>
+      <li><strong>Messages and shared media</strong> are retained so your conversation history is available across devices, until you or the other participant delete them, or you delete your account.</li>
+      <li><strong>Stories</strong> are ephemeral and set to expire ~24 hours after posting; expired stories are removed on the server.</li>
+      <li>Certain shared-media bytes are treated as short-lived and purged from the server after delivery/caching, keeping only a reference.</li>
+      <li>Diagnostic/crash data is retained by Sentry according to its retention settings.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>6. Security</h2>
+    <p>We use encrypted connections (HTTPS/WSS) for data in transit, store passwords only as hashes, and serve media through authenticated, participant-checked endpoints. However, <strong>no method of transmission or storage is completely secure</strong>, and because this is a development build you should not share highly sensitive information through it. Messages are readable on our server (not end-to-end encrypted); end-to-end encryption is a planned future improvement.</p>
+  </section>
+
+  <section>
+    <h2>7. Your choices &amp; rights</h2>
+    <ul>
+      <li><strong>Permissions:</strong> you control camera, microphone, contacts, location and notification permissions through your device settings, and can revoke them at any time (some features won't work without them).</li>
+      <li><strong>Linked devices:</strong> you can review and sign out linked devices.</li>
+      <li><strong>Delete content or your account:</strong> you can delete messages, and you may request deletion of your account and associated data by contacting us.</li>
+      <li>Depending on where you live, you may have rights to access, correct, export or delete your personal data. Contact us to exercise them.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>8. Children</h2>
+    <p>Aluta is not directed to children. You must be at least the age of digital consent in your country (and at least 13) to use it. We do not knowingly collect personal information from children below that age; if you believe a child has provided us information, contact us and we will remove it.</p>
+  </section>
+
+  <section>
+    <h2>9. International use</h2>
+    <p>Aluta is operated from Tanzania and your information may be processed on servers in other countries where our infrastructure or third-party providers operate. By using the app you consent to such processing where permitted by law.</p>
+  </section>
+
+  <section>
+    <h2>10. Changes to this policy</h2>
+    <p>Because Aluta is evolving quickly, we may update this policy. Material changes will be reflected by updating the “Effective date” above and, where appropriate, an in-app notice. Continued use after an update means you accept the revised policy.</p>
+  </section>
+
+  <section>
+    <h2>11. Contact</h2>
+    <p>Questions or requests about privacy: <a href="mailto:support@ozilane.com">support@ozilane.com</a>.</p>
+  </section>
+
+  <footer>
+    Aluta — Privacy Policy · Development build · This is a draft, not legal advice.
+  </footer>
+</div>
+</body>
+</html>

@@ -312,4 +312,24 @@ class StoryViewerOut(BaseModel):
     username: str
     avatar_url: Optional[str] = None
     phone: Optional[str] = None
-    viewed_at: Optional[datetime] = None
+    viewed_at: Optional[datetime] = None
+
+
+# ---------------------- LEGAL CONSENT SCHEMAS ----------------------
+
+class PolicyAccept(BaseModel):
+    # The version the client is acknowledging. The server records its own
+    # CURRENT_POLICY_VERSION regardless, so a stale or forged value can never
+    # skip a newer prompt — this is advisory only.
+    version: Optional[int] = None
+
+
+class PolicyStatusOut(BaseModel):
+    current_version: int
+    accepted_version: int
+    needs_acceptance: bool
+    is_update: bool           # true when re-consent (already accepted an older one)
+    effective_date: str
+    privacy_url: str
+    terms_url: str
+    summary: str = ""

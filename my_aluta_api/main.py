@@ -24,6 +24,7 @@ from routers import live as live_router
 from routers import conversations as conversations_router
 from routers import recognize as recognize_router
 from routers import stories as stories_router
+from routers import policy as policy_router
 from websocket_routes import router as websocket_router
 import websocket_manager
 from sqlalchemy import text
@@ -65,6 +66,8 @@ app.include_router(live_router.router)
 app.include_router(recognize_router.router)
 # Ephemeral 24h Stories (friends-only): post/feed/view/viewers/delete + media.
 app.include_router(stories_router.router)
+# Legal consent: GET /policy status + POST /policy/accept (versioned re-consent).
+app.include_router(policy_router.router)
 app.include_router(websocket_router)
 
 
@@ -120,6 +123,10 @@ def ensure_media_schema():
         # Text-only stories: background colour (kind == "text"); added here in
         # case the stories table was created before this column existed.
         "ALTER TABLE stories ADD COLUMN IF NOT EXISTS background VARCHAR",
+        # Legal consent: which Privacy Policy / Terms version the user accepted,
+        # and when. Existing rows default to 0 so they're re-prompted once.
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS policy_version INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS policy_accepted_at TIMESTAMPTZ",
     ]
     try:
         with engine.begin() as conn:
@@ -231,6 +238,37 @@ def api_info():
     if environment == "development":
         response["database_url"] = DATABASE_URL
     return response
+
+
+# ✅ Legal documents. Served by the API itself so the app can link to them
+#    directly (the consent gate opens /privacy and /terms) and they update with
+#    a redeploy. Declared BEFORE the SPA catch-all below so these exact paths
+#    win over the index.html fallback.
+_LEGAL_DIR = os.path.join(os.path.dirname(__file__), "legal")
+
+
+@app.get("/privacy", include_in_schema=False)
+def privacy_policy():
+    path = os.path.join(_LEGAL_DIR, "privacy.html")
+    if os.path.isfile(path):
+        return FileResponse(path, media_type="text/html")
+    return Response(status_code=404)
+
+
+@app.get("/terms", include_in_schema=False)
+def terms_of_use():
+    path = os.path.join(_LEGAL_DIR, "terms.html")
+    if os.path.isfile(path):
+        return FileResponse(path, media_type="text/html")
+    return Response(status_code=404)
+
+
+@app.get("/about", include_in_schema=False)
+def about_aluta():
+    path = os.path.join(_LEGAL_DIR, "about.html")
+    if os.path.isfile(path):
+        return FileResponse(path, media_type="text/html")
+    return Response(status_code=404)
 
 
 # ✅ CORS

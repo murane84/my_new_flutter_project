@@ -1581,6 +1581,50 @@ class ApiService {
     }
   }
 
+  // ── Legal consent (Privacy Policy + Terms) ────────────────────────────────
+
+  /// The signed-in user's consent status: whether they must (re-)accept the
+  /// current Privacy Policy + Terms, the current version, the doc URLs and a
+  /// short "what changed" summary. Returns null on any failure so the caller
+  /// fails OPEN — a network hiccup must never lock the user out of the app.
+  Future<Map<String, dynamic>?> fetchPolicyStatus() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/policy'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map) return Map<String, dynamic>.from(data);
+      }
+      return null;
+    } catch (e) {
+      _logger.w('fetchPolicyStatus failed: $e');
+      return null;
+    }
+  }
+
+  /// Record that the user has read and agreed to the current documents. The
+  /// server stamps its own current version regardless of [version]. Returns
+  /// true on success.
+  Future<bool> acceptPolicy(int version) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/policy/accept'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'version': version}),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.w('acceptPolicy failed: $e');
+      return false;
+    }
+  }
+
   /// Upload a story's photo/video bytes and return its asset id (or null).
   /// Reuses the ephemeral media store; the story then references this id.
   Future<String?> uploadStoryMedia({

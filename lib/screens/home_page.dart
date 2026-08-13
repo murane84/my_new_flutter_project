@@ -55,6 +55,7 @@ import 'group_call_screen.dart';
 import 'stories/stories_tray.dart';
 import 'stories/story_models.dart';
 import 'stories/story_viewer.dart';
+import 'policy_gate.dart';
 import '../services/telecom_service.dart';
 import '../main.dart' show navigatorKey;
 import '../utils/time_utils.dart';
@@ -129,6 +130,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // same seen-state. Refreshed on init, after posting/viewing, and on the
   // 'story_posted' WebSocket nudge.
   List<StoryGroup> _storyGroups = [];
+  // Guards the one-shot legal-consent check so it can't stack multiple gates.
+  bool _policyChecked = false;
   // When a chat is opened from a message notification, the id of the message to
   // scroll to + highlight once the thread loads (null for normal opens). Passed
   // to ChatPage; cleared to null on every ordinary open so it fires once.
@@ -236,6 +239,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _fetchStories();          // active stories for the tray + tile rings
     _loadLayoutState();
     _discoverServer();
+
+    // Legal consent: after the first frame, check whether this user must read &
+    // agree to the current Privacy Policy + Terms (a fresh account, or an
+    // existing user after we bump the policy version). Runs post-frame so a
+    // valid BuildContext is available to present the blocking gate.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensurePolicyAccepted());
 
     // Register this device for push notifications (Android/iOS; no-op else) so
     // messages/calls wake the phone when the app is backgrounded or closed. The
@@ -1654,6 +1663,40 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final raw = await ApiService().fetchStoriesFeed();
     if (!mounted) return;
     setState(() => _storyGroups = raw.map(StoryGroup.fromJson).toList());
+  }
+
+  /// One-shot: ask the server whether the signed-in user must (re-)accept the
+  /// current Privacy Policy + Terms, and if so present the blocking consent
+  /// gate. Fails OPEN — a null/failed status never blocks entry to the app.
+  Future<void> _ensurePolicyAccepted() async {
+    if (_policyChecked) return;
+    _policyChecked = true;
+    final status = await ApiService().fetchPolicyStatus();
+    if (!mounted || status == null) return;
+    if (status['needs_acceptance'] != true) return;
+    await showPolicyGate(
+      context,
+      status: status,
+      onLogout: _signOutFromGate,
+    );
+  }
+
+  /// Sign out directly from the consent gate when the user declines to accept.
+  /// No confirm dialog — declining consent is itself the deliberate choice.
+  Future<void> _signOutFromGate() async {
+    try {
+      await FcmService.instance.unregisterToken();
+    } catch (_) {}
+    await ApiService().logoutUser();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+    } catch (_) {}
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const AuthPage()),
+      (route) => false,
+    );
   }
 
   /// The active story group for a friend id (null if none), used to draw the

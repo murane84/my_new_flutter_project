@@ -420,8 +420,8 @@ app you consent to such processing where permitted by law.
 
 9. Changes to this Policy
 Because Aluta is evolving quickly, we may update this Policy. Material changes are
-reflected by updating the "Last updated" date above and, where appropriate, an
-in-app notice.
+reflected by updating the date shown above and, where appropriate, an in-app
+notice.
 
 10. Contact
 For any privacy questions or requests, contact us at: support@ozilane.com
@@ -502,14 +502,14 @@ disputes are subject to the courts of Tanzania, unless a mandatory local law tha
 applies to you provides otherwise.
 
 11. Changes and contact
-We may update these Terms; when we do we will change the "Last updated" date
-above, and continued use means you accept the updated Terms. Questions about
-these Terms: support@ozilane.com
+We may update these Terms; when we do we will change the date shown above, and
+continued use means you accept the updated Terms. Questions about these Terms:
+support@ozilane.com
 ''';
 
 const String _about = '''
 About Aluta
-Development / Beta build · Updated: 13 August 2026
+Development / Beta build · Last updated: 13 August 2026
 
 Aluta is a social app that brings your conversations and your music into one
 place — private and group chat, voice and group calls, ephemeral Stories, and a

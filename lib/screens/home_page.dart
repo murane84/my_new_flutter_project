@@ -56,6 +56,7 @@ import 'stories/stories_tray.dart';
 import 'stories/story_models.dart';
 import 'stories/story_viewer.dart';
 import 'policy_gate.dart';
+import 'add_friend_sheet.dart';
 import '../services/connected_contacts_service.dart';
 import '../services/telecom_service.dart';
 import '../main.dart' show navigatorKey;
@@ -1675,6 +1676,18 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final raw = await ApiService().fetchStoriesFeed();
     if (!mounted) return;
     setState(() => _storyGroups = raw.map(StoryGroup.fromJson).toList());
+  }
+
+  /// Manual add-friend — works everywhere, including desktop/web with no
+  /// phone-book to scan: look someone up by their exact username or phone and
+  /// add them to your circle, then refresh the list.
+  void _showAddFriend() {
+    showAddFriendSheet(
+      context,
+      onAdded: () {
+        if (mounted) _fetchFriends();
+      },
+    );
   }
 
   /// One-shot: ask the server whether the signed-in user must (re-)accept the
@@ -4371,6 +4384,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
                 () => showSongIdentifier(context)),
             _menuBtn(scheme, Icons.contacts_rounded, 'Find friends',
                 () => _findFriendsFromContacts()),
+            _menuBtn(scheme, Icons.person_add_alt_1_rounded, 'Add friend',
+                () => _showAddFriend()),
             if (mobile)
               _menuBtn(scheme, Icons.phonelink_ring_rounded,
                   'Call reliability', () {

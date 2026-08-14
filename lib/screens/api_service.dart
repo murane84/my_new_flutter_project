@@ -1050,6 +1050,191 @@ class ApiService {
   }
 
   // ---------------------------------------------------------------------------
+  // "Our Space" — pinned relationship profiles (bond-as-a-place). All calls are
+  // best-effort and fail soft (null / empty / false) so the friend list never
+  // breaks if the backend isn't deployed yet or the network drops.
+  // ---------------------------------------------------------------------------
+
+  /// My pinned Spaces (hero first). Light shape: id, name, theme, is_primary,
+  /// members, close_since, moment_count.
+  Future<List<Map<String, dynamic>>> listSpaces() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return [];
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/spaces'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map && data['spaces'] is List) {
+          return (data['spaces'] as List)
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        }
+      }
+      return [];
+    } catch (e) {
+      _logger.w('listSpaces failed: $e');
+      return [];
+    }
+  }
+
+  /// Pin a bond. On success returns the full Space. When the free-tier cap is
+  /// hit the server answers 402 → returns {'error':'together_required', ...} so
+  /// the caller can show an upsell instead of a generic failure. Other failures
+  /// return null.
+  Future<Map<String, dynamic>?> createSpace({
+    required List<int> memberIds,
+    String? name,
+    String? theme,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/spaces'),
+        headers: _authHeaders(token),
+        body: jsonEncode({
+          'member_ids': memberIds,
+          if (name != null) 'name': name,
+          if (theme != null) 'theme': theme,
+        }),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+        return null;
+      }
+      if (resp.statusCode == 402) {
+        String detail = 'Upgrade to Together to pin more Spaces.';
+        try {
+          final d = jsonDecode(resp.body);
+          if (d is Map && d['detail'] is String) detail = d['detail'];
+        } catch (_) {}
+        return {'error': 'together_required', 'detail': detail};
+      }
+      return null;
+    } catch (e) {
+      _logger.w('createSpace failed: $e');
+      return null;
+    }
+  }
+
+  /// Full detail for one Space: members, stats, moments.
+  Future<Map<String, dynamic>?> getSpace(int id) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/spaces/$id'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('getSpace failed: $e');
+      return null;
+    }
+  }
+
+  /// Edit a Space's name / theme / primary flag. Returns the updated Space.
+  Future<Map<String, dynamic>?> updateSpace(
+    int id, {
+    String? name,
+    String? theme,
+    bool? isPrimary,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.patch(
+        Uri.parse('${await _baseUrl}/spaces/$id'),
+        headers: _authHeaders(token),
+        body: jsonEncode({
+          if (name != null) 'name': name,
+          if (theme != null) 'theme': theme,
+          if (isPrimary != null) 'is_primary': isPrimary,
+        }),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('updateSpace failed: $e');
+      return null;
+    }
+  }
+
+  /// Unpin a Space.
+  Future<bool> deleteSpace(int id) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.delete(
+        Uri.parse('${await _baseUrl}/spaces/$id'),
+        headers: _authHeaders(token),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.w('deleteSpace failed: $e');
+      return false;
+    }
+  }
+
+  /// Pin a moment (dedication|voice|photo|song|note) into a Space.
+  Future<Map<String, dynamic>?> addMoment(
+    int spaceId, {
+    required String kind,
+    String? ref,
+    String? caption,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/moments'),
+        headers: _authHeaders(token),
+        body: jsonEncode({
+          'kind': kind,
+          if (ref != null) 'ref': ref,
+          if (caption != null) 'caption': caption,
+        }),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('addMoment failed: $e');
+      return null;
+    }
+  }
+
+  /// Remove a pinned moment.
+  Future<bool> deleteMoment(int spaceId, int momentId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.delete(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/moments/$momentId'),
+        headers: _authHeaders(token),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.w('deleteMoment failed: $e');
+      return false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Group conversations (DMs keep using the legacy /messages endpoints above)
   // ---------------------------------------------------------------------------
 

@@ -3294,39 +3294,42 @@ class HomePageState extends rp.ConsumerState<HomePage>
         rest.add(m);
       }
     }
-    // Flattened render list: section headers interleaved with tiles. Order:
-    // Our Space hero (directly under search) → Your Spaces → story circles
-    // (friend status) → Listening now → Your circle.
-    final entries = <Map<String, dynamic>>[];
+    // Two render lists so wide layouts (desktop / web) can show them side by
+    // side: the LEFT "space & stories" column (Our Space hero → Your Spaces →
+    // Status & Stories) and the RIGHT conversation column (Listening now → Your
+    // circle). On narrow widths they concatenate back into one scroll — exactly
+    // the mobile stack — so nothing changes there.
+    final sideEntries = <Map<String, dynamic>>[];
     final hero = _primarySpace;
     if (hero != null) {
-      entries.add({'kind': 'ourspace', 'space': hero});
-      entries.add({'kind': 'spacechips'});
+      sideEntries.add({'kind': 'ourspace', 'space': hero});
+      sideEntries.add({'kind': 'spacechips'});
     }
-    // Story circles ("friend status" + Your story) live in the scroll now, so
-    // the hero can sit right beneath the search bar. A header keeps the row from
+    // Story circles ("friend status" + Your story). A header keeps the row from
     // reading as orphaned.
     if (_myUserId != null) {
-      entries.add({'kind': 'header', 'label': 'Status & Stories'});
-      entries.add({'kind': 'stories'});
+      sideEntries.add({'kind': 'header', 'label': 'Status & Stories'});
+      sideEntries.add({'kind': 'stories'});
     }
+
+    final convEntries = <Map<String, dynamic>>[];
     if (listening.isNotEmpty) {
-      entries.add({
+      convEntries.add({
         'kind': 'header',
         'label': 'Listening now',
         'count': listening.length,
       });
       for (final m in listening) {
-        entries.add({'kind': 'tile', 'item': m});
+        convEntries.add({'kind': 'tile', 'item': m});
       }
     }
     // "Your circle" always heads the main conversation list (even when nobody is
     // listening), so the quiet list is never an unlabelled block.
     if (rest.isNotEmpty) {
-      entries.add({'kind': 'header', 'label': 'Your circle'});
+      convEntries.add({'kind': 'header', 'label': 'Your circle'});
     }
     for (final m in rest) {
-      entries.add({'kind': 'tile', 'item': m});
+      convEntries.add({'kind': 'tile', 'item': m});
     }
 
     return Column(
@@ -3352,95 +3355,161 @@ class HomePageState extends rp.ConsumerState<HomePage>
         Expanded(
           child: _isLoadingFriends
               ? const Center(child: CircularProgressIndicator())
-              : RefreshIndicator(
-                  onRefresh: _onPullToRefresh,
-                  // AlwaysScrollable → the list can overscroll (and so trigger
-                  // the pull gesture) even when it's short or empty.
-                  child: combined.isEmpty
-                      ? ListView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(top: 110),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.chat_bubble_outline,
-                                      size: 48,
-                                      color: scheme.outlineVariant),
-                                  const SizedBox(height: 10),
-                                  Text('No conversations yet',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                          color: scheme.onSurfaceVariant)),
-                                  const SizedBox(height: 6),
-                                  Text('Pull down to refresh',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                          fontSize: 11,
-                                          color: scheme.onSurfaceVariant
-                                              .withAlpha(150))),
-                                ],
-                              ),
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    // Wide enough (desktop / web, and only while the panel keeps
+                    // that width) → two columns so "Your Circle" sits in its own
+                    // right pane, visible without scrolling past the spaces and
+                    // stories. Otherwise collapse to the single mobile stack.
+                    final wide = constraints.maxWidth >= 880;
+                    if (wide) {
+                      return _friendListWide(
+                          sideEntries, convEntries, combined, scheme, textColor);
+                    }
+                    final all = [...sideEntries, ...convEntries];
+                    return RefreshIndicator(
+                      onRefresh: _onPullToRefresh,
+                      // AlwaysScrollable → the list can overscroll (and so
+                      // trigger the pull gesture) even when it's short or empty.
+                      child: combined.isEmpty
+                          ? _emptyConversations(scheme)
+                          : ListView.builder(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              itemCount: all.length,
+                              itemBuilder: (_, i) =>
+                                  _friendEntry(all, i, scheme, textColor),
                             ),
-                          ],
-                        )
-                      : ListView.builder(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          itemCount: entries.length,
-                          itemBuilder: (_, i) {
-                            final e = entries[i];
-                            if (e['kind'] == 'ourspace') {
-                              return _buildOurSpaceHero(
-                                  e['space'] as Map<String, dynamic>, scheme);
-                            }
-                            if (e['kind'] == 'spacechips') {
-                              return _buildSpaceChips(scheme);
-                            }
-                            if (e['kind'] == 'stories') {
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 6, bottom: 6),
-                                child: StoriesTray(
-                                  apiBase: _apiBase,
-                                  myUserId: _myUserId,
-                                  myName:
-                                      _username.isNotEmpty ? _username : 'You',
-                                  myAvatarUrl: _myAvatar,
-                                  groups: _storyGroups,
-                                  onReload: _fetchStories,
-                                ),
-                              );
-                            }
-                            if (e['kind'] == 'header') {
-                              return _listHeader(scheme, e['label'] as String,
-                                  e['count'] as int?);
-                            }
-                            final item = e['item'] as Map<String, dynamic>;
-                            final tile = item['is_group'] == true
-                                ? _buildGroupTile(item, textColor, scheme)
-                                : _buildFriendTile(item, textColor, scheme);
-                            // A divider only between two consecutive tiles (not
-                            // before a header, not after the last row).
-                            final next = i + 1 < entries.length
-                                ? entries[i + 1]
-                                : null;
-                            final showDiv =
-                                next != null && next['kind'] == 'tile';
-                            return Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                tile,
-                                if (showDiv)
-                                  Divider(
-                                    height: 1,
-                                    indent: 68,
-                                    color: scheme.outlineVariant.withAlpha(70),
-                                  ),
-                              ],
-                            );
-                          },
-                        ),
+                    );
+                  },
                 ),
+        ),
+      ],
+    );
+  }
+
+  /// Wide (desktop / web) friend-list layout: the space & stories column on the
+  /// left, the conversation list on the right, split by a hairline — so the
+  /// wide screen shows "Your Circle" straight away instead of below a long
+  /// scroll. Collapses to the single stack below the width threshold.
+  Widget _friendListWide(
+      List<Map<String, dynamic>> sideEntries,
+      List<Map<String, dynamic>> convEntries,
+      List<Map<String, dynamic>> combined,
+      ColorScheme scheme,
+      Color textColor) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // LEFT — Our Space + Your Spaces + Status & Stories.
+        Expanded(
+          flex: 5,
+          child: ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(right: 6),
+            itemCount: sideEntries.length,
+            itemBuilder: (_, i) =>
+                _friendEntry(sideEntries, i, scheme, textColor),
+          ),
+        ),
+        VerticalDivider(
+          width: 17,
+          thickness: 1,
+          color: scheme.outlineVariant.withAlpha(60),
+        ),
+        // RIGHT — the conversation list (Listening now → Your circle).
+        Expanded(
+          flex: 6,
+          child: RefreshIndicator(
+            onRefresh: _onPullToRefresh,
+            child: combined.isEmpty
+                ? _emptyConversations(scheme)
+                : ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(left: 6),
+                    itemCount: convEntries.length,
+                    itemBuilder: (_, i) =>
+                        _friendEntry(convEntries, i, scheme, textColor),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Renders one entry (hero / space chips / stories / header / tile) from a
+  /// friend-list entry list — shared by the narrow single-column stack and both
+  /// wide columns so a row looks identical either way.
+  Widget _friendEntry(List<Map<String, dynamic>> entries, int i,
+      ColorScheme scheme, Color textColor) {
+    final e = entries[i];
+    if (e['kind'] == 'ourspace') {
+      return _buildOurSpaceHero(e['space'] as Map<String, dynamic>, scheme);
+    }
+    if (e['kind'] == 'spacechips') {
+      return _buildSpaceChips(scheme);
+    }
+    if (e['kind'] == 'stories') {
+      return Padding(
+        padding: const EdgeInsets.only(top: 6, bottom: 6),
+        child: StoriesTray(
+          apiBase: _apiBase,
+          myUserId: _myUserId,
+          myName: _username.isNotEmpty ? _username : 'You',
+          myAvatarUrl: _myAvatar,
+          groups: _storyGroups,
+          onReload: _fetchStories,
+        ),
+      );
+    }
+    if (e['kind'] == 'header') {
+      return _listHeader(scheme, e['label'] as String, e['count'] as int?);
+    }
+    final item = e['item'] as Map<String, dynamic>;
+    final tile = item['is_group'] == true
+        ? _buildGroupTile(item, textColor, scheme)
+        : _buildFriendTile(item, textColor, scheme);
+    // A divider only between two consecutive tiles (not before a header, not
+    // after the last row).
+    final next = i + 1 < entries.length ? entries[i + 1] : null;
+    final showDiv = next != null && next['kind'] == 'tile';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        tile,
+        if (showDiv)
+          Divider(
+            height: 1,
+            indent: 68,
+            color: scheme.outlineVariant.withAlpha(70),
+          ),
+      ],
+    );
+  }
+
+  /// The empty-conversation placeholder (pull-to-refresh friendly).
+  Widget _emptyConversations(ColorScheme scheme) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 110),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.chat_bubble_outline,
+                  size: 48, color: scheme.outlineVariant),
+              const SizedBox(height: 10),
+              Text('No conversations yet',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: scheme.onSurfaceVariant)),
+              const SizedBox(height: 6),
+              Text('Pull down to refresh',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: scheme.onSurfaceVariant.withAlpha(150))),
+            ],
+          ),
         ),
       ],
     );

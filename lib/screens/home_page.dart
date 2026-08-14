@@ -66,6 +66,7 @@ import '../utils/time_utils.dart';
 // Prefixed: this file also imports package:provider, which exports colliding
 // names (Consumer, Provider, ChangeNotifierProvider). `rp.` keeps them distinct.
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rp;
+import 'package:flutter_slidable/flutter_slidable.dart';
 import '../state/playback_state.dart';
 import '../state/unread_state.dart';
 import '../state/presence_state.dart';
@@ -136,6 +137,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   List<StoryGroup> _storyGroups = [];
   // Guards the one-shot legal-consent check so it can't stack multiple gates.
   bool _policyChecked = false;
+  // Friends who are typing to me right now → a live "typing…" line on their
+  // tile. A short-lived one-shot timer per active typer (no periodic polling):
+  // the timer's presence IS the "typing" state, and it self-clears after 5s.
+  final Map<int, Timer> _typingTimers = {};
   // When a chat is opened from a message notification, the id of the message to
   // scroll to + highlight once the thread loads (null for normal opens). Passed
   // to ChatPage; cleared to null on every ordinary open so it fires once.
@@ -415,6 +420,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     ShareInbox.instance.removeListener(_onSharePending);
     playlistDrawerBus.isOpen.removeListener(_onPlaylistDrawerToggled);
     NowPlayingPresence.instance.removeListener(_onPresenceChanged);
+    for (final t in _typingTimers.values) {
+      t.cancel();
+    }
     _playlistDrawerCtrl.dispose();
     _searchCtrl.dispose();
     _refreshTimer?.cancel();
@@ -1198,6 +1206,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
       NowPlayingPresence.instance.applyEvent(event);
       return;
     }
+    // A friend is typing to me → show a live "typing…" line on their tile.
+    if (type == 'typing') {
+      final uid = (event['user_id'] as num?)?.toInt();
+      if (uid != null) _setFriendTyping(uid);
+      return;
+    }
     // A new chat message arriving on the per-user notify socket. When the app
     // is backgrounded (e.g. music playing in the car), pop a local
     // notification so the user is prompted back. Requires the backend to emit
@@ -1712,6 +1726,64 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// they're listening to (driven by NowPlayingPresence).
   void _onPresenceChanged() {
     if (mounted) setState(() {});
+  }
+
+  /// Mark [id] as typing to me and auto-clear after 5s (each typing event
+  /// refreshes the timer). No periodic polling — the timer's presence IS the
+  /// state, and it only exists while someone is actively typing.
+  void _setFriendTyping(int id) {
+    final was = _typingTimers.containsKey(id);
+    _typingTimers[id]?.cancel();
+    _typingTimers[id] = Timer(const Duration(seconds: 5), () {
+      _typingTimers.remove(id);
+      if (mounted) setState(() {});
+    });
+    if (!was && mounted) setState(() {});
+  }
+
+  /// The single contextual line under a friend's name, in priority order:
+  /// live track → typing… → last message (styled for unread).
+  Widget _tileSubtitle(ColorScheme scheme, Color textColor, String? npLine,
+      bool typing, String lastMsg, bool hasUnread) {
+    if (npLine != null) {
+      return Row(
+        children: [
+          Icon(Icons.graphic_eq_rounded, size: 14, color: scheme.primary),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              npLine,
+              style: TextStyle(
+                  fontSize: 12.5,
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
+        ],
+      );
+    }
+    if (typing) {
+      return Text(
+        'typing…',
+        style: TextStyle(
+            fontSize: 12.5,
+            color: scheme.primary,
+            fontStyle: FontStyle.italic,
+            fontWeight: FontWeight.w600),
+      );
+    }
+    return Text(
+      lastMsg,
+      style: TextStyle(
+        fontSize: 12.5,
+        color: hasUnread ? textColor.withAlpha(200) : textColor.withAlpha(110),
+        fontWeight: hasUnread ? FontWeight.w500 : FontWeight.normal,
+      ),
+      overflow: TextOverflow.ellipsis,
+      maxLines: 1,
+    );
   }
 
   /// One-shot: ask the server whether the signed-in user must (re-)accept the
@@ -3363,8 +3435,30 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final a = (npTrack['artist'] ?? '').toString().trim();
       if (t.isNotEmpty) npLine = a.isNotEmpty ? '$t — $a' : t;
     }
+    final isTyping = _typingTimers.containsKey((f['id'] as num).toInt());
 
-    return InkWell(
+    return Slidable(
+      key: ValueKey('friend-${f['id']}'),
+      // Swipe left → one-tap call, so the row stays clean.
+      endActionPane: ActionPane(
+        motion: const DrawerMotion(),
+        extentRatio: 0.26,
+        children: [
+          SlidableAction(
+            onPressed: (_) => _showCallChoice(
+              friendId: int.tryParse(f['id'].toString()) ?? -1,
+              name: name,
+              avatar: f['avatar_url'] as String?,
+              phone: f['phone'] as String?,
+            ),
+            backgroundColor: scheme.primary,
+            foregroundColor: scheme.onPrimary,
+            icon: Icons.call_rounded,
+            label: 'Call',
+          ),
+        ],
+      ),
+      child: InkWell(
       onTap: () => _isSharing ? _sendShareTo(friend: f) : openChat(f),
       borderRadius: BorderRadius.circular(10),
       child: Padding(
@@ -3388,40 +3482,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
-                  npLine != null
-                      ? Row(
-                          children: [
-                            Icon(Icons.graphic_eq_rounded,
-                                size: 14, color: scheme.primary),
-                            const SizedBox(width: 5),
-                            Expanded(
-                              child: Text(
-                                npLine,
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  color: scheme.primary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            ),
-                          ],
-                        )
-                      : Text(
-                          lastMsg,
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: hasUnread
-                                ? textColor.withAlpha(200)
-                                : textColor.withAlpha(110),
-                            fontWeight: hasUnread
-                                ? FontWeight.w500
-                                : FontWeight.normal,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
+                  _tileSubtitle(
+                      scheme, textColor, npLine, isTyping, lastMsg, hasUnread),
                 ],
               ),
             ),
@@ -3475,6 +3537,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
             ),
           ],
         ),
+      ),
       ),
     );
   }

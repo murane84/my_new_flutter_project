@@ -1098,8 +1098,8 @@ class ApiService {
         headers: _authHeaders(token),
         body: jsonEncode({
           'member_ids': memberIds,
-          if (name != null) 'name': name,
-          if (theme != null) 'theme': theme,
+          'name': ?name,
+          'theme': ?theme,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
@@ -1156,9 +1156,9 @@ class ApiService {
         Uri.parse('${await _baseUrl}/spaces/$id'),
         headers: _authHeaders(token),
         body: jsonEncode({
-          if (name != null) 'name': name,
-          if (theme != null) 'theme': theme,
-          if (isPrimary != null) 'is_primary': isPrimary,
+          'name': ?name,
+          'theme': ?theme,
+          'is_primary': ?isPrimary,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
@@ -1203,8 +1203,8 @@ class ApiService {
         headers: _authHeaders(token),
         body: jsonEncode({
           'kind': kind,
-          if (ref != null) 'ref': ref,
-          if (caption != null) 'caption': caption,
+          'ref': ?ref,
+          'caption': ?caption,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {

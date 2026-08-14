@@ -3257,14 +3257,19 @@ class HomePageState extends rp.ConsumerState<HomePage>
         rest.add(m);
       }
     }
-    // Flattened render list: section headers interleaved with tiles.
+    // Flattened render list: section headers interleaved with tiles. Order:
+    // Our Space hero (directly under search) → Your Spaces → story circles
+    // (friend status) → Listening now → Your circle.
     final entries = <Map<String, dynamic>>[];
-    // "Our Space" wedge at the very top — the pinned bond, above presence.
     final hero = _primarySpace;
     if (hero != null) {
       entries.add({'kind': 'ourspace', 'space': hero});
-      // "Your Spaces" chip row — the other pinned bonds + a "＋ New" affordance.
       entries.add({'kind': 'spacechips'});
+    }
+    // Story circles ("friend status" + Your story) live in the scroll now, so
+    // the hero can sit right beneath the search bar.
+    if (_myUserId != null) {
+      entries.add({'kind': 'stories'});
     }
     if (listening.isNotEmpty) {
       entries.add({
@@ -3301,16 +3306,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
           ),
         ),
         const SizedBox(height: 10),
-        // Ephemeral 24h Stories strip, atop the conversation list.
-        if (_myUserId != null)
-          StoriesTray(
-            apiBase: _apiBase,
-            myUserId: _myUserId,
-            myName: _username.isNotEmpty ? _username : 'You',
-            myAvatarUrl: _myAvatar,
-            groups: _storyGroups,
-            onReload: _fetchStories,
-          ),
         Expanded(
           child: _isLoadingFriends
               ? const Center(child: CircularProgressIndicator())
@@ -3358,6 +3353,20 @@ class HomePageState extends rp.ConsumerState<HomePage>
                             }
                             if (e['kind'] == 'spacechips') {
                               return _buildSpaceChips(scheme);
+                            }
+                            if (e['kind'] == 'stories') {
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 4, bottom: 4),
+                                child: StoriesTray(
+                                  apiBase: _apiBase,
+                                  myUserId: _myUserId,
+                                  myName:
+                                      _username.isNotEmpty ? _username : 'You',
+                                  myAvatarUrl: _myAvatar,
+                                  groups: _storyGroups,
+                                  onReload: _fetchStories,
+                                ),
+                              );
                             }
                             if (e['kind'] == 'header') {
                               return _listHeader(scheme, e['label'] as String,
@@ -3445,76 +3454,76 @@ class HomePageState extends rp.ConsumerState<HomePage>
         others.isNotEmpty ? (others.first['username'] ?? '').toString() : '';
     final otherAvatar =
         others.isNotEmpty ? _avatarFull(others.first['avatar_url']) : null;
+    final together = (space['plan_tier'] ?? 'free').toString() == 'together';
+    final momentCount = (space['moment_count'] as num?)?.toInt() ?? 0;
+    // Live "listening now" if any member (other than me) is playing right now.
+    final presence = NowPlayingPresence.instance;
+    final someoneListening = others.any(
+        (m) => presence.trackFor((m['id'] as num?)?.toInt() ?? -1) != null);
+    final dt = DateTime.tryParse((space['close_since'] ?? '').toString());
+    final closeLabel = dt == null
+        ? ''
+        : 'Close since ${DateFormat('MMM yyyy').format(dt.toLocal())}';
+    final meta = <String>[
+      if (closeLabel.isNotEmpty) closeLabel,
+      if (momentCount > 0) '$momentCount moment${momentCount == 1 ? '' : 's'}',
+    ].join('  ·  ');
     return Padding(
-      padding: const EdgeInsets.only(top: 4, bottom: 6),
+      padding: const EdgeInsets.only(top: 4, bottom: 8),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(20),
           onTap: () => _openSpace(space),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(20),
               gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
                 colors: [
-                  accent.withValues(alpha: 0.92),
-                  accent.withValues(alpha: 0.62),
+                  accent.withValues(alpha: 0.95),
+                  Color.lerp(accent, Colors.black, 0.42)!
+                      .withValues(alpha: 0.95),
                 ],
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: accent.withValues(alpha: 0.32),
+                  blurRadius: 16,
+                  offset: const Offset(0, 5),
+                ),
+              ],
             ),
             child: Row(
               children: [
-                // Overlapped avatars (me + the other), small.
-                SizedBox(
-                  width: 62,
-                  height: 42,
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        left: 0,
-                        child: _heroAvatarRing(
-                          InitialsAvatar(
-                            name: _username.isNotEmpty ? _username : 'You',
-                            radius: 18,
-                            imageUrl: _avatarFull(_myAvatar),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: 24,
-                        child: _heroAvatarRing(
-                          InitialsAvatar(
-                            name: otherName.isEmpty ? '?' : otherName,
-                            radius: 18,
-                            imageUrl: otherAvatar,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
+                _heroOverlapAvatars(otherName, otherAvatar, 21),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.push_pin_rounded,
-                              size: 12, color: Colors.white),
+                          Icon(Icons.push_pin_rounded,
+                              size: 11,
+                              color: Colors.white.withValues(alpha: 0.8)),
                           const SizedBox(width: 4),
                           Text(
                             'OUR SPACE',
                             style: TextStyle(
-                              fontSize: 9.5,
+                              fontSize: 9,
                               letterSpacing: 1.3,
                               fontWeight: FontWeight.w800,
-                              color: Colors.white.withValues(alpha: 0.9),
+                              color: Colors.white.withValues(alpha: 0.85),
                             ),
                           ),
+                          if (together) ...[
+                            const SizedBox(width: 8),
+                            _togetherBadge(),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 3),
@@ -3524,15 +3533,46 @@ class HomePageState extends rp.ConsumerState<HomePage>
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 16,
+                          fontSize: 17,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
+                      if (meta.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          meta,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            fontSize: 11.5,
+                          ),
+                        ),
+                      ],
+                      if (someoneListening) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.graphic_eq_rounded,
+                                size: 13, color: Colors.white),
+                            const SizedBox(width: 5),
+                            const Text(
+                              'listening now',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                Icon(Icons.chevron_right_rounded,
-                    color: Colors.white.withValues(alpha: 0.9)),
+                const SizedBox(width: 10),
+                _heroEnterButton(accent),
               ],
             ),
           ),
@@ -3546,6 +3586,74 @@ class HomePageState extends rp.ConsumerState<HomePage>
         decoration: const BoxDecoration(
             shape: BoxShape.circle, color: Colors.white),
         child: child,
+      );
+
+  /// The two overlapped, white-ringed avatars (me + the other) used on the hero.
+  Widget _heroOverlapAvatars(String otherName, String? otherAvatar, double r) {
+    return SizedBox(
+      width: r * 3 + 4,
+      height: r * 2 + 4,
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            child: _heroAvatarRing(
+              InitialsAvatar(
+                name: _username.isNotEmpty ? _username : 'You',
+                radius: r,
+                imageUrl: _avatarFull(_myAvatar),
+              ),
+            ),
+          ),
+          Positioned(
+            left: r + 4,
+            child: _heroAvatarRing(
+              InitialsAvatar(
+                name: otherName.isEmpty ? '?' : otherName,
+                radius: r,
+                imageUrl: otherAvatar,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Golden "TOGETHER" plan badge on the hero.
+  Widget _togetherBadge() => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF6D77A),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Text(
+          'TOGETHER',
+          style: TextStyle(
+            fontSize: 8.5,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.5,
+            color: Color(0xFF3A2A00),
+          ),
+        ),
+      );
+
+  /// The white "Enter" pill on the hero (the whole card is tappable; this is the
+  /// clear call-to-action).
+  Widget _heroEnterButton(Color accent) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(30),
+        ),
+        child: Text(
+          'Enter',
+          style: TextStyle(
+            color: Color.lerp(accent, Colors.black, 0.18),
+            fontWeight: FontWeight.w800,
+            fontSize: 13,
+          ),
+        ),
       );
 
   /// "Your Spaces" — a horizontal row of the non-hero pinned bonds as small
@@ -3587,6 +3695,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     );
   }
 
+  /// A Space chip: TWO overlapping avatars (you + the other) — a deliberate
+  /// "pair/bond" mark that reads as distinct from the single-avatar story
+  /// circles — plus a live status dot (listening beats online). Not a circle.
   Widget _spaceChip(Map<String, dynamic> space, ColorScheme scheme) {
     final accent = spaceThemeColor(space['theme'] as String?);
     final title = deriveSpaceName(space, _myUserId);
@@ -3598,29 +3709,68 @@ class HomePageState extends rp.ConsumerState<HomePage>
         others.isNotEmpty ? (others.first['username'] ?? '').toString() : '';
     final otherAvatar =
         others.isNotEmpty ? _avatarFull(others.first['avatar_url']) : null;
+    final otherId =
+        others.isNotEmpty ? (others.first['id'] as num?)?.toInt() : null;
+    final listening = otherId != null &&
+        NowPlayingPresence.instance.trackFor(otherId) != null;
+    final online =
+        otherId != null && ref.watch(presenceProvider).isOnline(otherId);
+
     return GestureDetector(
       onTap: () => _openSpace(space),
       child: Container(
-        width: 74,
-        margin: const EdgeInsets.only(right: 6),
+        width: 80,
+        margin: const EdgeInsets.only(right: 8),
         child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.all(2.5),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [accent, accent.withValues(alpha: 0.55)],
-                ),
-              ),
-              child: CircleAvatar(
-                radius: 26,
-                backgroundColor: scheme.surface,
-                child: InitialsAvatar(
-                  name: otherName.isEmpty ? '?' : otherName,
-                  radius: 24,
-                  imageUrl: otherAvatar,
-                ),
+            SizedBox(
+              width: 60,
+              height: 54,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // Back: me (smaller, behind).
+                  Positioned(
+                    left: 2,
+                    top: 0,
+                    child: _spaceMiniAvatar(
+                      name: _username.isNotEmpty ? _username : 'You',
+                      imageUrl: _avatarFull(_myAvatar),
+                      radius: 14,
+                      ringColor: scheme.surface,
+                    ),
+                  ),
+                  // Front: the other, overlapping, accent-ringed.
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: _spaceMiniAvatar(
+                      name: otherName.isEmpty ? '?' : otherName,
+                      imageUrl: otherAvatar,
+                      radius: 17,
+                      ringColor: accent,
+                    ),
+                  ),
+                  // Live status: listening (accent + eq) beats online (green).
+                  if (listening || online)
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: listening ? accent : Colors.green,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: scheme.surface, width: 2),
+                        ),
+                        child: listening
+                            ? const Icon(Icons.graphic_eq_rounded,
+                                size: 7, color: Colors.white)
+                            : null,
+                      ),
+                    ),
+                ],
               ),
             ),
             const SizedBox(height: 5),
@@ -3629,7 +3779,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, color: scheme.onSurface),
+              style: TextStyle(
+                  fontSize: 11,
+                  color: scheme.onSurface,
+                  fontWeight: FontWeight.w500),
             ),
           ],
         ),
@@ -3637,16 +3790,30 @@ class HomePageState extends rp.ConsumerState<HomePage>
     );
   }
 
+  Widget _spaceMiniAvatar({
+    required String name,
+    String? imageUrl,
+    required double radius,
+    required Color ringColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(shape: BoxShape.circle, color: ringColor),
+      child: InitialsAvatar(name: name, radius: radius, imageUrl: imageUrl),
+    );
+  }
+
   Widget _newSpaceChip(ColorScheme scheme) {
     return GestureDetector(
       onTap: _newSpaceFlow,
       child: SizedBox(
-        width: 74,
+        width: 80,
         child: Column(
           children: [
             Container(
-              width: 57,
-              height: 57,
+              width: 54,
+              height: 54,
+              margin: const EdgeInsets.only(top: 0),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: scheme.surfaceContainerHighest,

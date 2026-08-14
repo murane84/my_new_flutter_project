@@ -4399,10 +4399,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
   Future<void> _openTogether() async {
     await showAppPopup(
       navigatorKey.currentContext ?? context,
-      TogetherScreen(onChanged: () {
-        _loadPlan();
-        _loadSpaces();
-      }),
+      TogetherScreen(
+        initialTogether: _isTogether,
+        onChanged: () {
+          _loadPlan();
+          _loadSpaces();
+        },
+      ),
     );
     _loadPlan();
   }

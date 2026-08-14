@@ -2824,27 +2824,36 @@ class HomePageState extends rp.ConsumerState<HomePage>
         // from the status strip) balances the logo+title on the left; when
         // offline, the tap-to-reconnect badge takes its place.
         if (_serverReachable)
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: Colors.green.withAlpha(28),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _statusDot(const Color(0xFF2FA84F)),
-                const SizedBox(width: 6),
-                Text(
-                  '${ref.watch(presenceProvider).onlineCount} online',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: scheme.onSurface.withAlpha(200),
-                  ),
+          Tooltip(
+            message:
+                'Connected to $_serverIp\nTap to configure · long-press to rediscover',
+            child: GestureDetector(
+              onTap: _showServerSettings,
+              onLongPress: () => _discoverServer(forceReset: true),
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.green.withAlpha(28),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-              ],
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _statusDot(const Color(0xFF2FA84F)),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${ref.watch(presenceProvider).onlineCount} online',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurface.withAlpha(200),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         // Online/offline badge — reads the SAME server-side signal as the
@@ -5528,65 +5537,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
             children: [
-              // ── Left: server / connection status (tap to configure) ───────
-              Tooltip(
-                message: _serverReachable
-                    ? 'Connected to ${(kIsWeb || kReleaseMode) ? _serverIp : '$_serverIp:${AppConfig.port}'}\nLong-press to reconfigure'
-                    : 'Not connected — tap to configure',
-                child: GestureDetector(
-                  onTap: _showServerSettings,
-                  onLongPress: () => _discoverServer(forceReset: true),
-                  behavior: HitTestBehavior.opaque,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _isDiscovering
-                          ? SizedBox(
-                              width: 11,
-                              height: 11,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 1.6,
-                                color: scheme.onSurface.withAlpha(160),
-                              ),
-                            )
-                          : AnimatedContainer(
-                              duration: const Duration(milliseconds: 300),
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: _serverReachable
-                                    ? Colors.green
-                                    : Colors.red,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: (_serverReachable
-                                            ? Colors.green
-                                            : Colors.red)
-                                        .withAlpha(150),
-                                    blurRadius: 6,
-                                    spreadRadius: 1,
-                                  ),
-                                ],
-                              ),
-                            ),
-                      // (Online-friends count moved to the Messages header.)
-                    ],
-                  ),
-                ),
-              ),
-
-              const Spacer(),
-
-              // Collapsed music control lives here, centred, instead of floating
-              // over the chat and covering message bubbles. Shown only while the
-              // bar is dismissed and the full panel isn't open.
+              // Song-detail chip on the FAR LEFT (only while a track is loaded
+              // and the bar is collapsed) — it balances the profile pill on the
+              // right for a clean two-pill footer. The old server-connection dot
+              // was removed: it duplicated the "N online" pill in the Messages
+              // header, and server config now lives in Tools & settings.
               if (ref.watch(nowPlayingProvider).track.isNotEmpty &&
                   _barDismissed &&
-                  !_playerExpanded) ...[
-                _footerMusicChip(scheme),
-                const Spacer(),
-              ],
+                  !_playerExpanded)
+                Flexible(child: _footerMusicChip(scheme)),
+
+              const Spacer(),
 
               // ── Right: profile pill only (online count now sits by the dot) ─
               // Tap the name (a pill-shaped button) to open your profile.

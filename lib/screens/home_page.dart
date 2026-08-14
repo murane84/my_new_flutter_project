@@ -4998,7 +4998,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-              color: const Color(0xFFE53935).withAlpha(70), width: 1),
+              color: scheme.primary.withAlpha(70), width: 1),
         ),
       ),
       padding: const WidgetStatePropertyAll(
@@ -5066,14 +5066,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       builder: (_) => const CallReliabilityScreen()),
                 );
               }),
-            _menuBtn(
-              scheme,
-              themeProvider.isDarkMode
-                  ? Icons.light_mode_rounded
-                  : Icons.dark_mode_rounded,
-              themeProvider.isDarkMode ? 'Light mode' : 'Dark mode',
-              () => themeProvider.toggleTheme(!themeProvider.isDarkMode),
-            ),
             _menuBtn(scheme, Icons.palette_outlined, 'Appearance', () {
               Navigator.push(
                 context,

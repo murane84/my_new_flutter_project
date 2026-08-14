@@ -276,8 +276,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // permission; a no-op off Android).
     ConnectedContactsService.instance.onAction = _onConnectedContactAction;
     ConnectedContactsService.instance.init();
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) ConnectedContactsService.instance.refresh();
+    // Push the (first-run-heavy) contacts scan WELL past cold start so it can
+    // never contend with the audio handler's first load / first playback on a
+    // fresh install — the cause of the "play song file" error that a relaunch
+    // clears. Runs once per session, after the first frame + a long delay, and
+    // only while the app is foreground (skip if the user already backgrounded).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(seconds: 10), () {
+        if (mounted && _appForeground) {
+          ConnectedContactsService.instance.refresh();
+        }
+      });
     });
 
     // Live "Listening now": repaint tiles when a friend's playback changes, and

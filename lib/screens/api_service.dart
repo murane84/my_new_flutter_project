@@ -1107,13 +1107,18 @@ class ApiService {
         if (data is Map<String, dynamic>) return data;
         return null;
       }
-      if (resp.statusCode == 402) {
-        String detail = 'Upgrade to Together to pin more Spaces.';
+      if (resp.statusCode == 402 || resp.statusCode == 409) {
+        String detail = resp.statusCode == 409
+            ? 'You already have a Space with this person.'
+            : 'Upgrade to Together to pin more Spaces.';
         try {
           final d = jsonDecode(resp.body);
           if (d is Map && d['detail'] is String) detail = d['detail'];
         } catch (_) {}
-        return {'error': 'together_required', 'detail': detail};
+        return {
+          'error': resp.statusCode == 409 ? 'duplicate' : 'together_required',
+          'detail': detail,
+        };
       }
       return null;
     } catch (e) {

@@ -37,6 +37,7 @@ import 'live_session_screen.dart';
 import 'legal_screen.dart';
 import 'relationship_space_page.dart';
 import 'appearance_screen.dart';
+import 'spinning_vinyl_ring.dart';
 import '../services/live_session_service.dart'
     show activeLiveSession, endActiveLiveSession;
 import '../services/notif_service.dart';
@@ -3356,7 +3357,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                             }
                             if (e['kind'] == 'stories') {
                               return Padding(
-                                padding: const EdgeInsets.only(top: 4, bottom: 4),
+                                padding: const EdgeInsets.only(top: 6, bottom: 6),
                                 child: StoriesTray(
                                   apiBase: _apiBase,
                                   myUserId: _myUserId,
@@ -3456,14 +3457,25 @@ class HomePageState extends rp.ConsumerState<HomePage>
         others.isNotEmpty ? _avatarFull(others.first['avatar_url']) : null;
     final together = (space['plan_tier'] ?? 'free').toString() == 'together';
     final momentCount = (space['moment_count'] as num?)?.toInt() ?? 0;
-    // Live "listening now" if any member (other than me) is playing right now.
+    // Live: the actual track a member is playing right now (not just a flag).
     final presence = NowPlayingPresence.instance;
-    final someoneListening = others.any(
-        (m) => presence.trackFor((m['id'] as num?)?.toInt() ?? -1) != null);
+    Map<String, dynamic>? liveTrack;
+    for (final m in others) {
+      final t = presence.trackFor((m['id'] as num?)?.toInt() ?? -1);
+      if (t != null) {
+        liveTrack = t;
+        break;
+      }
+    }
+    final someoneListening = liveTrack != null;
+    String? liveLine;
+    if (liveTrack != null) {
+      final t = (liveTrack['title'] ?? '').toString().trim();
+      final a = (liveTrack['artist'] ?? '').toString().trim();
+      if (t.isNotEmpty) liveLine = a.isNotEmpty ? '$t — $a' : t;
+    }
     final dt = DateTime.tryParse((space['close_since'] ?? '').toString());
-    final closeLabel = dt == null
-        ? ''
-        : 'Close since ${DateFormat('MMM yyyy').format(dt.toLocal())}';
+    final closeLabel = _closeSinceLabel(dt);
     final meta = <String>[
       if (closeLabel.isNotEmpty) closeLabel,
       if (momentCount > 0) '$momentCount moment${momentCount == 1 ? '' : 's'}',
@@ -3499,7 +3511,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
             ),
             child: Row(
               children: [
-                _heroOverlapAvatars(otherName, otherAvatar, 21),
+                _heroOverlapAvatars(
+                    otherName, otherAvatar, 21, someoneListening),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -3553,17 +3566,18 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       if (someoneListening) ...[
                         const SizedBox(height: 4),
                         Row(
-                          mainAxisSize: MainAxisSize.min,
                           children: [
                             const Icon(Icons.graphic_eq_rounded,
                                 size: 13, color: Colors.white),
                             const SizedBox(width: 5),
-                            const Text(
-                              'listening now',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
+                            Expanded(
+                              child: _scrollingText(
+                                liveLine ?? 'listening now',
+                                const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ],
@@ -3590,11 +3604,28 @@ class HomePageState extends rp.ConsumerState<HomePage>
       );
 
   /// The two overlapped, white-ringed avatars (me + the other) used on the hero.
-  Widget _heroOverlapAvatars(String otherName, String? otherAvatar, double r) {
+  /// When [listening] the front avatar gains a slowly-spinning "record" ring so
+  /// motion always means someone's playing right now.
+  Widget _heroOverlapAvatars(
+      String otherName, String? otherAvatar, double r, bool listening) {
+    Widget front = _heroAvatarRing(
+      InitialsAvatar(
+        name: otherName.isEmpty ? '?' : otherName,
+        radius: r,
+        imageUrl: otherAvatar,
+      ),
+    );
+    if (listening) {
+      front = SpinningVinylRing(
+        color: Colors.white,
+        child: front,
+      );
+    }
     return SizedBox(
-      width: r * 3 + 4,
-      height: r * 2 + 4,
+      width: r * 3 + 8,
+      height: r * 2 + 8,
       child: Stack(
+        alignment: Alignment.centerLeft,
         children: [
           Positioned(
             left: 0,
@@ -3606,19 +3637,23 @@ class HomePageState extends rp.ConsumerState<HomePage>
               ),
             ),
           ),
-          Positioned(
-            left: r + 4,
-            child: _heroAvatarRing(
-              InitialsAvatar(
-                name: otherName.isEmpty ? '?' : otherName,
-                radius: r,
-                imageUrl: otherAvatar,
-              ),
-            ),
-          ),
+          Positioned(left: r + 4, child: front),
         ],
       ),
     );
+  }
+
+  /// Human-friendly "close since" phrasing: recent bonds read as freshly pinned;
+  /// older ones show the month (and year if not this year).
+  String _closeSinceLabel(DateTime? dt) {
+    if (dt == null) return '';
+    final local = dt.toLocal();
+    final days = DateTime.now().difference(local).inDays;
+    if (days <= 1) return 'Pinned just now';
+    if (days <= 14) return 'Pinned this week';
+    final sameYear = local.year == DateTime.now().year;
+    return 'Close since '
+        '${DateFormat(sameYear ? 'MMMM' : 'MMM yyyy').format(local)}';
   }
 
   /// Golden "TOGETHER" plan badge on the hero.
@@ -3663,12 +3698,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
   Widget _buildSpaceChips(ColorScheme scheme) {
     final others = _spaces.where((s) => s['is_primary'] != true).toList();
     return Padding(
-      padding: const EdgeInsets.only(top: 4, bottom: 2),
+      padding: const EdgeInsets.only(top: 6, bottom: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(6, 6, 6, 8),
+            padding: const EdgeInsets.fromLTRB(6, 2, 6, 8),
             child: Text(
               'YOUR SPACES',
               style: TextStyle(
@@ -3717,6 +3752,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final online =
         otherId != null && ref.watch(presenceProvider).isOnline(otherId);
 
+    Widget frontAvatar = _spaceMiniAvatar(
+      name: otherName.isEmpty ? '?' : otherName,
+      imageUrl: otherAvatar,
+      radius: 15,
+      ringColor: accent,
+    );
+    if (listening) {
+      // A spinning "record" ring signals they're playing right now.
+      frontAvatar = SpinningVinylRing(ring: 2, color: accent, child: frontAvatar);
+    }
+
     return GestureDetector(
       onTap: () => _openSpace(space),
       onLongPress: () => _showSpaceManageSheet(space),
@@ -3746,12 +3792,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                   ),
                   Positioned(
                     left: 25,
-                    child: _spaceMiniAvatar(
-                      name: otherName.isEmpty ? '?' : otherName,
-                      imageUrl: otherAvatar,
-                      radius: 15,
-                      ringColor: accent,
-                    ),
+                    child: frontAvatar,
                   ),
                   // Live status: listening (accent + eq) beats online (green).
                   if (listening || online)
@@ -4432,8 +4473,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
           type: ToastType.error);
       return;
     }
-    if (res['error'] == 'together_required') {
-      showToast(context, (res['detail'] ?? 'Upgrade to Together for more Spaces.').toString(),
+    if (res['error'] != null) {
+      showToast(
+          context,
+          (res['detail'] ?? 'Could not pin that Space.').toString(),
           type: ToastType.info);
       return;
     }

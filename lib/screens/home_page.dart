@@ -34,6 +34,7 @@ import 'api_service.dart';
 import 'websocket_manager.dart';
 import 'live_session_screen.dart';
 import 'legal_screen.dart';
+import 'relationship_space_page.dart';
 import '../services/live_session_service.dart'
     show activeLiveSession, endActiveLiveSession;
 import '../services/notif_service.dart';
@@ -137,6 +138,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
   List<StoryGroup> _storyGroups = [];
   // Guards the one-shot legal-consent check so it can't stack multiple gates.
   bool _policyChecked = false;
+  // "Our Space" — the user's pinned relationship profiles (light maps). Loaded
+  // once on init and again only on pull-to-refresh; never polled or socket-held,
+  // so it costs nothing in the background. The primary (hero) renders as the
+  // wedge at the very top of the friend list.
+  List<Map<String, dynamic>> _spaces = [];
   // Friends who are typing to me right now → a live "typing…" line on their
   // tile. A short-lived one-shot timer per active typer (no periodic polling):
   // the timer's presence IS the "typing" state, and it self-clears after 5s.
@@ -245,6 +251,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _loadUserData();
     _loadCachedFriends();    // show cached list instantly (no spinner flash)
     _fetchFriends();          // then refresh from network
+    _loadSpaces();            // pinned "Our Space" hero(es) — one-shot, no poll
     _fetchStories();          // active stories for the tray + tile rings
     _loadLayoutState();
     _discoverServer();
@@ -3201,6 +3208,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
     // Flattened render list: section headers interleaved with tiles.
     final entries = <Map<String, dynamic>>[];
+    // "Our Space" wedge at the very top — the pinned bond, above presence.
+    final hero = _primarySpace;
+    if (hero != null) {
+      entries.add({'kind': 'ourspace', 'space': hero});
+    }
     if (listening.isNotEmpty) {
       entries.add({
         'kind': 'header',
@@ -3287,6 +3299,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
                           itemCount: entries.length,
                           itemBuilder: (_, i) {
                             final e = entries[i];
+                            if (e['kind'] == 'ourspace') {
+                              return _buildOurSpaceHero(
+                                  e['space'] as Map<String, dynamic>, scheme);
+                            }
                             if (e['kind'] == 'header') {
                               return _listHeader(scheme, e['label'] as String,
                                   e['count'] as int?);
@@ -3358,6 +3374,119 @@ class HomePageState extends rp.ConsumerState<HomePage>
       ),
     );
   }
+
+  /// The "Our Space" hero wedge at the top of the friend list — a compact,
+  /// themed card for the pinned bond. Tapping opens the relationship profile.
+  /// Renders from the light Space map already in memory (no extra fetch).
+  Widget _buildOurSpaceHero(Map<String, dynamic> space, ColorScheme scheme) {
+    final accent = spaceThemeColor(space['theme'] as String?);
+    final title = deriveSpaceName(space, _myUserId);
+    final others = ((space['members'] as List?) ?? const [])
+        .whereType<Map>()
+        .where((m) => (m['id'] as num?)?.toInt() != _myUserId)
+        .toList();
+    final otherName =
+        others.isNotEmpty ? (others.first['username'] ?? '').toString() : '';
+    final otherAvatar =
+        others.isNotEmpty ? _avatarFull(others.first['avatar_url']) : null;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 6),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => _openSpace(space),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              gradient: LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [
+                  accent.withValues(alpha: 0.92),
+                  accent.withValues(alpha: 0.62),
+                ],
+              ),
+            ),
+            child: Row(
+              children: [
+                // Overlapped avatars (me + the other), small.
+                SizedBox(
+                  width: 62,
+                  height: 42,
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        left: 0,
+                        child: _heroAvatarRing(
+                          const InitialsAvatar(name: 'You', radius: 18),
+                        ),
+                      ),
+                      Positioned(
+                        left: 24,
+                        child: _heroAvatarRing(
+                          InitialsAvatar(
+                            name: otherName.isEmpty ? '?' : otherName,
+                            radius: 18,
+                            imageUrl: otherAvatar,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.push_pin_rounded,
+                              size: 12, color: Colors.white),
+                          const SizedBox(width: 4),
+                          Text(
+                            'OUR SPACE',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              letterSpacing: 1.3,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white.withValues(alpha: 0.9),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded,
+                    color: Colors.white.withValues(alpha: 0.9)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _heroAvatarRing(Widget child) => Container(
+        padding: const EdgeInsets.all(2),
+        decoration: const BoxDecoration(
+            shape: BoxShape.circle, color: Colors.white),
+        child: child,
+      );
 
   /// Banner shown across the top of the chat list while a photo shared into
   /// Aluta is waiting for the user to pick a recipient.
@@ -3460,6 +3589,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       ),
       child: InkWell(
       onTap: () => _isSharing ? _sendShareTo(friend: f) : openChat(f),
+      onLongPress: _isSharing ? null : () => _showFriendQuickSheet(f, name),
       borderRadius: BorderRadius.circular(10),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
@@ -3723,6 +3853,132 @@ class HomePageState extends rp.ConsumerState<HomePage>
       return;
     }
     await _fetchFriends();
+    _loadSpaces();
+  }
+
+  /// Load my pinned Spaces (best-effort, fail-soft). Runs once on init and on
+  /// pull-to-refresh only — never on a timer.
+  Future<void> _loadSpaces() async {
+    final spaces = await ApiService().listSpaces();
+    if (!mounted) return;
+    setState(() => _spaces = spaces);
+  }
+
+  /// The primary (hero) Space, if one is pinned.
+  Map<String, dynamic>? get _primarySpace {
+    for (final s in _spaces) {
+      if (s['is_primary'] == true) return s;
+    }
+    return _spaces.isNotEmpty ? _spaces.first : null;
+  }
+
+  /// Open a Space's relationship profile, then refresh the hero on return.
+  Future<void> _openSpace(Map<String, dynamic> space) async {
+    await Navigator.push(
+      navigatorKey.currentContext ?? context,
+      MaterialPageRoute(
+        builder: (_) => RelationshipSpacePage(
+          space: space,
+          apiBase: _apiBase,
+          myUserId: _myUserId,
+          onChanged: _loadSpaces,
+        ),
+      ),
+    );
+    _loadSpaces();
+  }
+
+  /// Pin a friend as an Our Space (from the friend-row quick sheet). Handles the
+  /// free-tier cap with a gentle upsell instead of a dead error.
+  Future<void> _pinAsSpace(int friendId, String name) async {
+    final res = await ApiService().createSpace(memberIds: [friendId]);
+    if (!mounted) return;
+    if (res == null) {
+      showToast(context, 'Could not create the Space — try again',
+          type: ToastType.error);
+      return;
+    }
+    if (res['error'] == 'together_required') {
+      showToast(context, (res['detail'] ?? 'Upgrade to Together for more Spaces.').toString(),
+          type: ToastType.info);
+      return;
+    }
+    await _loadSpaces();
+    if (!mounted) return;
+    _openSpace(res);
+  }
+
+  /// A friend row's long-press quick sheet: pin as Our Space, call, or open chat.
+  void _showFriendQuickSheet(Map<String, dynamic> f, String name) {
+    final scheme = Theme.of(context).colorScheme;
+    final fid = int.tryParse(f['id'].toString()) ?? -1;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: scheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+              child: Row(
+                children: [
+                  Text(name,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          color: scheme.onSurface)),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: Icon(Icons.favorite_rounded, color: scheme.primary),
+              title: const Text('Pin as Our Space'),
+              subtitle: const Text('Make this bond a place you can return to'),
+              onTap: () {
+                Navigator.pop(ctx);
+                if (fid > 0) _pinAsSpace(fid, name);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.call_rounded, color: scheme.primary),
+              title: const Text('Call'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showCallChoice(
+                  friendId: fid,
+                  name: name,
+                  avatar: f['avatar_url'] as String?,
+                  phone: f['phone'] as String?,
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.chat_bubble_rounded, color: scheme.primary),
+              title: const Text('Open chat'),
+              onTap: () {
+                Navigator.pop(ctx);
+                openChat(f);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   // ── Phone layout ───────────────────────────────────────────────────────────

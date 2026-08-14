@@ -32,7 +32,6 @@ import '../utils/marquee_text.dart';
 import 'api_service.dart';
 import 'chat/song_cache.dart';
 import 'music/song_identifier.dart' show showSongIdentifier;
-import '../utils/brand_theme.dart';
 
 part 'music/music_control_widgets.dart'; // _CtrlBtn, _CtrlChip, _SpeedPanel
 part 'music/music_playlist_overlay.dart'; // _PlaylistOverlay + state
@@ -1044,36 +1043,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         _publishPlaylist();
       }
     } catch (_) {}
-    if (Platform.isAndroid) {
-      if (_playlist.isEmpty) {
-        // Fresh install / nothing saved yet: auto-load the whole library via
-        // MediaStore (prompts for media permission once) so the user never has
-        // to manually tap "scan" after installing.
-        _scanIntoPlaylist();
-      } else {
-        // Returning user: keep the saved list and quietly merge any new songs.
-        _mergeNewMedia();
-      }
-    }
-  }
-
-  Future<void> _mergeNewMedia() async {
-    try {
-      // Silent (no prompt): only merge if MediaStore access is already granted.
-      final granted = await _audioQuery.permissionsStatus();
-      if (!granted) return;
-      final songs = await _audioQuery.querySongs(uriType: UriType.EXTERNAL);
-      final current = _playlist.toSet();
-      final additions = songs
-          .map((s) => s.data)
-          .where((p) => p.isNotEmpty && !current.contains(p))
-          .toList();
-      if (additions.isEmpty || !mounted) return;
-      setState(() => _playlist = [..._playlist, ...additions]);
-      _publishPlaylist();
-      _snack(
-          'Added ${additions.length} new track${additions.length == 1 ? '' : 's'}');
-    } catch (_) {}
+    // LAZY BY DESIGN: we do NOT scan the device library at launch. A cold scan
+    // of the whole MediaStore (+ its permission prompt) on a fresh install was
+    // contending with cold-start work and could stall the first launch. Instead,
+    // the saved playlist (if any) is restored above, and the FIRST tap on
+    // "Playlist" triggers the scan on demand (with a spinner) — see
+    // _openOrScanPlaylist. Nothing here touches the device until the user asks.
   }
 
   /// Nudge the playback position by [seconds] (negative rewinds), clamped
@@ -1676,11 +1651,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   @override
   Widget build(BuildContext context) {
-    // The Now Playing player is a permanently-dark immersive "stage" (dark makes
-    // the art / vinyl / glow pop), and the user's accent colours its controls —
-    // see PlayerTheme. Independent of the app's Light/Dark mode.
-    return PlayerTheme(
-      child: Builder(builder: (context) {
+    // The Now Playing surface is themed as a dark "stage" by its host sheet
+    // (PlayerTheme in home_page), so this reads the ambient (dark) scheme.
     final scheme = Theme.of(context).colorScheme;
     final isDark = scheme.brightness == Brightness.dark;
 
@@ -1780,8 +1752,6 @@ class _MusicControlsState extends ConsumerState<MusicControls>
             ),
         ],
       ),
-    );
-      }),
     );
   }
 

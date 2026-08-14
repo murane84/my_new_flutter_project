@@ -3105,6 +3105,37 @@ class HomePageState extends rp.ConsumerState<HomePage>
       return byTime != 0 ? byTime : nameKey(a).compareTo(nameKey(b));
     });
 
+    // "Listening now" zone: friends currently playing music rise to the top,
+    // everyone else drops to "Your circle" (presence over recency — the seed of
+    // Concept 05). When nobody's listening, this collapses to the plain list.
+    final presence = NowPlayingPresence.instance;
+    final listening = <Map<String, dynamic>>[];
+    final rest = <Map<String, dynamic>>[];
+    for (final m in combined) {
+      final id = m['is_group'] != true ? (m['id'] as num?)?.toInt() : null;
+      if (id != null && presence.trackFor(id) != null) {
+        listening.add(m);
+      } else {
+        rest.add(m);
+      }
+    }
+    // Flattened render list: section headers interleaved with tiles.
+    final entries = <Map<String, dynamic>>[];
+    if (listening.isNotEmpty) {
+      entries.add({
+        'kind': 'header',
+        'label': 'Listening now',
+        'count': listening.length,
+      });
+      for (final m in listening) {
+        entries.add({'kind': 'tile', 'item': m});
+      }
+      entries.add({'kind': 'header', 'label': 'Your circle'});
+    }
+    for (final m in rest) {
+      entries.add({'kind': 'tile', 'item': m});
+    }
+
     return Column(
       key: const ValueKey('friendList'),
       children: [
@@ -3171,24 +3202,80 @@ class HomePageState extends rp.ConsumerState<HomePage>
                             ),
                           ],
                         )
-                      : ListView.separated(
+                      : ListView.builder(
                           physics: const AlwaysScrollableScrollPhysics(),
-                          itemCount: combined.length,
-                          separatorBuilder: (ctx, i) => Divider(
-                            height: 1,
-                            indent: 68,
-                            color: scheme.outlineVariant.withAlpha(70),
-                          ),
+                          itemCount: entries.length,
                           itemBuilder: (_, i) {
-                            final item = combined[i];
-                            return item['is_group'] == true
+                            final e = entries[i];
+                            if (e['kind'] == 'header') {
+                              return _listHeader(scheme, e['label'] as String,
+                                  e['count'] as int?);
+                            }
+                            final item = e['item'] as Map<String, dynamic>;
+                            final tile = item['is_group'] == true
                                 ? _buildGroupTile(item, textColor, scheme)
                                 : _buildFriendTile(item, textColor, scheme);
+                            // A divider only between two consecutive tiles (not
+                            // before a header, not after the last row).
+                            final next = i + 1 < entries.length
+                                ? entries[i + 1]
+                                : null;
+                            final showDiv =
+                                next != null && next['kind'] == 'tile';
+                            return Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                tile,
+                                if (showDiv)
+                                  Divider(
+                                    height: 1,
+                                    indent: 68,
+                                    color: scheme.outlineVariant.withAlpha(70),
+                                  ),
+                              ],
+                            );
                           },
                         ),
                 ),
         ),
       ],
+    );
+  }
+
+  /// A zone header in the conversation list ("LISTENING NOW · 2", "YOUR
+  /// CIRCLE") — a small caps label, an optional coral count, and a hairline.
+  Widget _listHeader(ColorScheme scheme, String label, [int? count]) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(6, 16, 6, 8),
+      child: Row(
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          if (count != null) ...[
+            const SizedBox(width: 6),
+            Text(
+              '· $count',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+                color: scheme.primary,
+              ),
+            ),
+          ],
+          const SizedBox(width: 10),
+          Expanded(
+            child: Container(
+                height: 1, color: scheme.outlineVariant.withAlpha(70)),
+          ),
+        ],
+      ),
     );
   }
 

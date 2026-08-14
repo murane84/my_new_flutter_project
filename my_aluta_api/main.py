@@ -25,6 +25,7 @@ from routers import conversations as conversations_router
 from routers import recognize as recognize_router
 from routers import stories as stories_router
 from routers import policy as policy_router
+from routers import spaces as spaces_router
 from websocket_routes import router as websocket_router
 import websocket_manager
 from sqlalchemy import text
@@ -68,6 +69,9 @@ app.include_router(recognize_router.router)
 app.include_router(stories_router.router)
 # Legal consent: GET /policy status + POST /policy/accept (versioned re-consent).
 app.include_router(policy_router.router)
+# "Our Space": pinned relationship profiles (CRUD + moments). New tables are
+# created by Base.metadata.create_all below — no ALTER needed.
+app.include_router(spaces_router.router)
 app.include_router(websocket_router)
 
 

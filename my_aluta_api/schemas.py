@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, ConfigDict, Field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 # ---------------------- USER SCHEMAS ----------------------
 
@@ -338,4 +338,26 @@ class PolicyStatusOut(BaseModel):
     effective_date: str
     privacy_url: str
     terms_url: str
-    summary: str = ""
+    summary: str = ""
+
+
+# ---------------------- "OUR SPACE" SCHEMAS ----------------------
+
+class SpaceCreate(BaseModel):
+    # The friend(s) to pin with — each must already be a mutual friend. A pair
+    # is the common case; a small circle is allowed.
+    member_ids: List[int]
+    name: Optional[str] = None      # unset → derived from members client-side
+    theme: Optional[str] = None     # preset key (e.g. 'coral')
+
+
+class SpaceUpdate(BaseModel):
+    name: Optional[str] = None
+    theme: Optional[str] = None
+    is_primary: Optional[bool] = None
+
+
+class MomentCreate(BaseModel):
+    kind: str                       # dedication | voice | photo | song | note
+    ref: Optional[str] = None       # media URL / track JSON / text — kind decides
+    caption: Optional[str] = None

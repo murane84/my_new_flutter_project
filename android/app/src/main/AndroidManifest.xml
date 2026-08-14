@@ -137,20 +137,18 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- Renderer: Impeller (Vulkan) is Flutter's default on Android and does
-             NOT compile shaders at runtime — so it avoids the first-launch
-             "Aluta isn't responding" jank that Skia causes on a fresh install.
-             It was previously forced OFF because older engines lost the Vulkan
-             context on Redmi / Xiaomi HyperOS ("citrine") GPUs and hard-aborted
-             with "Check failed: back_texture. Context is valid:0"
-             (flutter/impeller/display_list/canvas.cc).
-             RE-ENABLED to test whether the current Flutter engine has fixed that
-             crash on the Xiaomi test device. If it hard-aborts on launch, flip
-             this back to "false" (Skia is stable there, at the cost of the
-             one-time first-run shader-compile stall). -->
+        <!-- Renderer: forced to Skia/OpenGL (Impeller OFF). Redmi / Xiaomi
+             HyperOS ("citrine") GPUs can lose the Vulkan context and Impeller
+             hard-aborts with "Check failed: back_texture. Context is valid:0"
+             (flutter/impeller/display_list/canvas.cc). A one-off test with
+             Impeller ON did not crash on the first launch, but it also did NOT
+             fix the first-install stall (that is cold-start init contention, not
+             shader compilation — Impeller compiles no shaders), so there's no
+             benefit to carrying the intermittent Vulkan-crash risk on this GPU
+             family. Revisit only if a future engine confirms citrine is fixed. -->
         <meta-data
             android:name="io.flutter.embedding.android.EnableImpeller"
-            android:value="true" />
+            android:value="false" />
 
         <!-- FCM: the default channel a data/notification message is posted to if
              it doesn't name one. Matches the "Messages" channel created in

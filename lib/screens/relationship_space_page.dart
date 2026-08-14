@@ -46,6 +46,8 @@ class RelationshipSpacePage extends StatefulWidget {
   final Map<String, dynamic> space; // light map from the list (id, members…)
   final String apiBase;
   final int? myUserId;
+  final String? myName;      // the signed-in user's display name
+  final String? myAvatarUrl; // full URL of the signed-in user's photo
   final VoidCallback? onChanged; // ask HomePage to reload its hero
 
   const RelationshipSpacePage({
@@ -53,6 +55,8 @@ class RelationshipSpacePage extends StatefulWidget {
     required this.space,
     required this.apiBase,
     this.myUserId,
+    this.myName,
+    this.myAvatarUrl,
     this.onChanged,
   });
 
@@ -311,7 +315,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           Padding(
             padding: const EdgeInsets.only(right: 48),
             child: _ringed(
-              child: InitialsAvatar(name: 'You', radius: 30),
+              child: InitialsAvatar(
+                name: (widget.myName ?? 'You').isEmpty ? 'You' : widget.myName!,
+                radius: 30,
+                imageUrl: widget.myAvatarUrl,
+              ),
             ),
           ),
           Padding(

@@ -162,6 +162,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
   List<String>? _shareToSend;
 
   // ── Layout state ──────────────────────────────────────────────────────────
+  // ONE persistent key for the music player so its State (the just_audio player,
+  // the loaded playlist, the current track) survives when the layout switches
+  // between the desktop two-pane and the narrow phone body across the 640px
+  // breakpoint. Without a shared key, crossing the breakpoint disposed the
+  // playing instance and mounted an empty one ("No track loaded").
+  final GlobalKey _musicPanelKey = GlobalKey(debugLabel: 'musicControls');
   double _musicPanelWidth = 280;
   bool _isMusicFullScreen = false;
   bool _isChatFullScreen = false;
@@ -2486,7 +2492,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
               children: [
                 kIsWeb
                     ? WebMusicPanel(textColor: scheme.onSurface)
-                    : MusicControls(textColor: scheme.onSurface),
+                    : MusicControls(
+                        key: _musicPanelKey, textColor: scheme.onSurface),
                 _playlistDrawerHost(context, music: true),
               ],
             ),
@@ -4743,7 +4750,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
               children: [
                 kIsWeb
                     ? WebMusicPanel(textColor: scheme.onSurface)
-                    : MusicControls(textColor: scheme.onSurface),
+                    : MusicControls(
+                        key: _musicPanelKey, textColor: scheme.onSurface),
                 _playlistDrawerHost(context, music: true),
               ],
             ),
@@ -5541,10 +5549,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
               // right for a clean two-pill footer. The old server-connection dot
               // was removed: it duplicated the "N online" pill in the Messages
               // header, and server config now lives in Tools & settings.
+              // Fixed-width pill (no Flexible — a flex here would split the row
+              // with the Spacer and leave the profile pill mid-row instead of
+              // far right).
               if (ref.watch(nowPlayingProvider).track.isNotEmpty &&
                   _barDismissed &&
                   !_playerExpanded)
-                Flexible(child: _footerMusicChip(scheme)),
+                _footerMusicChip(scheme),
 
               const Spacer(),
 

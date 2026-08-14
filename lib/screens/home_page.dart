@@ -5551,10 +5551,15 @@ class HomePageState extends rp.ConsumerState<HomePage>
               // header, and server config now lives in Tools & settings.
               // Fixed-width pill (no Flexible — a flex here would split the row
               // with the Spacer and leave the profile pill mid-row instead of
-              // far right).
+              // far right). Hidden when the desktop music PANE is already on
+              // screen (wide layout, chat not maximised) — the pane makes the
+              // footer chip redundant — and when there's no real track.
               if (ref.watch(nowPlayingProvider).track.isNotEmpty &&
+                  ref.watch(nowPlayingProvider).track != 'No track loaded' &&
                   _barDismissed &&
-                  !_playerExpanded)
+                  !_playerExpanded &&
+                  !(MediaQuery.of(context).size.width >= 640 &&
+                      !_isChatFullScreen))
                 _footerMusicChip(scheme),
 
               const Spacer(),

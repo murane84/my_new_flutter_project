@@ -1624,8 +1624,12 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                   widget.currentTitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      fontSize: 12.5, fontWeight: FontWeight.w600),
+                  // Explicit colour: a colourless TextStyle falls back to the
+                  // ambient text theme (dark) and vanished on this dark stage.
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurface),
                 ),
               ),
               // Share the CURRENT song straight to a chat — a one-tap, always-
@@ -1639,7 +1643,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                   onPressed: () => widget.onShare(_curPath()!),
                 ),
               IconButton(
-                icon: const Icon(Icons.skip_previous_rounded),
+                icon: Icon(Icons.skip_previous_rounded,
+                    color: scheme.onSurface),
                 visualDensity: VisualDensity.compact,
                 onPressed: widget.onPrev,
               ),
@@ -1664,7 +1669,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 },
               ),
               IconButton(
-                icon: const Icon(Icons.skip_next_rounded),
+                icon: Icon(Icons.skip_next_rounded, color: scheme.onSurface),
                 visualDensity: VisualDensity.compact,
                 onPressed: widget.onNext,
               ),

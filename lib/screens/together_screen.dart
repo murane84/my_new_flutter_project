@@ -3,6 +3,7 @@ import 'package:intl/intl.dart' hide TextDirection;
 
 import 'api_service.dart';
 import '../utils/toast_helper.dart';
+import '../utils/popup_shell.dart';
 
 /// "Aluta Together" — the paywall / benefits surface (build step 6).
 ///
@@ -85,10 +86,12 @@ class _TogetherScreenState extends State<TogetherScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Aluta Together')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+    return AppPopupShell(
+      title: 'Aluta Together',
+      icon: Icons.workspace_premium_rounded,
+      builder: (context, isWide) => ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
         children: [
           _hero(scheme),
           const SizedBox(height: 22),

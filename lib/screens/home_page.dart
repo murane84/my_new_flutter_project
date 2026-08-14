@@ -4397,14 +4397,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   /// Open the "Aluta Together" paywall, refreshing plan + spaces on return.
   Future<void> _openTogether() async {
-    await Navigator.push(
+    await showAppPopup(
       navigatorKey.currentContext ?? context,
-      MaterialPageRoute(
-        builder: (_) => TogetherScreen(onChanged: () {
-          _loadPlan();
-          _loadSpaces();
-        }),
-      ),
+      TogetherScreen(onChanged: () {
+        _loadPlan();
+        _loadSpaces();
+      }),
     );
     _loadPlan();
   }

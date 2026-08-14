@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// Presents [child] as a top-anchored popup that sits just BELOW the Aluta app
-/// header — so the brand title and the theme / policy / sign-out controls stay
-/// visible and are never covered. Fades + slides down on entry.
+/// Presents [child] as a popup that emerges FROM THE FOOTER, floating upward —
+/// consistent with the music panel and the app's bottom sheets (rather than
+/// dropping down from the header, which clashed with those surfaces and their
+/// controls). Fades + rises on entry.
 Future<T?> showAppPopup<T>(BuildContext context, Widget child) async {
   // Drop any active text focus so opening the popup never carries a keyboard
   // in with it.
@@ -12,15 +13,17 @@ Future<T?> showAppPopup<T>(BuildContext context, Widget child) async {
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
     barrierColor: Colors.black.withAlpha(90),
-    transitionDuration: const Duration(milliseconds: 240),
+    transitionDuration: const Duration(milliseconds: 260),
     pageBuilder: (_, _, _) => child,
     transitionBuilder: (_, anim, _, c) {
       final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
       return FadeTransition(
         opacity: curved,
         child: SlideTransition(
+          // Begin slightly BELOW its resting spot and rise up (emerge from the
+          // footer), instead of dropping down from the header.
           position: Tween<Offset>(
-                  begin: const Offset(0, -0.04), end: Offset.zero)
+                  begin: const Offset(0, 0.06), end: Offset.zero)
               .animate(curved),
           child: c,
         ),
@@ -33,9 +36,10 @@ Future<T?> showAppPopup<T>(BuildContext context, Widget child) async {
   return result;
 }
 
-/// The shared popup card: anchored under the app header, wide-but-capped on
-/// desktop and near-full-width on phones, with a thin red-accent border, a
-/// header row (icon + title + optional action + close) and a flexible body.
+/// The shared popup card: anchored ABOVE THE FOOTER (bottom-centre) and rising
+/// upward, wide-but-capped on desktop and near-full-width on phones, with a thin
+/// red-accent border, a header row (icon + title + optional action + close) and
+/// a flexible body.
 ///
 /// [isWide] is exposed to callers via the [builder] so a page can lay its
 /// fields out in columns on desktop (no scrolling) and stack them on phones.
@@ -60,21 +64,22 @@ class AppPopupShell extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final media = MediaQuery.of(context);
     final isWide = media.size.width >= 720;
-    // Clear the Aluta app header (toolbar + status bar) with a small gap.
+    // Clear the Aluta app header (toolbar + status bar) with a small gap when the
+    // card is tall — but the card is bottom-anchored, so short pages hug the
+    // footer and rise from there.
     final topInset = media.padding.top + 64;
     final maxW = isWide ? desktopMaxWidth : media.size.width - 24;
-    // Reserve the system navigation-bar inset (padding.bottom) at the bottom so
-    // the popup card — and any controls near its bottom edge — never sit under
-    // the Android 3-button nav bar. It's ~0 on gesture-nav phones, so no space
-    // is wasted there.
-    final bottomInset = media.padding.bottom;
-    final maxH = media.size.height - topInset - 20 - bottomInset;
+    // Reserve the system navigation-bar inset (padding.bottom) plus the app
+    // footer (~52) so the popup floats just ABOVE the footer, never under it or
+    // the Android 3-button nav bar.
+    final bottomInset = media.padding.bottom + 56;
+    final maxH = media.size.height - topInset - 12 - bottomInset;
 
     return Align(
-      alignment: Alignment.topCenter,
+      alignment: Alignment.bottomCenter,
       child: Padding(
         padding: EdgeInsets.only(
-            top: topInset, left: 12, right: 12, bottom: 12 + bottomInset),
+            top: topInset, left: 12, right: 12, bottom: bottomInset),
         child: Material(
           type: MaterialType.transparency,
           child: ConstrainedBox(

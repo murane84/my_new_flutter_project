@@ -4419,17 +4419,15 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   /// Open a Space's relationship profile, then refresh the hero on return.
   Future<void> _openSpace(Map<String, dynamic> space) async {
-    await Navigator.push(
+    await showAppPopup(
       navigatorKey.currentContext ?? context,
-      MaterialPageRoute(
-        builder: (_) => RelationshipSpacePage(
-          space: space,
-          apiBase: _apiBase,
-          myUserId: _myUserId,
-          myName: _username.isNotEmpty ? _username : 'You',
-          myAvatarUrl: _avatarFull(_myAvatar),
-          onChanged: _loadSpaces,
-        ),
+      RelationshipSpacePage(
+        space: space,
+        apiBase: _apiBase,
+        myUserId: _myUserId,
+        myName: _username.isNotEmpty ? _username : 'You',
+        myAvatarUrl: _avatarFull(_myAvatar),
+        onChanged: _loadSpaces,
       ),
     );
     _loadSpaces();
@@ -5537,11 +5535,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
               }),
             _menuBtn(scheme, Icons.devices_other_rounded, 'Linked devices',
                 () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => const LinkedDevicesScreen()),
-              );
+              showAppPopup(context, const LinkedDevicesScreen());
             }),
           ],
           child: const Text('Devices'),
@@ -5567,12 +5561,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       builder: (_) => const CallReliabilityScreen()),
                 );
               }),
-            _menuBtn(scheme, Icons.palette_outlined, 'Appearance', () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AppearanceScreen()),
-              );
-            }),
+            _menuBtn(scheme, Icons.palette_outlined, 'Appearance',
+                () => showAppPopup(context, const AppearanceScreen())),
             _menuBtn(
                 scheme,
                 _isTogether

@@ -37,6 +37,7 @@ import 'live_session_screen.dart';
 import 'legal_screen.dart';
 import 'relationship_space_page.dart';
 import 'appearance_screen.dart';
+import 'together_screen.dart';
 import '../services/live_session_service.dart'
     show activeLiveSession, endActiveLiveSession;
 import '../services/notif_service.dart';
@@ -145,6 +146,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // so it costs nothing in the background. The primary (hero) renders as the
   // wedge at the very top of the friend list.
   List<Map<String, dynamic>> _spaces = [];
+  // Monetization: whether the signed-in user is on the Together plan. Drives the
+  // hero badge and unlocks the multiple-Spaces gate. Loaded once + on refresh.
+  bool _isTogether = false;
   // Friends who are typing to me right now → a live "typing…" line on their
   // tile. A short-lived one-shot timer per active typer (no periodic polling):
   // the timer's presence IS the "typing" state, and it self-clears after 5s.
@@ -267,6 +271,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _loadCachedFriends();    // show cached list instantly (no spinner flash)
     _fetchFriends();          // then refresh from network
     _loadSpaces();            // pinned "Our Space" hero(es) — one-shot, no poll
+    _loadPlan();              // Together entitlement (badge + gating)
     _fetchStories();          // active stories for the tray + tile rings
     _loadLayoutState();
     _discoverServer();
@@ -3492,7 +3497,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         others.isNotEmpty ? (others.first['username'] ?? '').toString() : '';
     final otherAvatar =
         others.isNotEmpty ? _avatarFull(others.first['avatar_url']) : null;
-    final together = (space['plan_tier'] ?? 'free').toString() == 'together';
+    final together = _isTogether;
     final momentCount = (space['moment_count'] as num?)?.toInt() ?? 0;
     // Live: the actual track a member is playing right now (not just a flag).
     final presence = NowPlayingPresence.instance;
@@ -4372,6 +4377,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
     await _fetchFriends();
     _loadSpaces();
+    _loadPlan();
   }
 
   /// Load my pinned Spaces (best-effort, fail-soft). Runs once on init and on
@@ -4380,6 +4386,27 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final spaces = await ApiService().listSpaces();
     if (!mounted) return;
     setState(() => _spaces = spaces);
+  }
+
+  /// Load the Together entitlement (fail-soft → free).
+  Future<void> _loadPlan() async {
+    final plan = await ApiService().getPlan();
+    if (!mounted) return;
+    setState(() => _isTogether = plan['is_together'] == true);
+  }
+
+  /// Open the "Aluta Together" paywall, refreshing plan + spaces on return.
+  Future<void> _openTogether() async {
+    await Navigator.push(
+      navigatorKey.currentContext ?? context,
+      MaterialPageRoute(
+        builder: (_) => TogetherScreen(onChanged: () {
+          _loadPlan();
+          _loadSpaces();
+        }),
+      ),
+    );
+    _loadPlan();
   }
 
   /// The primary (hero) Space, if one is pinned.
@@ -4406,6 +4433,28 @@ class HomePageState extends rp.ConsumerState<HomePage>
       ),
     );
     _loadSpaces();
+  }
+
+  /// The Space (if any) that pins this friend.
+  Map<String, dynamic>? _spaceWithFriend(int friendId) {
+    for (final s in _spaces) {
+      for (final m in ((s['members'] as List?) ?? const []).whereType<Map>()) {
+        if ((m['id'] as num?)?.toInt() == friendId) return s;
+      }
+    }
+    return null;
+  }
+
+  /// 🎁 Send a moment (dedication/song/note) to a friend: open their Our Space
+  /// to compose it, pinning one first if the bond isn't a Space yet (respecting
+  /// the free-tier cap — which routes to the Together paywall).
+  Future<void> _sendMomentToFriend(int friendId, String name) async {
+    final existing = _spaceWithFriend(friendId);
+    if (existing != null) {
+      _openSpace(existing);
+      return;
+    }
+    _pinAsSpace(friendId, name);
   }
 
   /// Quick manage menu for a Space (long-press the hero or a chip): open, make
@@ -4525,6 +4574,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
           type: ToastType.error);
       return;
     }
+    if (res['error'] == 'together_required') {
+      // Hit the free-tier cap → send them to the Together paywall.
+      showToast(context,
+          (res['detail'] ?? 'Upgrade to Together to pin more Spaces.').toString(),
+          type: ToastType.info);
+      _openTogether();
+      return;
+    }
     if (res['error'] != null) {
       showToast(
           context,
@@ -4580,6 +4637,16 @@ class HomePageState extends rp.ConsumerState<HomePage>
               onTap: () {
                 Navigator.pop(ctx);
                 if (fid > 0) _pinAsSpace(fid, name);
+              },
+            ),
+            ListTile(
+              leading:
+                  Icon(Icons.card_giftcard_rounded, color: scheme.primary),
+              title: const Text('Send a moment'),
+              subtitle: const Text('Dedicate a song or a note to them'),
+              onTap: () {
+                Navigator.pop(ctx);
+                if (fid > 0) _sendMomentToFriend(fid, name);
               },
             ),
             ListTile(
@@ -5506,6 +5573,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
                 MaterialPageRoute(builder: (_) => const AppearanceScreen()),
               );
             }),
+            _menuBtn(
+                scheme,
+                _isTogether
+                    ? Icons.workspace_premium_rounded
+                    : Icons.favorite_border_rounded,
+                _isTogether ? 'Together ✓' : 'Aluta Together',
+                _openTogether),
             _menuBtn(scheme, Icons.shield_outlined, 'Legal & About',
                 () => showLegalMenu(context)),
           ],

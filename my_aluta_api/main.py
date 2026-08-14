@@ -26,6 +26,7 @@ from routers import recognize as recognize_router
 from routers import stories as stories_router
 from routers import policy as policy_router
 from routers import spaces as spaces_router
+from routers import plan as plan_router
 from websocket_routes import router as websocket_router
 import websocket_manager
 from sqlalchemy import text
@@ -72,6 +73,8 @@ app.include_router(policy_router.router)
 # "Our Space": pinned relationship profiles (CRUD + moments). New tables are
 # created by Base.metadata.create_all below — no ALTER needed.
 app.include_router(spaces_router.router)
+# Monetization entitlement: GET /plan + dev/trial toggle POST /plan/together.
+app.include_router(plan_router.router)
 app.include_router(websocket_router)
 
 
@@ -131,6 +134,9 @@ def ensure_media_schema():
         # and when. Existing rows default to 0 so they're re-prompted once.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS policy_version INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS policy_accepted_at TIMESTAMPTZ",
+        # Monetization: the 'Together' entitlement (free | together) + when it began.
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_tier VARCHAR DEFAULT 'free'",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS together_since TIMESTAMPTZ",
     ]
     try:
         with engine.begin() as conn:

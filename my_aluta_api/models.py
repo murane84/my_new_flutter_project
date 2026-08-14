@@ -40,6 +40,13 @@ class User(Base):
     policy_version = Column(Integer, default=0, nullable=False, server_default="0")
     policy_accepted_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Monetization entitlement. 'free' (default) or 'together' (the paid tier that
+    # unlocks multiple Our Spaces, forever history, and custom Space themes).
+    # Billing isn't wired yet — a dev/trial toggle flips this — but every gate
+    # reads from here, so a real billing webhook later only needs to set it.
+    plan_tier = Column(String, default="free", nullable=False, server_default="free")
+    together_since = Column(DateTime(timezone=True), nullable=True)
+
     sent_messages = relationship(
         "Message",
         foreign_keys="[Message.sender_id]",

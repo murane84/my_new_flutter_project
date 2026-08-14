@@ -25,11 +25,10 @@ from auth import get_current_user
 router = APIRouter(prefix="/spaces", tags=["Our Space"])
 
 # Free tier: one pinned Space. Raised for the Together plan (checked per-user).
-# A small, scarce cap — "one hero + a few chips" (spec §2.1). Tunable. At the
-# monetization step (build order §8.6) this drops to 1 for the free tier and the
-# Together plan raises it here via current_user_plan(); the gate logic below is
-# already written against the tier, so only this constant / the plan hook change.
-FREE_SPACE_CAP = 5
+# Scarcity is the point (spec §2.1). Free keeps a single hero Space; the Together
+# plan unlocks a small, deliberate set. Caps are read per-plan in create_space.
+FREE_SPACE_CAP = 1
+TOGETHER_SPACE_CAP = 8
 _VALID_MOMENT_KINDS = {"dedication", "voice", "photo", "song", "note"}
 
 
@@ -159,12 +158,16 @@ def create_space(
             )
 
     existing = len(owner_spaces)
-    if current_user_plan(current_user) == "free" and existing >= FREE_SPACE_CAP:
+    plan = current_user_plan(current_user)
+    cap = TOGETHER_SPACE_CAP if plan == "together" else FREE_SPACE_CAP
+    if existing >= cap:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail=(
                 "The free plan keeps one Our Space. Upgrade to Together to pin "
                 "more of the people who matter."
+                if plan != "together"
+                else "You've reached the maximum number of Spaces."
             ),
         )
 
@@ -290,7 +293,7 @@ def delete_moment(
 
 
 def current_user_plan(user: User) -> str:
-    """The user's plan tier. Billing isn't wired yet, so everyone is 'free' for
-    now — this single hook is where the Together entitlement will read from once
-    subscriptions land, so the cap logic above needs no further change."""
-    return "free"
+    """The user's plan tier ('free' | 'together'), read from the entitlement on
+    the User row. A dev/trial toggle (routers/plan.py) sets it today; a real
+    billing webhook will set the same field later, so this hook never changes."""
+    return (getattr(user, "plan_tier", None) or "free")

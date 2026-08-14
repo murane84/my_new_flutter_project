@@ -3725,29 +3725,29 @@ class HomePageState extends rp.ConsumerState<HomePage>
           children: [
             SizedBox(
               width: 60,
-              height: 54,
+              height: 38,
               child: Stack(
                 clipBehavior: Clip.none,
+                alignment: Alignment.center,
                 children: [
-                  // Back: me (smaller, behind).
+                  // Two equal, side-by-side photos — me + the other — exactly
+                  // like the hero (my profile pic on the left; name initials as
+                  // the only fallback, never the literal word "You").
                   Positioned(
-                    left: 2,
-                    top: 0,
+                    left: 3,
                     child: _spaceMiniAvatar(
-                      name: _username.isNotEmpty ? _username : 'You',
+                      name: _username.isNotEmpty ? _username : 'Me',
                       imageUrl: _avatarFull(_myAvatar),
-                      radius: 14,
+                      radius: 15,
                       ringColor: scheme.surface,
                     ),
                   ),
-                  // Front: the other, overlapping, accent-ringed.
                   Positioned(
-                    right: 0,
-                    bottom: 0,
+                    left: 25,
                     child: _spaceMiniAvatar(
                       name: otherName.isEmpty ? '?' : otherName,
                       imageUrl: otherAvatar,
-                      radius: 17,
+                      radius: 15,
                       ringColor: accent,
                     ),
                   ),
@@ -3755,7 +3755,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                   if (listening || online)
                     Positioned(
                       right: 0,
-                      top: 0,
+                      top: -2,
                       child: Container(
                         width: 14,
                         height: 14,

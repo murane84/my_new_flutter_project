@@ -30,6 +30,7 @@ import 'call_reliability_screen.dart';
 import 'music/song_identifier.dart' show showSongIdentifier;
 import 'profile_screen.dart';
 import '../utils/popup_shell.dart';
+import '../utils/brand_theme.dart';
 import 'api_service.dart';
 import 'websocket_manager.dart';
 import 'live_session_screen.dart';
@@ -237,12 +238,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Screenshot / photo shared into Aluta → surface the "pick a chat to send"
     // banner and react if one arrives while Home is already open.
     ShareInbox.instance.addListener(_onSharePending);
-    // Warm the phonebook name map (silent — only if contacts already granted) so
-    // the friend list, DM header and group headers can show your SAVED names for
-    // known numbers. Repaint once it's ready so names resolve on first view.
-    ContactNames.instance.ensureLoaded().then((_) {
-      if (mounted) setState(() {});
-    });
+    // Phonebook name map is NOT read at launch (that's a device-contacts read).
+    // It loads on demand the first time the user syncs contacts (Find friends),
+    // after which saved names resolve everywhere — see _findFriendsFromContacts.
     // Restore the user's backed-up song-detail edits (custom titles/artists) for
     // this account, so they survive a reinstall/update or a new device. Merges
     // into local storage (local edits win), then repaint so titles show at once.
@@ -274,20 +272,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Telegram. Register the tap-router + drain any cold-start action now, then
     // refresh the matched rows shortly after launch (self-gates on the contacts
     // permission; a no-op off Android).
+    // Only the lightweight action channel is wired at launch (no device read).
+    // The contacts SCAN is fully on demand — it runs when the user asks to find
+    // friends (see _findFriendsFromContacts), never automatically at launch, so
+    // a fresh install never blocks on a cold contacts read.
     ConnectedContactsService.instance.onAction = _onConnectedContactAction;
     ConnectedContactsService.instance.init();
-    // Push the (first-run-heavy) contacts scan WELL past cold start so it can
-    // never contend with the audio handler's first load / first playback on a
-    // fresh install — the cause of the "play song file" error that a relaunch
-    // clears. Runs once per session, after the first frame + a long delay, and
-    // only while the app is foreground (skip if the user already backgrounded).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(seconds: 10), () {
-        if (mounted && _appForeground) {
-          ConnectedContactsService.instance.refresh();
-        }
-      });
-    });
 
     // Live "Listening now": repaint tiles when a friend's playback changes, and
     // seed the current snapshot of who's playing right now.
@@ -2085,6 +2075,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
         type: ToastType.success,
       );
       _fetchFriends(); // refresh the list with any newly-added friends
+      // The user has just opted into contact features → NOW (on demand, never at
+      // launch) set up the Android "Connected apps" rows (Aluta call/message
+      // under matched contacts). Runs once per session; a no-op off Android.
+      ConnectedContactsService.instance.refresh();
     } catch (e) {
       if (mounted) {
         showToast(context, 'Could not sync contacts.', type: ToastType.error);
@@ -2368,12 +2362,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
   Widget _panelDecor(BuildContext context, Widget child,
       {bool isMusicPanel = false, EdgeInsetsGeometry? padding}) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    // Music panel: faint waveform gradient; Chat panel: uses its own wallpaper
+    // The music panel ("Now Playing") is always a dark immersive stage —
+    // independent of the app's Light/Dark mode — so cover art, the vinyl and the
+    // glow pop (see PlayerTheme, which also tints the controls with the accent).
+    // Chat panels keep their normal themed surface.
     final bgColor = isMusicPanel
-        ? (isDark
-            ? const Color(0xFF0F1B2A)   // deep navy for music
-            : const Color(0xFFF5F0FF))  // lavender-white for music
+        ? const Color(0xFF141011)   // fixed near-black music stage
         : theme.colorScheme.surface;
 
     return Container(
@@ -2435,6 +2429,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   }
 
   Widget _buildMusicContent(BuildContext context) {
+    // Now Playing is a dark "stage" regardless of app Light/Dark mode; the
+    // accent colours its controls (PlayerTheme).
+    return PlayerTheme(
+      child: Builder(builder: (context) {
     final scheme = Theme.of(context).colorScheme;
     return _panelDecor(
       context,
@@ -2455,6 +2453,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
         ],
       ),
       isMusicPanel: true,
+    );
+      }),
     );
   }
 
@@ -4282,6 +4282,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   }
 
   Widget _buildPhonePlayerSheet(BuildContext context) {
+    // Now Playing is a dark "stage" — header + surface + controls — regardless
+    // of the app's Light/Dark mode; the accent colours the controls (PlayerTheme).
+    return PlayerTheme(
+      child: Builder(builder: (context) {
     final scheme = Theme.of(context).colorScheme;
     return _panelDecor(
       context,
@@ -4352,6 +4356,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
         ],
       ),
       isMusicPanel: true,
+    );
+      }),
     );
   }
 

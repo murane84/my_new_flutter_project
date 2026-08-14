@@ -7,6 +7,7 @@ import 'login_screen.dart';
 import 'theme_provider.dart';
 import 'auth_page.dart';
 import '../utils/snackbar_helper.dart';
+import '../utils/brand_theme.dart';
 
 class RegisterPage extends StatefulWidget {
   static const String routeName = '/register';
@@ -132,6 +133,9 @@ class RegisterPageState extends State<RegisterPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Pre-login → always brand red, regardless of the in-app accent.
+    return BrandTheme(
+      child: Builder(builder: (context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -510,6 +514,8 @@ class RegisterPageState extends State<RegisterPage> {
           ),
         ],
       ),
+    );
+      }),
     );
   }
 

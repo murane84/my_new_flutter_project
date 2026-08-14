@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'theme_provider.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
+import '../utils/brand_theme.dart';
 
 class AuthPage extends StatelessWidget {
   static const String routeName = '/auth';
@@ -10,6 +11,10 @@ class AuthPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Pre-login → always brand red, regardless of the in-app accent. The Builder
+    // gives the body a context whose primary is the brand colour.
+    return BrandTheme(
+      child: Builder(builder: (context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final scheme = Theme.of(context).colorScheme;
     final primary = scheme.primary;
@@ -199,6 +204,8 @@ class AuthPage extends StatelessWidget {
           ),
         ],
       ),
+    );
+      }),
     );
   }
 

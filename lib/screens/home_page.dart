@@ -5487,6 +5487,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// Friends / Devices / Tools / Account parent submenus, and Sign out. Actions
   /// live with their kin (both "add a friend" flows under Friends; profile +
   /// appearance + legal under Account) rather than piling into one tall list.
+  /// On desktop, Tools' only applicable action is Identify song, so it surfaces
+  /// at the top level instead of sitting alone in a one-item submenu.
   Widget _buildOverflowMenu(
       BuildContext context, ThemeProvider themeProvider, ColorScheme scheme) {
     final bool mobile = !kIsWeb &&
@@ -5566,16 +5568,18 @@ class HomePageState extends rp.ConsumerState<HomePage>
           ],
           child: const Text('Devices'),
         ),
-        // Tools — utility actions only, now that Friends, Appearance and
-        // monetization have their own homes.
-        SubmenuButton(
-          menuStyle: menuStyle,
-          leadingIcon:
-              Icon(Icons.tune_rounded, size: 20, color: scheme.primary),
-          menuChildren: [
-            _menuBtn(scheme, Icons.hearing_rounded, 'Identify song',
-                () => showSongIdentifier(context)),
-            if (mobile)
+        // Tools — on mobile a small submenu (Identify song + Call reliability,
+        // which is mobile-only). On desktop Call reliability doesn't apply, so
+        // Identify song sits directly at the top level rather than alone in a
+        // one-item submenu.
+        if (mobile)
+          SubmenuButton(
+            menuStyle: menuStyle,
+            leadingIcon:
+                Icon(Icons.tune_rounded, size: 20, color: scheme.primary),
+            menuChildren: [
+              _menuBtn(scheme, Icons.hearing_rounded, 'Identify song',
+                  () => showSongIdentifier(context)),
               _menuBtn(scheme, Icons.phonelink_ring_rounded,
                   'Call reliability', () {
                 Navigator.push(
@@ -5584,9 +5588,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       builder: (_) => const CallReliabilityScreen()),
                 );
               }),
-          ],
-          child: const Text('Tools'),
-        ),
+            ],
+            child: const Text('Tools'),
+          )
+        else
+          _menuBtn(scheme, Icons.hearing_rounded, 'Identify song',
+              () => showSongIdentifier(context)),
         // Account — you + your app: your profile, personalization, and the
         // legal/about info, all under one parent as requested.
         SubmenuButton(

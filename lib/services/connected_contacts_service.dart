@@ -54,11 +54,16 @@ class ConnectedContactsService {
     onAction?.call(action, userId, number);
   }
 
+  bool _refreshed = false;
+
   /// Read the address book, match numbers against registered Aluta users, and
   /// write / prune the "Connected apps" rows. Requests contacts permission
-  /// (read + write) — if declined, quietly does nothing.
+  /// (read + write) — if declined, quietly does nothing. Runs at most ONCE per
+  /// app session (the scan + contact writes are heavy; no need to repeat them on
+  /// every home remount).
   Future<void> refresh() async {
-    if (!_supported) return;
+    if (!_supported || _refreshed) return;
+    _refreshed = true;
     try {
       // Needs read (to list numbers) AND write (to add the rows).
       final granted = await FlutterContacts.requestPermission(readonly: false);

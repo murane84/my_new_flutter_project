@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'api_service.dart';
 import '../utils/toast_helper.dart';
+import '../utils/brand_theme.dart';
 
 /// Recover a forgotten password two ways:
 ///   • Email code  — the backend emails a 6-digit code (works for everyone).
@@ -114,6 +115,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Pre-login → always brand red, regardless of the in-app accent.
+    return BrandTheme(
+      child: Builder(builder: (context) {
     final scheme = Theme.of(context).colorScheme;
     final emailMode = _method == _Method.email;
     // In email mode the code + password fields appear after a code is sent; in
@@ -352,6 +356,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ],
         ),
       ),
+    );
+      }),
     );
   }
 }

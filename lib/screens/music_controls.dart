@@ -32,6 +32,7 @@ import '../utils/marquee_text.dart';
 import 'api_service.dart';
 import 'chat/song_cache.dart';
 import 'music/song_identifier.dart' show showSongIdentifier;
+import '../utils/brand_theme.dart';
 
 part 'music/music_control_widgets.dart'; // _CtrlBtn, _CtrlChip, _SpeedPanel
 part 'music/music_playlist_overlay.dart'; // _PlaylistOverlay + state
@@ -1675,6 +1676,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   @override
   Widget build(BuildContext context) {
+    // The Now Playing player is a core brand surface (the coral/vinyl identity),
+    // so it stays brand red regardless of the user's chosen in-app accent.
+    return BrandTheme(
+      child: Builder(builder: (context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = scheme.brightness == Brightness.dark;
 
@@ -1774,6 +1779,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
             ),
         ],
       ),
+    );
+      }),
     );
   }
 

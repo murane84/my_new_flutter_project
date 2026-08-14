@@ -13,6 +13,7 @@ import 'forgot_password_screen.dart';
 import 'token_helper.dart';
 import '../services/biometric_service.dart';
 import '../utils/snackbar_helper.dart';
+import '../utils/brand_theme.dart';
 
 class LoginPage extends StatefulWidget {
   static const String routeName = '/login';
@@ -269,6 +270,9 @@ class LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Pre-login → always brand red, regardless of the in-app accent.
+    return BrandTheme(
+      child: Builder(builder: (context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -651,6 +655,8 @@ class LoginPageState extends State<LoginPage> {
           ),
         ],
       ),
+    );
+      }),
     );
   }
 

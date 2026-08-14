@@ -476,3 +476,101 @@ class StoryView(Base):
 
     def __repr__(self):
         return f"<StoryView(story_id={self.story_id}, viewer_id={self.viewer_id})>"
+
+
+# ─────────────────────────── "Our Space" ────────────────────────────────────
+# A bond rendered as a *place* (a relationship profile), not a chat thread. It
+# is a deliberate pin ("this connection matters"), kept intentionally scarce —
+# the free tier allows one; the Together plan unlocks several (cap enforced in
+# routers/spaces.py, not the schema, so it stays tunable). Owner-scoped for now:
+# the creator pins and manages it, and members are carried as a set so a future
+# "shared / mutual-visibility" mode can layer on without a migration (the §9
+# open decision is parked, not foreclosed). Distinct from the plain `friends`
+# circle, which stays exactly as-is.
+class RelationshipSpace(Base):
+    __tablename__ = "relationship_spaces"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # The user who pinned the bond and can edit / unpin it.
+    owner_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Display name, e.g. "You & Belyner". Nullable → the client derives one from
+    # the members when unset, so a Space is never nameless.
+    name = Column(String, nullable=True)
+    # Preset theme key (e.g. 'coral'); reuses the Now-Playing palette vocabulary
+    # rather than a raw colour — presets only, never a free-for-all.
+    theme = Column(String, nullable=True)
+    # The single hero card at the top of the friend list. Exactly one primary
+    # per owner (enforced in the router on create / set-primary).
+    is_primary = Column(Boolean, default=False, nullable=False)
+    # 'free' | 'together'. The floor for gating multiple Spaces / forever-history
+    # / custom themes; upgrading deepens closeness, never gates basic use.
+    plan_tier = Column(String, default="free", nullable=False, server_default="free")
+    # "Close since" — the moment the bond was pinned.
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    owner = relationship("User", foreign_keys=[owner_id], passive_deletes=True)
+    members = relationship(
+        "SpaceMember",
+        back_populates="space",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    moments = relationship(
+        "PinnedMoment",
+        back_populates="space",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    def __repr__(self):
+        return f"<RelationshipSpace(id={self.id}, owner_id={self.owner_id})>"
+
+
+class SpaceMember(Base):
+    __tablename__ = "space_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    space_id = Column(
+        Integer, ForeignKey("relationship_spaces.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    space = relationship("RelationshipSpace", back_populates="members")
+    user = relationship("User", foreign_keys=[user_id], passive_deletes=True)
+
+    __table_args__ = (
+        UniqueConstraint('space_id', 'user_id', name='_space_member_uc'),
+    )
+
+
+class PinnedMoment(Base):
+    """A saved memory inside a Space — a dedication, a voice note, a photo, the
+    "first song", a note. The relationship's history, curated by hand."""
+    __tablename__ = "pinned_moments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    space_id = Column(
+        Integer, ForeignKey("relationship_spaces.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    author_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    # dedication | voice | photo | song | note
+    kind = Column(String, nullable=False)
+    # The payload: a media URL, a track JSON blob, or free text — kind decides.
+    ref = Column(Text, nullable=True)
+    caption = Column(String, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    space = relationship("RelationshipSpace", back_populates="moments")
+    author = relationship("User", foreign_keys=[author_id], passive_deletes=True)

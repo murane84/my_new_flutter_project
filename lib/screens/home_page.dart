@@ -37,7 +37,6 @@ import 'live_session_screen.dart';
 import 'legal_screen.dart';
 import 'relationship_space_page.dart';
 import 'appearance_screen.dart';
-import 'spinning_vinyl_ring.dart';
 import '../services/live_session_service.dart'
     show activeLiveSession, endActiveLiveSession;
 import '../services/notif_service.dart';

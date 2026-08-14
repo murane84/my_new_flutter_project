@@ -25,7 +25,11 @@ from auth import get_current_user
 router = APIRouter(prefix="/spaces", tags=["Our Space"])
 
 # Free tier: one pinned Space. Raised for the Together plan (checked per-user).
-FREE_SPACE_CAP = 1
+# A small, scarce cap — "one hero + a few chips" (spec §2.1). Tunable. At the
+# monetization step (build order §8.6) this drops to 1 for the free tier and the
+# Together plan raises it here via current_user_plan(); the gate logic below is
+# already written against the tier, so only this constant / the plan hook change.
+FREE_SPACE_CAP = 5
 _VALID_MOMENT_KINDS = {"dedication", "voice", "photo", "song", "note"}
 
 

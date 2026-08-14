@@ -3475,6 +3475,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
           onTap: () => _openSpace(space),
+          onLongPress: () => _showSpaceManageSheet(space),
           child: Container(
             padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
             decoration: BoxDecoration(
@@ -3679,7 +3680,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
             ),
           ),
           SizedBox(
-            height: 92,
+            height: 72,
             child: ListView(
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
@@ -3718,6 +3719,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
     return GestureDetector(
       onTap: () => _openSpace(space),
+      onLongPress: () => _showSpaceManageSheet(space),
       child: Container(
         width: 80,
         margin: const EdgeInsets.only(right: 8),
@@ -3725,7 +3727,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           children: [
             SizedBox(
               width: 60,
-              height: 38,
+              height: 40,
               child: Stack(
                 clipBehavior: Clip.none,
                 alignment: Alignment.center,
@@ -3810,17 +3812,23 @@ class HomePageState extends rp.ConsumerState<HomePage>
         width: 80,
         child: Column(
           children: [
-            Container(
-              width: 54,
-              height: 54,
-              margin: const EdgeInsets.only(top: 0),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: scheme.surfaceContainerHighest,
-                border: Border.all(
-                    color: scheme.outlineVariant.withValues(alpha: 0.6)),
+            // Same avatar-area height (40) as the pair chips so every label sits
+            // on one row; the "+" circle matches the friend-avatar size.
+            SizedBox(
+              height: 40,
+              child: Center(
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: scheme.surfaceContainerHighest,
+                    border: Border.all(
+                        color: scheme.outlineVariant.withValues(alpha: 0.6)),
+                  ),
+                  child: Icon(Icons.add_rounded, color: scheme.primary),
+                ),
               ),
-              child: Icon(Icons.add_rounded, color: scheme.primary),
             ),
             const SizedBox(height: 5),
             Text('New',
@@ -4305,6 +4313,113 @@ class HomePageState extends rp.ConsumerState<HomePage>
       ),
     );
     _loadSpaces();
+  }
+
+  /// Quick manage menu for a Space (long-press the hero or a chip): open, make
+  /// hero, or unpin — so a mistaken/duplicate Space can be removed without
+  /// digging into the profile.
+  void _showSpaceManageSheet(Map<String, dynamic> space) {
+    final scheme = Theme.of(context).colorScheme;
+    final title = deriveSpaceName(space, _myUserId);
+    final isPrimary = space['is_primary'] == true;
+    final id = (space['id'] as num).toInt();
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 8, bottom: 6),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: scheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+              child: Row(
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          color: scheme.onSurface)),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: Icon(Icons.open_in_full_rounded, color: scheme.primary),
+              title: const Text('Open Space'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _openSpace(space);
+              },
+            ),
+            if (!isPrimary)
+              ListTile(
+                leading: Icon(Icons.push_pin_rounded, color: scheme.primary),
+                title: const Text('Make hero'),
+                subtitle: const Text('Show at the top of your list'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final ok = await ApiService().updateSpace(id, isPrimary: true);
+                  if (ok != null) _loadSpaces();
+                },
+              ),
+            ListTile(
+              leading: Icon(Icons.link_off_rounded, color: scheme.error),
+              title: Text('Unpin Space',
+                  style: TextStyle(color: scheme.error)),
+              subtitle: const Text('Removes this Space — your chats stay'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _confirmUnpinSpace(space);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmUnpinSpace(Map<String, dynamic> space) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Unpin this Space?'),
+        content: const Text(
+            'The relationship profile and its pinned moments are removed. Your '
+            'friendship and chats stay exactly as they are.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(c, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Unpin'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final done = await ApiService().deleteSpace((space['id'] as num).toInt());
+    if (!mounted) return;
+    if (done) {
+      _loadSpaces();
+      showToast(context, 'Space unpinned', type: ToastType.success);
+    } else {
+      showToast(context, 'Could not unpin — try again',
+          type: ToastType.error);
+    }
   }
 
   /// Pin a friend as an Our Space (from the friend-row quick sheet). Handles the

@@ -57,6 +57,7 @@ import 'stories/story_models.dart';
 import 'stories/story_viewer.dart';
 import 'policy_gate.dart';
 import 'add_friend_sheet.dart';
+import 'spinning_vinyl_ring.dart';
 import '../services/connected_contacts_service.dart';
 import '../services/now_playing_presence.dart';
 import '../services/telecom_service.dart';
@@ -1818,11 +1819,18 @@ class HomePageState extends rp.ConsumerState<HomePage>
       imageUrl: _avatarFull(f['avatar_url']),
     );
     final story = _friendStory(f['id']);
-    if (story == null) return avatar;
-    return GestureDetector(
-      onTap: () => _openFriendStory(story),
-      child: _statusRing(avatar, story),
-    );
+    Widget core = story == null
+        ? avatar
+        : GestureDetector(
+            onTap: () => _openFriendStory(story),
+            child: _statusRing(avatar, story),
+          );
+    // Listening right now → wrap in a slowly spinning coral "record" ring.
+    final id = (f['id'] as num?)?.toInt();
+    if (id != null && NowPlayingPresence.instance.trackFor(id) != null) {
+      core = SpinningVinylRing(key: ValueKey('np-$id'), child: core);
+    }
+    return core;
   }
 
   // ── Chat open/close ───────────────────────────────────────────────────────

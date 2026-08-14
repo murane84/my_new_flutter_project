@@ -465,6 +465,22 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
   }
 
+  // The playlist toggle in a chat header. On WEB there's no device music library
+  // to load, so opening the drawer does nothing useful — tell the user which
+  // apps DO support it instead of silently toggling an empty drawer.
+  void _openChatPlaylist() {
+    if (kIsWeb) {
+      showToast(
+        context,
+        'Playlists use the music saved on your device — open Aluta on your '
+        'phone or the desktop app to build and play your library.',
+        type: ToastType.info,
+      );
+      return;
+    }
+    playlistDrawerBus.toggle?.call();
+  }
+
   // ── Session expiry → clean auto sign-out ──────────────────────────────────
   bool _handlingExpiry = false;
   Future<void> _onSessionExpired() async {
@@ -2651,7 +2667,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                   _startGroupCall(g);
                   break;
                 case 'playlist':
-                  playlistDrawerBus.toggle?.call();
+                  _openChatPlaylist();
                   break;
               }
             },
@@ -2762,7 +2778,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
               tooltip: open ? 'Hide playlist' : 'Playlist',
               icon: Icon(Icons.queue_music_rounded,
                   color: open ? scheme.primary : null),
-              onPressed: () => playlistDrawerBus.toggle?.call(),
+              onPressed: _openChatPlaylist,
             ),
           ),
           IconButton(

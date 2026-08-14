@@ -3212,6 +3212,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final hero = _primarySpace;
     if (hero != null) {
       entries.add({'kind': 'ourspace', 'space': hero});
+      // "Your Spaces" chip row — the other pinned bonds + a "＋ New" affordance.
+      entries.add({'kind': 'spacechips'});
     }
     if (listening.isNotEmpty) {
       entries.add({
@@ -3302,6 +3304,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
                             if (e['kind'] == 'ourspace') {
                               return _buildOurSpaceHero(
                                   e['space'] as Map<String, dynamic>, scheme);
+                            }
+                            if (e['kind'] == 'spacechips') {
+                              return _buildSpaceChips(scheme);
                             }
                             if (e['kind'] == 'header') {
                               return _listHeader(scheme, e['label'] as String,
@@ -3487,6 +3492,196 @@ class HomePageState extends rp.ConsumerState<HomePage>
             shape: BoxShape.circle, color: Colors.white),
         child: child,
       );
+
+  /// "Your Spaces" — a horizontal row of the non-hero pinned bonds as small
+  /// chips, plus a "＋ New" chip. Renders from the in-memory Space list (no
+  /// fetch). Scarce by design, so it stays a short, deliberate row.
+  Widget _buildSpaceChips(ColorScheme scheme) {
+    final others = _spaces.where((s) => s['is_primary'] != true).toList();
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(6, 6, 6, 8),
+            child: Text(
+              'YOUR SPACES',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          SizedBox(
+            height: 92,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              children: [
+                for (final s in others) _spaceChip(s, scheme),
+                _newSpaceChip(scheme),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _spaceChip(Map<String, dynamic> space, ColorScheme scheme) {
+    final accent = spaceThemeColor(space['theme'] as String?);
+    final title = deriveSpaceName(space, _myUserId);
+    final others = ((space['members'] as List?) ?? const [])
+        .whereType<Map>()
+        .where((m) => (m['id'] as num?)?.toInt() != _myUserId)
+        .toList();
+    final otherName =
+        others.isNotEmpty ? (others.first['username'] ?? '').toString() : '';
+    final otherAvatar =
+        others.isNotEmpty ? _avatarFull(others.first['avatar_url']) : null;
+    return GestureDetector(
+      onTap: () => _openSpace(space),
+      child: Container(
+        width: 74,
+        margin: const EdgeInsets.only(right: 6),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(2.5),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [accent, accent.withValues(alpha: 0.55)],
+                ),
+              ),
+              child: CircleAvatar(
+                radius: 26,
+                backgroundColor: scheme.surface,
+                child: InitialsAvatar(
+                  name: otherName.isEmpty ? '?' : otherName,
+                  radius: 24,
+                  imageUrl: otherAvatar,
+                ),
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              title.replaceFirst('You & ', ''),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 11, color: scheme.onSurface),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _newSpaceChip(ColorScheme scheme) {
+    return GestureDetector(
+      onTap: _newSpaceFlow,
+      child: SizedBox(
+        width: 74,
+        child: Column(
+          children: [
+            Container(
+              width: 57,
+              height: 57,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: scheme.surfaceContainerHighest,
+                border: Border.all(
+                    color: scheme.outlineVariant.withValues(alpha: 0.6)),
+              ),
+              child: Icon(Icons.add_rounded, color: scheme.primary),
+            ),
+            const SizedBox(height: 5),
+            Text('New',
+                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Pick a friend to pin as a new Space. Only people already in your circle
+  /// appear — Spaces are always within the circle.
+  Future<void> _newSpaceFlow() async {
+    // Friends not already pinned in any Space (a bond is pinned once).
+    final pinnedIds = <int>{};
+    for (final s in _spaces) {
+      for (final m in ((s['members'] as List?) ?? const []).whereType<Map>()) {
+        final id = (m['id'] as num?)?.toInt();
+        if (id != null && id != _myUserId) pinnedIds.add(id);
+      }
+    }
+    final candidates = _allFriends.where((f) {
+      final id = (f['id'] as num?)?.toInt();
+      return id != null && !pinnedIds.contains(id);
+    }).toList();
+
+    if (candidates.isEmpty) {
+      showToast(context, 'Everyone in your circle is already pinned',
+          type: ToastType.info);
+      return;
+    }
+
+    final chosen = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final scheme = Theme.of(ctx).colorScheme;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Text('Pin a new Space',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                      color: scheme.onSurface)),
+              const SizedBox(height: 8),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: candidates.length,
+                  itemBuilder: (_, i) {
+                    final f = candidates[i];
+                    final nm = _contactDisplayName(
+                        f['phone']?.toString(), f['username'] as String? ?? '');
+                    return ListTile(
+                      leading: InitialsAvatar(
+                        name: nm,
+                        radius: 20,
+                        imageUrl: _avatarFull(f['avatar_url']),
+                      ),
+                      title: Text(nm),
+                      onTap: () => Navigator.pop(ctx, f),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (chosen == null) return;
+    final fid = int.tryParse(chosen['id'].toString()) ?? -1;
+    final nm = _contactDisplayName(
+        chosen['phone']?.toString(), chosen['username'] as String? ?? '');
+    if (fid > 0) _pinAsSpace(fid, nm);
+  }
 
   /// Banner shown across the top of the chat list while a photo shared into
   /// Aluta is waiting for the user to pick a recipient.

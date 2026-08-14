@@ -151,6 +151,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       builder: (_) => _EditSpaceSheet(
         initialName: deriveSpaceName(_space, widget.myUserId),
         initialTheme: (_space['theme'] as String?) ?? 'coral',
+        initialPrimary: _space['is_primary'] == true,
         spaceId: _id,
       ),
     );
@@ -704,10 +705,12 @@ class _MomentComposerState extends State<_MomentComposer> {
 class _EditSpaceSheet extends StatefulWidget {
   final String initialName;
   final String initialTheme;
+  final bool initialPrimary;
   final int spaceId;
   const _EditSpaceSheet({
     required this.initialName,
     required this.initialTheme,
+    required this.initialPrimary,
     required this.spaceId,
   });
 
@@ -719,6 +722,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
   late final TextEditingController _c =
       TextEditingController(text: widget.initialName);
   late String _theme = widget.initialTheme;
+  late bool _primary = widget.initialPrimary;
   bool _busy = false;
 
   @override
@@ -733,6 +737,8 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
       widget.spaceId,
       name: _c.text.trim(),
       theme: _theme,
+      // Only ever promote to hero here (never demote to headless).
+      isPrimary: (_primary && !widget.initialPrimary) ? true : null,
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -799,7 +805,23 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                 ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Hero Space'),
+            subtitle: Text(
+              widget.initialPrimary
+                  ? 'This bond leads your list'
+                  : 'Show this bond at the top of your list',
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            ),
+            value: _primary,
+            // Already the hero → can't unset directly (promote another instead).
+            onChanged: widget.initialPrimary
+                ? null
+                : (v) => setState(() => _primary = v),
+          ),
+          const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
             child: FilledButton(

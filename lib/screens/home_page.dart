@@ -3268,8 +3268,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
       entries.add({'kind': 'spacechips'});
     }
     // Story circles ("friend status" + Your story) live in the scroll now, so
-    // the hero can sit right beneath the search bar.
+    // the hero can sit right beneath the search bar. A header keeps the row from
+    // reading as orphaned.
     if (_myUserId != null) {
+      entries.add({'kind': 'header', 'label': 'Status & Stories'});
       entries.add({'kind': 'stories'});
     }
     if (listening.isNotEmpty) {
@@ -3281,6 +3283,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
       for (final m in listening) {
         entries.add({'kind': 'tile', 'item': m});
       }
+    }
+    // "Your circle" always heads the main conversation list (even when nobody is
+    // listening), so the quiet list is never an unlabelled block.
+    if (rest.isNotEmpty) {
       entries.add({'kind': 'header', 'label': 'Your circle'});
     }
     for (final m in rest) {
@@ -4034,8 +4040,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
     return Slidable(
       key: ValueKey('friend-${f['id']}'),
-      // Swipe left → one-tap call, so the row stays clean.
-      endActionPane: ActionPane(
+      // Swipe RIGHT (drag from the left edge) → Call.
+      startActionPane: ActionPane(
         motion: const DrawerMotion(),
         extentRatio: 0.26,
         children: [
@@ -4050,6 +4056,21 @@ class HomePageState extends rp.ConsumerState<HomePage>
             foregroundColor: scheme.onPrimary,
             icon: Icons.call_rounded,
             label: 'Call',
+          ),
+        ],
+      ),
+      // Swipe LEFT → open the message thread.
+      endActionPane: ActionPane(
+        motion: const DrawerMotion(),
+        extentRatio: 0.26,
+        children: [
+          SlidableAction(
+            onPressed: (_) =>
+                _isSharing ? _sendShareTo(friend: f) : openChat(f),
+            backgroundColor: scheme.secondaryContainer,
+            foregroundColor: scheme.onSecondaryContainer,
+            icon: Icons.chat_bubble_rounded,
+            label: 'Message',
           ),
         ],
       ),

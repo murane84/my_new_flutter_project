@@ -895,11 +895,19 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       await _player.play();
     } on PlayerException catch (e) {
       _switching = false;
-      if (mounted) _snack('Cannot play: ${e.message}');
+      if (_pruneIfMissing(path)) {
+        if (mounted) _snack('Track no longer on device — removed');
+      } else if (mounted) {
+        _snack('Cannot play: ${e.message}');
+      }
       return;
     } catch (_) {
       _switching = false;
-      if (mounted) _snack('Playback error — check file format');
+      if (_pruneIfMissing(path)) {
+        if (mounted) _snack('Track no longer on device — removed');
+      } else if (mounted) {
+        _snack('Playback error — check file format');
+      }
       return;
     }
     // Re-enable auto-advance once playback has actually settled.
@@ -907,6 +915,29 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       _switching = false;
     });
     if (_isMobile) _fetchMetadata(path);
+  }
+
+  /// Lazy validation: if a track failed to play because its file is gone (moved
+  /// or deleted since it was saved to the playlist), drop it from the list. This
+  /// is a SINGLE stat, only for the track we actually tried to play — never a
+  /// launch-time sweep of the whole saved playlist. Returns true if it pruned.
+  bool _pruneIfMissing(String path) {
+    if (kIsWeb || !_isMobile) return false;
+    try {
+      if (File(path).existsSync()) return false; // exists → a real format error
+    } catch (_) {
+      return false;
+    }
+    final i = _playlist.indexOf(path);
+    if (i < 0) return false;
+    setState(() {
+      _playlist.removeAt(i);
+      if (_currentIndex >= _playlist.length) {
+        _currentIndex = _playlist.length - 1;
+      }
+    });
+    _publishPlaylist();
+    return true;
   }
 
   Future<void> _fetchMetadata(String path) async {
@@ -1030,16 +1061,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       final p = await SharedPreferences.getInstance();
       final saved = p.getStringList('music_playlist') ?? const [];
       if (saved.isNotEmpty) {
-        final existing = <String>[];
-        for (final path in saved) {
-          try {
-            if (File(path).existsSync()) existing.add(path);
-          } catch (_) {
-            existing.add(path);
-          }
-        }
+        // Load saved paths AS-IS — no per-file existsSync sweep at launch (that
+        // device I/O is what we're eliminating). Any file that has since moved or
+        // been deleted is pruned LAZILY, on the single play attempt that first
+        // touches it (see _pruneIfMissing in _play).
         if (!mounted) return;
-        setState(() => _playlist = existing);
+        setState(() => _playlist = List<String>.from(saved));
         _publishPlaylist();
       }
     } catch (_) {}

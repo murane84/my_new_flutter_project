@@ -1676,9 +1676,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   @override
   Widget build(BuildContext context) {
-    // The Now Playing player is a core brand surface (the coral/vinyl identity),
-    // so it stays brand red regardless of the user's chosen in-app accent.
-    return BrandTheme(
+    // The Now Playing player is a permanently-dark immersive "stage" (dark makes
+    // the art / vinyl / glow pop), and the user's accent colours its controls —
+    // see PlayerTheme. Independent of the app's Light/Dark mode.
+    return PlayerTheme(
       child: Builder(builder: (context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = scheme.brightness == Brightness.dark;

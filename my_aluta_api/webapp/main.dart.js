@@ -78578,7 +78578,7 @@ s=J.M5(s.$1(a),s.$1(b))}return s},
 $S:290}
 A.aHu.prototype={
 $2(a,b){var s,r,q,p=this
-if(b.b>=880)return p.a.aOz(p.b,p.c,p.d,p.e,p.f)
+if(b.b>=600)return p.a.aOz(p.b,p.c,p.d,p.e,p.f)
 s=A.S(p.b,t.P)
 B.d.L(s,p.c)
 r=p.a

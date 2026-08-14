@@ -4,6 +4,7 @@ import 'package:intl/intl.dart' hide TextDirection;
 import 'api_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/avatar_widget.dart';
+import '../utils/popup_shell.dart';
 
 /// "Our Space" — a bond rendered as a *place*, not a chat thread. Opening a
 /// pinned Space shows the story of that connection: who you are together, how
@@ -205,10 +206,12 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         .map((m) => Map<String, dynamic>.from(m))
         .toList();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Our Space'),
-        actions: [
+    return AppPopupShell(
+      title: 'Our Space',
+      icon: Icons.favorite_rounded,
+      headerAction: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           IconButton(
             tooltip: 'Edit',
             icon: const Icon(Icons.edit_outlined),
@@ -221,11 +224,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           ),
         ],
       ),
-      body: RefreshIndicator(
+      builder: (context, isWide) => RefreshIndicator(
         onRefresh: _load,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
           children: [
             _header(scheme, title),
             const SizedBox(height: 18),

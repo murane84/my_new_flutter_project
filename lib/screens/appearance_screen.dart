@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'theme_provider.dart';
+import '../utils/popup_shell.dart';
 
 /// The personalization surface (build step 5): whole-app **theme** (System /
 /// Light / Dark) + a curated **accent** preset set. Dark stays the brand's
@@ -29,17 +30,12 @@ class AppearanceScreen extends StatelessWidget {
     final theme = context.watch<ThemeProvider>();
     final scheme = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      appBar: AppBar(
-        // Title carries the accent so the very first thing on the page previews
-        // the chosen colour — no need to leave settings to see how it looks.
-        title: Text(
-          'Appearance',
-          style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w700),
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+    return AppPopupShell(
+      title: 'Appearance',
+      icon: Icons.palette_outlined,
+      builder: (context, isWide) => ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
         children: [
           _sectionLabel(scheme, 'APP THEME'),
           const SizedBox(height: 10),

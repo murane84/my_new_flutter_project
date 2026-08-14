@@ -12,6 +12,7 @@ import 'api_service.dart';
 import 'home_page.dart';
 import '../services/contact_names.dart';
 import '../utils/toast_helper.dart';
+import '../utils/popup_shell.dart';
 
 /// A friendly label + platform tag for THIS device (used when it links itself).
 ({String label, String platform}) _describeThisDevice() {
@@ -493,106 +494,114 @@ class _LinkedDevicesScreenState extends State<LinkedDevicesScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Linked devices'),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _loading ? null : _load,
-          ),
-        ],
+    return AppPopupShell(
+      title: 'Linked devices',
+      icon: Icons.devices_rounded,
+      headerAction: IconButton(
+        tooltip: 'Refresh',
+        icon: const Icon(Icons.refresh_rounded),
+        onPressed: _loading ? null : _load,
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _devices.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(28),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.devices_other_rounded,
-                            size: 56, color: scheme.outlineVariant),
-                        const SizedBox(height: 12),
-                        Text('No linked computers',
-                            style: TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Log in on a computer by scanning its QR from the '
-                          'menu → “Link a computer”.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: scheme.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: _devices.length,
-                    separatorBuilder: (_, _) => Divider(
-                        height: 1, color: scheme.outlineVariant.withAlpha(70)),
-                    itemBuilder: (_, i) {
-                      final d = _devices[i];
-                      final id = (d['id'] as num?)?.toInt() ?? -1;
-                      final platform = (d['platform'] ?? '').toString();
-                      final isCurrent = d['current'] == true;
-                      final label = (d['label'] ?? 'Device').toString();
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: scheme.primaryContainer,
-                          child: Icon(_iconFor(platform),
-                              color: scheme.onPrimaryContainer),
-                        ),
-                        title: Row(
-                          children: [
-                            Flexible(
-                                child: Text(label,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w600))),
-                            if (isCurrent) ...[
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: scheme.primary.withAlpha(30),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text('This device',
-                                    style: TextStyle(
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: scheme.primary)),
-                              ),
-                            ],
-                          ],
-                        ),
-                        subtitle: Text(_lastSeen(d['last_seen_at']?.toString()),
-                            style: TextStyle(
-                                fontSize: 12, color: scheme.onSurfaceVariant)),
-                        trailing: _busy.contains(id)
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2))
-                            : IconButton(
-                                tooltip: 'Sign out',
-                                icon: Icon(Icons.logout_rounded,
-                                    color: scheme.error),
-                                onPressed: () => _revoke(d),
-                              ),
-                      );
-                    },
-                  ),
+      builder: (context, isWide) => _body(scheme),
+    );
+  }
+
+  Widget _body(ColorScheme scheme) {
+    if (_loading) {
+      return const SizedBox(
+          height: 220, child: Center(child: CircularProgressIndicator()));
+    }
+    if (_devices.isEmpty) {
+      return SizedBox(
+        height: 300,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.devices_other_rounded,
+                    size: 56, color: scheme.outlineVariant),
+                const SizedBox(height: 12),
+                Text('No linked computers',
+                    style: TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                Text(
+                  'Log in on a computer by scanning its QR from the '
+                  'menu → “Link a computer”.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: scheme.onSurfaceVariant),
                 ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.separated(
+        shrinkWrap: true,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: _devices.length,
+        separatorBuilder: (_, _) => Divider(
+            height: 1, color: scheme.outlineVariant.withAlpha(70)),
+        itemBuilder: (_, i) {
+          final d = _devices[i];
+          final id = (d['id'] as num?)?.toInt() ?? -1;
+          final platform = (d['platform'] ?? '').toString();
+          final isCurrent = d['current'] == true;
+          final label = (d['label'] ?? 'Device').toString();
+          return ListTile(
+            leading: CircleAvatar(
+              backgroundColor: scheme.primaryContainer,
+              child: Icon(_iconFor(platform),
+                  color: scheme.onPrimaryContainer),
+            ),
+            title: Row(
+              children: [
+                Flexible(
+                    child: Text(label,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600))),
+                if (isCurrent) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withAlpha(30),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text('This device',
+                        style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.primary)),
+                  ),
+                ],
+              ],
+            ),
+            subtitle: Text(_lastSeen(d['last_seen_at']?.toString()),
+                style: TextStyle(
+                    fontSize: 12, color: scheme.onSurfaceVariant)),
+            trailing: _busy.contains(id)
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : IconButton(
+                    tooltip: 'Sign out',
+                    icon: Icon(Icons.logout_rounded,
+                        color: scheme.error),
+                    onPressed: () => _revoke(d),
+                  ),
+          );
+        },
+      ),
     );
   }
 }

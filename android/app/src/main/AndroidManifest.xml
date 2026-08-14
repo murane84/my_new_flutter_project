@@ -137,16 +137,20 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- Renderer: fall back from Impeller (Vulkan) to the Skia/OpenGL
-             renderer on Android. Some devices — notably Redmi / Xiaomi HyperOS
-             (citrine) GPUs — lose the Vulkan context and Impeller hard-aborts
+        <!-- Renderer: Impeller (Vulkan) is Flutter's default on Android and does
+             NOT compile shaders at runtime — so it avoids the first-launch
+             "Aluta isn't responding" jank that Skia causes on a fresh install.
+             It was previously forced OFF because older engines lost the Vulkan
+             context on Redmi / Xiaomi HyperOS ("citrine") GPUs and hard-aborted
              with "Check failed: back_texture. Context is valid:0"
-             (flutter/impeller/display_list/canvas.cc). Skia is stable there.
-             Remove this once the app is pinned to a Flutter engine where the
-             Impeller/Vulkan context-loss crash is fixed. -->
+             (flutter/impeller/display_list/canvas.cc).
+             RE-ENABLED to test whether the current Flutter engine has fixed that
+             crash on the Xiaomi test device. If it hard-aborts on launch, flip
+             this back to "false" (Skia is stable there, at the cost of the
+             one-time first-run shader-compile stall). -->
         <meta-data
             android:name="io.flutter.embedding.android.EnableImpeller"
-            android:value="false" />
+            android:value="true" />
 
         <!-- FCM: the default channel a data/notification message is posted to if
              it doesn't name one. Matches the "Messages" channel created in

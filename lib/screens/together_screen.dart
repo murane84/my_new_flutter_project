@@ -14,7 +14,13 @@ import '../utils/popup_shell.dart';
 class TogetherScreen extends StatefulWidget {
   /// Called after the plan changes so the caller can refresh its cached state.
   final VoidCallback? onChanged;
-  const TogetherScreen({super.key, this.onChanged});
+
+  /// The status the opener already knows (from its cached plan), used to paint
+  /// the correct state on the very first frame — so reopening the page never
+  /// flashes the "not on Together" state before the fresh fetch lands.
+  final bool? initialTogether;
+
+  const TogetherScreen({super.key, this.onChanged, this.initialTogether});
 
   @override
   State<TogetherScreen> createState() => _TogetherScreenState();
@@ -24,7 +30,14 @@ class _TogetherScreenState extends State<TogetherScreen> {
   Map<String, dynamic>? _plan;
   bool _busy = false;
 
-  bool get _isTogether => _plan?['is_together'] == true;
+  // Fresh server data wins; until it lands, fall back to the opener's cached
+  // hint so we never render a stale/incorrect status.
+  bool get _isTogether => _plan != null
+      ? _plan!['is_together'] == true
+      : (widget.initialTogether ?? false);
+
+  // Do we know the status well enough to show a definite CTA yet?
+  bool get _known => _plan != null || widget.initialTogether != null;
 
   static const Color _gold = Color(0xFFF6D77A);
 
@@ -148,9 +161,11 @@ class _TogetherScreenState extends State<TogetherScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            _isTogether
-                ? 'You’re on Together${_sinceLabel()}. Thank you 💛'
-                : 'Upgrade deepens closeness — it never gates the basics.',
+            !_known
+                ? 'Checking your plan…'
+                : _isTogether
+                    ? 'You’re on Together${_sinceLabel()}. Thank you 💛'
+                    : 'Upgrade deepens closeness — it never gates the basics.',
             textAlign: TextAlign.center,
             style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.9), fontSize: 12.5),
@@ -207,6 +222,27 @@ class _TogetherScreenState extends State<TogetherScreen> {
   }
 
   Widget _cta(ColorScheme scheme) {
+    // Status not yet known — show a neutral, disabled placeholder rather than
+    // guessing "Start Together" (which would flash the wrong state on reopen).
+    if (!_known) {
+      return SizedBox(
+        width: double.infinity,
+        child: FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: _gold.withValues(alpha: 0.5),
+            foregroundColor: const Color(0xFF3A2A00),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+          ),
+          onPressed: null,
+          child: const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+                strokeWidth: 2, color: Color(0xFF3A2A00)),
+          ),
+        ),
+      );
+    }
     if (_isTogether) {
       return Column(
         children: [

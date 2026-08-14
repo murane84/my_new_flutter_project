@@ -5482,9 +5482,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // One row of the header overflow menu (icon + label).
   // ── Overflow menu (grouped, MenuAnchor with submenus) ─────────────────────
 
-  /// The header overflow menu. Related actions are nested under parent
-  /// submenus (Devices, Tools & settings…) so the top level stays short as new
-  /// features are added, instead of the flat list growing ever taller.
+  /// The header overflow menu, grouped by intent so it scales as features grow:
+  /// Aluta Together (monetization, top level for visibility), Groups, then the
+  /// Friends / Devices / Tools / Account parent submenus, and Sign out. Actions
+  /// live with their kin (both "add a friend" flows under Friends; profile +
+  /// appearance + legal under Account) rather than piling into one tall list.
   Widget _buildOverflowMenu(
       BuildContext context, ThemeProvider themeProvider, ColorScheme scheme) {
     final bool mobile = !kIsWeb &&
@@ -5514,11 +5516,34 @@ class HomePageState extends rp.ConsumerState<HomePage>
             controller.isOpen ? controller.close() : controller.open(),
       ),
       menuChildren: [
+        // Monetization lives at the TOP LEVEL so the upgrade is one tap from the
+        // menu — it used to be buried two levels deep under Tools & settings.
+        _menuBtn(
+            scheme,
+            _isTogether
+                ? Icons.workspace_premium_rounded
+                : Icons.favorite_border_rounded,
+            _isTogether ? 'Together ✓' : 'Aluta Together',
+            _openTogether),
         _menuBtn(scheme, Icons.groups_rounded, 'Groups', () async {
           final conv = await showAppPopup<Map<String, dynamic>>(
               context, const GroupsScreen());
           if (conv != null && mounted) openGroupInPanel(conv);
         }),
+        // Friends — the two "grow your circle" actions grouped together (they
+        // were the same intent split across two flat Tools entries).
+        SubmenuButton(
+          menuStyle: menuStyle,
+          leadingIcon: Icon(Icons.group_add_rounded,
+              size: 20, color: scheme.primary),
+          menuChildren: [
+            _menuBtn(scheme, Icons.contacts_rounded, 'Find friends',
+                () => _findFriendsFromContacts()),
+            _menuBtn(scheme, Icons.person_add_alt_1_rounded, 'Add friend',
+                () => _showAddFriend()),
+          ],
+          child: const Text('Friends'),
+        ),
         // Devices — QR linking + the linked-devices manager.
         SubmenuButton(
           menuStyle: menuStyle,
@@ -5541,7 +5566,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
           ],
           child: const Text('Devices'),
         ),
-        // Tools & settings — the catch-all so future actions nest here.
+        // Tools — utility actions only, now that Friends, Appearance and
+        // monetization have their own homes.
         SubmenuButton(
           menuStyle: menuStyle,
           leadingIcon:
@@ -5549,10 +5575,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
           menuChildren: [
             _menuBtn(scheme, Icons.hearing_rounded, 'Identify song',
                 () => showSongIdentifier(context)),
-            _menuBtn(scheme, Icons.contacts_rounded, 'Find friends',
-                () => _findFriendsFromContacts()),
-            _menuBtn(scheme, Icons.person_add_alt_1_rounded, 'Add friend',
-                () => _showAddFriend()),
             if (mobile)
               _menuBtn(scheme, Icons.phonelink_ring_rounded,
                   'Call reliability', () {
@@ -5562,24 +5584,27 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       builder: (_) => const CallReliabilityScreen()),
                 );
               }),
+          ],
+          child: const Text('Tools'),
+        ),
+        // Account — you + your app: your profile, personalization, and the
+        // legal/about info, all under one parent as requested.
+        SubmenuButton(
+          menuStyle: menuStyle,
+          leadingIcon: Icon(Icons.account_circle_outlined,
+              size: 20, color: scheme.primary),
+          menuChildren: [
+            _menuBtn(scheme, Icons.person_rounded, 'Profile', () async {
+              await showAppPopup(context, const ProfileScreen());
+              if (mounted) _loadUserData();
+            }),
             _menuBtn(scheme, Icons.palette_outlined, 'Appearance',
                 () => showAppPopup(context, const AppearanceScreen())),
-            _menuBtn(
-                scheme,
-                _isTogether
-                    ? Icons.workspace_premium_rounded
-                    : Icons.favorite_border_rounded,
-                _isTogether ? 'Together ✓' : 'Aluta Together',
-                _openTogether),
             _menuBtn(scheme, Icons.shield_outlined, 'Legal & About',
                 () => showLegalMenu(context)),
           ],
-          child: const Text('Tools & settings'),
+          child: const Text('Account'),
         ),
-        _menuBtn(scheme, Icons.person_rounded, 'Profile', () async {
-          await showAppPopup(context, const ProfileScreen());
-          if (mounted) _loadUserData();
-        }),
         const Divider(height: 10),
         _menuBtn(scheme, Icons.logout_rounded, 'Sign out', _logout,
             destructive: true),

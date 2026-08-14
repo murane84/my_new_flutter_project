@@ -98,14 +98,28 @@ class MainActivity : AudioServiceFragmentActivity() {
         contactsMc = cmc
         cmc.setMethodCallHandler { call, result ->
             when (call.method) {
-                "ensureAccount" -> result.success(ConnectedContacts.ensureAccount(this))
+                // ContactsContract reads/writes (queries + applyBatch) can be
+                // slow — and on some OEMs (notably MIUI) can block for seconds or
+                // stall on a permission gate. Run them OFF the main thread, or the
+                // whole app ANRs ("Aluta is not responding") and audio playback
+                // stalls with it. Results are posted back on the UI thread.
+                "ensureAccount" -> Thread {
+                    val ok = ConnectedContacts.ensureAccount(this)
+                    runOnUiThread { result.success(ok) }
+                }.start()
                 "sync" -> {
                     @Suppress("UNCHECKED_CAST")
                     val list = (call.argument<List<Map<String, Any?>>>("matches")
                         ?: emptyList())
-                    result.success(ConnectedContacts.sync(this, list))
+                    Thread {
+                        val ok = ConnectedContacts.sync(this, list)
+                        runOnUiThread { result.success(ok) }
+                    }.start()
                 }
-                "clear" -> { ConnectedContacts.clearAll(this); result.success(true) }
+                "clear" -> Thread {
+                    ConnectedContacts.clearAll(this)
+                    runOnUiThread { result.success(true) }
+                }.start()
                 "consumePendingAction" -> {
                     val p = pendingContactAction
                     pendingContactAction = null

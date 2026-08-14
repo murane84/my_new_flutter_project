@@ -3357,11 +3357,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
               ? const Center(child: CircularProgressIndicator())
               : LayoutBuilder(
                   builder: (context, constraints) {
-                    // Wide enough (desktop / web, and only while the panel keeps
-                    // that width) → two columns so "Your Circle" sits in its own
-                    // right pane, visible without scrolling past the spaces and
-                    // stories. Otherwise collapse to the single mobile stack.
-                    final wide = constraints.maxWidth >= 880;
+                    // Two columns as soon as there's more than phone-ish width,
+                    // so "Your Circle" sits in its own right pane (visible
+                    // without scrolling past the spaces and stories). Only true
+                    // phone widths — or the panel narrowed by the music pane —
+                    // collapse to the single mobile stack.
+                    final wide = constraints.maxWidth >= 600;
                     if (wide) {
                       return _friendListWide(
                           sideEntries, convEntries, combined, scheme, textColor);

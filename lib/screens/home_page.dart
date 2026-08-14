@@ -238,9 +238,19 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Screenshot / photo shared into Aluta → surface the "pick a chat to send"
     // banner and react if one arrives while Home is already open.
     ShareInbox.instance.addListener(_onSharePending);
-    // Phonebook name map is NOT read at launch (that's a device-contacts read).
-    // It loads on demand the first time the user syncs contacts (Find friends),
-    // after which saved names resolve everywhere — see _findFriendsFromContacts.
+    // Phonebook name map: warmed for RETURNING users so their saved contact
+    // names show in the friend list. This is SILENT and permission-gated — a
+    // fresh install (contacts not granted yet) reads nothing and never prompts,
+    // so it can't cause the first-install stall. Deferred off the first frame so
+    // even a returning user's read never competes with cold-start render/audio.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(seconds: 4), () {
+        if (!mounted) return;
+        ContactNames.instance.ensureLoaded().then((_) {
+          if (mounted) setState(() {});
+        });
+      });
+    });
     // Restore the user's backed-up song-detail edits (custom titles/artists) for
     // this account, so they survive a reinstall/update or a new device. Merges
     // into local storage (local edits win), then repaint so titles show at once.

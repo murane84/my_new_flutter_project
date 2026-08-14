@@ -1763,21 +1763,15 @@ class HomePageState extends rp.ConsumerState<HomePage>
   Widget _tileSubtitle(ColorScheme scheme, Color textColor, String? npLine,
       bool typing, String lastMsg, bool hasUnread) {
     if (npLine != null) {
+      final npStyle = TextStyle(
+          fontSize: 12.5,
+          color: scheme.primary,
+          fontWeight: FontWeight.w600);
       return Row(
         children: [
           Icon(Icons.graphic_eq_rounded, size: 14, color: scheme.primary),
           const SizedBox(width: 5),
-          Expanded(
-            child: Text(
-              npLine,
-              style: TextStyle(
-                  fontSize: 12.5,
-                  color: scheme.primary,
-                  fontWeight: FontWeight.w600),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
+          Expanded(child: _scrollingText(npLine, npStyle)),
         ],
       );
     }
@@ -1800,6 +1794,43 @@ class HomePageState extends rp.ConsumerState<HomePage>
       ),
       overflow: TextOverflow.ellipsis,
       maxLines: 1,
+    );
+  }
+
+  /// A single-line label that gently scrolls (marquee) ONLY when the text is too
+  /// long to fit — short titles render as plain, still text. Used for the live
+  /// track under a friend in the "Listening now" zone so long "Title — Artist"
+  /// strings are fully readable without truncation.
+  Widget _scrollingText(String text, TextStyle style) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final tp = TextPainter(
+          text: TextSpan(text: text, style: style),
+          maxLines: 1,
+          textDirection: TextDirection.ltr,
+        )..layout();
+        final overflows = tp.width > constraints.maxWidth;
+        if (!overflows) {
+          return Text(text,
+              style: style, maxLines: 1, overflow: TextOverflow.clip);
+        }
+        return SizedBox(
+          height: (style.fontSize ?? 13) + 5,
+          child: Marquee(
+            text: text,
+            style: style,
+            blankSpace: 44,
+            velocity: 26,
+            startPadding: 0,
+            pauseAfterRound: const Duration(seconds: 1),
+            accelerationDuration: const Duration(milliseconds: 350),
+            decelerationDuration: const Duration(milliseconds: 350),
+            showFadingOnlyWhenScrolling: true,
+            fadingEdgeStartFraction: 0.06,
+            fadingEdgeEndFraction: 0.12,
+          ),
+        );
+      },
     );
   }
 

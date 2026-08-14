@@ -58,6 +58,7 @@ import 'stories/story_viewer.dart';
 import 'policy_gate.dart';
 import 'add_friend_sheet.dart';
 import '../services/connected_contacts_service.dart';
+import '../services/now_playing_presence.dart';
 import '../services/telecom_service.dart';
 import '../main.dart' show navigatorKey;
 import '../utils/time_utils.dart';
@@ -265,6 +266,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
       if (mounted) ConnectedContactsService.instance.refresh();
     });
 
+    // Live "Listening now": repaint tiles when a friend's playback changes, and
+    // seed the current snapshot of who's playing right now.
+    NowPlayingPresence.instance.addListener(_onPresenceChanged);
+    NowPlayingPresence.instance.loadSnapshot();
+
     // Foreground heartbeat: keep the server-side presence alive while the app
     // is open, so idling no longer silently drops the user offline.
     _heartbeatTimer = Timer.periodic(
@@ -407,6 +413,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     SessionEvents.instance.expired.removeListener(_onSessionExpired);
     ShareInbox.instance.removeListener(_onSharePending);
     playlistDrawerBus.isOpen.removeListener(_onPlaylistDrawerToggled);
+    NowPlayingPresence.instance.removeListener(_onPresenceChanged);
     _playlistDrawerCtrl.dispose();
     _searchCtrl.dispose();
     _refreshTimer?.cancel();
@@ -846,6 +853,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Group (mesh) calling rides the same socket.
     GroupCallService.instance.sendSignal = (msg) => _notifyWs?.sendEvent(msg);
     GroupCallService.instance.onShowUI = _openGroupCallScreen;
+    // Live "now playing" presence rides the same socket: emit what I'm playing
+    // (server fans it to friends only) and begin watching local playback.
+    NowPlayingPresence.instance.emitSink = (msg) => _notifyWs?.sendEvent(msg);
+    NowPlayingPresence.instance.start();
     // The mesh's "smaller id offers" rule needs our OWN id on every entry
     // path. startGroupCall()/joinRoom() set it, but accept() (answering an
     // incoming ring) does not — so on a fresh launch the acceptor's myId was
@@ -1178,6 +1189,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // tray + their conversation tile, without the user pulling to refresh.
     if (type == 'story_posted') {
       _fetchStories();
+      return;
+    }
+    // A friend started/stopped/changed what they're listening to → update the
+    // live "Listening now" indicator on their tile.
+    if (type == 'friend_now_playing') {
+      NowPlayingPresence.instance.applyEvent(event);
       return;
     }
     // A new chat message arriving on the per-user notify socket. When the app
@@ -1690,6 +1707,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
     );
   }
 
+  /// Repaint the friend list when a friend starts / stops / changes what
+  /// they're listening to (driven by NowPlayingPresence).
+  void _onPresenceChanged() {
+    if (mounted) setState(() {});
+  }
+
   /// One-shot: ask the server whether the signed-in user must (re-)accept the
   /// current Privacy Policy + Terms, and if so present the blocking consent
   /// gate. Fails OPEN — a null/failed status never blocks entry to the app.
@@ -1712,6 +1735,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     try {
       await FcmService.instance.unregisterToken();
     } catch (_) {}
+    NowPlayingPresence.instance.stop();
     await ConnectedContactsService.instance.clear();
     await ApiService().logoutUser();
     try {
@@ -2173,6 +2197,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Stop pushes reaching this device for the account we're leaving (done while
     // the token is still valid, before logoutUser clears it). Best-effort.
     await FcmService.instance.unregisterToken();
+    NowPlayingPresence.instance.stop();
     // Remove Aluta's "Connected apps" contact rows for the account we're leaving.
     await ConnectedContactsService.instance.clear();
     await ApiService().logoutUser();
@@ -3233,6 +3258,16 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Unread now comes from Riverpod (single source of truth for the badge).
     final unread = ref.watch(unreadProvider).countFor((f['id'] as num).toInt());
     final hasUnread = unread > 0;
+    // Live "Listening now": if this friend is playing music right now, show the
+    // track in place of the last-message preview (seed of Concept 05).
+    final npTrack =
+        NowPlayingPresence.instance.trackFor((f['id'] as num).toInt());
+    String? npLine;
+    if (npTrack != null) {
+      final t = (npTrack['title'] ?? '').toString().trim();
+      final a = (npTrack['artist'] ?? '').toString().trim();
+      if (t.isNotEmpty) npLine = a.isNotEmpty ? '$t — $a' : t;
+    }
 
     return InkWell(
       onTap: () => _isSharing ? _sendShareTo(friend: f) : openChat(f),
@@ -3258,20 +3293,40 @@ class HomePageState extends rp.ConsumerState<HomePage>
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    lastMsg,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: hasUnread
-                          ? textColor.withAlpha(200)
-                          : textColor.withAlpha(110),
-                      fontWeight: hasUnread
-                          ? FontWeight.w500
-                          : FontWeight.normal,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
+                  npLine != null
+                      ? Row(
+                          children: [
+                            Icon(Icons.graphic_eq_rounded,
+                                size: 14, color: scheme.primary),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                npLine,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: scheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Text(
+                          lastMsg,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: hasUnread
+                                ? textColor.withAlpha(200)
+                                : textColor.withAlpha(110),
+                            fontWeight: hasUnread
+                                ? FontWeight.w500
+                                : FontWeight.normal,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
                 ],
               ),
             ),

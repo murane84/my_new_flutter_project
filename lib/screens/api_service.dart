@@ -1023,6 +1023,32 @@ class ApiService {
     }
   }
 
+  /// Friends who are playing music right now — seeds the "Listening now" zone.
+  /// Returns [{user_id, username, avatar_url, track:{title,artist}}].
+  Future<List<Map<String, dynamic>>> friendsListening() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return [];
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/users/friends/listening'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map && data['listening'] is List) {
+          return (data['listening'] as List)
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        }
+      }
+      return [];
+    } catch (e) {
+      _logger.w('friendsListening failed: $e');
+      return [];
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Group conversations (DMs keep using the legacy /messages endpoints above)
   // ---------------------------------------------------------------------------

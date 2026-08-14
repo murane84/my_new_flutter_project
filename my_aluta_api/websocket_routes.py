@@ -8,8 +8,11 @@ from jose import JWTError, jwt
 
 from config import SECRET_KEY, ALGORITHM
 from database import SessionLocal
-from models import User, Conversation, ConversationMember
-from websocket_manager import connected_users, disconnect_user, notify_user
+from models import User, Conversation, ConversationMember, Friend
+from websocket_manager import (
+    connected_users, disconnect_user, notify_user,
+    set_now_playing, clear_now_playing,
+)
 from push import send_push_to_user, _tokens_for
 
 router = APIRouter()
@@ -188,6 +191,49 @@ def _authenticate_ws(token: Optional[str], user_id: int) -> Optional[User]:
     return user
 
 
+def _friend_ids(uid: int) -> list:
+    """The user's circle (symmetric Friend rows), for friends-only presence
+    fan-out. Mirrors crud._get_friend_ids but self-contained for the WS layer."""
+    db = SessionLocal()
+    try:
+        rows = db.query(Friend).filter(
+            (Friend.user_id == uid) | (Friend.friend_id == uid)).all()
+        ids = set()
+        for r in rows:
+            other = r.friend_id if r.user_id == uid else r.user_id
+            if other != uid:
+                ids.add(int(other))
+        return list(ids)
+    except Exception:
+        return []
+    finally:
+        db.close()
+
+
+async def _now_playing_update(uid: int, track, playing: bool, username: str):
+    """A user's playback changed → update presence and tell their FRIENDS ONLY
+    (privacy) so the friend list's 'Listening now' updates live. `track` is a
+    small dict {title, artist, art}. A falsy/empty track or playing=False clears
+    the user's presence and pushes a 'stopped' event."""
+    valid = bool(playing) and isinstance(track, dict) and bool(track.get("title"))
+    if valid:
+        set_now_playing(uid, track)
+    else:
+        clear_now_playing(uid)
+    msg = {
+        "type": "friend_now_playing",
+        "user_id": uid,
+        "username": username,
+        "playing": valid,
+        "track": track if valid else None,
+    }
+    for f in _friend_ids(uid):
+        try:
+            await notify_user(f, msg)
+        except Exception:
+            pass
+
+
 @router.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""):
     # Accept the handshake first so we can deliver a proper 4401 close frame to
@@ -348,6 +394,15 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                             ))
                         except Exception:
                             pass
+            elif etype == "now_playing":
+                # Live "now playing" presence: the client sends this when its
+                # track or play/pause state changes. Fan it out to friends only.
+                await _now_playing_update(
+                    uid,
+                    data.get("track"),
+                    bool(data.get("playing")),
+                    caller_name,
+                )
             elif etype == "group_call_start":
                 room_id = _to_int(data.get("room"))
                 if room_id is not None:
@@ -380,5 +435,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
         if not connected_users.get(uid):
             try:
                 await _group_cleanup_user(uid)
+            except Exception:
+                pass
+            # Last socket gone → they're no longer listening; clear presence and
+            # tell friends so the "Listening now" zone drops them.
+            try:
+                await _now_playing_update(uid, None, False, caller_name)
             except Exception:
                 pass

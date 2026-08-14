@@ -1,11 +1,41 @@
 # websocket_manager.py
 import asyncio
-from typing import Dict, List
+import time
+from typing import Dict, List, Optional
 from fastapi import WebSocket
 from collections import defaultdict
 import json
 
 connected_users: Dict[int, List[WebSocket]] = defaultdict(list)
+
+# ── "Now playing" presence ───────────────────────────────────────────────────
+# user_id -> {"track": {...}, "ts": epoch}. What each user is listening to right
+# now, so friends can see it (the friend list's "Listening now" zone) and, later,
+# tap to join. Ephemeral and single-replica by design, exactly like
+# `connected_users` — a multi-replica deploy would move this to Redis. Entries
+# auto-expire so a crashed/killed client never leaves a friend "stuck" playing.
+now_playing: Dict[int, dict] = {}
+NOW_PLAYING_TTL = 180  # seconds; the client refreshes well within this window
+
+
+def set_now_playing(user_id: int, track: dict) -> None:
+    now_playing[int(user_id)] = {"track": track, "ts": time.time()}
+
+
+def clear_now_playing(user_id: int) -> None:
+    now_playing.pop(int(user_id), None)
+
+
+def get_now_playing(user_id: int) -> Optional[dict]:
+    """The user's current track, or None if not playing / stale (expired)."""
+    entry = now_playing.get(int(user_id))
+    if not entry:
+        return None
+    if time.time() - entry["ts"] > NOW_PLAYING_TTL:
+        now_playing.pop(int(user_id), None)
+        return None
+    return entry["track"]
+
 
 # Will be set in main.py at startup
 main_loop = None

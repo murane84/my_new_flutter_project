@@ -352,6 +352,32 @@ def lookup_user(
     }
 
 
+@router.get("/users/friends/listening", tags=["Users"])
+def friends_listening(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Friends who are playing music RIGHT NOW — the snapshot that seeds the
+    'Listening now' zone on load (live updates then arrive over the WebSocket as
+    'friend_now_playing'). Returns [{user_id, username, avatar_url, track}]."""
+    from websocket_manager import get_now_playing
+    out = []
+    for fid in crud._get_friend_ids(db, current_user.id):
+        track = get_now_playing(int(fid))
+        if not track:
+            continue
+        u = db.query(User).filter(User.id == fid).first()
+        if not u:
+            continue
+        out.append({
+            "user_id": int(fid),
+            "username": u.username,
+            "avatar_url": u.avatar_url,
+            "track": track,
+        })
+    return {"listening": out}
+
+
 @router.post("/users/friends/add", tags=["Users"])
 def add_friend(
     payload: schemas.FriendAdd,

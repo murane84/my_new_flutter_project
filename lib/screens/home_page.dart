@@ -35,6 +35,7 @@ import 'websocket_manager.dart';
 import 'live_session_screen.dart';
 import 'legal_screen.dart';
 import 'relationship_space_page.dart';
+import 'appearance_screen.dart';
 import '../services/live_session_service.dart'
     show activeLiveSession, endActiveLiveSession;
 import '../services/notif_service.dart';
@@ -5073,6 +5074,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
               themeProvider.isDarkMode ? 'Light mode' : 'Dark mode',
               () => themeProvider.toggleTheme(!themeProvider.isDarkMode),
             ),
+            _menuBtn(scheme, Icons.palette_outlined, 'Appearance', () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AppearanceScreen()),
+              );
+            }),
             _menuBtn(scheme, Icons.shield_outlined, 'Legal & About',
                 () => showLegalMenu(context)),
           ],

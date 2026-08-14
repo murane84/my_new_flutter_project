@@ -272,14 +272,31 @@ class MyApp extends StatelessWidget {
         // from a seed for harmonised secondary/tertiary tones, then override the
         // primary + surfaces so light mode reads crisp and vivid instead of the
         // washed-out pink/maroon that Material's default tonal mapping produces.
+        //
+        // App accent (personalization): the default brand red keeps every value
+        // below exactly. Any other preset re-derives ONLY the primary family
+        // from the chosen accent — surfaces / neutrals stay brand-tuned, so the
+        // dark, intimate identity is preserved while the accent shifts.
+        final accent = themeProvider.accent;
+        final bool customAccent =
+            accent.toARGB32() != ThemeProvider.defaultAccent.toARGB32();
+        final ColorScheme? lightP = customAccent
+            ? ColorScheme.fromSeed(
+                seedColor: accent, brightness: Brightness.light)
+            : null;
+        final ColorScheme? darkP = customAccent
+            ? ColorScheme.fromSeed(
+                seedColor: accent, brightness: Brightness.dark)
+            : null;
         final lightScheme = ColorScheme.fromSeed(
           seedColor: const Color(0xFFD90429),
           brightness: Brightness.light,
         ).copyWith(
-          primary: const Color(0xFFD90429), // vivid crimson (brand red)
-          onPrimary: Colors.white,
-          primaryContainer: const Color(0xFFFFDAD7),
-          onPrimaryContainer: const Color(0xFF40000A),
+          primary: lightP?.primary ?? const Color(0xFFD90429),
+          onPrimary: lightP?.onPrimary ?? Colors.white,
+          primaryContainer: lightP?.primaryContainer ?? const Color(0xFFFFDAD7),
+          onPrimaryContainer:
+              lightP?.onPrimaryContainer ?? const Color(0xFF40000A),
           secondary: const Color(0xFF201A1B), // near-black accent
           onSecondary: Colors.white,
           secondaryContainer: const Color(0xFFFFE1DE),
@@ -302,10 +319,11 @@ class MyApp extends StatelessWidget {
           seedColor: const Color(0xFFD90429),
           brightness: Brightness.dark,
         ).copyWith(
-          primary: const Color(0xFFFF5A5F), // punchy red that pops on black
-          onPrimary: const Color(0xFF3A0007),
-          primaryContainer: const Color(0xFF8E1420),
-          onPrimaryContainer: const Color(0xFFFFDAD7),
+          primary: darkP?.primary ?? const Color(0xFFFF5A5F),
+          onPrimary: darkP?.onPrimary ?? const Color(0xFF3A0007),
+          primaryContainer: darkP?.primaryContainer ?? const Color(0xFF8E1420),
+          onPrimaryContainer:
+              darkP?.onPrimaryContainer ?? const Color(0xFFFFDAD7),
           secondary: const Color(0xFFE7BDBD),
           // True near-black surfaces so the red accents spark.
           surface: const Color(0xFF141011),

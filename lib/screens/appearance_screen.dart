@@ -30,7 +30,14 @@ class AppearanceScreen extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Appearance')),
+      appBar: AppBar(
+        // Title carries the accent so the very first thing on the page previews
+        // the chosen colour — no need to leave settings to see how it looks.
+        title: Text(
+          'Appearance',
+          style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w700),
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
@@ -108,13 +115,15 @@ class AppearanceScreen extends StatelessWidget {
     );
   }
 
+  // Section headers wear the accent (scheme.primary IS the chosen accent), so
+  // they retint live the instant a swatch is tapped — the requested glimpse.
   Widget _sectionLabel(ColorScheme scheme, String label) => Text(
         label,
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w800,
           letterSpacing: 1.2,
-          color: scheme.onSurfaceVariant,
+          color: scheme.primary,
         ),
       );
 

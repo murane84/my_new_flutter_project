@@ -139,11 +139,26 @@ def create_space(
             detail="You can only pin people already in your circle",
         )
 
-    existing = (
+    # No duplicate Spaces: reject if one already pins this exact set of people.
+    target_set = set(member_ids)
+    owner_spaces = (
         db.query(RelationshipSpace)
         .filter(RelationshipSpace.owner_id == current_user.id)
-        .count()
+        .all()
     )
+    for existing_space in owner_spaces:
+        existing_members = {
+            m.user_id for m in existing_space.members
+            if m.user_id != current_user.id
+        }
+        if existing_members == target_set:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="You already have a Space with "
+                + ("these people." if len(target_set) > 1 else "this person."),
+            )
+
+    existing = len(owner_spaces)
     if current_user_plan(current_user) == "free" and existing >= FREE_SPACE_CAP:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,

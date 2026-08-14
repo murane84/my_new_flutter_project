@@ -3425,7 +3425,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       Positioned(
                         left: 0,
                         child: _heroAvatarRing(
-                          const InitialsAvatar(name: 'You', radius: 18),
+                          InitialsAvatar(
+                            name: _username.isNotEmpty ? _username : 'You',
+                            radius: 18,
+                            imageUrl: _avatarFull(_myAvatar),
+                          ),
                         ),
                       ),
                       Positioned(
@@ -4076,6 +4080,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
           space: space,
           apiBase: _apiBase,
           myUserId: _myUserId,
+          myName: _username.isNotEmpty ? _username : 'You',
+          myAvatarUrl: _avatarFull(_myAvatar),
           onChanged: _loadSpaces,
         ),
       ),

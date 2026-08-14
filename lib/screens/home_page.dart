@@ -5208,21 +5208,32 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // straight to the full music panel. Shows a marquee of the current title.
   Widget _footerMusicChip(ColorScheme scheme) {
     final title = ref.read(nowPlayingProvider).track;
+    final hasRealTrack = title.isNotEmpty && title != 'No track loaded';
     final style = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w600,
       color: scheme.primary,
     );
-    // Bring the collapsed now-playing bar back above the footer (no full panel).
-    void resumeBar() => setState(() => _barDismissed = false);
     // Jump straight to the full player panel — remembering it came from the
     // pill, so closing it returns here (bar stays dismissed).
     void openPanel() => setState(() {
           _panelFromPill = true;
           _playerExpanded = true;
         });
+    // Single tap: if a track is loaded, bring the collapsed now-playing bar back
+    // above the footer; if nothing's loaded yet (fresh launch — the library is
+    // scanned lazily, on demand), there's no bar to show, so open the full
+    // player so the user can pick/scan music. Double-tap/long-press always opens
+    // the full panel.
+    void tapAction() {
+      if (hasRealTrack) {
+        setState(() => _barDismissed = false);
+      } else {
+        openPanel();
+      }
+    }
     return GestureDetector(
-      onTap: resumeBar,
+      onTap: tapAction,
       onDoubleTap: openPanel,
       onLongPress: openPanel,
       behavior: HitTestBehavior.opaque,
@@ -5712,6 +5723,23 @@ class HomePageState extends rp.ConsumerState<HomePage>
         // left, profile pill on the right. The "Connected" label is dropped —
         // seeing your online friends (plus the toast) already tells you you're
         // back online, so the word was redundant.
+        final np = ref.watch(nowPlayingProvider);
+        // The wide two-pane layout already shows the music PANE (unless chat is
+        // maximised), so the footer pill would be redundant there.
+        final musicPaneVisible =
+            MediaQuery.of(context).size.width >= 640 && !_isChatFullScreen;
+        // The collapsed now-playing BAR is up only when a track is loaded and
+        // not dismissed; while it's up, the pill would just duplicate it.
+        final barShowing =
+            np.track.isNotEmpty && !_barDismissed && !_playerExpanded;
+        // Persistent entry point to the player: show the pill whenever the pane
+        // isn't on screen and neither the bar nor the full player is up —
+        // INCLUDING when no track is loaded yet (fresh launch scans the library
+        // lazily), so portrait always has a way into music. This was the gap:
+        // the pill used to require a loaded track, so a fresh phone had no music
+        // entry point until rotated to landscape (where the pane always shows).
+        final showMusicPill =
+            !_playerExpanded && !musicPaneVisible && !barShowing;
         return Container(
           // Fill the footer colour behind the system navigation bar area too,
           // then SafeArea lifts the 44px status row up above the 3-button nav
@@ -5737,13 +5765,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
               // far right). Hidden when the desktop music PANE is already on
               // screen (wide layout, chat not maximised) — the pane makes the
               // footer chip redundant — and when there's no real track.
-              if (ref.watch(nowPlayingProvider).track.isNotEmpty &&
-                  ref.watch(nowPlayingProvider).track != 'No track loaded' &&
-                  _barDismissed &&
-                  !_playerExpanded &&
-                  !(MediaQuery.of(context).size.width >= 640 &&
-                      !_isChatFullScreen))
-                _footerMusicChip(scheme),
+              if (showMusicPill) _footerMusicChip(scheme),
 
               const Spacer(),
 

@@ -1050,6 +1050,52 @@ class ApiService {
   }
 
   // ---------------------------------------------------------------------------
+  // Monetization — the "Aluta Together" plan. Fail-soft (returns free defaults
+  // if the backend isn't deployed yet).
+  // ---------------------------------------------------------------------------
+
+  /// Current plan: {tier, is_together, together_since, space_cap, benefits{...}}.
+  Future<Map<String, dynamic>> getPlan() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return {'tier': 'free', 'is_together': false};
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/plan'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return {'tier': 'free', 'is_together': false};
+    } catch (e) {
+      _logger.w('getPlan failed: $e');
+      return {'tier': 'free', 'is_together': false};
+    }
+  }
+
+  /// DEV/TRIAL: turn Together on (true) or off (false). Returns the new plan, or
+  /// null on failure.
+  Future<Map<String, dynamic>?> setTogether(bool on) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/plan/${on ? 'together' : 'free'}'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('setTogether failed: $e');
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // "Our Space" — pinned relationship profiles (bond-as-a-place). All calls are
   // best-effort and fail soft (null / empty / false) so the friend list never
   // breaks if the backend isn't deployed yet or the network drops.

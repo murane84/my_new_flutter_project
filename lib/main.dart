@@ -9,6 +9,7 @@ import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'services/share_inbox.dart';
+import 'utils/brand_theme.dart';
 import 'screens/theme_provider.dart';
 import 'screens/home_page.dart';
 import 'screens/login_screen.dart';
@@ -453,6 +454,10 @@ class SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Splash is a pre-login brand surface → always brand red (accent-free),
+    // in both light and dark modes.
+    return BrandTheme(
+      child: Builder(builder: (context) {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: Colors.black,
@@ -492,6 +497,8 @@ class SplashScreenState extends State<SplashScreen> {
           ],
         ),
       ),
+    );
+      }),
     );
   }
 }

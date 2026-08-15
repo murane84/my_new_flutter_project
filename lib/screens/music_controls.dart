@@ -127,6 +127,14 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         _pushLiveToAmbient();
         if (mounted) setState(() {});
       });
+      // Refresh the repeat/shuffle buttons whenever the SHARED session state
+      // changes — whether we set it or it was synced from the peer.
+      live.onRepeatChanged = () {
+        if (mounted) setState(() {});
+      };
+      live.onShuffleChanged = () {
+        if (mounted) setState(() {});
+      };
       // Establish the media/foreground state immediately so the session is
       // protected from background-kill from the very start.
       _pushLiveToAmbient();
@@ -1105,7 +1113,36 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _player.seek(target);
   }
 
+  // ── Effective repeat/shuffle: during a live session these read the SHARED
+  // session state (set by whoever — host or listener — last touched it), so the
+  // buttons reflect what everyone in the room is on. Off-session they fall back
+  // to the local player's own flags.
+  String get _effRepeatMode {
+    if (_liveActive && _live != null) return _live!.repeatMode;
+    if (_repeatOne) return 'one';
+    if (_repeatAll) return 'all';
+    return 'off';
+  }
+
+  bool get _effShuffle =>
+      (_liveActive && _live != null) ? _live!.shuffle : _shuffle;
+
   void _cycleRepeat() {
+    // In a live session, cycle the SHARED repeat mode (host or listener — the
+    // controller broadcasts so it affects everyone). The onRepeatChanged hook
+    // refreshes the button for both sides.
+    if (_liveActive && _live != null) {
+      const order = ['off', 'all', 'one'];
+      final next = order[(order.indexOf(_live!.repeatMode) + 1) % order.length];
+      _live!.setRepeatMode(next);
+      _snack(next == 'all'
+          ? 'Repeat All · session'
+          : next == 'one'
+              ? 'Repeat One · session'
+              : 'Repeat Off · session');
+      setState(() {});
+      return;
+    }
     setState(() {
       if (!_repeatAll && !_repeatOne) {
         _repeatAll = true;
@@ -1126,6 +1163,15 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   }
 
   void _toggleShuffle() {
+    // In a live session, toggle the SHARED shuffle (host or listener — the
+    // controller broadcasts so it affects everyone).
+    if (_liveActive && _live != null) {
+      final on = !_live!.shuffle;
+      _live!.setShuffle(on);
+      _snack(on ? 'Shuffle On · session' : 'Shuffle Off · session');
+      setState(() {});
+      return;
+    }
     setState(() {
       _shuffle = !_shuffle;
       if (_shuffle) {
@@ -2047,10 +2093,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                 children: [
                   _CtrlChip(
                     icon: Icons.shuffle_rounded,
-                    active: _shuffle,
+                    active: _effShuffle,
                     activeColor: Colors.green,
                     onTap: _toggleShuffle,
-                    tooltip: 'Shuffle',
+                    tooltip: _liveActive ? 'Shuffle · session' : 'Shuffle',
                   ),
                   const SizedBox(width: 14),
                   _CtrlBtn(
@@ -2132,16 +2178,16 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                   ),
                   const SizedBox(width: 14),
                   _CtrlChip(
-                    icon: _repeatOne
+                    icon: _effRepeatMode == 'one'
                         ? Icons.repeat_one_rounded
                         : Icons.repeat_rounded,
-                    active: _repeatAll || _repeatOne,
+                    active: _effRepeatMode != 'off',
                     activeColor: accent,
                     onTap: _cycleRepeat,
-                    tooltip: _repeatOne
-                        ? 'Repeat One'
-                        : _repeatAll
-                            ? 'Repeat All'
+                    tooltip: _effRepeatMode == 'one'
+                        ? (_liveActive ? 'Repeat One · session' : 'Repeat One')
+                        : _effRepeatMode == 'all'
+                            ? (_liveActive ? 'Repeat All · session' : 'Repeat All')
                             : 'Repeat Off',
                   ),
                 ],

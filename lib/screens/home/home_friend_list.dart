@@ -146,25 +146,11 @@ extension _HomeFriendListView on HomePageState {
                       return _friendListWide(harmonyEntries, circleEntries,
                           combined, scheme, textColor);
                     }
-                    // Interim mobile single-stack (until the hub lands): drop the
-                    // desktop-only decorations so the phone list stays as-is.
-                    final all = [...harmonyEntries, ...circleEntries]
-                        .where((e) =>
-                            e['kind'] != 'liveroom' && e['kind'] != 'nospaces')
-                        .toList();
-                    return RefreshIndicator(
-                      onRefresh: _onPullToRefresh,
-                      // AlwaysScrollable → the list can overscroll (and so
-                      // trigger the pull gesture) even when it's short or empty.
-                      child: combined.isEmpty
-                          ? _emptyConversations(scheme)
-                          : ListView.builder(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              itemCount: all.length,
-                              itemBuilder: (_, i) =>
-                                  _friendEntry(all, i, scheme, textColor),
-                            ),
-                    );
+                    // Narrow (mobile): the two-tile accordion hub — both layer
+                    // headers + badges always visible, one expanded and scrolling
+                    // inside itself. See home_hub.dart.
+                    return _friendHubMobile(
+                        harmonyEntries, circleEntries, combined, scheme, textColor);
                   },
                 ),
         ),
@@ -192,8 +178,8 @@ extension _HomeFriendListView on HomePageState {
           flex: 5,
           child: Column(
             children: [
-              _layerColumnHeader(
-                  scheme, 'Harmony', Icons.favorite_rounded, 'your closest, in tune'),
+              _layerColumnHeader(scheme, 'Harmony', Icons.favorite_rounded,
+                  'your closest, in tune', _harmonyBadge()),
               Expanded(
                 child: ListView.builder(
                   physics: const AlwaysScrollableScrollPhysics(),
@@ -216,8 +202,8 @@ extension _HomeFriendListView on HomePageState {
           flex: 6,
           child: Column(
             children: [
-              _layerColumnHeader(
-                  scheme, 'Circle', Icons.forum_rounded, 'your people & chats'),
+              _layerColumnHeader(scheme, 'Circle', Icons.forum_rounded,
+                  'your people & chats', _circleBadge()),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _onPullToRefresh,
@@ -240,9 +226,10 @@ extension _HomeFriendListView on HomePageState {
   }
 
   /// The header atop each desktop layer column: an accent icon + the layer's
-  /// flagship name + a soft one-line tagline, over a hairline.
-  Widget _layerColumnHeader(
-      ColorScheme scheme, String name, IconData icon, String tagline) {
+  /// flagship name + a soft one-line tagline + the same persistent badge the
+  /// mobile hub uses, over a hairline.
+  Widget _layerColumnHeader(ColorScheme scheme, String name, IconData icon,
+      String tagline, int badge) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(6, 2, 6, 8),
       child: Column(
@@ -262,13 +249,18 @@ extension _HomeFriendListView on HomePageState {
                 ),
               ),
               const SizedBox(width: 10),
-              Text(
-                tagline,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: scheme.onSurfaceVariant,
+              Expanded(
+                child: Text(
+                  tagline,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
+              if (badge > 0) _hubBadgePill(scheme, badge),
             ],
           ),
           const SizedBox(height: 8),

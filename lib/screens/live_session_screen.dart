@@ -156,8 +156,43 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   // Host side: the listener announced a deliberate 'leaving', so a following
   // 'peer_left' should NOT be relabelled as "lost connection".
   bool _peerGoneGraceful = false;
+  // The music panel also observes session repeat/shuffle. While this popup is
+  // open it takes over those callbacks (so its own buttons rebuild on a synced
+  // change) but CHAINS the panel's, and restores them on minimise so the
+  // persistent panel keeps working underneath.
+  VoidCallback? _prevRepeatCb;
+  VoidCallback? _prevShuffleCb;
+  bool _flagCbsBound = false;
 
   bool get _isHost => widget.role == LiveRole.host;
+
+  // Take over (chained) the controller's repeat/shuffle notifications so this
+  // popup rebuilds when the SHARED mode changes — whether we set it or it was
+  // synced from the peer. Scheduled post-frame so it runs after the music
+  // panel has bound its own (microtask), letting the popup win while it's up.
+  void _bindFlagCallbacks() {
+    if (_flagCbsBound) return;
+    _flagCbsBound = true;
+    _prevRepeatCb = _c.onRepeatChanged;
+    _c.onRepeatChanged = () {
+      _prevRepeatCb?.call();
+      if (mounted) setState(() {});
+    };
+    _prevShuffleCb = _c.onShuffleChanged;
+    _c.onShuffleChanged = () {
+      _prevShuffleCb?.call();
+      if (mounted) setState(() {});
+    };
+  }
+
+  // Hand the repeat/shuffle callbacks back to whatever held them (the music
+  // panel) when the popup goes away, so the persistent panel keeps updating.
+  void _restoreFlagCallbacks() {
+    if (!_flagCbsBound) return;
+    _flagCbsBound = false;
+    _c.onRepeatChanged = _prevRepeatCb;
+    _c.onShuffleChanged = _prevShuffleCb;
+  }
 
   @override
   void initState() {
@@ -176,6 +211,8 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
       _status = _isHost
           ? 'Sharing with ${widget.peerName}'
           : 'Listening with ${widget.peerName}';
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _bindFlagCallbacks());
       return;
     }
 
@@ -209,6 +246,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
         .read(liveSessionProvider.notifier)
         .start(peer: widget.peerName, asHost: _isHost);
     _start();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bindFlagCallbacks());
   }
 
   // Close the popup but keep the session running in the background. Re-point
@@ -216,6 +254,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   // minimised still tears down and hides the banner.
   void _minimize() {
     _minimizing = true;
+    _restoreFlagCallbacks();
     _c.onEvent = null;
     _c.onError = (_) {};
     _c.onEnded = _handleMinimizedEnd;
@@ -679,6 +718,48 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     _c.player.seek(target);
   }
 
+  // Cycle the SHARED session repeat mode off → all → one → off. Works for host
+  // and listener alike (the controller routes a listener's change through the
+  // host, who re-broadcasts), so whoever taps it sets the mode for everyone.
+  void _cycleSessionRepeat() {
+    const order = ['off', 'all', 'one'];
+    final next = order[(order.indexOf(_c.repeatMode) + 1) % order.length];
+    _c.setRepeatMode(next);
+  }
+
+  // The shared shuffle + repeat controls shown to BOTH sides of the session.
+  Widget _sessionFlagControls(ColorScheme scheme) {
+    final mode = _c.repeatMode;
+    final repeatOn = mode != 'off';
+    Color tint(bool on) =>
+        on ? scheme.primary : scheme.onSurface.withAlpha(120);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        IconButton(
+          iconSize: 22,
+          color: tint(_c.shuffle),
+          tooltip: _c.shuffle ? 'Shuffle on' : 'Shuffle off',
+          onPressed: _ready ? () => _c.setShuffle(!_c.shuffle) : null,
+          icon: const Icon(Icons.shuffle_rounded),
+        ),
+        const SizedBox(width: 24),
+        IconButton(
+          iconSize: 22,
+          color: tint(repeatOn),
+          tooltip: mode == 'one'
+              ? 'Repeat one'
+              : mode == 'all'
+                  ? 'Repeat all'
+                  : 'Repeat off',
+          onPressed: _ready ? _cycleSessionRepeat : null,
+          icon: Icon(
+              mode == 'one' ? Icons.repeat_one_rounded : Icons.repeat_rounded),
+        ),
+      ],
+    );
+  }
+
   Widget _buildHostControls() {
     final scheme = Theme.of(context).colorScheme;
     final hasPrev = _c.currentIndex > 0;
@@ -695,25 +776,37 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
               onPressed: onTap,
               icon: Icon(icon),
             );
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        return Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Previous track in the queue
-            btn(Icons.skip_previous_rounded,
-                (_ready && hasPrev) ? () => _c.playIndex(_c.currentIndex - 1) : null,
-                30),
-            btn(Icons.replay_10_rounded, _ready ? () => _liveSeekBy(-10) : null, 26),
-            IconButton.filled(
-              iconSize: 40,
-              onPressed: !_ready
-                  ? null
-                  : () => playing ? _c.player.pause() : _c.player.play(),
-              icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Previous track in the queue
+                btn(
+                    Icons.skip_previous_rounded,
+                    (_ready && hasPrev)
+                        ? () => _c.playIndex(_c.currentIndex - 1)
+                        : null,
+                    30),
+                btn(Icons.replay_10_rounded,
+                    _ready ? () => _liveSeekBy(-10) : null, 26),
+                IconButton.filled(
+                  iconSize: 40,
+                  onPressed: !_ready
+                      ? null
+                      : () => playing ? _c.player.pause() : _c.player.play(),
+                  icon: Icon(
+                      playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                ),
+                btn(Icons.forward_10_rounded,
+                    _ready ? () => _liveSeekBy(10) : null, 26),
+                // Next track in the queue
+                btn(Icons.skip_next_rounded,
+                    (_ready && hasNext) ? _c.nextTrack : null, 30),
+              ],
             ),
-            btn(Icons.forward_10_rounded, _ready ? () => _liveSeekBy(10) : null, 26),
-            // Next track in the queue
-            btn(Icons.skip_next_rounded,
-                (_ready && hasNext) ? _c.nextTrack : null, 30),
+            _sessionFlagControls(scheme),
           ],
         );
       },
@@ -778,6 +871,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
                     30),
               ],
             ),
+            _sessionFlagControls(scheme),
             Padding(
               padding: const EdgeInsets.only(top: 2, bottom: 2),
               child: Text(

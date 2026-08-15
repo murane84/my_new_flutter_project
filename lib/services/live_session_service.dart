@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart'
@@ -244,6 +245,26 @@ class LiveSessionController {
   /// now — the listener's mirrored queue too).
   void Function()? onQueueChanged;
 
+  /// Repeat mode for the whole SESSION: 'off' | 'one' | 'all'. Shared by host
+  /// and listener — either side can set it (see [setRepeatMode]); the host is
+  /// authoritative for the queue and re-broadcasts so everyone stays in sync.
+  String repeatMode = 'off';
+
+  /// Fired when [repeatMode] changes (set locally or synced from the peer), so
+  /// the music panel's repeat button refreshes for both sides.
+  void Function()? onRepeatChanged;
+
+  /// Shuffle for the whole SESSION. Like [repeatMode], shared by host and
+  /// listener — either side can toggle it (see [setShuffle]) and the host is
+  /// authoritative for what actually plays next. When on, [nextTrack] jumps to
+  /// a random queue position instead of the next in order.
+  bool shuffle = false;
+
+  /// Fired when [shuffle] changes (set locally or synced from the peer).
+  void Function()? onShuffleChanged;
+
+  final Random _shuffleRand = Random();
+
   /// Title of the track playing live right now (host or listener). Held here —
   /// not only in the popup — so it survives the popup being minimised and so
   /// the music-panel console can always mirror the correct live title.
@@ -375,7 +396,13 @@ class LiveSessionController {
       if (role == LiveRole.host &&
           s == ProcessingState.completed &&
           !_switchingTrack) {
-        nextTrack();
+        // Respect the session repeat mode: one → replay this track; otherwise
+        // advance (nextTrack wraps to the top when repeat=all).
+        if (repeatMode == 'one') {
+          playIndex(currentIndex);
+        } else {
+          nextTrack();
+        }
       }
     });
     _sendControl(meta);
@@ -428,11 +455,54 @@ class LiveSessionController {
     });
   }
 
-  /// Skip to the next queued track, if any.
-  Future<void> nextTrack() async {
-    if (currentIndex + 1 < queue.length) {
-      await playIndex(currentIndex + 1);
+  /// Set the SESSION repeat mode from EITHER side. Applies locally at once (so
+  /// the button feels instant) then syncs: the host broadcasts it to everyone;
+  /// a listener asks the host, who applies + re-broadcasts to confirm.
+  void setRepeatMode(String mode) {
+    if (mode != 'off' && mode != 'one' && mode != 'all') mode = 'off';
+    repeatMode = mode;
+    onRepeatChanged?.call();
+    if (role == LiveRole.host) {
+      _sendControl({'type': 'repeat', 'mode': mode});
+    } else {
+      _sendControl({'type': 'ctl', 'action': 'repeat', 'mode': mode});
     }
+  }
+
+  /// Toggle SESSION shuffle from EITHER side. Same sync shape as
+  /// [setRepeatMode]: applies locally at once, then the host broadcasts and a
+  /// listener asks the host (who applies + re-broadcasts to confirm).
+  void setShuffle(bool on) {
+    shuffle = on;
+    onShuffleChanged?.call();
+    if (role == LiveRole.host) {
+      _sendControl({'type': 'shuffle', 'on': on});
+    } else {
+      _sendControl({'type': 'ctl', 'action': 'shuffle', 'on': on});
+    }
+  }
+
+  /// Pick the next queue index. Shuffle → a random OTHER entry (never the same
+  /// track twice in a row when the queue has more than one). In order → the
+  /// next entry, wrapping to 0 only when repeat=all.
+  int _nextIndex() {
+    final n = queue.length;
+    if (n <= 1) return currentIndex + 1 < n ? currentIndex + 1 : -1;
+    if (shuffle) {
+      int pick = _shuffleRand.nextInt(n);
+      if (pick == currentIndex) pick = (pick + 1) % n;
+      return pick;
+    }
+    if (currentIndex + 1 < n) return currentIndex + 1;
+    if (repeatMode == 'all') return 0;
+    return -1;
+  }
+
+  /// Skip to the next queued track. Honours shuffle, and wraps to the top when
+  /// repeat=all.
+  Future<void> nextTrack() async {
+    final next = _nextIndex();
+    if (next >= 0) await playIndex(next);
   }
 
   /// Switch playback (host + listener) to queue entry [index].
@@ -1044,6 +1114,10 @@ class LiveSessionController {
         }
         // Send the current queue so the freshly-joined listener sees it.
         _broadcastQueue();
+        // And the current repeat mode + shuffle, so their buttons match from
+        // the start.
+        if (repeatMode != 'off') _sendControl({'type': 'repeat', 'mode': repeatMode});
+        if (shuffle) _sendControl({'type': 'shuffle', 'on': true});
       } else if (type == 'ctl') {
         // A listener requested a transport action. The host executes it
         // authoritatively; the resulting play/pause/position/track_change
@@ -1077,6 +1151,14 @@ class LiveSessionController {
             // Listener tapped a specific queue track — jump to it.
             final idx = msg['index'];
             if (idx is int) playIndex(idx);
+            break;
+          case 'repeat':
+            // Listener toggled repeat — apply authoritatively + re-broadcast.
+            setRepeatMode((msg['mode'] as String?) ?? 'off');
+            break;
+          case 'shuffle':
+            // Listener toggled shuffle — apply authoritatively + re-broadcast.
+            setShuffle(msg['on'] == true);
             break;
         }
       } else if (type == 'leaving') {
@@ -1140,6 +1222,19 @@ class LiveSessionController {
         final idx = msg['index'];
         if (idx is int) remoteIndex = idx;
         onQueueChanged?.call();
+        break;
+      case 'repeat':
+        // Host set the session repeat mode — mirror it so our button matches.
+        final m = msg['mode'];
+        if (m is String) {
+          repeatMode = m;
+          onRepeatChanged?.call();
+        }
+        break;
+      case 'shuffle':
+        // Host set session shuffle — mirror it so our button matches.
+        shuffle = msg['on'] == true;
+        onShuffleChanged?.call();
         break;
       case 'eq':
         // Mirror the host's equalizer onto our live player.

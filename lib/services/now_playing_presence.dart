@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'audio_handler.dart';
+import 'live_session_service.dart' show activeLiveSession;
 import '../screens/api_service.dart';
 
 /// Live "now playing" presence — the seed of Concept 05's "Listening now" zone
@@ -111,9 +112,17 @@ class NowPlayingPresence extends ChangeNotifier {
     final mi = h.mediaItem.value;
     final title = (mi?.title ?? '').trim();
     final artist = (mi?.artist ?? '').trim();
+    // "Our Space" privacy: a Listen Together session is a sacred, PRIVATE space
+    // between the two of you. While one is active, we do NOT broadcast the
+    // now-playing to third-party friends — they should never see what the pair
+    // are sharing in the session. Presence resumes (announcing the real local
+    // track) the moment the session ends and the local player takes over.
+    final inLiveSession = activeLiveSession != null;
     // 'Aluta' is the handler's placeholder when nothing real is loaded.
-    final playing =
-        h.playbackState.value.playing && title.isNotEmpty && title != 'Aluta';
+    final playing = !inLiveSession &&
+        h.playbackState.value.playing &&
+        title.isNotEmpty &&
+        title != 'Aluta';
     final key = playing ? '$title|$artist' : '';
     if (!force && playing == _lastPlaying && key == _lastKey) return;
     _lastPlaying = playing;

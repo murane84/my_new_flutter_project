@@ -6,6 +6,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../screens/api_service.dart';
 import '../state/call_state.dart';
 import '../state/playback_state.dart' show providerContainer;
+import 'ice_config.dart';
 import 'notif_service.dart';
 import 'telecom_service.dart';
 
@@ -125,31 +126,12 @@ class CallService {
   bool _reoffered = false;
 
   // STUN keeps it free for same-network / simple NATs; the TURN entries relay
-  // media when a direct path can't be punched (common on cellular). These are
-  // Open Relay's FREE public TURN servers (no signup) — swap in your own from
-  // metered.ca / a coturn box for production reliability + higher limits.
-  static const Map<String, dynamic> _iceConfig = {
-    'iceServers': [
-      {'urls': 'stun:stun.l.google.com:19302'},
-      {'urls': 'stun:stun1.l.google.com:19302'},
-      {
-        'urls': 'turn:openrelay.metered.ca:80',
-        'username': 'openrelayproject',
-        'credential': 'openrelayproject',
-      },
-      {
-        'urls': 'turn:openrelay.metered.ca:443',
-        'username': 'openrelayproject',
-        'credential': 'openrelayproject',
-      },
-      {
-        'urls': 'turn:openrelay.metered.ca:443?transport=tcp',
-        'username': 'openrelayproject',
-        'credential': 'openrelayproject',
-      },
-    ],
-    'sdpSemantics': 'unified-plan',
-  };
+  // media when a direct path can't be punched (common on cellular). The ICE
+  // servers are now fetched from the server (see ice_config.dart) so the TURN
+  // relay can be swapped/renewed without rebuilding the app — the same shared
+  // config Listen Together uses, so calls and live sessions never drift apart.
+  static Future<Map<String, dynamic>> get _iceConfig =>
+      IceConfig.instance.servers();
 
   static const Map<String, dynamic> _offerAnswerConstraints = {
     'mandatory': {'OfferToReceiveAudio': true, 'OfferToReceiveVideo': false},
@@ -526,7 +508,7 @@ class CallService {
   Future<void> _createPeer() async {
     _localStream = await navigator.mediaDevices
         .getUserMedia({'audio': true, 'video': false});
-    final pc = await createPeerConnection(_iceConfig);
+    final pc = await createPeerConnection(await _iceConfig);
     _pc = pc;
 
     // Web needs a media element to play the remote audio; prepare it up-front.

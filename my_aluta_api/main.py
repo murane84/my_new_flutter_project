@@ -21,6 +21,7 @@ from routers import upload
 from routers import attachments
 from routers import devices as devices_router
 from routers import live as live_router
+from routers import webrtc as webrtc_router
 from routers import conversations as conversations_router
 from routers import recognize as recognize_router
 from routers import stories as stories_router
@@ -64,6 +65,9 @@ app.include_router(conversations_router.router)
 # /live/sessions/{id}/end. Without this include the whole /live prefix 404s and
 # starting a listen-together session fails.
 app.include_router(live_router.router)
+# ICE (STUN/TURN) config for calls + Listen Together, served from env so TURN
+# can be swapped/renewed without an app rebuild: GET /webrtc/ice.
+app.include_router(webrtc_router.router)
 # Shazam-style song recognition (proxied to AudD; needs AUDD_API_TOKEN set).
 app.include_router(recognize_router.router)
 # Ephemeral 24h Stories (friends-only): post/feed/view/viewers/delete + media.

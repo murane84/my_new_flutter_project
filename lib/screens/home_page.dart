@@ -166,6 +166,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   String? _pendingJumpMessageId;
   List<Map<String, dynamic>> _filteredGroups = [];
   final TextEditingController _searchCtrl = TextEditingController();
+  // A SEPARATE controller for the Harmony (spaces) search, so the two layers'
+  // search boxes are independent — required on desktop where both columns show
+  // their own search at once, and nice on mobile so switching keeps each query.
+  final TextEditingController _spaceSearchCtrl = TextEditingController();
   bool _isLoadingFriends = false;
 
   // Which friend-page layer is expanded in the MOBILE accordion hub ('harmony'
@@ -184,11 +188,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   void _setFriendLayer(String layer) {
     if (_friendLayer == layer) return;
-    setState(() {
-      _friendLayer = layer;
-      _clearSearchState(); // reset the Circle search + empty the box
-      _spaceQuery = ''; //    reset the Harmony search
-    });
+    // Each layer keeps its OWN search box/controller (Circle: _searchCtrl,
+    // Harmony: _spaceSearchCtrl), so switching preserves each side's query
+    // rather than wiping it.
+    setState(() => _friendLayer = layer);
   }
 
   // Images shared into Aluta from another app, waiting to be handed to the chat
@@ -483,6 +486,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
     _playlistDrawerCtrl.dispose();
     _searchCtrl.dispose();
+    _spaceSearchCtrl.dispose();
     _refreshTimer?.cancel();
     _heartbeatTimer?.cancel();
     _connectivitySub?.cancel();
@@ -2845,7 +2849,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           // header, so the whole screen below is that layer's content.
           _layerTab(scheme, 'harmony', 'Harmony', Icons.favorite_rounded,
               _harmonyBadge()),
-          const SizedBox(width: 8),
+          const SizedBox(width: 14),
           _layerTab(scheme, 'circle', 'Circle', Icons.forum_rounded,
               _circleBadge()),
           const Spacer(),

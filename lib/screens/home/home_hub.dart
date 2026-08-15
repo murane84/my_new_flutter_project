@@ -25,9 +25,10 @@ extension _HomeHub on HomePageState {
     final entries = harmony ? harmonyEntries : circleEntries;
     return Column(
       children: [
-        // Contextual search — follows the open layer.
+        // Contextual search — follows the open layer, each with its own box.
         _friendSearchField(
           scheme,
+          harmony ? _spaceSearchCtrl : _searchCtrl,
           harmony ? 'Search your spaces…' : 'Search chats & people…',
           harmony ? _filterSpaces : _filterFriends,
         ),
@@ -58,39 +59,52 @@ extension _HomeHub on HomePageState {
       child: InkWell(
         onTap: () => _setFriendLayer(key),
         borderRadius: BorderRadius.circular(20),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            color: active ? scheme.primary.withAlpha(30) : Colors.transparent,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: active
-                  ? scheme.primary.withAlpha(130)
-                  : scheme.outlineVariant.withAlpha(80),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon,
-                  size: 15,
-                  color: active ? scheme.primary : scheme.onSurfaceVariant),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: active ? FontWeight.w800 : FontWeight.w600,
-                  color: active ? scheme.onSurface : scheme.onSurfaceVariant,
+        // The badge FLOATS on the corner (Stack, no clip) instead of sitting
+        // inline — so it adds zero width to the pill. A growing count (even
+        // "99+") can never nudge the neighbouring pill; the two stay put.
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color:
+                    active ? scheme.primary.withAlpha(30) : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: active
+                      ? scheme.primary.withAlpha(130)
+                      : scheme.outlineVariant.withAlpha(80),
                 ),
               ),
-              if (badge > 0) ...[
-                const SizedBox(width: 6),
-                _hubBadgePill(scheme, badge),
-              ],
-            ],
-          ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon,
+                      size: 15,
+                      color:
+                          active ? scheme.primary : scheme.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                      color:
+                          active ? scheme.onSurface : scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (badge > 0)
+              Positioned(
+                top: -6,
+                right: -6,
+                child: _hubBadgePill(scheme, badge),
+              ),
+          ],
         ),
       ),
     );

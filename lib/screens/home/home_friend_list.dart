@@ -73,9 +73,10 @@ extension _HomeFriendListView on HomePageState {
     //   • CIRCLE   — Status & Stories → Listening now → Your circle. The people
     //     & conversation side, where time-sensitive unread lives.
     // Desktop shows both side by side; mobile shows one at a time via the
-    // header pills. Spaces are filtered by the HARMONY contextual search when
-    // that layer is the one being viewed.
-    final spaceQ = _friendLayer == 'harmony' ? _spaceQuery : '';
+    // header pills. Spaces are filtered by the HARMONY contextual search box
+    // (_spaceQuery) — always applied, since on desktop both columns' searches
+    // are live at once.
+    final spaceQ = _spaceQuery;
     final visibleSpaces = spaceQ.isEmpty
         ? _spaces
         : _spaces
@@ -147,20 +148,11 @@ extension _HomeFriendListView on HomePageState {
                     // layer + header pills.
                     final wide = constraints.maxWidth >= 600;
                     if (wide) {
-                      // Desktop: one search over conversations sits above the two
-                      // columns (the header pills + contextual search are for the
-                      // mobile single-layer view).
-                      return Column(
-                        children: [
-                          _friendSearchField(
-                              scheme, 'Search messages…', _filterFriends),
-                          const SizedBox(height: 10),
-                          Expanded(
-                            child: _friendListWide(harmonyEntries,
-                                circleEntries, combined, scheme, textColor),
-                          ),
-                        ],
-                      );
+                      // Desktop: each column carries its OWN contextual search
+                      // (inside _friendListWide) — spaces on the left, chats on
+                      // the right — so search matches the column it sits under.
+                      return _friendListWide(harmonyEntries, circleEntries,
+                          combined, scheme, textColor);
                     }
                     // Narrow (mobile): only the active layer, its own contextual
                     // search at the top; the Harmony/Circle switch pills live in
@@ -174,12 +166,14 @@ extension _HomeFriendListView on HomePageState {
     );
   }
 
-  /// The rounded search field — reused by the desktop pane search and the mobile
-  /// contextual search; only the hint + onChanged handler change per context.
-  Widget _friendSearchField(
-      ColorScheme scheme, String hint, ValueChanged<String> onChanged) {
+  /// The rounded search field — reused by each desktop column and the mobile
+  /// contextual search. The controller, hint and handler change per context
+  /// (Circle: _searchCtrl/_filterFriends; Harmony: _spaceSearchCtrl/_filterSpaces)
+  /// so the two searches never mirror each other.
+  Widget _friendSearchField(ColorScheme scheme, TextEditingController controller,
+      String hint, ValueChanged<String> onChanged) {
     return TextField(
-      controller: _searchCtrl,
+      controller: controller,
       onChanged: onChanged,
       decoration: InputDecoration(
         hintText: hint,
@@ -217,6 +211,11 @@ extension _HomeFriendListView on HomePageState {
             children: [
               _layerColumnHeader(scheme, 'Harmony', Icons.favorite_rounded,
                   'your closest, in tune', _harmonyBadge()),
+              Padding(
+                padding: const EdgeInsets.only(right: 6, bottom: 8),
+                child: _friendSearchField(scheme, _spaceSearchCtrl,
+                    'Search your spaces…', _filterSpaces),
+              ),
               Expanded(
                 child: ListView.builder(
                   physics: const AlwaysScrollableScrollPhysics(),
@@ -241,6 +240,11 @@ extension _HomeFriendListView on HomePageState {
             children: [
               _layerColumnHeader(scheme, 'Circle', Icons.forum_rounded,
                   'your people & chats', _circleBadge()),
+              Padding(
+                padding: const EdgeInsets.only(left: 6, bottom: 8),
+                child: _friendSearchField(scheme, _searchCtrl,
+                    'Search chats & people…', _filterFriends),
+              ),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _onPullToRefresh,

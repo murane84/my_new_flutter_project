@@ -181,6 +181,11 @@ extension _HomeFriendListView on HomePageState {
   Widget _friendSearchField(ColorScheme scheme, TextEditingController controller,
       String hint, ValueChanged<String> onChanged) {
     return TextField(
+      // Key on the controller so the mobile hub (which swaps the controller when
+      // you switch layers) treats Harmony's and Circle's search as DISTINCT
+      // fields — otherwise Flutter reuses the one element and focus/keyboard
+      // carries from one layer's box onto the other's.
+      key: ValueKey(controller),
       controller: controller,
       onChanged: onChanged,
       decoration: InputDecoration(

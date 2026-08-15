@@ -188,6 +188,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   void _setFriendLayer(String layer) {
     if (_friendLayer == layer) return;
+    // Drop any active search focus first, so switching layers never carries the
+    // keyboard/focus onto the other layer's (separate) search box.
+    FocusManager.instance.primaryFocus?.unfocus();
     // Each layer keeps its OWN search box/controller (Circle: _searchCtrl,
     // Harmony: _spaceSearchCtrl), so switching preserves each side's query
     // rather than wiping it.

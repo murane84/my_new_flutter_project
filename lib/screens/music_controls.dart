@@ -117,6 +117,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       // Mirror the live player's state into the panel + ambient bars.
       _liveStateSub = live.player.playerStateStream.listen((_) {
         _pushLiveToAmbient();
+        // The spinning disc must follow the LIVE player during a session — the
+        // local _player is paused, so its state listener (which normally drives
+        // the disc) would leave it frozen mid-session.
+        _syncDiscSpin(live.player.playing);
         if (mounted) setState(() {});
       });
       _livePosSub = live.player.positionStream.listen((_) {
@@ -126,6 +130,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       // Establish the media/foreground state immediately so the session is
       // protected from background-kill from the very start.
       _pushLiveToAmbient();
+      _syncDiscSpin(live.player.playing);
     } else {
       // The live session just ended (or was cleared). Control reverts to the
       // local music player, so re-sync the ambient now-playing bar + media
@@ -136,8 +141,20 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       ref.read(nowPlayingProvider.notifier).update(
           track: _trackName, artist: _artistName, playing: _player.playing);
       _pushMediaState();
+      _syncDiscSpin(_player.playing);
     }
     if (mounted) setState(() {});
+  }
+
+  /// Keep the album disc rotating whenever audio is actually playing — from the
+  /// LIVE player during a session, the local player otherwise. (Guarded so an
+  /// already-spinning disc isn't restarted, which would jump its angle.)
+  void _syncDiscSpin(bool playing) {
+    if (playing) {
+      if (!_discCtrl.isAnimating) _discCtrl.repeat();
+    } else {
+      _discCtrl.stop();
+    }
   }
 
   String _liveTitle() {
@@ -1911,16 +1928,21 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                         ),
                         if (displayArtist.isNotEmpty) ...[
                           const SizedBox(height: 2),
-                          Text(displayArtist,
-                              style: TextStyle(
-                                  color: live
-                                      ? accent
-                                      : onSurface.withAlpha(160),
-                                  fontWeight: live
-                                      ? FontWeight.w600
-                                      : FontWeight.normal,
-                                  fontSize: 11.5),
-                              overflow: TextOverflow.ellipsis),
+                          // Marquee (not ellipsis) so a long live line like
+                          // "Live · streaming to <name>" scrolls fully instead
+                          // of being cut off.
+                          MarqueeText(
+                            text: displayArtist,
+                            height: 15,
+                            style: TextStyle(
+                                color: live
+                                    ? accent
+                                    : onSurface.withAlpha(160),
+                                fontWeight: live
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                fontSize: 11.5),
+                          ),
                         ],
                         if (live) ...[
                           const SizedBox(height: 4),

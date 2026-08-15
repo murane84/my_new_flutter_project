@@ -83,6 +83,7 @@ part 'home/home_space_actions.dart'; // Our Space + friend action flows (open/pi
 part 'home/home_phone_body.dart'; // phone layout body + expandable player sheet
 part 'home/home_banners.dart'; // live-session + call-return banners, live chip
 part 'home/home_menu.dart'; // header overflow menu (grouped submenus)
+part 'home/home_hub.dart'; // mobile two-tile accordion hub (Harmony / Circle) + badges
 
 String _formatFriendTimestamp(String raw) {
   if (raw.isEmpty) return '';
@@ -166,6 +167,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
   List<Map<String, dynamic>> _filteredGroups = [];
   final TextEditingController _searchCtrl = TextEditingController();
   bool _isLoadingFriends = false;
+
+  // Which friend-page layer is expanded in the MOBILE accordion hub ('harmony'
+  // or 'circle'). Both tile headers — with their badges — always stay visible;
+  // this only picks which one fills the screen. Defaults to Circle so unread
+  // conversations are the first thing in view. (setState lives here in the main
+  // class; the hub builder in home_hub.dart just calls _setFriendLayer.)
+  String _friendLayer = 'circle';
+  void _setFriendLayer(String layer) {
+    if (_friendLayer == layer) return;
+    setState(() => _friendLayer = layer);
+  }
 
   // Images shared into Aluta from another app, waiting to be handed to the chat
   // the user next taps (screenshot-share flow). Null when nothing is pending.

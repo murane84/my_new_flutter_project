@@ -90,35 +90,19 @@ Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Media session (car / Bluetooth / lock-screen controls + a foreground
-  // service that keeps the app alive & online while music plays). Guarded so a
-  // failure never blocks launch.
-  await initAudioService();
-  await initNotifications();
-  // Push notifications (Android/iOS only). Firebase reads its config from
-  // android/app/google-services.json; if that or the Firebase project isn't set
-  // up yet, this whole block fails softly and the app still runs (WebSocket-only
-  // delivery). Register the background handler BEFORE runApp so terminated-state
-  // pushes are handled.
-  if (fcmSupported) {
-    try {
-      await Firebase.initializeApp();
-      FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
-      await FcmService.instance.init();
-    } catch (_) {/* Firebase not configured yet — non-fatal */}
-  }
-  await metadataStore.load();
-  // Warm the in-memory auth caches (access token + API origin) before any UI
-  // renders, so the very first avatar/image frame can attach the auth header to
-  // our now-protected media endpoints (otherwise a cold-start frame could 401),
-  // and so the header is correctly scoped to our host (never leaked to GIF CDNs).
-  await warmMediaAuth();
-  // Start listening for images shared into Aluta while it's running (Android/
-  // iOS only; a no-op elsewhere).
-  _listenForSharedMedia();
-  // Crash/error reporting. Running the app via Sentry's `appRunner` is what
-  // installs capture of BOTH uncaught Flutter framework errors and async
-  // (PlatformDispatcher / zone) errors — no manual FlutterError.onError needed.
+  // Paint the app (its splash) AS SOON AS POSSIBLE. Only Sentry wraps runApp, so
+  // it still installs capture of BOTH uncaught Flutter framework errors and
+  // async (PlatformDispatcher / zone) errors. Everything heavy — the audio
+  // foreground service, notification channels, Firebase/FCM, and the auth +
+  // metadata warm-up — is deferred to _bootstrapServices(), which runs AFTER the
+  // first frame.
+  //
+  // WHY: previously all of that was awaited BEFORE runApp, so `runApp` (and thus
+  // the first Flutter frame) didn't happen until a chain of first-time native
+  // binds + cold-network calls finished. On a cold first-post-install launch
+  // that left the screen frozen on the native launch image long enough to read
+  // as "app not responding" (ANR). The splash — a live, animating Flutter frame
+  // — now shows immediately and gates entry to Home on the bootstrap instead.
   await SentryFlutter.init(
     (options) {
       // Placeholder DSN. Replace with your project's DSN, or supply it at build
@@ -144,6 +128,53 @@ void main() async {
       ),
     ),
   );
+  // Head start on the heavy init while the splash paints; the splash awaits the
+  // same (memoised) future before navigating on to Home.
+  _bootstrapServices();
+}
+
+/// Heavy, one-time app bootstrap — the native + network initialisation that used
+/// to block the first frame. Runs AFTER runApp so a cold first launch shows the
+/// (responsive) splash instead of a frozen native image. Memoised so the splash
+/// can await the very same run; every step is guarded so one failure never
+/// blocks the rest, and none of it is required to render the splash itself.
+Future<void>? _bootstrapFuture;
+Future<void> _bootstrapServices() {
+  return _bootstrapFuture ??= () async {
+    // Media session (car / Bluetooth / lock-screen controls + the foreground
+    // service that keeps the app alive & online while music plays).
+    try {
+      await initAudioService();
+    } catch (_) {/* never block launch on the media session */}
+    try {
+      await initNotifications();
+    } catch (_) {}
+    // Push notifications (Android/iOS only). Firebase reads its config from
+    // android/app/google-services.json; if that or the Firebase project isn't
+    // set up, this whole block fails softly and the app still runs (WebSocket-
+    // only delivery). The background handler is registered here (a few ms after
+    // the first frame) rather than before runApp.
+    if (fcmSupported) {
+      try {
+        await Firebase.initializeApp();
+        FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
+        await FcmService.instance.init();
+      } catch (_) {/* Firebase not configured yet — non-fatal */}
+    }
+    // Restore backed-up song-detail edits so custom titles/artists show at once.
+    try {
+      await metadataStore.load();
+    } catch (_) {}
+    // Warm the in-memory auth caches (access token + API origin) so the first
+    // protected avatar/image frame in Home can attach the auth header (otherwise
+    // a cold-start frame could 401), scoped to our host (never leaked to CDNs).
+    try {
+      await warmMediaAuth();
+    } catch (_) {}
+    // Start listening for images shared into Aluta while it's running (Android/
+    // iOS only; a no-op elsewhere).
+    _listenForSharedMedia();
+  }();
 }
 
 class MyApp extends StatelessWidget {
@@ -436,7 +467,17 @@ class SplashScreenState extends State<SplashScreen> {
     // If the app was cold-launched from another app's Share sheet, grab the
     // shared image(s) now; HomePage presents the recipient picker once signed in.
     await consumeInitialSharedMedia();
-    await Future.delayed(const Duration(milliseconds: 800));
+    // Run the heavy service bootstrap WHILE this splash (a live, animating frame)
+    // is on screen — not before runApp, where it froze the native launch image
+    // on a cold first start. Wait for BOTH a short brand-minimum (no flash on
+    // warm launches) and the bootstrap, but cap the bootstrap so a slow or
+    // unreachable service can't pin the splash — it keeps finishing in the
+    // background, and the pieces Home needs (auth + metadata) are quick + local.
+    await Future.wait([
+      _bootstrapServices()
+          .timeout(const Duration(seconds: 8), onTimeout: () {}),
+      Future.delayed(const Duration(milliseconds: 600)),
+    ]);
     if (!mounted) return;
     final prefs = await SharedPreferences.getInstance();
     final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;

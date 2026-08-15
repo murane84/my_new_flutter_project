@@ -174,9 +174,21 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // conversations are the first thing in view. (setState lives here in the main
   // class; the hub builder in home_hub.dart just calls _setFriendLayer.)
   String _friendLayer = 'circle';
+  // Contextual-search query for the HARMONY layer (spaces). The CIRCLE layer
+  // uses the existing _searchQuery / _filterFriends. Switching layers clears the
+  // box so a query never bleeds from one side to the other.
+  String _spaceQuery = '';
+  void _filterSpaces(String query) {
+    setState(() => _spaceQuery = query.trim().toLowerCase());
+  }
+
   void _setFriendLayer(String layer) {
     if (_friendLayer == layer) return;
-    setState(() => _friendLayer = layer);
+    setState(() {
+      _friendLayer = layer;
+      _clearSearchState(); // reset the Circle search + empty the box
+      _spaceQuery = ''; //    reset the Harmony search
+    });
   }
 
   // Images shared into Aluta from another app, waiting to be handed to the chat
@@ -2826,7 +2838,18 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
     return Row(
       children: [
-        if (!phone) ...[
+        if (phone) ...[
+          // The two flagship layers as compact toggle-pills — replacing the logo
+          // + "Messages". Tap to switch; the active one is lit, both carry their
+          // badge so anything pending shows at first glance. The lit pill IS the
+          // header, so the whole screen below is that layer's content.
+          _layerTab(scheme, 'harmony', 'Harmony', Icons.favorite_rounded,
+              _harmonyBadge()),
+          const SizedBox(width: 8),
+          _layerTab(scheme, 'circle', 'Circle', Icons.forum_rounded,
+              _circleBadge()),
+          const Spacer(),
+        ] else ...[
           _PanelToggleBtn(
             isFullScreen: _isChatFullScreen,
             onTap: () {
@@ -2844,27 +2867,23 @@ class HomePageState extends rp.ConsumerState<HomePage>
             },
           ),
           const SizedBox(width: 10),
-        ],
-        // App logo as the brand mark leading the Messages header.
-        SizedBox(
-          width: 24,
-          height: 24,
-          child: Image.asset(
-            'assets/images/logo.png',
-            fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => Icon(
-              Icons.chat_bubble_outline_rounded,
-              color: scheme.primary,
-              size: 20,
+          // Brand mark leads the desktop header; the HARMONY / CIRCLE column
+          // headers below name the two layers, so no "Messages" title is needed.
+          SizedBox(
+            width: 24,
+            height: 24,
+            child: Image.asset(
+              'assets/images/logo.png',
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => Icon(
+                Icons.chat_bubble_outline_rounded,
+                color: scheme.primary,
+                size: 20,
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        const Text(
-          'Messages',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-        const Spacer(),
+          const Spacer(),
+        ],
         // Right side status: when online, a green "N online" chip (moved up
         // from the status strip) balances the logo+title on the left; when
         // offline, the tap-to-reconnect badge takes its place.

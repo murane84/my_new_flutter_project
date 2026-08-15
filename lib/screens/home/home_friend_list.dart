@@ -72,14 +72,35 @@ extension _HomeFriendListView on HomePageState {
     //     has pinned no bonds yet, so the column is never an ambiguous blank.
     //   • CIRCLE   — Status & Stories → Listening now → Your circle. The people
     //     & conversation side, where time-sensitive unread lives.
-    // Desktop shows both side by side; mobile shows one at a time via the hub
-    // (that lands next). 'liveroom' + 'nospaces' are desktop-layer decorations,
-    // filtered out of the interim mobile single-stack until the hub arrives.
+    // Desktop shows both side by side; mobile shows one at a time via the
+    // header pills. Spaces are filtered by the HARMONY contextual search when
+    // that layer is the one being viewed.
+    final spaceQ = _friendLayer == 'harmony' ? _spaceQuery : '';
+    final visibleSpaces = spaceQ.isEmpty
+        ? _spaces
+        : _spaces
+            .where((s) =>
+                deriveSpaceName(s, _myUserId).toLowerCase().contains(spaceQ))
+            .toList();
+    Map<String, dynamic>? hero;
+    if (spaceQ.isEmpty) {
+      hero = _primarySpace;
+    } else {
+      for (final s in visibleSpaces) {
+        if (s['is_primary'] == true) {
+          hero = s;
+          break;
+        }
+      }
+      hero ??= visibleSpaces.isNotEmpty ? visibleSpaces.first : null;
+    }
     final harmonyEntries = <Map<String, dynamic>>[];
-    final hero = _primarySpace;
     if (hero != null) {
-      harmonyEntries.add({'kind': 'ourspace', 'space': hero});
-      harmonyEntries.add({'kind': 'spacechips'});
+      final heroSpace = hero;
+      harmonyEntries.add({'kind': 'ourspace', 'space': heroSpace});
+      final others =
+          visibleSpaces.where((s) => !identical(s, heroSpace)).toList();
+      harmonyEntries.add({'kind': 'spacechips', 'others': others});
     } else {
       harmonyEntries.add({'kind': 'nospaces'});
     }
@@ -115,46 +136,62 @@ extension _HomeFriendListView on HomePageState {
       key: const ValueKey('friendList'),
       children: [
         if (_isSharing) _buildShareBanner(scheme),
-        TextField(
-          controller: _searchCtrl,
-          onChanged: _filterFriends,
-          decoration: InputDecoration(
-            hintText: 'Search messages…',
-            prefixIcon: const Icon(Icons.search, size: 20),
-            isDense: true,
-            filled: true,
-            fillColor: scheme.surfaceContainerHighest,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
         Expanded(
           child: _isLoadingFriends
               ? const Center(child: CircularProgressIndicator())
               : LayoutBuilder(
                   builder: (context, constraints) {
                     // Two columns as soon as there's more than phone-ish width,
-                    // so "Your Circle" sits in its own right pane (visible
-                    // without scrolling past the spaces and stories). Only true
-                    // phone widths — or the panel narrowed by the music pane —
-                    // collapse to the single mobile stack.
+                    // so both layers show at once. Only true phone widths — or
+                    // the panel narrowed by the music pane — use the single
+                    // layer + header pills.
                     final wide = constraints.maxWidth >= 600;
                     if (wide) {
-                      return _friendListWide(harmonyEntries, circleEntries,
-                          combined, scheme, textColor);
+                      // Desktop: one search over conversations sits above the two
+                      // columns (the header pills + contextual search are for the
+                      // mobile single-layer view).
+                      return Column(
+                        children: [
+                          _friendSearchField(
+                              scheme, 'Search messages…', _filterFriends),
+                          const SizedBox(height: 10),
+                          Expanded(
+                            child: _friendListWide(harmonyEntries,
+                                circleEntries, combined, scheme, textColor),
+                          ),
+                        ],
+                      );
                     }
-                    // Narrow (mobile): the two-tile accordion hub — both layer
-                    // headers + badges always visible, one expanded and scrolling
-                    // inside itself. See home_hub.dart.
+                    // Narrow (mobile): only the active layer, its own contextual
+                    // search at the top; the Harmony/Circle switch pills live in
+                    // the header. See home_hub.dart.
                     return _friendHubMobile(
-                        harmonyEntries, circleEntries, combined, scheme, textColor);
+                        harmonyEntries, circleEntries, scheme, textColor);
                   },
                 ),
         ),
       ],
+    );
+  }
+
+  /// The rounded search field — reused by the desktop pane search and the mobile
+  /// contextual search; only the hint + onChanged handler change per context.
+  Widget _friendSearchField(
+      ColorScheme scheme, String hint, ValueChanged<String> onChanged) {
+    return TextField(
+      controller: _searchCtrl,
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        hintText: hint,
+        prefixIcon: const Icon(Icons.search, size: 20),
+        isDense: true,
+        filled: true,
+        fillColor: scheme.surfaceContainerHighest,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+      ),
     );
   }
 
@@ -327,7 +364,8 @@ extension _HomeFriendListView on HomePageState {
       return _buildOurSpaceHero(e['space'] as Map<String, dynamic>, scheme);
     }
     if (e['kind'] == 'spacechips') {
-      return _buildSpaceChips(scheme);
+      return _buildSpaceChips(
+          scheme, (e['others'] as List).cast<Map<String, dynamic>>());
     }
     if (e['kind'] == 'liveroom') {
       return const LiveRoomHeroShell();
@@ -693,8 +731,8 @@ extension _HomeFriendListView on HomePageState {
   /// "Your Spaces" — a horizontal row of the non-hero pinned bonds as small
   /// chips, plus a "＋ New" chip. Renders from the in-memory Space list (no
   /// fetch). Scarce by design, so it stays a short, deliberate row.
-  Widget _buildSpaceChips(ColorScheme scheme) {
-    final others = _spaces.where((s) => s['is_primary'] != true).toList();
+  Widget _buildSpaceChips(
+      ColorScheme scheme, List<Map<String, dynamic>> others) {
     return Padding(
       padding: const EdgeInsets.only(top: 6, bottom: 6),
       child: Column(

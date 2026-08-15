@@ -133,36 +133,44 @@ extension _HomeFriendListView on HomePageState {
       circleEntries.add({'kind': 'tile', 'item': m});
     }
 
-    return Column(
-      key: const ValueKey('friendList'),
-      children: [
-        if (_isSharing) _buildShareBanner(scheme),
-        Expanded(
-          child: _isLoadingFriends
-              ? const Center(child: CircularProgressIndicator())
-              : LayoutBuilder(
-                  builder: (context, constraints) {
-                    // Two columns as soon as there's more than phone-ish width,
-                    // so both layers show at once. Only true phone widths — or
-                    // the panel narrowed by the music pane — use the single
-                    // layer + header pills.
-                    final wide = constraints.maxWidth >= 600;
-                    if (wide) {
-                      // Desktop: each column carries its OWN contextual search
-                      // (inside _friendListWide) — spaces on the left, chats on
-                      // the right — so search matches the column it sits under.
-                      return _friendListWide(harmonyEntries, circleEntries,
-                          combined, scheme, textColor);
-                    }
-                    // Narrow (mobile): only the active layer, its own contextual
-                    // search at the top; the Harmony/Circle switch pills live in
-                    // the header. See home_hub.dart.
-                    return _friendHubMobile(
-                        harmonyEntries, circleEntries, scheme, textColor);
-                  },
-                ),
-        ),
-      ],
+    return GestureDetector(
+      // Tap anywhere that isn't the search field (or a tile/button) → drop
+      // focus, so a search box never lingers with its "active" accent border.
+      // Translucent so it only catches taps on empty space; tiles/buttons still
+      // win their own taps. Works on both mobile and desktop.
+      behavior: HitTestBehavior.translucent,
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      child: Column(
+        key: const ValueKey('friendList'),
+        children: [
+          if (_isSharing) _buildShareBanner(scheme),
+          Expanded(
+            child: _isLoadingFriends
+                ? const Center(child: CircularProgressIndicator())
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Two columns as soon as there's more than phone-ish
+                      // width, so both layers show at once. Only true phone
+                      // widths — or the panel narrowed by the music pane — use
+                      // the single layer + header pills.
+                      final wide = constraints.maxWidth >= 600;
+                      if (wide) {
+                        // Desktop: each column carries its OWN contextual search
+                        // (inside _friendListWide) — spaces left, chats right —
+                        // so search matches the column it sits under.
+                        return _friendListWide(harmonyEntries, circleEntries,
+                            combined, scheme, textColor);
+                      }
+                      // Narrow (mobile): only the active layer + its own
+                      // contextual search; the Harmony/Circle switch pills live
+                      // in the header. See home_hub.dart.
+                      return _friendHubMobile(
+                          harmonyEntries, circleEntries, scheme, textColor);
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 

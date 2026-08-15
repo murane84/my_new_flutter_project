@@ -14,6 +14,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../utils/app_config.dart';
 import '../screens/api_service.dart';
 import 'audio_handler.dart';
+import 'ice_config.dart';
 
 /// "Listen together" live session client.
 ///
@@ -183,31 +184,11 @@ class LiveSessionController {
   }
 
   // ── WebRTC (peer-to-peer audio) ────────────────────────────────────────────
-  // Free STUN keeps same-network / simple-NAT peers direct; the TURN entries
-  // relay when a direct path can't be punched (common on cellular). Mirrors
-  // call_service.dart — swap in your own TURN for production reliability.
-  static const Map<String, dynamic> _iceConfig = {
-    'iceServers': [
-      {'urls': 'stun:stun.l.google.com:19302'},
-      {'urls': 'stun:stun1.l.google.com:19302'},
-      {
-        'urls': 'turn:openrelay.metered.ca:80',
-        'username': 'openrelayproject',
-        'credential': 'openrelayproject',
-      },
-      {
-        'urls': 'turn:openrelay.metered.ca:443',
-        'username': 'openrelayproject',
-        'credential': 'openrelayproject',
-      },
-      {
-        'urls': 'turn:openrelay.metered.ca:443?transport=tcp',
-        'username': 'openrelayproject',
-        'credential': 'openrelayproject',
-      },
-    ],
-    'sdpSemantics': 'unified-plan',
-  };
+  // ICE (STUN/TURN) is fetched from the server via IceConfig so TURN can be
+  // swapped/renewed without an app rebuild (see ice_config.dart). This const is
+  // only a STUN-only last resort if that fetch ever fails — cross-network needs
+  // the TURN the server adds on top.
+  static Future<Map<String, dynamic>> get _iceConfig => IceConfig.instance.servers();
 
   // HOST: one peer connection + data channel per listener, keyed by their user
   // id (room-ready). LISTENER: a single connection back to the host.
@@ -608,7 +589,7 @@ class LiveSessionController {
     await _closePeer(peerId);
     try {
       _log('host: negotiating peer connection to $peerId');
-      final pc = await createPeerConnection(_iceConfig);
+      final pc = await createPeerConnection(await _iceConfig);
       final peer = _Peer(pc);
       _peers[peerId] = peer;
 
@@ -723,7 +704,7 @@ class LiveSessionController {
     await _closeListenerPc();
     try {
       _log('listener: got offer from $hostId — answering');
-      final pc = await createPeerConnection(_iceConfig);
+      final pc = await createPeerConnection(await _iceConfig);
       _lpc = pc;
 
       pc.onIceCandidate = (RTCIceCandidate c) {

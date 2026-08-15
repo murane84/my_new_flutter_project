@@ -6,6 +6,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../screens/api_service.dart';
 import '../state/group_call_state.dart';
 import '../state/playback_state.dart' show providerContainer;
+import 'ice_config.dart';
 import 'notif_service.dart';
 import 'telecom_service.dart';
 
@@ -196,29 +197,11 @@ class GroupCallService {
     if (speakingIds.value.isNotEmpty) speakingIds.value = <int>{};
   }
 
-  // Same ICE config as 1:1 calls (STUN + free Open Relay TURN).
-  static const Map<String, dynamic> _iceConfig = {
-    'iceServers': [
-      {'urls': 'stun:stun.l.google.com:19302'},
-      {'urls': 'stun:stun1.l.google.com:19302'},
-      {
-        'urls': 'turn:openrelay.metered.ca:80',
-        'username': 'openrelayproject',
-        'credential': 'openrelayproject',
-      },
-      {
-        'urls': 'turn:openrelay.metered.ca:443',
-        'username': 'openrelayproject',
-        'credential': 'openrelayproject',
-      },
-      {
-        'urls': 'turn:openrelay.metered.ca:443?transport=tcp',
-        'username': 'openrelayproject',
-        'credential': 'openrelayproject',
-      },
-    ],
-    'sdpSemantics': 'unified-plan',
-  };
+  // Same ICE config as 1:1 calls + Listen Together — fetched from the server
+  // (see ice_config.dart) so the TURN relay can be swapped without an app
+  // rebuild. STUN-only fallback if the fetch fails.
+  static Future<Map<String, dynamic>> get _iceConfig =>
+      IceConfig.instance.servers();
 
   static const Map<String, dynamic> _mediaConstraints = {
     'audio': true,
@@ -478,7 +461,7 @@ class GroupCallService {
   Future<RTCPeerConnection> _ensurePeer(int pid) async {
     final existing = _peers[pid];
     if (existing != null) return existing;
-    final pc = await createPeerConnection(_iceConfig);
+    final pc = await createPeerConnection(await _iceConfig);
     _peers[pid] = pc;
     _remoteSet[pid] = false;
     final ls = _localStream;

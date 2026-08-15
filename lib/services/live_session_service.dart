@@ -12,6 +12,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../utils/app_config.dart';
 import '../screens/api_service.dart';
+import 'audio_handler.dart';
 
 /// "Listen together" live session client.
 ///
@@ -260,6 +261,19 @@ class LiveSessionController {
     if (t == null || t.isEmpty) return;
     currentTitle = t;
     activeLiveSession?.title = t;
+    // Push the new title straight into the media session so the now-playing
+    // PRESENCE (NowPlayingPresence reads audioHandler.mediaItem) updates for
+    // BOTH host and listener — even if the MusicControls panel isn't the
+    // mounted surface. Without this the listener's "Listening now" stayed stuck
+    // on the track that opened the session while the host advanced the queue.
+    audioHandler?.updateFromPlayer(
+      id: 'live-session',
+      title: t,
+      artist: 'Live',
+      playing: player.playing,
+      position: player.position,
+      duration: player.duration,
+    );
   }
 
   /// Host → listener: broadcast the queue (titles + current index) so the

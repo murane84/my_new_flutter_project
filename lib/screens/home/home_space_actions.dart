@@ -56,6 +56,46 @@ extension _HomeSpaceActions on HomePageState {
     return null;
   }
 
+  /// BRIDGE — Listening now → Harmony ("tune in"): from a friend who's playing
+  /// right now, jump to the Harmony layer (on mobile) and open the Space you
+  /// share, so their space (where Listen Together / the Live Room live) is one
+  /// tap from their now-playing row. No shared Space yet → nudge to pin a bond.
+  void _tuneInto(int friendId, String name) {
+    _setFriendLayer('harmony');
+    final space = _spaceWithFriend(friendId);
+    if (space != null) {
+      _openSpace(space);
+    } else {
+      showToast(context, 'Pin a bond with $name to tune in together',
+          type: ToastType.info);
+    }
+  }
+
+  /// BRIDGE — Harmony → Circle ("message"): open the chat with the other person
+  /// in a Space, using the existing conversation surface (chat_page untouched).
+  /// Prefers the full friend record; falls back to the Space's member snapshot.
+  void _messageSpacemate(Map<String, dynamic> space) {
+    final other = ((space['members'] as List?) ?? const [])
+        .whereType<Map>()
+        .firstWhere(
+          (m) => (m['id'] as num?)?.toInt() != _myUserId,
+          orElse: () => const {},
+        );
+    final otherId = (other['id'] as num?)?.toInt();
+    if (otherId == null) return;
+    final full = _allFriends.firstWhere(
+      (f) => (f['id'] as num?)?.toInt() == otherId,
+      orElse: () => <String, dynamic>{},
+    );
+    openChat(full.isNotEmpty
+        ? full
+        : {
+            'id': otherId,
+            'username': (other['username'] ?? '').toString(),
+            'avatar_url': other['avatar_url'],
+          });
+  }
+
   /// 🎁 Send a moment (dedication/song/note) to a friend: open their Our Space
   /// to compose it, pinning one first if the bond isn't a Space yet (respecting
   /// the free-tier cap — which routes to the Together paywall).
@@ -106,6 +146,16 @@ extension _HomeSpaceActions on HomePageState {
                           color: scheme.onSurface)),
                 ],
               ),
+            ),
+            ListTile(
+              leading:
+                  Icon(Icons.chat_bubble_rounded, color: scheme.primary),
+              title: const Text('Message'),
+              subtitle: const Text('Open your chat with them'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _messageSpacemate(space);
+              },
             ),
             ListTile(
               leading: Icon(Icons.open_in_full_rounded, color: scheme.primary),

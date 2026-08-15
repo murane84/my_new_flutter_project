@@ -639,7 +639,10 @@ extension _HomeFriendListView on HomePageState {
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
+                // BRIDGE — message the bond from Harmony (opens the chat).
+                _heroMessageButton(space),
+                const SizedBox(width: 6),
                 _heroEnterButton(accent),
               ],
             ),
@@ -648,6 +651,22 @@ extension _HomeFriendListView on HomePageState {
       ),
     );
   }
+
+  /// A translucent white message button on the (coloured) hero — the one-tap
+  /// bridge from Harmony into the chat with this bond.
+  Widget _heroMessageButton(Map<String, dynamic> space) => Material(
+        color: Colors.white.withValues(alpha: 0.18),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () => _messageSpacemate(space),
+          child: const Padding(
+            padding: EdgeInsets.all(9),
+            child: Icon(Icons.chat_bubble_rounded,
+                color: Colors.white, size: 18),
+          ),
+        ),
+      );
 
   Widget _heroAvatarRing(Widget child) => Container(
         padding: const EdgeInsets.all(2),
@@ -1188,6 +1207,17 @@ extension _HomeFriendListView on HomePageState {
                 ],
               ],
             ),
+            // BRIDGE — when this friend is playing right now, a one-tap "tune
+            // in" jumps to Harmony and opens the Space you share (their room).
+            if (npLine != null)
+              IconButton(
+                tooltip: 'Tune in with $name',
+                icon: Icon(Icons.headphones_rounded,
+                    color: scheme.primary, size: 20),
+                visualDensity: VisualDensity.compact,
+                onPressed: () =>
+                    _tuneInto(int.tryParse(f['id'].toString()) ?? -1, name),
+              ),
             IconButton(
               tooltip: 'Call $name',
               icon: Icon(Icons.call_rounded, color: scheme.primary, size: 20),

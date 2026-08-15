@@ -38,6 +38,7 @@ import 'legal_screen.dart';
 import 'relationship_space_page.dart';
 import 'appearance_screen.dart';
 import 'together_screen.dart';
+import 'live_room_hero.dart';
 import '../services/live_session_service.dart'
     show activeLiveSession, endActiveLiveSession;
 import '../services/notif_service.dart';

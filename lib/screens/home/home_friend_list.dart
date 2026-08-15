@@ -188,20 +188,28 @@ extension _HomeFriendListView on HomePageState {
           thickness: 1,
           color: scheme.outlineVariant.withAlpha(60),
         ),
-        // RIGHT — the conversation list (Listening now → Your circle).
+        // RIGHT — the Live Room slot (desktop-only preview of C1) pinned at the
+        // top, then the conversation list (Listening now → Your circle) below.
         Expanded(
           flex: 6,
-          child: RefreshIndicator(
-            onRefresh: _onPullToRefresh,
-            child: combined.isEmpty
-                ? _emptyConversations(scheme)
-                : ListView.builder(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.only(left: 6),
-                    itemCount: convEntries.length,
-                    itemBuilder: (_, i) =>
-                        _friendEntry(convEntries, i, scheme, textColor),
-                  ),
+          child: Column(
+            children: [
+              const LiveRoomHeroShell(),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _onPullToRefresh,
+                  child: combined.isEmpty
+                      ? _emptyConversations(scheme)
+                      : ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.only(left: 6),
+                          itemCount: convEntries.length,
+                          itemBuilder: (_, i) =>
+                              _friendEntry(convEntries, i, scheme, textColor),
+                        ),
+                ),
+              ),
+            ],
           ),
         ),
       ],

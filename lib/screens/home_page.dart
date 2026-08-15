@@ -2836,11 +2836,15 @@ class HomePageState extends rp.ConsumerState<HomePage>
       );
     }
 
-    // On phones there's no split to expand, so the ⤢ toggle is meaningless —
-    // hide it and let the "Messages" title lead the header.
-    final bool phone = MediaQuery.of(context).size.width < 640;
-
-    return Row(
+    // Header adapts to the PANE's own width (via LayoutBuilder), not the whole
+    // window — so a shrunk desktop pane falls back to the SAME mobile chrome as
+    // the body below: the Harmony/Circle switch pills instead of the logo +
+    // expand toggle. The 600 threshold matches _buildFriendList, so header and
+    // body flip together (never a desktop header over a mobile body).
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bool phone = constraints.maxWidth < 600;
+        return Row(
       children: [
         if (phone) ...[
           // The two flagship layers as compact toggle-pills — replacing the logo
@@ -2969,6 +2973,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
             ),
           ),
       ],
+        );
+      },
     );
   }
 

@@ -1,117 +1,94 @@
 part of '../home_page.dart';
 
-// The MOBILE two-tile accordion hub for the friend page. Both layer headers —
-// HARMONY and CIRCLE — with their badges stay visible at all times, so any
-// pending item (unread chats, a bond you can tune into) reaches the user at
-// first glance without scrolling. One tile is expanded and fills the screen with
-// its own internal scroll; the other collapses to just its header bar. Tapping a
-// header swaps which is open. Desktop keeps both columns open (see
-// home_friend_list.dart); this hub is only for narrow widths.
+// The MOBILE two-layer switcher for the friend page. Instead of stacked headers,
+// the two flagship layers live as compact toggle-PILLS in the header row (see
+// _buildChatHeader): HARMONY and CIRCLE, each badged, the active one lit. Tapping
+// a pill switches which layer fills the screen — so the lit pill IS the header
+// and the whole area below is that layer's content, starting with its own
+// contextual search bar. Both badges stay visible at all times, so any pending
+// item (unread chats, a bond you can tune into) reaches the user at first glance.
+// Desktop keeps both columns open (see home_friend_list.dart); this is narrow-only.
 //
-// A private extension on HomePageState (a library part), so it reaches every
-// field/method. It never calls setState directly — the open/collapse toggle
-// delegates to HomePageState._setFriendLayer — so it stays clear of @protected.
+// A private extension on HomePageState (a library part). It never calls setState
+// directly — the pill toggle delegates to HomePageState._setFriendLayer — so it
+// stays clear of @protected.
 extension _HomeHub on HomePageState {
+  /// Mobile friend body: just the ACTIVE layer, its own contextual search at the
+  /// top, content scrolling below. The Harmony/Circle pills that switch layers
+  /// live in the header (_buildChatHeader).
   Widget _friendHubMobile(
       List<Map<String, dynamic>> harmonyEntries,
       List<Map<String, dynamic>> circleEntries,
-      List<Map<String, dynamic>> combined,
       ColorScheme scheme,
       Color textColor) {
-    final open = _friendLayer;
-    final hBadge = _harmonyBadge();
-    final cBadge = _circleBadge();
-
-    Widget tile(String key, String name, IconData icon, String tagline,
-        int badge, List<Map<String, dynamic>> entries) {
-      final isOpen = open == key;
-      final header = _hubHeader(scheme, key, name, icon, tagline, badge, isOpen);
-      if (!isOpen) return header;
-      // The open tile takes the remaining height and scrolls INSIDE itself.
-      return Expanded(
-        child: Column(
-          children: [
-            header,
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _onPullToRefresh,
-                child: ListView.builder(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.only(top: 6, bottom: 12),
-                  itemCount: entries.length,
-                  itemBuilder: (_, i) =>
-                      _friendEntry(entries, i, scheme, textColor),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Exactly one Expanded (the open tile) + one bare header (the collapsed one)
-    // → the column fills the screen, both headers + badges always visible.
+    final harmony = _friendLayer == 'harmony';
+    final entries = harmony ? harmonyEntries : circleEntries;
     return Column(
       children: [
-        tile('harmony', 'Harmony', Icons.favorite_rounded,
-            'your closest, in tune', hBadge, harmonyEntries),
-        tile('circle', 'Circle', Icons.forum_rounded, 'your people & chats',
-            cBadge, circleEntries),
+        // Contextual search — follows the open layer.
+        _friendSearchField(
+          scheme,
+          harmony ? 'Search your spaces…' : 'Search chats & people…',
+          harmony ? _filterSpaces : _filterFriends,
+        ),
+        const SizedBox(height: 10),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _onPullToRefresh,
+            child: ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.only(bottom: 12),
+              itemCount: entries.length,
+              itemBuilder: (_, i) =>
+                  _friendEntry(entries, i, scheme, textColor),
+            ),
+          ),
+        ),
       ],
     );
   }
 
-  /// One accordion header bar: accent icon + layer name + tagline + a persistent
-  /// badge + an open/closed chevron. Tapping swaps which layer is expanded.
-  Widget _hubHeader(ColorScheme scheme, String layerKey, String name,
-      IconData icon, String tagline, int badge, bool open) {
+  /// One layer toggle-pill for the mobile header: icon + label + badge, lit when
+  /// active and calm when not. Tapping switches the whole friend body to it.
+  Widget _layerTab(ColorScheme scheme, String key, String label, IconData icon,
+      int badge) {
+    final active = _friendLayer == key;
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => _setFriendLayer(layerKey),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 13),
+        onTap: () => _setFriendLayer(key),
+        borderRadius: BorderRadius.circular(20),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            color: open ? scheme.primary.withAlpha(12) : null,
-            border: Border(
-              bottom:
-                  BorderSide(color: scheme.outlineVariant.withAlpha(70)),
+            color: active ? scheme.primary.withAlpha(30) : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: active
+                  ? scheme.primary.withAlpha(130)
+                  : scheme.outlineVariant.withAlpha(80),
             ),
           ),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 18, color: scheme.primary),
-              const SizedBox(width: 8),
+              Icon(icon,
+                  size: 15,
+                  color: active ? scheme.primary : scheme.onSurfaceVariant),
+              const SizedBox(width: 6),
               Text(
-                name.toUpperCase(),
+                label,
                 style: TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.4,
-                  color: scheme.onSurface,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  tagline,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 11.5, color: scheme.onSurfaceVariant),
+                  fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                  color: active ? scheme.onSurface : scheme.onSurfaceVariant,
                 ),
               ),
               if (badge > 0) ...[
+                const SizedBox(width: 6),
                 _hubBadgePill(scheme, badge),
-                const SizedBox(width: 8),
               ],
-              Icon(
-                open
-                    ? Icons.keyboard_arrow_up_rounded
-                    : Icons.keyboard_arrow_down_rounded,
-                size: 22,
-                color: scheme.onSurfaceVariant,
-              ),
             ],
           ),
         ),
@@ -119,8 +96,8 @@ extension _HomeHub on HomePageState {
     );
   }
 
-  /// The little count pill used on both the mobile hub headers and the desktop
-  /// column headers, so pending counts read the same everywhere.
+  /// The little count pill used on the mobile layer pills AND the desktop column
+  /// headers, so pending counts read the same everywhere.
   Widget _hubBadgePill(ColorScheme scheme, int count) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),

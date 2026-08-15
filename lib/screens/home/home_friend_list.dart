@@ -65,42 +65,50 @@ extension _HomeFriendListView on HomePageState {
         rest.add(m);
       }
     }
-    // Two render lists so wide layouts (desktop / web) can show them side by
-    // side: the LEFT "space & stories" column (Our Space hero → Your Spaces →
-    // Status & Stories) and the RIGHT conversation column (Listening now → Your
-    // circle). On narrow widths they concatenate back into one scroll — exactly
-    // the mobile stack — so nothing changes there.
-    final sideEntries = <Map<String, dynamic>>[];
+    // The friend page is split into two named layers (the "branches" of the
+    // friend list — like we branched the monolith file):
+    //   • HARMONY  — Our Space hero → Your Spaces chips → Live Room. The
+    //     presence/togetherness side. Shows an empty-state prompt when the user
+    //     has pinned no bonds yet, so the column is never an ambiguous blank.
+    //   • CIRCLE   — Status & Stories → Listening now → Your circle. The people
+    //     & conversation side, where time-sensitive unread lives.
+    // Desktop shows both side by side; mobile shows one at a time via the hub
+    // (that lands next). 'liveroom' + 'nospaces' are desktop-layer decorations,
+    // filtered out of the interim mobile single-stack until the hub arrives.
+    final harmonyEntries = <Map<String, dynamic>>[];
     final hero = _primarySpace;
     if (hero != null) {
-      sideEntries.add({'kind': 'ourspace', 'space': hero});
-      sideEntries.add({'kind': 'spacechips'});
+      harmonyEntries.add({'kind': 'ourspace', 'space': hero});
+      harmonyEntries.add({'kind': 'spacechips'});
+    } else {
+      harmonyEntries.add({'kind': 'nospaces'});
     }
+    harmonyEntries.add({'kind': 'liveroom'});
+
+    final circleEntries = <Map<String, dynamic>>[];
     // Story circles ("friend status" + Your story). A header keeps the row from
     // reading as orphaned.
     if (_myUserId != null) {
-      sideEntries.add({'kind': 'header', 'label': 'Status & Stories'});
-      sideEntries.add({'kind': 'stories'});
+      circleEntries.add({'kind': 'header', 'label': 'Status & Stories'});
+      circleEntries.add({'kind': 'stories'});
     }
-
-    final convEntries = <Map<String, dynamic>>[];
     if (listening.isNotEmpty) {
-      convEntries.add({
+      circleEntries.add({
         'kind': 'header',
         'label': 'Listening now',
         'count': listening.length,
       });
       for (final m in listening) {
-        convEntries.add({'kind': 'tile', 'item': m});
+        circleEntries.add({'kind': 'tile', 'item': m});
       }
     }
     // "Your circle" always heads the main conversation list (even when nobody is
     // listening), so the quiet list is never an unlabelled block.
     if (rest.isNotEmpty) {
-      convEntries.add({'kind': 'header', 'label': 'Your circle'});
+      circleEntries.add({'kind': 'header', 'label': 'Your circle'});
     }
     for (final m in rest) {
-      convEntries.add({'kind': 'tile', 'item': m});
+      circleEntries.add({'kind': 'tile', 'item': m});
     }
 
     return Column(
@@ -135,10 +143,15 @@ extension _HomeFriendListView on HomePageState {
                     // collapse to the single mobile stack.
                     final wide = constraints.maxWidth >= 600;
                     if (wide) {
-                      return _friendListWide(
-                          sideEntries, convEntries, combined, scheme, textColor);
+                      return _friendListWide(harmonyEntries, circleEntries,
+                          combined, scheme, textColor);
                     }
-                    final all = [...sideEntries, ...convEntries];
+                    // Interim mobile single-stack (until the hub lands): drop the
+                    // desktop-only decorations so the phone list stays as-is.
+                    final all = [...harmonyEntries, ...circleEntries]
+                        .where((e) =>
+                            e['kind'] != 'liveroom' && e['kind'] != 'nospaces')
+                        .toList();
                     return RefreshIndicator(
                       onRefresh: _onPullToRefresh,
                       // AlwaysScrollable → the list can overscroll (and so
@@ -159,28 +172,38 @@ extension _HomeFriendListView on HomePageState {
     );
   }
 
-  /// Wide (desktop / web) friend-list layout: the space & stories column on the
-  /// left, the conversation list on the right, split by a hairline — so the
-  /// wide screen shows "Your Circle" straight away instead of below a long
-  /// scroll. Collapses to the single stack below the width threshold.
+  /// Wide (desktop / web) friend-list layout: the two named layers side by side
+  /// — HARMONY (Our Space, Your Spaces, Live Room) on the left, CIRCLE (Stories,
+  /// Listening now, Your circle) on the right — each under its own header, split
+  /// by a hairline. Desktop has the room to show both at once, so there's no hub
+  /// here; the wide screen surfaces conversations immediately AND keeps the
+  /// spaces/rooms in view. Collapses to the single mobile stack below 600px.
   Widget _friendListWide(
-      List<Map<String, dynamic>> sideEntries,
-      List<Map<String, dynamic>> convEntries,
+      List<Map<String, dynamic>> harmonyEntries,
+      List<Map<String, dynamic>> circleEntries,
       List<Map<String, dynamic>> combined,
       ColorScheme scheme,
       Color textColor) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // LEFT — Our Space + Your Spaces + Status & Stories.
+        // LEFT — HARMONY: Our Space + Your Spaces + Live Room.
         Expanded(
           flex: 5,
-          child: ListView.builder(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.only(right: 6),
-            itemCount: sideEntries.length,
-            itemBuilder: (_, i) =>
-                _friendEntry(sideEntries, i, scheme, textColor),
+          child: Column(
+            children: [
+              _layerColumnHeader(
+                  scheme, 'Harmony', Icons.favorite_rounded, 'your closest, in tune'),
+              Expanded(
+                child: ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.only(right: 6),
+                  itemCount: harmonyEntries.length,
+                  itemBuilder: (_, i) =>
+                      _friendEntry(harmonyEntries, i, scheme, textColor),
+                ),
+              ),
+            ],
           ),
         ),
         VerticalDivider(
@@ -188,13 +211,13 @@ extension _HomeFriendListView on HomePageState {
           thickness: 1,
           color: scheme.outlineVariant.withAlpha(60),
         ),
-        // RIGHT — the Live Room slot (desktop-only preview of C1) pinned at the
-        // top, then the conversation list (Listening now → Your circle) below.
+        // RIGHT — CIRCLE: Status & Stories + Listening now + Your circle.
         Expanded(
           flex: 6,
           child: Column(
             children: [
-              const LiveRoomHeroShell(),
+              _layerColumnHeader(
+                  scheme, 'Circle', Icons.forum_rounded, 'your people & chats'),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _onPullToRefresh,
@@ -203,9 +226,9 @@ extension _HomeFriendListView on HomePageState {
                       : ListView.builder(
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.only(left: 6),
-                          itemCount: convEntries.length,
+                          itemCount: circleEntries.length,
                           itemBuilder: (_, i) =>
-                              _friendEntry(convEntries, i, scheme, textColor),
+                              _friendEntry(circleEntries, i, scheme, textColor),
                         ),
                 ),
               ),
@@ -213,6 +236,92 @@ extension _HomeFriendListView on HomePageState {
           ),
         ),
       ],
+    );
+  }
+
+  /// The header atop each desktop layer column: an accent icon + the layer's
+  /// flagship name + a soft one-line tagline, over a hairline.
+  Widget _layerColumnHeader(
+      ColorScheme scheme, String name, IconData icon, String tagline) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(6, 2, 6, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 17, color: scheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                name.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.6,
+                  color: scheme.onSurface,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                tagline,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(height: 1, color: scheme.outlineVariant.withAlpha(70)),
+        ],
+      ),
+    );
+  }
+
+  /// Harmony empty-state — shown when the user has pinned no bonds yet, so the
+  /// column reads as an invitation instead of a mysterious blank.
+  Widget _noSpacesCard(ColorScheme scheme) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(0, 2, 6, 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        color: scheme.surfaceContainerHighest,
+        border: Border.all(color: scheme.primary.withAlpha(60)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.favorite_border_rounded,
+                  size: 18, color: scheme.primary),
+              const SizedBox(width: 8),
+              Text('No spaces yet',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurface)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Pin a bond to share a space — a song, moments, your streak — just '
+            'the two of you.',
+            style: TextStyle(
+                fontSize: 12.5, height: 1.35, color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: () => _newSpaceFlow(),
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Pin a bond'),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -227,6 +336,12 @@ extension _HomeFriendListView on HomePageState {
     }
     if (e['kind'] == 'spacechips') {
       return _buildSpaceChips(scheme);
+    }
+    if (e['kind'] == 'liveroom') {
+      return const LiveRoomHeroShell();
+    }
+    if (e['kind'] == 'nospaces') {
+      return _noSpacesCard(scheme);
     }
     if (e['kind'] == 'stories') {
       return Padding(

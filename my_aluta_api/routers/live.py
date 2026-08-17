@@ -19,7 +19,7 @@ from jose import JWTError, jwt
 
 from config import SECRET_KEY, ALGORITHM
 from database import SessionLocal, get_db
-from models import User
+from models import User, Friend
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
@@ -28,6 +28,36 @@ from live_session import MANAGER
 from push import send_push_to_user
 
 router = APIRouter(prefix="/live", tags=["Live Session"])
+
+
+def _friend_ids(db: Session, uid: int) -> list:
+    """The user's circle (symmetric Friend rows)."""
+    rows = db.query(Friend).filter(
+        (Friend.user_id == uid) | (Friend.friend_id == uid)).all()
+    ids = set()
+    for r in rows:
+        other = r.friend_id if r.user_id == uid else r.user_id
+        if other != uid:
+            ids.add(int(other))
+    return list(ids)
+
+
+def _are_friends(a: int, b: int) -> bool:
+    """True if a and b are friends (either direction). Opens its own session so
+    it's safe to call from the WebSocket handler."""
+    if a == b:
+        return True
+    db = SessionLocal()
+    try:
+        row = db.query(Friend).filter(
+            ((Friend.user_id == a) & (Friend.friend_id == b))
+            | ((Friend.user_id == b) & (Friend.friend_id == a))
+        ).first()
+        return row is not None
+    except Exception:
+        return False
+    finally:
+        db.close()
 
 
 # ------------------------------ Schemas ------------------------------
@@ -40,6 +70,12 @@ class TrackMeta(BaseModel):
 
 class CreateSessionRequest(BaseModel):
     receiver_id: int
+    track: TrackMeta = TrackMeta()
+
+
+class CreateRoomRequest(BaseModel):
+    # An open "Listening Room" — no single receiver; the host's whole circle can
+    # drop in. Only the track metadata is needed to seed it.
     track: TrackMeta = TrackMeta()
 
 
@@ -92,6 +128,56 @@ def create_session(
     return {"session_id": session_id, "host_id": current_user.id, "track": track}
 
 
+@router.post("/rooms")
+def create_room(
+    body: CreateRoomRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Open a live "Listening Room": a drop-in space the host's whole circle can
+    join (vs a 1:1 invite). We announce it to the host's friends over their home
+    socket so their friend list can surface a "room is live" card; friends who
+    come online later discover it via GET /live/rooms (or the home-socket
+    reconnect re-delivery)."""
+    session_id = uuid.uuid4().hex
+    track = body.track.model_dump()
+    friend_ids = _friend_ids(db, current_user.id)
+    session = MANAGER.create(
+        session_id, host_id=current_user.id, invited_ids=[], track=track,
+        host_username=current_user.username or "", open=True)
+    # Remember the circle we told, so we can also announce when the room ends
+    # (including from the host-timeout path, which has no request context).
+    session.notify_ids = set(friend_ids)
+
+    payload = {
+        "type": "live_room_available",
+        "data": {
+            "session_id": session_id,
+            "host_id": current_user.id,
+            "host_username": current_user.username,
+            "track": track,
+        },
+    }
+    for fid in friend_ids:
+        safe_notify_user(fid, payload)
+
+    return {"session_id": session_id, "host_id": current_user.id,
+            "track": track, "open": True}
+
+
+@router.get("/rooms")
+def list_rooms(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Live open rooms this user can drop into right now (hosted by a friend,
+    host connected). Used to populate the "Live Room" slot when the friend list
+    loads — covers friends who were already online before the room started."""
+    friend_ids = _friend_ids(db, current_user.id)
+    rooms = MANAGER.open_rooms_for(current_user.id, friend_ids)
+    return {"rooms": [s.snapshot() for s in rooms]}
+
+
 @router.post("/sessions/{session_id}/decline")
 def decline_session(
     session_id: str,
@@ -131,6 +217,9 @@ async def end_session(
         raise HTTPException(status_code=403, detail="Only the host can end the session")
 
     await MANAGER.broadcast_text(session_id, json.dumps({"type": "end", "reason": "host_ended"}))
+    # If this was an open Listening Room, tell the host's circle it's closed so
+    # the "room is live" card disappears from their friend list.
+    MANAGER.announce_room_ended(session)
     MANAGER.remove(session_id)
     return {"detail": "Session ended"}
 
@@ -173,9 +262,21 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
         return
 
     session = MANAGER.get(session_id)
-    if session is None or user.id not in session.allowed_ids:
-        await websocket.close(code=4404)  # no such session / not invited
+    if session is None:
+        await websocket.close(code=4404)  # no such session
         return
+    # Membership: an explicitly-allowed user (host or invited listener), OR — for
+    # an OPEN "Listening Room" — any friend of the host (drop-in). The friendship
+    # check opens its own DB session so it's safe here.
+    allowed = user.id in session.allowed_ids or (
+        session.open and _are_friends(user.id, session.host_id))
+    if not allowed:
+        await websocket.close(code=4403)  # not allowed in this room
+        return
+    # Remember an open-room drop-in so re-delivery / bookkeeping treats them as
+    # a member for the rest of the session.
+    if session.open:
+        session.allowed_ids.add(user.id)
 
     is_host = (user.id == session.host_id)
 
@@ -227,7 +328,16 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
             if text is not None:
                 # Track last known playback state for late joiners.
                 _update_state_from_control(session, text)
-                await MANAGER.relay_text(session_id, user.id, text)
+                # Per-peer routing: WebRTC signaling (rtc_offer/answer/ice) is
+                # addressed to ONE peer via a `to` field — with N listeners it
+                # must reach only that peer, or everyone's peer connections would
+                # cross-wire. Everything else (play/pause/queue/meta/…) has no
+                # `to` and fans out to all others exactly as before.
+                target = _relay_target(text)
+                if target is not None:
+                    await MANAGER.send_to_user(session_id, target, text)
+                else:
+                    await MANAGER.relay_text(session_id, user.id, text)
             elif data is not None:
                 await MANAGER.relay_bytes(session_id, user.id, data)
 
@@ -257,6 +367,24 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
                     session_id, user.id,
                     json.dumps({"type": "peer_left", "data": {"user_id": user.id}}),
                 )
+
+
+def _relay_target(text: str):
+    """If this message is addressed to a single peer (a `to` user id — used by
+    the WebRTC signaling rtc_offer/rtc_answer/rtc_ice), return that id so it can
+    be delivered only to them. Otherwise None → normal broadcast to all others."""
+    try:
+        msg = json.loads(text)
+    except Exception:
+        return None
+    to = msg.get("to")
+    if isinstance(to, bool):  # guard: bools are ints in Python
+        return None
+    if isinstance(to, int):
+        return to
+    if isinstance(to, str) and to.isdigit():
+        return int(to)
+    return None
 
 
 def _update_state_from_control(session, text: str) -> None:

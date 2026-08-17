@@ -716,8 +716,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     return StreamBuilder<Duration>(
       stream: _c.player.positionStream,
       builder: (context, posSnap) {
-        final pos = posSnap.data ?? Duration.zero;
-        final dur = _c.player.duration ?? Duration.zero;
+        // Real song timeline (accounts for a trimmed MP3 tail on the listener).
+        final pos = _c.livePosition;
+        final dur = _c.liveDuration ?? Duration.zero;
         final max = dur.inMilliseconds.toDouble();
         final value = max <= 0
             ? 0.0
@@ -859,8 +860,10 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   // send a request to the host, who executes it and broadcasts the result, so
   // host and listener stay perfectly in sync (and the host keeps final say).
   void _listenerSeekBy(int seconds) {
-    final dur = _c.player.duration ?? Duration.zero;
-    var target = _c.player.position + Duration(seconds: seconds);
+    // Work in REAL song time (our buffer may be a trimmed tail) so the seek we
+    // ask the host for lands where the user expects.
+    final dur = _c.liveDuration ?? Duration.zero;
+    var target = _c.livePosition + Duration(seconds: seconds);
     if (target < Duration.zero) target = Duration.zero;
     if (dur > Duration.zero && target > dur) target = dur;
     _c.requestControl('seek', positionMs: target.inMilliseconds);

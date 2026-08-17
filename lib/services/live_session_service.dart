@@ -211,6 +211,14 @@ class LiveSessionController {
   // resume at the host's position and DON'T autoplay if the host is paused.
   bool _hostPlaying = true;
   int _hostPositionMs = 0;
+  // Real-time (ms) that the FIRST byte of the listener's current buffer maps to.
+  // 0 for a full-from-start transfer; >0 when the host trimmed the already-played
+  // head and streamed only from its current position (MP3 fast-join, see
+  // _streamTrackToPeer). The listener's player timeline is then offset by this,
+  // so every real host position is translated by subtracting it (and displays
+  // add it back). Kept at 0 for the host and for non-trimmed transfers, so the
+  // full-file path behaves exactly as before.
+  int _listenerBaseMs = 0;
 
   // Host-side: kept so we can (re)stream the song the moment a listener joins,
   // so join timing no longer matters (a late joiner still gets the full audio).
@@ -721,20 +729,57 @@ class LiveSessionController {
     // even a straggler frame from the old stream is discarded harmlessly.
     final epoch = ++p.streamEpoch;
     try {
-      _log('host: streaming ${bytes.length} bytes ($mime)');
-      ch.send(RTCDataChannelMessage(jsonEncode({'t': 'track_start', 'mime': mime})));
+      // Fast-join (#1): for an MP3, once the host is a few seconds into the
+      // track, skip streaming the already-played head — send only from ~the
+      // current position to the end. The listener plays that tail; the `base_ms`
+      // offset keeps its timeline and sync correct. This roughly halves (or
+      // better) what a late joiner must pull over a slow relay before they hear
+      // anything. Container formats (M4A/AAC) can't start mid-file, so they —
+      // and early joins — stream full-from-0 exactly as before.
+      int startByte = 0;
+      int baseMs = 0;
+      final durMs = player.duration?.inMilliseconds ?? 0;
+      final posMs = player.position.inMilliseconds;
+      const trimAfterMs = 8000; // only worth trimming once we're into the song
+      if (_isMp3(mime) &&
+          durMs > 0 &&
+          posMs > trimAfterMs &&
+          bytes.length > 96 * 1024) {
+        final frac = (posMs / durMs).clamp(0.0, 0.95);
+        // Back off ~48 KB before the estimated offset so the decoder has clean
+        // frames to resync on plus a small lead-in, then map that byte to a
+        // real-time base.
+        var off = (frac * bytes.length).floor() - 48 * 1024;
+        if (off < 0) off = 0;
+        startByte = off;
+        baseMs = ((startByte / bytes.length) * durMs).floor();
+      }
+
+      _log('host: streaming ${bytes.length - startByte}/${bytes.length} bytes '
+          '($mime)${baseMs > 0 ? ' from ${baseMs}ms' : ''}');
+      ch.send(RTCDataChannelMessage(
+          jsonEncode({'t': 'track_start', 'mime': mime, 'base_ms': baseMs})));
       // 16 KB frames stay under every WebRTC implementation's reliable
       // single-message limit (browsers included), so the web PWA interops too.
+      // Faster pacing (#2): send in short bursts and yield only BETWEEN bursts.
+      // The old fixed 4 ms sleep PER 16 KB frame capped throughput at ~4 MB/s
+      // even on a fast/LAN link; a burst yield keeps the UI responsive and lets
+      // the channel drain while pushing bytes far faster. Local buffering stays
+      // bounded for song-sized files.
       const chunkSize = 16 * 1024;
-      for (var offset = 0; offset < bytes.length; offset += chunkSize) {
+      const framesPerBurst = 8; // ~128 KB between yields
+      var sinceYield = 0;
+      for (var offset = startByte; offset < bytes.length; offset += chunkSize) {
         if (p.streamEpoch != epoch) return; // superseded by a newer track
         final end = (offset + chunkSize < bytes.length)
             ? offset + chunkSize
             : bytes.length;
         ch.send(RTCDataChannelMessage.fromBinary(
             Uint8List.sublistView(bytes, offset, end)));
-        // Pace so we don't overrun the channel's send buffer or freeze the UI.
-        await Future<void>.delayed(const Duration(milliseconds: 4));
+        if (++sinceYield >= framesPerBurst) {
+          sinceYield = 0;
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        }
       }
       if (p.streamEpoch != epoch) return; // don't terminate a superseded stream
       // Stamp the host's exact position + play state at the moment the transfer
@@ -828,6 +873,11 @@ class LiveSessionController {
             _log('listener: track_start');
             final mime = j['mime'];
             if (mime is String) _incomingMime = mime;
+            // Real-time offset of the first byte we're about to receive: >0 when
+            // the host trimmed the already-played head (MP3 fast-join), 0 for a
+            // full-from-start transfer.
+            final base = j['base_ms'];
+            _listenerBaseMs = (base is int && base > 0) ? base : 0;
             _incoming.clear();
             _listenerStarted = false;
             try {
@@ -966,6 +1016,7 @@ class LiveSessionController {
     await _closeListenerPc();
     _incoming.clear();
     _listenerStarted = false;
+    _listenerBaseMs = 0;
     await _openSocket(sessionId, myUserId, token);
   }
 
@@ -990,6 +1041,7 @@ class LiveSessionController {
     await _closeListenerPc();
     _incoming.clear();
     _listenerStarted = false;
+    _listenerBaseMs = 0;
     try {
       await player.stop();
     } catch (_) {}
@@ -1035,6 +1087,38 @@ class LiveSessionController {
     if (meta != null) _sendControl(meta);
   }
 
+  // ── Trimmed-join helpers (MP3 fast-join) ────────────────────────────────────
+  static bool _isMp3(String? mime) {
+    final m = (mime ?? '').toLowerCase();
+    return m.contains('mpeg') || m.contains('mp3');
+  }
+
+  /// The REAL playback position, accounting for a trimmed listener buffer. Host
+  /// (base 0) → the player's own position; a trimmed listener → offset back onto
+  /// the full-song timeline. Use this for anything user-facing (progress bar).
+  Duration get livePosition =>
+      player.position + Duration(milliseconds: _listenerBaseMs);
+
+  /// The REAL track duration (the whole song), even when the listener holds only
+  /// a trimmed tail of it.
+  Duration? get liveDuration {
+    final d = player.duration;
+    if (d == null) return null;
+    return d + Duration(milliseconds: _listenerBaseMs);
+  }
+
+  int get _listenerRealPositionMs =>
+      player.position.inMilliseconds + _listenerBaseMs;
+
+  /// Seek the listener's player to a REAL host position, translated onto the
+  /// (possibly trimmed) local buffer timeline.
+  Future<void> _listenerSeekReal(int realMs) async {
+    final local = realMs - _listenerBaseMs;
+    try {
+      await player.seek(Duration(milliseconds: local < 0 ? 0 : local));
+    } catch (_) {}
+  }
+
   Future<void> _startListenerPlayback({bool autoplay = true}) async {
     if (_listenerStarted) return;
     final bytes = _incoming.toBytes();
@@ -1052,11 +1136,11 @@ class LiveSessionController {
           BytesAudioSource(bytes, contentType: _incomingMime));
       // Resume at the host's position, and only play if the host is playing — so
       // joining (or re-buffering after a reconnect) while the host is paused, or
-      // mid-track, lands us in sync instead of blasting from 0:00.
-      if (_hostPositionMs > 0) {
-        try {
-          await player.seek(Duration(milliseconds: _hostPositionMs));
-        } catch (_) {}
+      // mid-track, lands us in sync instead of blasting from 0:00. Translated
+      // onto the local buffer timeline (a no-op when the buffer is full-from-0,
+      // an offset when the host trimmed the already-played head).
+      if (_hostPositionMs > _listenerBaseMs) {
+        await _listenerSeekReal(_hostPositionMs);
       }
       if (autoplay && _hostPlaying) unawaited(player.play());
     } catch (e) {
@@ -1316,7 +1400,7 @@ class LiveSessionController {
         // Ignore the actual transport until the full song is buffered (started
         // via 'eos'); otherwise playback would begin from a partial buffer.
         if (!_listenerStarted) break;
-        if (playPos is int) await player.seek(Duration(milliseconds: playPos));
+        if (playPos is int) await _listenerSeekReal(playPos);
         unawaited(player.play()); // future resolves on track END — don't await
         break;
       case 'pause':
@@ -1324,7 +1408,7 @@ class LiveSessionController {
         final pausePos = msg['position_ms'];
         if (pausePos is int) _hostPositionMs = pausePos;
         if (!_listenerStarted) break;
-        if (pausePos is int) await player.seek(Duration(milliseconds: pausePos));
+        if (pausePos is int) await _listenerSeekReal(pausePos);
         await player.pause();
         break;
       case 'seek':
@@ -1334,8 +1418,9 @@ class LiveSessionController {
           _hostPositionMs = pos;
           if (_listenerStarted) {
             // Only correct if we've drifted noticeably (>1.5s) to avoid stutter.
-            final drift = (player.position.inMilliseconds - pos).abs();
-            if (drift > 1500) await player.seek(Duration(milliseconds: pos));
+            // Compare on the REAL timeline (buffer may be trimmed).
+            final drift = (_listenerRealPositionMs - pos).abs();
+            if (drift > 1500) await _listenerSeekReal(pos);
           }
         }
         break;
@@ -1394,6 +1479,7 @@ class LiveSessionController {
     await _closeAllPeers();
     _incoming.clear();
     _listenerStarted = false;
+    _listenerBaseMs = 0;
     try {
       await player.stop();
     } catch (_) {}

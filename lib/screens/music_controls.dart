@@ -188,8 +188,11 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     final playing = live.player.playing;
     ref.read(nowPlayingProvider.notifier).update(
         track: _liveTitle(), artist: 'Live', playing: playing);
-    final dur = live.player.duration;
-    final pos = live.player.position;
+    // Use the REAL song timeline (livePosition/liveDuration) so a listener who
+    // joined a trimmed MP3 tail still shows the true position/duration, not the
+    // partial buffer's.
+    final dur = live.liveDuration;
+    final pos = live.livePosition;
     playProgressNotifier.value = (dur != null && dur.inMilliseconds > 0)
         ? (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0)
         : 0.0;

@@ -103,31 +103,40 @@ void main() async {
   // that left the screen frozen on the native launch image long enough to read
   // as "app not responding" (ANR). The splash — a live, animating Flutter frame
   // — now shows immediately and gates entry to Home on the bootstrap instead.
-  await SentryFlutter.init(
-    (options) {
-      // Placeholder DSN. Replace with your project's DSN, or supply it at build
-      // time: --dart-define=SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<id>
-      // An empty DSN keeps Sentry installed but inert (no events sent), so the
-      // app runs cleanly until a real DSN is provided.
-      options.dsn =
-          const String.fromEnvironment('SENTRY_DSN', defaultValue: '');
-      // Errors only — no performance tracing — to keep it lightweight.
-      options.tracesSampleRate = 0.0;
-    },
-    appRunner: () => runApp(
-      // Riverpod's scope wraps everything. We pass OUR container (the same one
-      // non-widget code uses via `providerContainer`) so widget `ref` and that
-      // container share a single state tree. The existing provider-package
-      // ThemeProvider stays untouched inside it.
-      rp.UncontrolledProviderScope(
+  // Riverpod's scope wraps everything. We pass OUR container (the same one
+  // non-widget code uses via `providerContainer`) so widget `ref` and that
+  // container share a single state tree. The provider-package ThemeProvider
+  // stays untouched inside it.
+  Widget appRoot() => rp.UncontrolledProviderScope(
         container: providerContainer,
         child: ChangeNotifierProvider(
           create: (_) => ThemeProvider(),
           child: const MyApp(),
         ),
-      ),
-    ),
-  );
+      );
+
+  // Sentry DSN. Supply at build time:
+  //   --dart-define=SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<id>
+  const sentryDsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
+  if (sentryDsn.isEmpty) {
+    // No DSN → Sentry would be inert anyway (it sends nothing). Skip its native
+    // init entirely so the FIRST FRAME paints without waiting on a pre-frame
+    // MethodChannel. This matters most on a cold first-launch right after an
+    // APK update, when Android is busy re-optimising (dexopt) and every native
+    // call is slow — shaving the last pre-frame work reduces the "not
+    // responding" window. When a real DSN is provided we wrap runApp as before
+    // so startup errors are still captured.
+    runApp(appRoot());
+  } else {
+    await SentryFlutter.init(
+      (options) {
+        options.dsn = sentryDsn;
+        // Errors only — no performance tracing — to keep it lightweight.
+        options.tracesSampleRate = 0.0;
+      },
+      appRunner: () => runApp(appRoot()),
+    );
+  }
   // Head start on the heavy init while the splash paints; the splash awaits the
   // same (memoised) future before navigating on to Home.
   _bootstrapServices();

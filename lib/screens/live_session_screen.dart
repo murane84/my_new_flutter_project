@@ -32,12 +32,17 @@ class LiveSessionScreen extends StatefulWidget {
     this.track,
     this.resume = false,
     this.startPositionMs = 0,
+    this.isRoom = false,
   });
 
   final LiveRole role;
   final String token;
   final int myUserId;
   final String peerName;
+  // Host-only: true when hosting an OPEN "Listening Room" (drop-in for the whole
+  // circle) rather than a 1:1 invite. Drives startRoom() vs startHost() and the
+  // "waiting for your circle" copy.
+  final bool isRoom;
   // When true, rebind to the already-running [activeLiveSession] instead of
   // creating/starting a new one (reopening a minimised session).
   final bool resume;
@@ -75,6 +80,28 @@ class LiveSessionScreen extends StatefulWidget {
         title: title,
         durationMs: durationMs,
         startPositionMs: startPositionMs,
+      );
+
+  /// Host an OPEN "Listening Room" — a drop-in space the whole circle can join,
+  /// seeded with [audioBytes]/[title]. No receiver; the backend announces it.
+  factory LiveSessionScreen.roomHost({
+    required String token,
+    required int myUserId,
+    required Uint8List audioBytes,
+    required String title,
+    int? durationMs,
+    int startPositionMs = 0,
+  }) =>
+      LiveSessionScreen._(
+        role: LiveRole.host,
+        token: token,
+        myUserId: myUserId,
+        peerName: 'your circle',
+        audioBytes: audioBytes,
+        title: title,
+        durationMs: durationMs,
+        startPositionMs: startPositionMs,
+        isRoom: true,
       );
 
   factory LiveSessionScreen.listener({
@@ -239,6 +266,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
       title: _title,
       token: widget.token,
       myUserId: widget.myUserId,
+      isRoom: widget.isRoom,
     );
     // Broadcast that a live co-listening session is active so ambient UI
     // (the persistent banner / bars) can reflect it.
@@ -264,19 +292,33 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   Future<void> _start() async {
     try {
       if (_isHost) {
-        setState(() => _status = 'Starting session…');
-        await _c.startHost(
-          receiverId: widget.receiverId!,
-          myUserId: widget.myUserId,
-          token: widget.token,
-          audioBytes: widget.audioBytes!,
-          title: _title,
-          durationMs: widget.durationMs,
-          startPositionMs: widget.startPositionMs,
-        );
+        setState(() =>
+            _status = widget.isRoom ? 'Opening your room…' : 'Starting session…');
+        if (widget.isRoom) {
+          await _c.startRoom(
+            myUserId: widget.myUserId,
+            token: widget.token,
+            audioBytes: widget.audioBytes!,
+            title: _title,
+            durationMs: widget.durationMs,
+            startPositionMs: widget.startPositionMs,
+          );
+        } else {
+          await _c.startHost(
+            receiverId: widget.receiverId!,
+            myUserId: widget.myUserId,
+            token: widget.token,
+            audioBytes: widget.audioBytes!,
+            title: _title,
+            durationMs: widget.durationMs,
+            startPositionMs: widget.startPositionMs,
+          );
+        }
         setState(() {
           _ready = true;
-          _status = 'Waiting for ${widget.peerName} to join…';
+          _status = widget.isRoom
+              ? 'Your room is live — your circle can drop in'
+              : 'Waiting for ${widget.peerName} to join…';
         });
       } else {
         setState(() => _status = 'Joining ${widget.peerName}’s session…');

@@ -38,7 +38,6 @@ import 'legal_screen.dart';
 import 'relationship_space_page.dart';
 import 'appearance_screen.dart';
 import 'together_screen.dart';
-import 'live_room_hero.dart';
 import '../services/live_session_service.dart'
     show activeLiveSession, endActiveLiveSession;
 import '../services/notif_service.dart';
@@ -65,7 +64,9 @@ import 'add_friend_sheet.dart';
 import 'spinning_vinyl_ring.dart';
 import '../services/connected_contacts_service.dart';
 import '../services/now_playing_presence.dart';
+import '../services/live_rooms_registry.dart';
 import '../services/telecom_service.dart';
+import '../utils/file_bytes.dart';
 import '../main.dart' show navigatorKey;
 import '../utils/time_utils.dart';
 // Prefixed: this file also imports package:provider, which exports colliding
@@ -340,6 +341,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // seed the current snapshot of who's playing right now.
     NowPlayingPresence.instance.addListener(_onPresenceChanged);
     NowPlayingPresence.instance.loadSnapshot();
+    // Seed any live "Listening Rooms" a friend is already hosting (events keep
+    // this current afterwards).
+    LiveRoomsRegistry.instance.loadSnapshot();
 
     // Foreground heartbeat: keep the server-side presence alive while the app
     // is open, so idling no longer silently drops the user offline.
@@ -1273,6 +1277,21 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
     if (type == 'live_declined') {
       _showLiveDeclined(event);
+      return;
+    }
+    // A friend opened a live "Listening Room" → surface a drop-in card in the
+    // Live Room slot. (Ignore my own room echoed back to me.)
+    if (type == 'live_room_available') {
+      final data = (event['data'] as Map?) ?? const {};
+      final hostId = (data['host_id'] as num?)?.toInt();
+      if (hostId != null && hostId != _myUserId) {
+        LiveRoomsRegistry.instance.applyAvailable(data);
+      }
+      return;
+    }
+    // A friend's room closed → remove its card.
+    if (type == 'live_room_ended') {
+      LiveRoomsRegistry.instance.applyEnded((event['data'] as Map?) ?? const {});
       return;
     }
     // A friend posted a story → refresh the feed so their ring appears on the

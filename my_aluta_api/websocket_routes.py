@@ -274,6 +274,19 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                     "track": s.track,
                 },
             })
+        # Also surface any OPEN "Listening Room" a friend is hosting right now, so
+        # a user who comes online mid-room sees the drop-in card immediately
+        # (the same info GET /live/rooms returns on a fresh friend-list load).
+        for s in _LIVE.open_rooms_for(uid, _friend_ids(uid)):
+            await notify_user(uid, {
+                "type": "live_room_available",
+                "data": {
+                    "session_id": s.session_id,
+                    "host_id": s.host_id,
+                    "host_username": s.host_username,
+                    "track": s.track,
+                },
+            })
     except Exception:
         pass
 

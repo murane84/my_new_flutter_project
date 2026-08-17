@@ -385,7 +385,7 @@ extension _HomeFriendListView on HomePageState {
           scheme, (e['others'] as List).cast<Map<String, dynamic>>());
     }
     if (e['kind'] == 'liveroom') {
-      return const LiveRoomHeroShell();
+      return _buildLiveRoomSlot(scheme);
     }
     if (e['kind'] == 'nospaces') {
       return _noSpacesCard(scheme);
@@ -1350,6 +1350,382 @@ extension _HomeFriendListView on HomePageState {
               visualDensity: VisualDensity.compact,
               onPressed: () => _startGroupCall(g),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Live Room slot ─────────────────────────────────────────────────────────
+  // The "Live Room · Your Circle" slot, now real (C1). Three states: I'm hosting
+  // a room, a friend is hosting one I can drop into, or nobody's live (start one).
+  Widget _buildLiveRoomSlot(ColorScheme scheme) {
+    return ListenableBuilder(
+      listenable: LiveRoomsRegistry.instance,
+      builder: (context, _) {
+        final dark = Theme.of(context).brightness == Brightness.dark;
+        final active = activeLiveSession;
+        final hostingRoom = active != null && active.isHost && active.isRoom;
+        final reg = LiveRoomsRegistry.instance;
+        if (hostingRoom) {
+          return _liveRoomShell(scheme, dark,
+              child: _liveRoomHostingBody(scheme, active));
+        }
+        if (reg.hasRooms) {
+          return _liveRoomShell(scheme, dark,
+              child: _liveRoomDropInBody(scheme, reg.mostRecent!, reg.count));
+        }
+        return _liveRoomShell(scheme, dark, child: _liveRoomStartBody(scheme));
+      },
+    );
+  }
+
+  Widget _liveRoomShell(ColorScheme scheme, bool dark, {required Widget child}) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(6, 2, 0, 12),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            scheme.surfaceContainerHighest,
+            scheme.primary.withAlpha(dark ? 46 : 24),
+          ],
+        ),
+        border: Border.all(color: scheme.primary.withAlpha(90)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                    color: scheme.primary, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 7),
+              Text(
+                'LIVE ROOM · YOUR CIRCLE',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.1,
+                  color: scheme.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _liveRoomStartBody(ColorScheme scheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Listen together, in real time',
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: scheme.onSurface)),
+        const SizedBox(height: 4),
+        Text(
+          'Start a room and your circle can drop in — no ads, and the app goes '
+          'quiet the moment someone joins.',
+          style: TextStyle(
+              fontSize: 12, height: 1.35, color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: _startRoomFlow,
+          icon: const Icon(Icons.play_arrow_rounded, size: 18),
+          label: const Text('Start a room'),
+          style: FilledButton.styleFrom(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
+        ),
+      ],
+    );
+  }
+
+  Widget _liveRoomDropInBody(
+      ColorScheme scheme, Map<String, dynamic> room, int count) {
+    final host = (room['host_username'] ?? 'A friend').toString();
+    final track = room['track'] as Map?;
+    final title = (track?['title'] ?? '').toString();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('$host is hosting a room',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: scheme.onSurface)),
+        if (title.isNotEmpty) ...[
+          const SizedBox(height: 3),
+          Row(
+            children: [
+              Icon(Icons.graphic_eq_rounded, size: 14, color: scheme.primary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 12.5, color: scheme.onSurfaceVariant)),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            FilledButton.icon(
+              onPressed: () => _dropIntoRoom(room),
+              icon: const Icon(Icons.headphones_rounded, size: 18),
+              label: const Text('Drop in'),
+              style: FilledButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
+            ),
+            if (count > 1) ...[
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: _roomsSheet,
+                child: Text('+${count - 1} more'),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _liveRoomHostingBody(ColorScheme scheme, ActiveLiveSession active) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Your room is live',
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: scheme.onSurface)),
+        const SizedBox(height: 3),
+        Text('Your circle can drop in and listen with you.',
+            style:
+                TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: _openMyRoom,
+          icon: const Icon(Icons.open_in_full_rounded, size: 18),
+          label: const Text('Open room'),
+          style: FilledButton.styleFrom(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
+        ),
+      ],
+    );
+  }
+
+  String _roomTitleFromPath(String path) {
+    final name = path.split(RegExp(r'[\\/]+')).last;
+    return name.replaceAll(RegExp(r'\.[^.]+$'), '');
+  }
+
+  /// Start a room: from the song already playing (one tap), else pick one.
+  Future<void> _startRoomFlow() async {
+    final playing = playbackBus.isPlaying?.call() ?? false;
+    final curPath = playbackBus.currentPath?.call();
+    String? path;
+    int startPos = 0;
+    if (playing && curPath != null && curPath.isNotEmpty) {
+      path = curPath;
+      startPos = playbackBus.currentPositionMs?.call() ?? 0;
+    } else {
+      path = await _pickRoomTrack();
+    }
+    if (path == null || !mounted) return;
+
+    Uint8List bytes;
+    try {
+      bytes = Uint8List.fromList(await readFileBytes(path));
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not read that track.',
+            type: ToastType.error);
+      }
+      return;
+    }
+    if (bytes.isEmpty) {
+      if (mounted) {
+        showToast(context, 'That track appears to be empty.',
+            type: ToastType.error);
+      }
+      return;
+    }
+
+    final token = await getToken();
+    final myUserId = _myUserId;
+    if (token == null || myUserId == null || !mounted) return;
+    // Stop the local player so the song isn't also heard outside the room.
+    playbackBus.onPause?.call();
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => LiveSessionScreen.roomHost(
+        token: token,
+        myUserId: myUserId,
+        audioBytes: bytes,
+        title: _roomTitleFromPath(path!),
+        startPositionMs: startPos,
+      ),
+    );
+  }
+
+  Future<String?> _pickRoomTrack() async {
+    final paths = List<String>.from(playlistNotifier.value);
+    if (paths.isEmpty) {
+      showToast(context, 'Open the music player and load some songs first.',
+          type: ToastType.info);
+      return null;
+    }
+    final scheme = Theme.of(context).colorScheme;
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+            Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: scheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2))),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+              child: Row(children: [
+                Text('Pick the opening song',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: scheme.onSurface)),
+              ]),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: paths.length,
+                itemBuilder: (c, i) => ListTile(
+                  leading:
+                      Icon(Icons.music_note_rounded, color: scheme.primary),
+                  title: Text(_roomTitleFromPath(paths[i]),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => Navigator.pop(ctx, paths[i]),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _dropIntoRoom(Map<String, dynamic> room) async {
+    final token = await getToken();
+    final myUserId = _myUserId;
+    if (token == null || myUserId == null || !mounted) return;
+    final sid = (room['session_id'] ?? '').toString();
+    if (sid.isEmpty) return;
+    final host = (room['host_username'] ?? 'Your friend').toString();
+    final track =
+        (room['track'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => LiveSessionScreen.listener(
+        token: token,
+        myUserId: myUserId,
+        sessionId: sid,
+        track: track,
+        peerName: host,
+      ),
+    );
+  }
+
+  void _openMyRoom() {
+    if (activeLiveSession == null) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => LiveSessionScreen.resume(),
+    );
+  }
+
+  void _roomsSheet() {
+    final scheme = Theme.of(context).colorScheme;
+    final rooms = LiveRoomsRegistry.instance.rooms;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+            Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: scheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2))),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+              child: Row(children: [
+                Text('Live rooms',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: scheme.onSurface)),
+              ]),
+            ),
+            ...rooms.map((r) {
+              final host = (r['host_username'] ?? 'Friend').toString();
+              final tt = ((r['track'] as Map?)?['title'] ?? '').toString();
+              return ListTile(
+                leading: Icon(Icons.headphones_rounded, color: scheme.primary),
+                title:
+                    Text(host, maxLines: 1, overflow: TextOverflow.ellipsis),
+                subtitle: tt.isEmpty
+                    ? null
+                    : Text(tt, maxLines: 1, overflow: TextOverflow.ellipsis),
+                trailing: TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _dropIntoRoom(r);
+                  },
+                  child: const Text('Drop in'),
+                ),
+              );
+            }),
+            const SizedBox(height: 8),
           ],
         ),
       ),

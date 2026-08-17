@@ -53,6 +53,7 @@ class ActiveLiveSession {
     required this.title,
     required this.token,
     required this.myUserId,
+    this.isRoom = false,
   });
 
   final LiveSessionController controller;
@@ -61,6 +62,9 @@ class ActiveLiveSession {
   String title;
   final String token;
   final int myUserId;
+  // True when this is an OPEN "Listening Room" I'm hosting (vs a 1:1 session),
+  // so the Live Room card can show "your room is live".
+  final bool isRoom;
 
   bool get isHost => role == LiveRole.host;
 }
@@ -337,25 +341,104 @@ class LiveSessionController {
     }
     sessionId = jsonDecode(res.body)['session_id'] as String;
 
-    // 2) Open the session socket.
+    // 2) Common bring-up (socket, playback, EQ, meta, queue, play).
+    await _beginHostPlayback(
+      myUserId: myUserId,
+      token: token,
+      audioBytes: audioBytes,
+      title: title,
+      artist: artist,
+      durationMs: durationMs,
+      mime: mime,
+      startPositionMs: startPositionMs,
+    );
+    return sessionId!;
+  }
+
+  /// Open an OPEN "Listening Room": like [startHost] but the server creates a
+  /// drop-in room (POST /live/rooms) that the host's whole circle can join,
+  /// instead of a single 1:1 invite. Returns the room's session id.
+  Future<String> startRoom({
+    required int myUserId,
+    required String token,
+    required Uint8List audioBytes,
+    required String title,
+    String? artist,
+    int? durationMs,
+    String mime = 'audio/mpeg',
+    int startPositionMs = 0,
+  }) async {
+    role = LiveRole.host;
+    // A room isn't a 1:1 conversation, so there's no per-friend history to log.
+    _logReceiverId = null;
+    _logConversationId = null;
+    _sessionStartAt = DateTime.now();
+    _hadListener = false;
+    _outcomeLogged = false;
+
+    final base = await AppConfig.baseUrl;
+    final res = await http.post(
+      Uri.parse('$base/live/rooms'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'track': {
+          'title': title,
+          'artist': artist,
+          'duration_ms': durationMs,
+          'mime': mime,
+        },
+      }),
+    );
+    if (res.statusCode != 200) {
+      throw Exception('Failed to create room: ${res.statusCode} ${res.body}');
+    }
+    sessionId = jsonDecode(res.body)['session_id'] as String;
+
+    await _beginHostPlayback(
+      myUserId: myUserId,
+      token: token,
+      audioBytes: audioBytes,
+      title: title,
+      artist: artist,
+      durationMs: durationMs,
+      mime: mime,
+      startPositionMs: startPositionMs,
+    );
+    return sessionId!;
+  }
+
+  /// Shared host playback bring-up used by both [startHost] (1:1) and
+  /// [startRoom] (open room). [sessionId] must already be set. Opens the session
+  /// socket, starts local playback at [startPositionMs], applies the saved EQ,
+  /// seeds the queue with the first track, and announces meta + play. The audio
+  /// bytes are streamed to each peer only once they join (see `peer_joined`).
+  Future<void> _beginHostPlayback({
+    required int myUserId,
+    required String token,
+    required Uint8List audioBytes,
+    required String title,
+    String? artist,
+    int? durationMs,
+    required String mime,
+    required int startPositionMs,
+  }) async {
     await _openSocket(sessionId!, myUserId, token);
 
-    // 3) Start local playback from the in-memory bytes, at the requested
-    //    position (so sharing the currently-playing song blends in without a
-    //    restart).
     await player.setAudioSource(BytesAudioSource(audioBytes, contentType: mime));
     if (startPositionMs > 0) {
       await player.seek(Duration(milliseconds: startPositionMs));
     }
-    _broadcastHostPlayback(); // mirror play/pause/seek/position to the listener
+    _broadcastHostPlayback(); // mirror play/pause/seek/position to listeners
 
-    // 3b) Apply the host's saved equalizer to the live player AND remember it
-    //     so it can be mirrored to the listener.
+    // Apply the host's saved equalizer to the live player AND remember it so it
+    // can be mirrored to each listener.
     await _sendHostEq(alsoSend: false);
 
-    // 4) Announce metadata. The actual audio is streamed only once a listener
-    //    joins (see the `peer_joined` handling below), so a late-accepting
-    //    receiver still gets the full song.
+    // Announce metadata. The actual audio is streamed only once a listener
+    // joins (see the `peer_joined` handling), so a late joiner still gets it.
     final meta = {
       'type': 'meta',
       'track': {
@@ -377,8 +460,7 @@ class LiveSessionController {
       if (role == LiveRole.host &&
           s == ProcessingState.completed &&
           !_switchingTrack) {
-        // Respect the session repeat mode: one → replay this track; otherwise
-        // advance (nextTrack wraps to the top when repeat=all).
+        // Respect the session repeat mode: one → replay; otherwise advance.
         if (repeatMode == 'one') {
           playIndex(currentIndex);
         } else {
@@ -388,16 +470,11 @@ class LiveSessionController {
     });
     _sendControl(meta);
     _setCurrentTitle(title);
-    // Do NOT await: just_audio's play() future completes only when playback
-    // FINISHES (the song ends), so awaiting it would block startHost from
-    // returning for the whole track — leaving the host's controls disabled the
-    // entire time on backends (e.g. Android) that honour that contract.
+    // Do NOT await: play()'s future completes only when the song ENDS.
     unawaited(player.play());
     _sendControl({'type': 'play', 'position_ms': startPositionMs});
     onQueueChanged?.call();
     _broadcastQueue();
-
-    return sessionId!;
   }
 
   // ---------------------------------------------------------------------------

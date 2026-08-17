@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
     show kIsWeb, kReleaseMode, defaultTargetPlatform, TargetPlatform;
@@ -39,7 +41,7 @@ import 'relationship_space_page.dart';
 import 'appearance_screen.dart';
 import 'together_screen.dart';
 import '../services/live_session_service.dart'
-    show activeLiveSession, endActiveLiveSession;
+    show activeLiveSession, endActiveLiveSession, ActiveLiveSession;
 import '../services/notif_service.dart';
 import '../services/fcm_service.dart';
 import '../services/share_inbox.dart';

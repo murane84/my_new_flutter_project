@@ -223,7 +223,8 @@ extension _HomeFriendListView on HomePageState {
           child: Column(
             children: [
               _layerColumnHeader(scheme, 'Harmony', Icons.favorite_rounded,
-                  'your closest, in tune', _harmonyBadge()),
+                  'your closest, in tune', _harmonyBadge(),
+                  onRefresh: _onPullToRefresh),
               Padding(
                 padding: const EdgeInsets.only(right: 6, bottom: 8),
                 child: _friendSearchField(scheme, _spaceSearchCtrl,
@@ -252,7 +253,8 @@ extension _HomeFriendListView on HomePageState {
           child: Column(
             children: [
               _layerColumnHeader(scheme, 'Circle', Icons.forum_rounded,
-                  'your people & chats', _circleBadge()),
+                  'your people & chats', _circleBadge(),
+                  onRefresh: _onPullToRefresh),
               Padding(
                 padding: const EdgeInsets.only(left: 6, bottom: 8),
                 child: _friendSearchField(scheme, _searchCtrl,
@@ -283,7 +285,7 @@ extension _HomeFriendListView on HomePageState {
   /// flagship name + a soft one-line tagline + the same persistent badge the
   /// mobile hub uses, over a hairline.
   Widget _layerColumnHeader(ColorScheme scheme, String name, IconData icon,
-      String tagline, int badge) {
+      String tagline, int badge, {VoidCallback? onRefresh}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(6, 2, 6, 8),
       child: Column(
@@ -315,6 +317,20 @@ extension _HomeFriendListView on HomePageState {
                 ),
               ),
               if (badge > 0) _hubBadgePill(scheme, badge),
+              // Desktop has no pull-to-refresh gesture, so give each column a
+              // manual reload (spaces / chats update on tap instead of waiting
+              // for the next automatic load).
+              if (onRefresh != null)
+                IconButton(
+                  onPressed: onRefresh,
+                  tooltip: 'Refresh',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  iconSize: 17,
+                  color: scheme.onSurfaceVariant,
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
             ],
           ),
           const SizedBox(height: 8),
@@ -1382,7 +1398,10 @@ extension _HomeFriendListView on HomePageState {
 
   Widget _liveRoomShell(ColorScheme scheme, bool dark, {required Widget child}) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(6, 2, 0, 12),
+      // Flush-left (0) to line up with the Our Space hero above it, which sits
+      // at the column edge and relies on the list's right:6 padding — a left
+      // margin here pushed the Live Room card 6px in and misaligned the cards.
+      margin: const EdgeInsets.fromLTRB(0, 2, 0, 12),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),

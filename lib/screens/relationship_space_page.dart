@@ -1,10 +1,16 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
 import 'api_service.dart';
+import 'home_page.dart' show playbackBus, playlistNotifier;
+import 'live_session_screen.dart';
+import 'token_helper.dart' show getToken;
 import '../utils/toast_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/popup_shell.dart';
+import '../utils/file_bytes.dart';
 
 /// "Our Space" — a bond rendered as a *place*, not a chat thread. Opening a
 /// pinned Space shows the story of that connection: who you are together, how
@@ -111,12 +117,129 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   }
 
   // ── actions ────────────────────────────────────────────────────────────────
-  void _listenTogether() {
-    // Wires to the Listen-Together / Rooms surface once it lands; until then a
-    // truthful nudge instead of a dead button.
-    showToast(context,
-        'Listen together is coming with Rooms — soon you can play this bond a song in sync.',
-        type: ToastType.info);
+  /// Start a private 1:1 Listen Together with this bond's partner: pick the song
+  /// (what's playing now, else choose one), then open the live session as host —
+  /// the partner gets the "listen together" invite. Plays the bond a song in
+  /// sync, exactly as the button promises.
+  Future<void> _listenTogether() async {
+    final others = _others;
+    if (others.isEmpty) {
+      showToast(context, 'This space has no one to listen with yet.',
+          type: ToastType.info);
+      return;
+    }
+    final partner = others.first;
+    final partnerId = (partner['id'] as num?)?.toInt();
+    final partnerName = (partner['username'] ?? 'them').toString();
+    final myUserId = widget.myUserId;
+    if (partnerId == null || myUserId == null) return;
+
+    // The opening song: what's already playing (one tap), else pick one.
+    final playing = playbackBus.isPlaying?.call() ?? false;
+    final curPath = playbackBus.currentPath?.call();
+    String? path;
+    int startPos = 0;
+    if (playing && curPath != null && curPath.isNotEmpty) {
+      path = curPath;
+      startPos = playbackBus.currentPositionMs?.call() ?? 0;
+    } else {
+      path = await _pickSong();
+    }
+    if (path == null || !mounted) return;
+
+    Uint8List bytes;
+    try {
+      bytes = Uint8List.fromList(await readFileBytes(path));
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not read that track.', type: ToastType.error);
+      }
+      return;
+    }
+    if (bytes.isEmpty) {
+      if (mounted) {
+        showToast(context, 'That track appears to be empty.',
+            type: ToastType.error);
+      }
+      return;
+    }
+    final token = await getToken();
+    if (token == null || !mounted) return;
+    // Stop the local player so the song isn't heard twice.
+    playbackBus.onPause?.call();
+
+    showDialog<void>(
+      context: context,
+      useRootNavigator: true, // top-level so the live popup owns its own route
+      barrierDismissible: false,
+      builder: (_) => LiveSessionScreen.host(
+        token: token,
+        myUserId: myUserId,
+        receiverId: partnerId,
+        audioBytes: bytes,
+        title: _songTitle(path!),
+        peerName: partnerName,
+        startPositionMs: startPos,
+      ),
+    );
+  }
+
+  String _songTitle(String path) {
+    final name = path.split(RegExp(r'[\\/]+')).last;
+    return name.replaceAll(RegExp(r'\.[^.]+$'), '');
+  }
+
+  Future<String?> _pickSong() async {
+    final paths = List<String>.from(playlistNotifier.value);
+    if (paths.isEmpty) {
+      showToast(context, 'Open the music player and load some songs first.',
+          type: ToastType.info);
+      return null;
+    }
+    final scheme = Theme.of(context).colorScheme;
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+            Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: scheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2))),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+              child: Row(children: [
+                Text('Pick a song to play together',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: scheme.onSurface)),
+              ]),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: paths.length,
+                itemBuilder: (c, i) => ListTile(
+                  leading: Icon(Icons.music_note_rounded, color: _accent),
+                  title: Text(_songTitle(paths[i]),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => Navigator.pop(ctx, paths[i]),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _sendMoment() async {

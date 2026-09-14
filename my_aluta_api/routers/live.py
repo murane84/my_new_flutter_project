@@ -346,9 +346,12 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
     except Exception:
         pass
     finally:
-        MANAGER.detach(session_id, user.id)
+        # Pass THIS socket so a stale cleanup after a quick rejoin can't drop the
+        # new connection. Only react (peer_left / host grace) when we actually
+        # removed the current socket — otherwise a rejoin already replaced it.
+        removed = MANAGER.detach(session_id, user.id, websocket)
         current = MANAGER.get(session_id)
-        if current is not None:
+        if current is not None and removed:
             if user.id == current.host_id:
                 # The host's socket dropped. This is often just a network glitch
                 # (WiFi blip / cell handover), so DON'T tear the session down

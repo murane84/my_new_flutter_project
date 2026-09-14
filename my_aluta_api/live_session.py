@@ -128,10 +128,20 @@ class LiveSessionManager:
         if session is not None:
             session.connections[user_id] = websocket
 
-    def detach(self, session_id: str, user_id: int) -> None:
+    def detach(self, session_id: str, user_id: int, websocket: WebSocket = None) -> bool:
+        """Remove a user's connection, returning True only if one was actually
+        removed. When [websocket] is given, remove it ONLY if it's still the
+        current socket for that user: a quick leave→rejoin races — the old
+        socket's cleanup can run AFTER the new socket has attached, and without
+        this guard that stale cleanup would drop the freshly-rejoined connection
+        (and fire a bogus peer_left), so the listener could never re-enter until
+        the host restarted. Identity-checking the socket makes rejoin safe."""
         session = self.sessions.get(session_id)
-        if session is not None:
-            session.connections.pop(user_id, None)
+        if session is None:
+            return False
+        if websocket is not None and session.connections.get(user_id) is not websocket:
+            return False  # a newer socket replaced this one — leave it be
+        return session.connections.pop(user_id, None) is not None
 
     def host_connected(self, session_id: str) -> bool:
         session = self.sessions.get(session_id)

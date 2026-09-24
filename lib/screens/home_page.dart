@@ -1318,6 +1318,26 @@ class HomePageState extends rp.ConsumerState<HomePage>
       }
       return;
     }
+    // Your partner added a song to Our Playlist — warm toast + refresh the hero.
+    if (type == 'space_playlist_add') {
+      final data = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final line = (data['line'] ??
+              '${data['from_username'] ?? 'Someone'} added a song to your '
+                  'playlist 🎶')
+          .toString();
+      if (mounted) showToast(context, line, type: ToastType.info);
+      _loadSpaces();
+      return;
+    }
+    // Your partner tapped "Thinking of you" in Our Space — a warm live ping.
+    if (type == 'space_nudge') {
+      final data = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final line = (data['line'] ??
+              '${data['from_username'] ?? 'Someone'} is thinking of you 💭')
+          .toString();
+      if (mounted) showToast(context, line, type: ToastType.info);
+      return;
+    }
     // A friend posted a story → refresh the feed so their ring appears on the
     // tray + their conversation tile, without the user pulling to refresh.
     if (type == 'story_posted') {

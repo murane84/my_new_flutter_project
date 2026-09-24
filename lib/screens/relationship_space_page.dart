@@ -8,6 +8,7 @@ import 'api_service.dart';
 import 'home_page.dart' show playbackBus, playlistNotifier;
 import 'live_session_screen.dart';
 import 'token_helper.dart' show getToken;
+import '../services/now_playing_presence.dart';
 import '../utils/toast_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/popup_shell.dart';
@@ -79,10 +80,30 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   int get _id => (_space['id'] as num).toInt();
   Color get _accent => spaceThemeColor(_space['theme'] as String?);
 
+  bool _nudging = false;
+
   @override
   void initState() {
     super.initState();
     _load();
+    // Repaint when the partner starts/stops/changes what they're playing, so the
+    // "tune in together" card appears and clears live.
+    NowPlayingPresence.instance.addListener(_onPresence);
+  }
+
+  @override
+  void dispose() {
+    NowPlayingPresence.instance.removeListener(_onPresence);
+    super.dispose();
+  }
+
+  void _onPresence() {
+    if (mounted) setState(() {});
+  }
+
+  int? get _partnerId {
+    final o = _others;
+    return o.isNotEmpty ? (o.first['id'] as num?)?.toInt() : null;
   }
 
   Future<void> _load() async {
@@ -123,18 +144,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   /// the partner gets the "listen together" invite. Plays the bond a song in
   /// sync, exactly as the button promises.
   Future<void> _listenTogether() async {
-    final others = _others;
-    if (others.isEmpty) {
+    if (_others.isEmpty) {
       showToast(context, 'This space has no one to listen with yet.',
           type: ToastType.info);
       return;
     }
-    final partner = others.first;
-    final partnerId = (partner['id'] as num?)?.toInt();
-    final partnerName = (partner['username'] ?? 'them').toString();
-    final myUserId = widget.myUserId;
-    if (partnerId == null || myUserId == null) return;
-
     // The opening song: what's already playing (one tap), else pick one.
     final playing = playbackBus.isPlaying?.call() ?? false;
     final curPath = playbackBus.currentPath?.call();
@@ -147,6 +161,19 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       path = await _pickSong();
     }
     if (path == null || !mounted) return;
+    await _hostSession(path, startPos);
+  }
+
+  /// Open a live session as host playing `path` for the partner in sync. Shared
+  /// by the Listen-together button, the tune-in card, and the playlist rows.
+  Future<void> _hostSession(String path, int startPos) async {
+    final others = _others;
+    if (others.isEmpty) return;
+    final partner = others.first;
+    final partnerId = (partner['id'] as num?)?.toInt();
+    final partnerName = (partner['username'] ?? 'them').toString();
+    final myUserId = widget.myUserId;
+    if (partnerId == null || myUserId == null) return;
 
     Uint8List bytes;
     try {
@@ -178,7 +205,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         myUserId: myUserId,
         receiverId: partnerId,
         audioBytes: bytes,
-        title: _songTitle(path!),
+        title: _songTitle(path),
         peerName: partnerName,
         startPositionMs: startPos,
       ),
@@ -268,6 +295,102 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     } else {
       showToast(context, 'Could not save that moment', type: ToastType.error);
     }
+  }
+
+  /// "Thinking of you 💭" — the lightest touch across the bond. One tap fires a
+  /// warm ping (socket + push) to the partner. No thread, no payload; just "I'm
+  /// here". Debounced so a double-tap can't double-ping.
+  Future<void> _nudge() async {
+    if (_nudging) return;
+    if (_partnerId == null) {
+      showToast(context, 'No one to nudge in this space yet.',
+          type: ToastType.info);
+      return;
+    }
+    setState(() => _nudging = true);
+    final ok = await ApiService().nudgePartner(_id);
+    if (!mounted) return;
+    setState(() => _nudging = false);
+    showToast(
+      context,
+      ok ? 'Sent 💭 they will feel it' : 'Could not send — try again',
+      type: ok ? ToastType.success : ToastType.error,
+    );
+  }
+
+  // ── our playlist (shared crate) ─────────────────────────────────────────────
+  /// Add a song to the shared crate: pick from your loaded library (title
+  /// auto-filled) or type one by hand. Both partners see whatever lands here.
+  Future<void> _addToPlaylist() async {
+    if (_partnerId == null) {
+      showToast(context, 'No one to build a playlist with yet.',
+          type: ToastType.info);
+      return;
+    }
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _PlaylistAddSheet(accent: _accent),
+    );
+    if (result == null) return;
+    final saved = await ApiService().addTrack(
+      _id,
+      title: (result['title'] ?? '').toString(),
+      artist: result['artist'] as String?,
+      ref: result['ref'] as String?,
+    );
+    if (!mounted) return;
+    if (saved != null) {
+      showToast(context, 'Added to your playlist 🎶', type: ToastType.success);
+      _load();
+    } else {
+      showToast(context, 'Could not add that track', type: ToastType.error);
+    }
+  }
+
+  Future<void> _removeTrackFromCrate(int trackId) async {
+    final done = await ApiService().removeTrack(_id, trackId);
+    if (!mounted) return;
+    if (done) {
+      _load();
+    } else {
+      showToast(context, 'Could not remove', type: ToastType.error);
+    }
+  }
+
+  /// Play a crate track together — if I have that song in my own loaded library
+  /// (matched by title), host it in sync; otherwise nudge me to load it first.
+  Future<void> _playCrateTrack(Map<String, dynamic> track) async {
+    final title = (track['title'] ?? '').toString().trim();
+    final ref = (track['ref'] ?? '').toString().trim();
+    // Prefer the adder's exact path if it happens to exist in my library, else
+    // fall back to matching by title.
+    final local = _localPathFor(ref, title);
+    if (local == null) {
+      showToast(
+        context,
+        'You do not have "$title" loaded — add it to your player to listen '
+        'together.',
+        type: ToastType.info,
+      );
+      return;
+    }
+    await _hostSession(local, 0);
+  }
+
+  String? _localPathFor(String ref, String title) {
+    final paths = List<String>.from(playlistNotifier.value);
+    if (ref.isNotEmpty && paths.contains(ref)) return ref;
+    if (title.isEmpty) return null;
+    final want = title.toLowerCase();
+    for (final p in paths) {
+      if (_songTitle(p).toLowerCase() == want) return p;
+    }
+    return null;
   }
 
   Future<void> _editSpace() async {
@@ -363,7 +486,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             const SizedBox(height: 18),
             _yourSong(scheme),
             const SizedBox(height: 22),
+            _tuneInCard(scheme),
             _actions(scheme),
+            const SizedBox(height: 26),
+            _playlistSection(scheme),
             const SizedBox(height: 26),
             Row(
               children: [
@@ -658,36 +784,266 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
+  // ── tune in together ──────────────────────────────────────────────────────
+  /// When the partner is playing something right now (live "now playing"
+  /// presence), invite the user to sync up in one tap. Disappears the moment
+  /// they stop. This is the "③ tune-in" beat — catch the bond in a listening
+  /// mood and turn it into a shared session.
+  Widget _tuneInCard(ColorScheme scheme) {
+    final pid = _partnerId;
+    if (pid == null) return const SizedBox.shrink();
+    final track = NowPlayingPresence.instance.trackFor(pid);
+    if (track == null) return const SizedBox.shrink();
+    final t = (track['title'] ?? '').toString().trim();
+    final a = (track['artist'] ?? '').toString().trim();
+    if (t.isEmpty) return const SizedBox.shrink();
+    final line = a.isNotEmpty ? '$t — $a' : t;
+    final name = _others.isNotEmpty
+        ? (_others.first['username'] ?? 'They').toString()
+        : 'They';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            colors: [
+              _accent.withValues(alpha: 0.20),
+              _accent.withValues(alpha: 0.08),
+            ],
+          ),
+          border: Border.all(color: _accent.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: _accent.withValues(alpha: 0.9),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.graphic_eq_rounded,
+                  color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('$name is listening now',
+                      style: TextStyle(
+                          fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                  const SizedBox(height: 2),
+                  Text(line,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            FilledButton(
+              onPressed: _listenTogether,
+              style: FilledButton.styleFrom(
+                backgroundColor: _accent,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              ),
+              child: const Text('Tune in'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── actions ───────────────────────────────────────────────────────────────
   Widget _actions(ColorScheme scheme) {
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          child: FilledButton.icon(
-            onPressed: _listenTogether,
-            style: FilledButton.styleFrom(
-              backgroundColor: _accent,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: _listenTogether,
+                style: FilledButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: const Text('Listen together'),
+              ),
             ),
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: const Text('Listen together'),
-          ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _sendMoment,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _accent,
+                  side: BorderSide(color: _accent.withValues(alpha: 0.6)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                icon: const Icon(Icons.favorite_border_rounded),
+                label: const Text('Send a moment'),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: _sendMoment,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _accent,
-              side: BorderSide(color: _accent.withValues(alpha: 0.6)),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-            icon: const Icon(Icons.favorite_border_rounded),
-            label: const Text('Send a moment'),
-          ),
+        const SizedBox(height: 8),
+        // The lightest touch: a warm "thinking of you" ping to the partner.
+        TextButton.icon(
+          onPressed: _nudging ? null : _nudge,
+          style: TextButton.styleFrom(foregroundColor: _accent),
+          icon: _nudging
+              ? SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: _accent),
+                )
+              : const Text('💭', style: TextStyle(fontSize: 16)),
+          label: const Text('Thinking of you'),
         ),
       ],
+    );
+  }
+
+  // ── our playlist ────────────────────────────────────────────────────────
+  Widget _playlistSection(ColorScheme scheme) {
+    // 1:1 only — a shared crate needs a partner. Hidden for group Spaces.
+    if (_partnerId == null) return const SizedBox.shrink();
+    final tracks = ((_space['playlist'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((t) => Map<String, dynamic>.from(t))
+        .toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('🎶', style: const TextStyle(fontSize: 15)),
+            const SizedBox(width: 6),
+            Text('Our Playlist',
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: scheme.onSurface)),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: _addToPlaylist,
+              style: TextButton.styleFrom(foregroundColor: _accent),
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Add'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (tracks.isEmpty)
+          _playlistEmpty(scheme)
+        else
+          for (final t in tracks) _trackRow(scheme, t),
+      ],
+    );
+  }
+
+  Widget _playlistEmpty(ColorScheme scheme) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.queue_music_rounded, color: _accent, size: 26),
+          const SizedBox(height: 8),
+          Text('Start your crate',
+              style: TextStyle(
+                  fontWeight: FontWeight.w700, color: scheme.onSurface)),
+          const SizedBox(height: 4),
+          Text(
+            'Add the songs that are you two. Whoever adds, you both see it here.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _trackRow(ColorScheme scheme, Map<String, dynamic> t) {
+    final id = (t['id'] as num?)?.toInt();
+    final title = (t['title'] ?? '').toString();
+    final artist = (t['artist'] ?? '').toString();
+    final mine = t['mine'] == true;
+    final adder = mine ? 'You' : (t['added_by_username'] ?? '').toString();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: _accent.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.music_note_rounded, color: _accent, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        color: scheme.onSurface)),
+                const SizedBox(height: 2),
+                Text(
+                  artist.isNotEmpty
+                      ? '$artist · added by $adder'
+                      : 'Added by $adder',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 11, color: scheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Listen together',
+            visualDensity: VisualDensity.compact,
+            icon: Icon(Icons.play_circle_fill_rounded, color: _accent),
+            onPressed: () => _playCrateTrack(t),
+          ),
+          if (id != null)
+            IconButton(
+              tooltip: 'Remove',
+              visualDensity: VisualDensity.compact,
+              icon: Icon(Icons.close_rounded,
+                  size: 18, color: scheme.onSurfaceVariant),
+              onPressed: () => _removeTrackFromCrate(id),
+            ),
+        ],
+      ),
     );
   }
 
@@ -1165,6 +1521,192 @@ class _MomentComposerState extends State<_MomentComposer> {
                   foregroundColor: Colors.white),
               onPressed: _pin,
               child: const Text('Pin it'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── playlist add sheet ────────────────────────────────────────────────────
+class _PlaylistAddSheet extends StatefulWidget {
+  final Color accent;
+  const _PlaylistAddSheet({required this.accent});
+
+  @override
+  State<_PlaylistAddSheet> createState() => _PlaylistAddSheetState();
+}
+
+class _PlaylistAddSheetState extends State<_PlaylistAddSheet> {
+  final TextEditingController _title = TextEditingController();
+  final TextEditingController _artist = TextEditingController();
+  String? _ref; // the adder's local path when picked from the library
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _artist.dispose();
+    super.dispose();
+  }
+
+  String _titleFromPath(String path) {
+    final name = path.split(RegExp(r'[\\/]+')).last;
+    return name.replaceAll(RegExp(r'\.[^.]+$'), '');
+  }
+
+  Future<void> _pickFromLibrary() async {
+    final scheme = Theme.of(context).colorScheme;
+    final paths = List<String>.from(playlistNotifier.value);
+    if (paths.isEmpty) {
+      showToast(context, 'Open the music player and load some songs first.',
+          type: ToastType.info);
+      return;
+    }
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+            Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: scheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2))),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+              child: Row(children: [
+                Text('Pick from your songs',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: scheme.onSurface)),
+              ]),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: paths.length,
+                itemBuilder: (c, i) => ListTile(
+                  leading:
+                      Icon(Icons.music_note_rounded, color: widget.accent),
+                  title: Text(_titleFromPath(paths[i]),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => Navigator.pop(ctx, paths[i]),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (chosen != null && mounted) {
+      setState(() {
+        _title.text = _titleFromPath(chosen);
+        _ref = chosen;
+      });
+    }
+  }
+
+  void _add() {
+    final title = _title.text.trim();
+    if (title.isEmpty) {
+      showToast(context, 'Give the track a title.', type: ToastType.info);
+      return;
+    }
+    final artist = _artist.text.trim();
+    Navigator.pop(context, {
+      'title': title,
+      'artist': artist.isEmpty ? null : artist,
+      'ref': _ref,
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 18, 20, 18 + bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Add to Our Playlist',
+              style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                  color: scheme.onSurface)),
+          const SizedBox(height: 14),
+          InkWell(
+            onTap: _pickFromLibrary,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.library_music_rounded,
+                      color: widget.accent, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text('Pick from your songs',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: scheme.onSurface)),
+                  ),
+                  Icon(Icons.chevron_right_rounded,
+                      color: scheme.onSurfaceVariant),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _title,
+            decoration: InputDecoration(
+              labelText: 'Title',
+              filled: true,
+              fillColor: scheme.surfaceContainerHighest,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _artist,
+            decoration: InputDecoration(
+              labelText: 'Artist (optional)',
+              filled: true,
+              fillColor: scheme.surfaceContainerHighest,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                  backgroundColor: widget.accent,
+                  foregroundColor: Colors.white),
+              onPressed: _add,
+              child: const Text('Add'),
             ),
           ),
         ],

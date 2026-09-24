@@ -15,14 +15,26 @@ pipeline before a live surface needs it.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Optional
+from pydantic import BaseModel
 
 from database import get_db
-from models import User, RelationshipSpace, SpaceMember, PinnedMoment
+from models import (
+    User, RelationshipSpace, SpaceMember, PinnedMoment, MomentReaction,
+)
 import crud
 import schemas
 from auth import get_current_user
+from websocket_manager import safe_notify_user
+try:
+    from push import send_push_to_user
+except Exception:  # pragma: no cover - push optional
+    send_push_to_user = None
 
 router = APIRouter(prefix="/spaces", tags=["Our Space"])
+
+
+class _ReactBody(BaseModel):
+    emoji: Optional[str] = None
 
 # Free tier: one pinned Space. Raised for the Together plan (checked per-user).
 # Scarcity is the point (spec §2.1). Free keeps a single hero Space; the Together
@@ -63,18 +75,112 @@ def _space_brief(db: Session, space: RelationshipSpace) -> dict:
     }
 
 
-def _moment_dict(m: PinnedMoment) -> dict:
+def _partner_id(space: RelationshipSpace, current_user_id: int) -> Optional[int]:
+    """The other person in a 1:1 bond, or None if it isn't a clean pair."""
+    others = [m.user_id for m in space.members if m.user_id != current_user_id]
+    return others[0] if len(others) == 1 else None
+
+
+def _sibling_space(db: Session, space: RelationshipSpace,
+                   current_user_id: int) -> Optional[RelationshipSpace]:
+    """The partner's mirror of this 1:1 bond — a Space the OTHER person pinned
+    that also contains me. Because a Space is owner-scoped, each partner pins
+    their own; unifying the two lets both see ONE shared moments timeline."""
+    partner = _partner_id(space, current_user_id)
+    if partner is None:
+        return None
+    candidates = (
+        db.query(RelationshipSpace)
+        .join(SpaceMember, SpaceMember.space_id == RelationshipSpace.id)
+        .filter(RelationshipSpace.owner_id == partner,
+                SpaceMember.user_id == current_user_id)
+        .all()
+    )
+    for c in candidates:
+        if {m.user_id for m in c.members} == {partner, current_user_id}:
+            return c
+    return None
+
+
+def _bond_space_ids(db: Session, space: RelationshipSpace,
+                    current_user_id: int) -> list:
+    """Both mirror Spaces of this bond (mine + the partner's), so moments and
+    reactions are shared across the pair."""
+    ids = {space.id}
+    sib = _sibling_space(db, space, current_user_id)
+    if sib is not None:
+        ids.add(sib.id)
+    return list(ids)
+
+
+def _moment_dict(db: Session, m: PinnedMoment, current_user_id: int) -> dict:
+    author = m.author or (
+        db.query(User).filter(User.id == m.author_id).first() if m.author_id else None
+    )
+    reactions = db.query(MomentReaction).filter(
+        MomentReaction.moment_id == m.id).all()
+    mine = next((r.emoji for r in reactions
+                 if r.user_id == current_user_id and r.emoji), None)
     return {
         "id": m.id,
         "kind": m.kind,
         "ref": m.ref,
         "caption": m.caption,
         "author_id": m.author_id,
+        "author": {
+            "id": author.id,
+            "username": author.username,
+            "avatar_url": author.avatar_url,
+        } if author else None,
         "created_at": m.created_at.isoformat() if m.created_at else None,
+        "reactions": [
+            {"user_id": r.user_id, "emoji": r.emoji}
+            for r in reactions if r.emoji
+        ],
+        "my_reaction": mine,
+        "mine": m.author_id == current_user_id,
     }
 
 
-def _space_full(db: Session, space: RelationshipSpace) -> dict:
+def _notify_partner_moment(db: Session, space: RelationshipSpace,
+                           current_user: User, moment: PinnedMoment) -> None:
+    """Tell the partner a new moment landed — the little loop that makes people
+    keep sending. Best-effort over the home socket + a push."""
+    partner = _partner_id(space, current_user.id)
+    if not partner:
+        return
+    who = current_user.username or "Someone"
+    line = (f"{who} dedicated a song to you 💛"
+            if moment.kind in ("dedication", "song")
+            else f"{who} pinned a moment for you")
+    try:
+        safe_notify_user(partner, {
+            "type": "space_moment",
+            "data": {
+                "space_id": space.id,
+                "moment_id": moment.id,
+                "from_id": current_user.id,
+                "from_username": who,
+                "kind": moment.kind,
+                "caption": moment.caption,
+                "ref": moment.ref,
+                "line": line,
+            },
+        })
+    except Exception:
+        pass
+    if send_push_to_user is not None:
+        try:
+            send_push_to_user(partner, {
+                "type": "space_moment",
+                "title": "Our Space 💛",
+                "body": line,
+            })
+        except Exception:
+            pass
+
+
+def _space_full(db: Session, space: RelationshipSpace, current_user: User) -> dict:
     data = _space_brief(db, space)
     # Stats: real where we have data, honestly empty where we don't (yet).
     data["stats"] = {
@@ -85,8 +191,15 @@ def _space_full(db: Session, space: RelationshipSpace) -> dict:
         "listen_streak": 0,         # consecutive-day streak
         "next_milestone": None,     # {label, date} when computed
     }
-    data["moments"] = [_moment_dict(m) for m in
-                       sorted(space.moments, key=lambda x: x.id, reverse=True)]
+    # Moments are shared across BOTH partners' mirror Spaces, newest first.
+    bond_ids = _bond_space_ids(db, space, current_user.id)
+    moments = (
+        db.query(PinnedMoment)
+        .filter(PinnedMoment.space_id.in_(bond_ids))
+        .order_by(PinnedMoment.id.desc())
+        .all()
+    )
+    data["moments"] = [_moment_dict(db, m, current_user.id) for m in moments]
     return data
 
 
@@ -187,7 +300,7 @@ def create_space(
         db.add(SpaceMember(space_id=space.id, user_id=mid))
     db.commit()
     db.refresh(space)
-    return _space_full(db, space)
+    return _space_full(db, space, current_user)
 
 
 @router.get("/{space_id}")
@@ -197,7 +310,7 @@ def get_space(
     current_user: User = Depends(get_current_user),
 ):
     space = _owned_space_or_404(db, space_id, current_user.id)
-    return _space_full(db, space)
+    return _space_full(db, space, current_user)
 
 
 @router.patch("/{space_id}")
@@ -223,7 +336,7 @@ def update_space(
         space.is_primary = False
     db.commit()
     db.refresh(space)
-    return _space_full(db, space)
+    return _space_full(db, space, current_user)
 
 
 @router.delete("/{space_id}")
@@ -273,7 +386,69 @@ def add_moment(
     db.add(moment)
     db.commit()
     db.refresh(moment)
-    return _moment_dict(moment)
+    # Reach across to the partner: a dedication that no one hears about is only
+    # half a gift.
+    _notify_partner_moment(db, space, current_user, moment)
+    return _moment_dict(db, moment, current_user.id)
+
+
+@router.post("/{space_id}/moments/{moment_id}/react")
+def react_moment(
+    space_id: int,
+    moment_id: int,
+    payload: _ReactBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """React to a moment (a heart). Authorised by membership of the bond the
+    moment belongs to — so the PARTNER can react to what you pinned, not just the
+    owner. Sending the same emoji again clears it (toggle)."""
+    moment = db.query(PinnedMoment).filter(PinnedMoment.id == moment_id).first()
+    if not moment:
+        raise HTTPException(status_code=404, detail="Moment not found")
+    is_member = db.query(SpaceMember).filter(
+        SpaceMember.space_id == moment.space_id,
+        SpaceMember.user_id == current_user.id,
+    ).first()
+    if not is_member:
+        raise HTTPException(status_code=403, detail="Not part of this space")
+
+    emoji = (payload.emoji or "").strip()
+    existing = db.query(MomentReaction).filter(
+        MomentReaction.moment_id == moment_id,
+        MomentReaction.user_id == current_user.id,
+    ).first()
+
+    # Empty emoji, or the same one again → toggle off.
+    if not emoji or (existing and existing.emoji == emoji):
+        if existing:
+            db.delete(existing)
+            db.commit()
+        return {"ok": True, "my_reaction": None}
+
+    if existing:
+        existing.emoji = emoji
+    else:
+        db.add(MomentReaction(
+            moment_id=moment_id, user_id=current_user.id, emoji=emoji))
+    db.commit()
+
+    # Tell the moment's author their partner reacted (unless reacting to my own).
+    if moment.author_id and moment.author_id != current_user.id:
+        try:
+            safe_notify_user(moment.author_id, {
+                "type": "space_moment_react",
+                "data": {
+                    "space_id": space_id,
+                    "moment_id": moment_id,
+                    "from_id": current_user.id,
+                    "from_username": current_user.username,
+                    "emoji": emoji,
+                },
+            })
+        except Exception:
+            pass
+    return {"ok": True, "my_reaction": emoji}
 
 
 @router.delete("/{space_id}/moments/{moment_id}")

@@ -1296,6 +1296,28 @@ class HomePageState extends rp.ConsumerState<HomePage>
       LiveRoomsRegistry.instance.applyEnded((event['data'] as Map?) ?? const {});
       return;
     }
+    // Your partner pinned a moment / dedicated a song in Our Space — a warm
+    // live nudge, and refresh the hero so the new moment is there when opened.
+    if (type == 'space_moment') {
+      final data = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final line = (data['line'] ??
+              '${data['from_username'] ?? 'Someone'} pinned a moment for you 💛')
+          .toString();
+      if (mounted) showToast(context, line, type: ToastType.info);
+      _loadSpaces();
+      return;
+    }
+    // Your partner reacted to a moment you pinned.
+    if (type == 'space_moment_react') {
+      final data = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final who = (data['from_username'] ?? 'Your partner').toString();
+      final emoji = (data['emoji'] ?? '❤️').toString();
+      if (mounted) {
+        showToast(context, '$who reacted $emoji to your moment',
+            type: ToastType.info);
+      }
+      return;
+    }
     // A friend posted a story → refresh the feed so their ring appears on the
     // tray + their conversation tile, without the user pulling to refresh.
     if (type == 'story_posted') {

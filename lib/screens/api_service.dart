@@ -1269,6 +1269,30 @@ class ApiService {
     }
   }
 
+  /// React to a moment with an emoji (a heart). Sending the same one again — or
+  /// an empty string — toggles it off. Returns the server's `my_reaction`
+  /// (emoji or null) on success, or null on failure.
+  Future<Map<String, dynamic>?> reactMoment(
+      int spaceId, int momentId, String emoji) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/moments/$momentId/react'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'emoji': emoji}),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('reactMoment failed: $e');
+      return null;
+    }
+  }
+
   /// Remove a pinned moment.
   Future<bool> deleteMoment(int spaceId, int momentId) async {
     try {

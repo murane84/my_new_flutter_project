@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -243,7 +244,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   }
 
   Future<void> _sendMoment() async {
-    final result = await showModalBottomSheet<Map<String, String>>(
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -255,12 +256,13 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     if (result == null) return;
     final saved = await ApiService().addMoment(
       _id,
-      kind: result['kind'] ?? 'note',
-      caption: result['caption'],
+      kind: (result['kind'] ?? 'note').toString(),
+      ref: result['ref'] as String?,
+      caption: result['caption'] as String?,
     );
     if (!mounted) return;
     if (saved != null) {
-      showToast(context, 'Moment pinned', type: ToastType.success);
+      showToast(context, 'Moment pinned 💛', type: ToastType.success);
       _load();
       widget.onChanged?.call();
     } else {
@@ -380,7 +382,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             if (moments.isEmpty)
               _momentsEmpty(scheme)
             else
-              _momentsGrid(scheme, moments),
+              _momentsTimeline(scheme, moments),
           ],
         ),
       ),
@@ -640,50 +642,187 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
-  Widget _momentsGrid(
+  // A tender, scroll-back timeline of the bond — each moment shows who sent it,
+  // the song (if any), the note, and a heart the other can tap.
+  Widget _momentsTimeline(
       ColorScheme scheme, List<Map<String, dynamic>> moments) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: moments.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: 1.35,
-      ),
-      itemBuilder: (_, i) {
-        final m = moments[i];
-        final kind = (m['kind'] ?? 'note').toString();
-        final caption = (m['caption'] ?? '').toString();
-        return GestureDetector(
-          onLongPress: () => _confirmDeleteMoment((m['id'] as num).toInt()),
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      children: [for (final m in moments) _momentCard(scheme, m)],
+    );
+  }
+
+  Widget _momentCard(ColorScheme scheme, Map<String, dynamic> m) {
+    final id = (m['id'] as num).toInt();
+    final kind = (m['kind'] ?? 'note').toString();
+    final caption = (m['caption'] ?? '').toString();
+    final mine = m['mine'] == true;
+    final author = (m['author'] as Map?)?.cast<String, dynamic>();
+    final authorName = mine ? 'You' : (author?['username'] ?? '').toString();
+    final created = DateTime.tryParse((m['created_at'] ?? '').toString());
+    final song = _songFromRef(m['ref']);
+    final reactions = (m['reactions'] as List?) ?? const [];
+    final reactedByMe = (m['my_reaction'] ?? '').toString().isNotEmpty;
+
+    return GestureDetector(
+      onLongPress: mine ? () => _confirmDeleteMoment(id) : null,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Icon(_momentIcon(kind), color: _accent, size: 20),
+                CircleAvatar(
+                  radius: 12,
+                  backgroundColor: _accent.withValues(alpha: 0.25),
+                  child: Text(
+                    (authorName.isNotEmpty ? authorName[0] : '·').toUpperCase(),
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: _accent),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(_momentIcon(kind), size: 14, color: _accent),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    authorName.isEmpty ? _momentLabel(kind) : authorName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5,
+                        color: scheme.onSurface),
+                  ),
+                ),
                 const Spacer(),
-                Text(
-                  caption.isEmpty ? _momentLabel(kind) : caption,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
+                if (created != null)
+                  Text(_timeAgo(created),
+                      style: TextStyle(
+                          fontSize: 11, color: scheme.onSurfaceVariant)),
+              ],
+            ),
+            if (song != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: _accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.music_note_rounded, size: 16, color: _accent),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            (song['title'] ?? 'A song').toString(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12.5,
+                                color: scheme.onSurface),
+                          ),
+                          if ((song['artist'] ?? '').toString().isNotEmpty)
+                            Text(
+                              (song['artist']).toString(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: scheme.onSurfaceVariant),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (caption.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(caption,
                   style: TextStyle(
-                      fontSize: 12.5,
-                      color: scheme.onSurface,
-                      fontWeight: FontWeight.w500),
+                      fontSize: 13.5, height: 1.3, color: scheme.onSurface)),
+            ],
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                InkWell(
+                  onTap: () => _reactMoment(id, '❤️'),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          reactedByMe
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
+                          size: 18,
+                          color:
+                              reactedByMe ? _accent : scheme.onSurfaceVariant,
+                        ),
+                        if (reactions.isNotEmpty) ...[
+                          const SizedBox(width: 5),
+                          Text('${reactions.length}',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: scheme.onSurfaceVariant)),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
+  }
+
+  /// Parse a song moment's `ref` (JSON {title, artist}); null if it isn't a song.
+  Map<String, dynamic>? _songFromRef(dynamic ref) {
+    if (ref is! String || ref.trim().isEmpty) return null;
+    try {
+      final j = jsonDecode(ref);
+      if (j is Map && (j['title'] ?? '').toString().trim().isNotEmpty) {
+        return j.cast<String, dynamic>();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  String _timeAgo(DateTime dt) {
+    final d = DateTime.now().difference(dt.toLocal());
+    if (d.inMinutes < 1) return 'just now';
+    if (d.inMinutes < 60) return '${d.inMinutes}m';
+    if (d.inHours < 24) return '${d.inHours}h';
+    if (d.inDays < 7) return '${d.inDays}d';
+    return DateFormat('MMM d').format(dt.toLocal());
+  }
+
+  Future<void> _reactMoment(int momentId, String emoji) async {
+    final res = await ApiService().reactMoment(_id, momentId, emoji);
+    if (!mounted) return;
+    if (res != null) {
+      _load(); // refresh the shared timeline with the new reaction state
+    }
   }
 
   Future<void> _confirmDeleteMoment(int momentId) async {
@@ -755,12 +894,100 @@ class _MomentComposer extends StatefulWidget {
 
 class _MomentComposerState extends State<_MomentComposer> {
   final TextEditingController _c = TextEditingController();
-  String _kind = 'dedication';
+  bool _songMode = true; // the star action: dedicate a song
+  String? _songTitle;
+  String? _songArtist;
 
   @override
   void dispose() {
     _c.dispose();
     super.dispose();
+  }
+
+  String _titleFromPath(String path) {
+    final name = path.split(RegExp(r'[\\/]+')).last;
+    return name.replaceAll(RegExp(r'\.[^.]+$'), '');
+  }
+
+  Future<void> _chooseSong() async {
+    final scheme = Theme.of(context).colorScheme;
+    final paths = List<String>.from(playlistNotifier.value);
+    if (paths.isEmpty) {
+      showToast(context, 'Open the music player and load some songs first.',
+          type: ToastType.info);
+      return;
+    }
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+            Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: scheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2))),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+              child: Row(children: [
+                Text('Choose a song',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: scheme.onSurface)),
+              ]),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: paths.length,
+                itemBuilder: (c, i) => ListTile(
+                  leading:
+                      Icon(Icons.music_note_rounded, color: widget.accent),
+                  title: Text(_titleFromPath(paths[i]),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => Navigator.pop(ctx, paths[i]),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (chosen != null && mounted) {
+      setState(() {
+        _songTitle = _titleFromPath(chosen);
+        _songArtist = '';
+      });
+    }
+  }
+
+  void _pin() {
+    final text = _c.text.trim();
+    if (_songMode) {
+      if (_songTitle == null) {
+        showToast(context, 'Choose a song to dedicate.', type: ToastType.info);
+        return;
+      }
+      Navigator.pop(context, {
+        'kind': 'song',
+        'ref': jsonEncode({'title': _songTitle, 'artist': _songArtist ?? ''}),
+        'caption': text.isEmpty ? null : text,
+      });
+    } else {
+      if (text.isEmpty) {
+        Navigator.pop(context);
+        return;
+      }
+      Navigator.pop(context, {'kind': 'note', 'caption': text});
+    }
   }
 
   @override
@@ -782,27 +1009,68 @@ class _MomentComposerState extends State<_MomentComposer> {
           Wrap(
             spacing: 8,
             children: [
-              for (final k in const ['dedication', 'note', 'song'])
-                ChoiceChip(
-                  label: Text(k[0].toUpperCase() + k.substring(1)),
-                  selected: _kind == k,
-                  selectedColor: widget.accent.withValues(alpha: 0.22),
-                  onSelected: (_) => setState(() => _kind = k),
-                ),
+              ChoiceChip(
+                label: const Text('Dedicate a song'),
+                selected: _songMode,
+                selectedColor: widget.accent.withValues(alpha: 0.22),
+                onSelected: (_) => setState(() => _songMode = true),
+              ),
+              ChoiceChip(
+                label: const Text('Note'),
+                selected: !_songMode,
+                selectedColor: widget.accent.withValues(alpha: 0.22),
+                onSelected: (_) => setState(() => _songMode = false),
+              ),
             ],
           ),
+          if (_songMode) ...[
+            const SizedBox(height: 14),
+            InkWell(
+              onTap: _chooseSong,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.music_note_rounded,
+                        color: widget.accent, size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _songTitle ?? 'Choose a song…',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: _songTitle == null
+                              ? scheme.onSurfaceVariant
+                              : scheme.onSurface,
+                          fontWeight: _songTitle == null
+                              ? FontWeight.w400
+                              : FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right_rounded,
+                        color: scheme.onSurfaceVariant),
+                  ],
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           TextField(
             controller: _c,
-            autofocus: true,
             maxLines: 3,
             maxLength: 240,
             decoration: InputDecoration(
-              hintText: _kind == 'dedication'
-                  ? 'Dedicate a few words…'
-                  : _kind == 'song'
-                      ? 'Name the song and why it matters…'
-                      : 'Write a note you want to keep…',
+              hintText: _songMode
+                  ? 'Say why this song is you two… (optional)'
+                  : 'Write a note you want to keep…',
               filled: true,
               fillColor: scheme.surfaceContainerHighest,
               border: OutlineInputBorder(
@@ -818,14 +1086,7 @@ class _MomentComposerState extends State<_MomentComposer> {
               style: FilledButton.styleFrom(
                   backgroundColor: widget.accent,
                   foregroundColor: Colors.white),
-              onPressed: () {
-                final text = _c.text.trim();
-                if (text.isEmpty) {
-                  Navigator.pop(context);
-                  return;
-                }
-                Navigator.pop(context, {'kind': _kind, 'caption': text});
-              },
+              onPressed: _pin,
               child: const Text('Pin it'),
             ),
           ),

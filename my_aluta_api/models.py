@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Column, DateTime, Integer, String, Text, TIMESTAMP, ForeignKey, Boolean,
-    UniqueConstraint, LargeBinary
+    UniqueConstraint, LargeBinary, Date
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -606,4 +606,25 @@ class MomentReaction(Base):
 
     __table_args__ = (
         UniqueConstraint('moment_id', 'user_id', name='_moment_react_uc'),
+    )
+
+
+class SharedListenDay(Base):
+    """One row per (bond-pair, calendar day) the two listened together — the
+    substrate for 'days in a song', the listen streak, and 'your song'. Keyed by
+    pair_key='loId:hiId' (sorted) so a bond has a single series no matter who
+    hosted. Written best-effort when a Listen Together session forms."""
+    __tablename__ = "shared_listen_days"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pair_key = Column(String, nullable=False, index=True)
+    day = Column(Date, nullable=False)
+    # What they were on that day (best-effort) → powers "your song".
+    song_title = Column(String, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint('pair_key', 'day', name='_shared_listen_uc'),
     )

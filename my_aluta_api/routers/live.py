@@ -286,6 +286,21 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
     # timer so a transient glitch doesn't end the session after the fact.
     if is_host:
         MANAGER.cancel_host_timeout(session_id)
+    else:
+        # A listener joined the host's session → the two listened together today.
+        # Record it for the bond's streak / "days in a song" (best-effort, its
+        # own short-lived DB session, idempotent per calendar day).
+        try:
+            from bonding import record_shared_listen
+            _sldb = SessionLocal()
+            try:
+                record_shared_listen(
+                    _sldb, session.host_id, user.id,
+                    (session.track or {}).get("title"))
+            finally:
+                _sldb.close()
+        except Exception:
+            pass
 
     # Tell the newcomer the current playback state, and let others know someone
     # joined. We ALSO tell the newcomer about every peer already connected: this

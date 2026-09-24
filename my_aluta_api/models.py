@@ -581,3 +581,29 @@ class PinnedMoment(Base):
 
     space = relationship("RelationshipSpace", back_populates="moments")
     author = relationship("User", foreign_keys=[author_id], passive_deletes=True)
+
+
+class MomentReaction(Base):
+    """A partner's reaction to a pinned moment — makes moments a two-way keepsake
+    instead of a one-sided pin. One heart per person per moment (they can change
+    which). The optional `reply` column is reserved for short text replies so the
+    table needs no later migration to gain them."""
+    __tablename__ = "moment_reactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    moment_id = Column(
+        Integer, ForeignKey("pinned_moments.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    emoji = Column(String, nullable=True)   # a reaction (e.g. ❤️)
+    reply = Column(String, nullable=True)   # reserved for short replies (future)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint('moment_id', 'user_id', name='_moment_react_uc'),
+    )

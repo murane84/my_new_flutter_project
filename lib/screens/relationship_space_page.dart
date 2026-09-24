@@ -356,8 +356,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
           children: [
             _header(scheme, title),
+            _milestoneBanner(scheme),
             const SizedBox(height: 18),
             _statsRow(scheme),
+            _nextMilestoneHint(scheme),
             const SizedBox(height: 18),
             _yourSong(scheme),
             const SizedBox(height: 22),
@@ -472,6 +474,81 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         ),
         child: child,
       );
+
+  // ── milestones ───────────────────────────────────────────────────────────
+  Widget _milestoneBanner(ColorScheme scheme) {
+    final reached = (_space['stats'] as Map?)?['milestone_reached'];
+    if (reached is! Map) return const SizedBox.shrink();
+    final kind = (reached['kind'] ?? '').toString();
+    final label = (reached['label'] ?? '').toString();
+    final emoji = kind == 'streak' ? '🔥' : '💫';
+    final line = kind == 'streak'
+        ? "You're on a roll together"
+        : 'A milestone worth marking';
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            colors: [_accent.withValues(alpha: 0.85), _accent],
+          ),
+        ),
+        child: Row(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 26)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                          color: Colors.white)),
+                  const SizedBox(height: 2),
+                  Text(line,
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.9))),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _nextMilestoneHint(ColorScheme scheme) {
+    final next = (_space['stats'] as Map?)?['next_milestone'];
+    if (next is! Map) return const SizedBox.shrink();
+    final remaining = (next['remaining'] as num?)?.toInt() ?? 0;
+    final label = (next['label'] ?? '').toString();
+    final kind = (next['kind'] ?? '').toString();
+    if (remaining <= 0 || label.isEmpty) return const SizedBox.shrink();
+    final emoji = kind == 'streak' ? '🔥' : '💫';
+    final unit = kind == 'streak' ? 'day' : 'day';
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.auto_awesome_rounded, size: 13, color: _accent),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              '$remaining more $unit${remaining == 1 ? '' : 's'} to $label $emoji',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   // ── stats ─────────────────────────────────────────────────────────────────
   Widget _statsRow(ColorScheme scheme) {

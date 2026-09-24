@@ -23,6 +23,7 @@ from models import (
 )
 import crud
 import schemas
+import bonding
 from auth import get_current_user
 from websocket_manager import safe_notify_user
 try:
@@ -182,15 +183,16 @@ def _notify_partner_moment(db: Session, space: RelationshipSpace,
 
 def _space_full(db: Session, space: RelationshipSpace, current_user: User) -> dict:
     data = _space_brief(db, space)
-    # Stats: real where we have data, honestly empty where we don't (yet).
-    data["stats"] = {
-        "close_since": data["close_since"],
-        # Populated once a shared-listening surface exists; empty is truthful now.
-        "your_song": None,          # {title, artist, count} when known
-        "days_in_song": 0,          # accumulated shared-listen days
-        "listen_streak": 0,         # consecutive-day streak
-        "next_milestone": None,     # {label, date} when computed
-    }
+    # Stats: real shared-listening maths for a 1:1 bond (streak, days, your song,
+    # milestones); honestly empty for a non-pair Space.
+    partner = _partner_id(space, current_user.id)
+    close_since_date = space.created_at.date() if space.created_at else None
+    if partner is not None:
+        st = bonding.bond_stats(db, current_user.id, partner, close_since_date)
+    else:
+        st = {"days_in_song": 0, "listen_streak": 0, "your_song": None,
+              "next_milestone": None, "milestone_reached": None}
+    data["stats"] = {"close_since": data["close_since"], **st}
     # Moments are shared across BOTH partners' mirror Spaces, newest first.
     bond_ids = _bond_space_ids(db, space, current_user.id)
     moments = (

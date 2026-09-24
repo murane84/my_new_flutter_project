@@ -628,3 +628,30 @@ class SharedListenDay(Base):
     __table_args__ = (
         UniqueConstraint('pair_key', 'day', name='_shared_listen_uc'),
     )
+
+
+class PlaylistTrack(Base):
+    """"Our Playlist" — a shared crate two partners build together. A song each
+    of them can add; both see one list no matter who pinned it. Keyed by
+    pair_key='loId:hiId' (sorted) so, like the streak series, it belongs to the
+    BOND rather than to either owner-scoped Space — no migration needed to make
+    it two-way. `ref` keeps the adder's local file path (best-effort) so they can
+    tap to play it in sync; the partner may not have that exact file, so the
+    crate stays meaningful as a curated list even when a track isn't playable
+    on the other device."""
+    __tablename__ = "playlist_tracks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pair_key = Column(String, nullable=False, index=True)
+    added_by = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+        index=True,
+    )
+    title = Column(String, nullable=False)
+    artist = Column(String, nullable=True)
+    # The adder's local path / URL for the track (best-effort; may not resolve
+    # on the partner's device). Reserved-roomy so no later migration is needed.
+    ref = Column(String, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

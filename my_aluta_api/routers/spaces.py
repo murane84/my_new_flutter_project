@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from database import get_db
 from models import (
     User, RelationshipSpace, SpaceMember, PinnedMoment, MomentReaction,
+    PlaylistTrack,
 )
 import crud
 import schemas
@@ -36,6 +37,12 @@ router = APIRouter(prefix="/spaces", tags=["Our Space"])
 
 class _ReactBody(BaseModel):
     emoji: Optional[str] = None
+
+
+class _TrackBody(BaseModel):
+    title: str
+    artist: Optional[str] = None
+    ref: Optional[str] = None
 
 # Free tier: one pinned Space. Raised for the Together plan (checked per-user).
 # Scarcity is the point (spec §2.1). Free keeps a single hero Space; the Together
@@ -181,6 +188,82 @@ def _notify_partner_moment(db: Session, space: RelationshipSpace,
             pass
 
 
+def _bond_pair_key(space: RelationshipSpace, current_user_id: int):
+    """(pair_key, partner_id) for a clean 1:1 bond, else (None, None). The
+    pair_key ('loId:hiId') is what the shared crate + streak series are keyed by,
+    so both partners land on one list regardless of who owns which Space."""
+    partner = _partner_id(space, current_user_id)
+    if partner is None:
+        return None, None
+    return bonding.pair_key(current_user_id, partner), partner
+
+
+def _track_dict(db: Session, t: PlaylistTrack, current_user_id: int) -> dict:
+    adder = (
+        db.query(User).filter(User.id == t.added_by).first()
+        if t.added_by else None
+    )
+    return {
+        "id": t.id,
+        "title": t.title,
+        "artist": t.artist,
+        "ref": t.ref,
+        "added_by": t.added_by,
+        "added_by_username": adder.username if adder else None,
+        "mine": t.added_by == current_user_id,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+    }
+
+
+def _playlist_for(db: Session, space: RelationshipSpace,
+                  current_user_id: int) -> list:
+    pk, _partner = _bond_pair_key(space, current_user_id)
+    if pk is None:
+        return []
+    rows = (
+        db.query(PlaylistTrack)
+        .filter(PlaylistTrack.pair_key == pk)
+        .order_by(PlaylistTrack.id.desc())
+        .all()
+    )
+    return [_track_dict(db, t, current_user_id) for t in rows]
+
+
+def _notify_partner_playlist(db: Session, space: RelationshipSpace,
+                             current_user: User, track: PlaylistTrack) -> None:
+    """Tell the partner a song just landed in the shared crate — the little pull
+    that says 'come add to this with me'. Best-effort socket + push."""
+    partner = _partner_id(space, current_user.id)
+    if not partner:
+        return
+    who = current_user.username or "Someone"
+    line = f"{who} added '{track.title}' to your playlist 🎶"
+    try:
+        safe_notify_user(partner, {
+            "type": "space_playlist_add",
+            "data": {
+                "space_id": space.id,
+                "track_id": track.id,
+                "from_id": current_user.id,
+                "from_username": who,
+                "title": track.title,
+                "artist": track.artist,
+                "line": line,
+            },
+        })
+    except Exception:
+        pass
+    if send_push_to_user is not None:
+        try:
+            send_push_to_user(partner, {
+                "type": "space_playlist_add",
+                "title": "Our Playlist 🎶",
+                "body": line,
+            })
+        except Exception:
+            pass
+
+
 def _space_full(db: Session, space: RelationshipSpace, current_user: User) -> dict:
     data = _space_brief(db, space)
     # Stats: real shared-listening maths for a 1:1 bond (streak, days, your song,
@@ -202,6 +285,8 @@ def _space_full(db: Session, space: RelationshipSpace, current_user: User) -> di
         .all()
     )
     data["moments"] = [_moment_dict(db, m, current_user.id) for m in moments]
+    # "Our Playlist" — the shared crate for this bond (both partners' adds).
+    data["playlist"] = _playlist_for(db, space, current_user.id)
     return data
 
 
@@ -451,6 +536,117 @@ def react_moment(
         except Exception:
             pass
     return {"ok": True, "my_reaction": emoji}
+
+
+@router.post("/{space_id}/nudge")
+def nudge_partner(
+    space_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """"Thinking of you" — a one-tap tap on the shoulder across the bond. No
+    payload and nothing stored: just a warm live ping (home socket + push) to
+    the partner. The lightest loop in Our Space — "I'm here, I'm thinking of
+    you" — meant to pull them back in for a listen."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    partner = _partner_id(space, current_user.id)
+    if not partner:
+        raise HTTPException(
+            status_code=400, detail="This space has no partner to nudge")
+    who = current_user.username or "Someone"
+    line = f"{who} is thinking of you 💭"
+    try:
+        safe_notify_user(partner, {
+            "type": "space_nudge",
+            "data": {
+                "space_id": space.id,
+                "from_id": current_user.id,
+                "from_username": who,
+                "line": line,
+            },
+        })
+    except Exception:
+        pass
+    if send_push_to_user is not None:
+        try:
+            send_push_to_user(partner, {
+                "type": "space_nudge",
+                "title": "Our Space 💭",
+                "body": line,
+            })
+        except Exception:
+            pass
+    return {"ok": True}
+
+
+@router.get("/{space_id}/playlist")
+def get_playlist(
+    space_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The shared crate for this bond (both partners' adds), newest first."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    return {"tracks": _playlist_for(db, space, current_user.id)}
+
+
+@router.post("/{space_id}/playlist")
+def add_track(
+    space_id: int,
+    payload: _TrackBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Add a song to "Our Playlist". Shared across the bond via pair_key, so the
+    partner sees it too. Notifies them so the crate feels co-built."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(
+            status_code=400,
+            detail="This space has no partner to share a playlist with")
+    title = (payload.title or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="A track needs a title")
+    artist = (payload.artist or "").strip() or None
+    ref = (payload.ref or "").strip() or None
+    track = PlaylistTrack(
+        pair_key=pk,
+        added_by=current_user.id,
+        title=title[:200],
+        artist=artist[:200] if artist else None,
+        ref=ref,
+    )
+    db.add(track)
+    db.commit()
+    db.refresh(track)
+    _notify_partner_playlist(db, space, current_user, track)
+    return _track_dict(db, track, current_user.id)
+
+
+@router.delete("/{space_id}/playlist/{track_id}")
+def remove_track(
+    space_id: int,
+    track_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Remove a track from the shared crate. Either partner can prune it — it's a
+    communal list, not a personal one. Scoped by pair_key so you can only touch
+    your own bond's crate."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(status_code=404, detail="Track not found")
+    track = db.query(PlaylistTrack).filter(
+        PlaylistTrack.id == track_id,
+        PlaylistTrack.pair_key == pk,
+    ).first()
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+    db.delete(track)
+    db.commit()
+    return {"ok": True}
 
 
 @router.delete("/{space_id}/moments/{moment_id}")

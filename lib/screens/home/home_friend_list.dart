@@ -375,6 +375,7 @@ extension _HomeFriendListView on HomePageState {
             myAvatarUrl: _myAvatar,
             groups: _storyGroups,
             onReload: _fetchStories,
+            compact: true,
           ),
           const SizedBox(height: 4),
           Container(height: 1, color: scheme.outlineVariant.withAlpha(45)),

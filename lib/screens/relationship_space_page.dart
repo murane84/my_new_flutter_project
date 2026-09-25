@@ -475,6 +475,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     return AppPopupShell(
       title: 'Our Space',
       icon: Icons.favorite_rounded,
+      // Wider than the default popup so the two-column (summary rail + content)
+      // layout has real room on desktop/web/tablet. Narrow screens still get a
+      // near-full-width card and the single-column stack.
+      desktopMaxWidth: 940,
       headerAction: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

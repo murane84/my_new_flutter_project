@@ -33,12 +33,16 @@ class LiveSessionScreen extends StatefulWidget {
     this.resume = false,
     this.startPositionMs = 0,
     this.isRoom = false,
+    this.myName,
   });
 
   final LiveRole role;
   final String token;
   final int myUserId;
   final String peerName;
+  // The signed-in user's own display name — used to attribute a track a
+  // listener contributes to a room ("added by <myName>"). Optional.
+  final String? myName;
   // Host-only: true when hosting an OPEN "Listening Room" (drop-in for the whole
   // circle) rather than a 1:1 invite. Drives startRoom() vs startHost() and the
   // "waiting for your circle" copy.
@@ -110,6 +114,7 @@ class LiveSessionScreen extends StatefulWidget {
     required String sessionId,
     required Map<String, dynamic> track,
     required String peerName,
+    String? myName,
   }) =>
       LiveSessionScreen._(
         role: LiveRole.listener,
@@ -118,6 +123,7 @@ class LiveSessionScreen extends StatefulWidget {
         peerName: peerName,
         sessionId: sessionId,
         track: track,
+        myName: myName,
       );
 
   /// Reopen the currently-minimised session. Reads [activeLiveSession] for its
@@ -189,6 +195,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   // persistent panel keeps working underneath.
   VoidCallback? _prevRepeatCb;
   VoidCallback? _prevShuffleCb;
+  VoidCallback? _prevContribCb;
   bool _flagCbsBound = false;
 
   bool get _isHost => widget.role == LiveRole.host;
@@ -210,6 +217,13 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
       _prevShuffleCb?.call();
       if (mounted) setState(() {});
     };
+    // Stage C: rebuild when guest-contribution availability changes (host
+    // toggled it, or a listener synced it from the host).
+    _prevContribCb = _c.onContribChanged;
+    _c.onContribChanged = () {
+      _prevContribCb?.call();
+      if (mounted) setState(() {});
+    };
   }
 
   // Hand the repeat/shuffle callbacks back to whatever held them (the music
@@ -219,6 +233,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     _flagCbsBound = false;
     _c.onRepeatChanged = _prevRepeatCb;
     _c.onShuffleChanged = _prevShuffleCb;
+    _c.onContribChanged = _prevContribCb;
   }
 
   @override
@@ -949,6 +964,8 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
       itemCount: titles.length,
       itemBuilder: (_, i) {
         final isCurrent = i == _c.remoteIndex;
+        final by = (i < _c.remoteQueueBy.length) ? _c.remoteQueueBy[i] : null;
+        final hasBy = by != null && by.isNotEmpty;
         return ListTile(
           dense: true,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12),
@@ -969,7 +986,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
           subtitle: isCurrent
               ? Text('Now playing',
                   style: TextStyle(fontSize: 10.5, color: scheme.primary))
-              : Text('Tap to play',
+              : Text(hasBy ? 'added by $by · tap to play' : 'Tap to play',
                   style: TextStyle(
                       fontSize: 10.5, color: scheme.onSurfaceVariant)),
           // Tap a track → ask the host to jump to it (host stays authoritative).
@@ -1029,7 +1046,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
               style:
                   const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
           const Spacer(),
-          // Only the host can add to the queue; the listener's view is read-only.
+          // Host of a room: toggle whether guests may add songs (Stage C).
+          if (widget.isRoom && _isHost) _guestToggle(scheme),
+          // Only the host can add to their own queue directly.
           if (_isHost)
             TextButton.icon(
               onPressed: _addSongToQueue,
@@ -1041,7 +1060,45 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ),
+          // Guest in a room where the host opened contributions → add a song.
+          if (!_isHost && _c.remoteContribAllowed)
+            TextButton.icon(
+              onPressed: _contributeSong,
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Add a song'),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
         ],
+      ),
+    );
+  }
+
+  /// HOST (room): a compact switch for "let guests add songs to the queue".
+  Widget _guestToggle(ColorScheme scheme) {
+    final on = _c.allowContributions;
+    return InkWell(
+      onTap: () => setState(() => _c.setAllowContributions(!on)),
+      borderRadius: BorderRadius.circular(20),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(on ? Icons.group_add_rounded : Icons.group_outlined,
+                size: 16,
+                color: on ? scheme.primary : scheme.onSurfaceVariant),
+            const SizedBox(width: 4),
+            Text(on ? 'Guests can add' : 'Guests off',
+                style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: on ? scheme.primary : scheme.onSurfaceVariant)),
+          ],
+        ),
       ),
     );
   }
@@ -1078,7 +1135,11 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
           subtitle: isCurrent
               ? Text('Now playing',
                   style: TextStyle(fontSize: 10.5, color: scheme.primary))
-              : null,
+              : (t.contributor != null
+                  ? Text('added by ${t.contributor}',
+                      style: TextStyle(
+                          fontSize: 10.5, color: scheme.onSurfaceVariant))
+                  : null),
           trailing: upcoming
               ? IconButton(
                   icon: const Icon(Icons.close_rounded, size: 18),
@@ -1092,14 +1153,15 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     );
   }
 
-  Future<void> _addSongToQueue() async {
+  /// Present the loaded music library and return the chosen path (or null).
+  Future<String?> _pickLoadedSong(String heading) async {
     final loaded = playlistNotifier.value;
     if (loaded.isEmpty) {
       _snack('Load songs in your music player first');
-      return;
+      return null;
     }
     final scheme = Theme.of(context).colorScheme;
-    final chosen = await showModalBottomSheet<String>(
+    return showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
       backgroundColor: scheme.surface,
@@ -1110,12 +1172,12 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text('Add to queue',
-                    style: TextStyle(
+                child: Text(heading,
+                    style: const TextStyle(
                         fontWeight: FontWeight.bold, fontSize: 15)),
               ),
             ),
@@ -1140,6 +1202,10 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _addSongToQueue() async {
+    final chosen = await _pickLoadedSong('Add to queue');
     if (chosen == null || !mounted) return;
     try {
       final bytes = Uint8List.fromList(await readFileBytes(chosen));
@@ -1149,6 +1215,34 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
       }
       await _c.addTrack(LiveTrack(bytes: bytes, title: _titleFromPath(chosen)));
       _snack('Added to queue');
+    } catch (_) {
+      _snack('Could not read that track.');
+    }
+  }
+
+  /// LISTENER (room, contributions on): pick a song and upload it to the host,
+  /// who drops it into the shared queue attributed to me.
+  Future<void> _contributeSong() async {
+    final chosen = await _pickLoadedSong('Add a song to the room');
+    if (chosen == null || !mounted) return;
+    try {
+      final bytes = Uint8List.fromList(await readFileBytes(chosen));
+      if (bytes.isEmpty) {
+        _snack('That track appears to be empty.');
+        return;
+      }
+      if (bytes.length > 20 * 1024 * 1024) {
+        _snack('That song is too large to add to the room.');
+        return;
+      }
+      _snack('Sending to the room…');
+      final ok = await _c.contributeTrack(
+        bytes,
+        _titleFromPath(chosen),
+        by: widget.myName,
+      );
+      if (!mounted) return;
+      _snack(ok ? 'Added to the room queue 🎶' : 'Could not add that song');
     } catch (_) {
       _snack('Could not read that track.');
     }

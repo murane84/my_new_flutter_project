@@ -95,10 +95,18 @@ Future<void> endActiveLiveSession() async {
 
 /// One song in a live session's host-side queue (audio kept in memory only).
 class LiveTrack {
-  LiveTrack({required this.bytes, required this.title, this.mime = 'audio/mpeg'});
+  LiveTrack({
+    required this.bytes,
+    required this.title,
+    this.mime = 'audio/mpeg',
+    this.contributor,
+  });
   final Uint8List bytes;
   final String title;
   final String mime;
+  // Set when a listener contributed this track (their display name); null for
+  // the host's own tracks. Drives the "added by X" attribution in the queue.
+  final String? contributor;
 }
 
 class LiveSessionController {
@@ -267,7 +275,21 @@ class LiveSessionController {
   // until a track actually plays). Lets the listener SEE what the host queued
   // and know which one is current, exactly like the host does.
   final List<String> remoteQueueTitles = [];
+  // Parallel to [remoteQueueTitles]: who contributed each entry (null = host's
+  // own track). Lets a listener see "added by X" on the mirrored queue.
+  final List<String?> remoteQueueBy = [];
   int remoteIndex = 0;
+
+  /// Whether guests (listeners) may add songs to THIS room's queue. The host
+  /// owns [allowContributions] and broadcasts it; each listener mirrors it into
+  /// [remoteContribAllowed] to know whether to show its "Add a song" button.
+  /// Off by default (Stage C: host opts in per room).
+  bool allowContributions = false; // host's authoritative switch
+  bool remoteContribAllowed = false; // listener's mirror of the host switch
+
+  /// Fired when the contribution switch changes (host toggled it, or a listener
+  /// synced it from the host), so the room UI refreshes.
+  void Function()? onContribChanged;
 
   /// Sets the live title and keeps the global session title in sync so every
   /// surface (popup, music panel, banner) reflects the current song.
@@ -296,6 +318,9 @@ class LiveSessionController {
     _sendControl({
       'type': 'queue',
       'items': queue.map((t) => t.title).toList(),
+      // Parallel attribution list (null for the host's own tracks) so listeners
+      // can show "added by X" on contributed entries.
+      'by': queue.map((t) => t.contributor).toList(),
       'index': currentIndex,
     });
   }
@@ -548,6 +573,57 @@ class LiveSessionController {
     }
   }
 
+  /// HOST: allow or deny guests adding songs to the room's queue. Broadcast so
+  /// every listener shows/hides its "Add a song" button. Off by default; the
+  /// host opts in per room (Stage C). Contributed tracks land as up-next and the
+  /// host can still remove any before they play.
+  void setAllowContributions(bool on) {
+    allowContributions = on;
+    onContribChanged?.call();
+    _sendControl({'type': 'contrib', 'on': on});
+  }
+
+  /// LISTENER: contribute a track into the room's queue by uploading its bytes
+  /// to the host over our data channel (the host reassembles + enqueues it,
+  /// attributed to [by]). Framed exactly like the host's outbound stream
+  /// (contribute_start → binary frames → contribute_eos). No-op unless guest
+  /// contributions are enabled and the channel is open.
+  Future<bool> contributeTrack(Uint8List bytes, String title,
+      {String mime = 'audio/mpeg', String? by}) async {
+    if (role != LiveRole.listener) return false;
+    if (!remoteContribAllowed) return false;
+    final ch = _lchan;
+    if (ch == null) return false;
+    if (bytes.isEmpty || bytes.length > _maxContribBytes) return false;
+    try {
+      ch.send(RTCDataChannelMessage(jsonEncode({
+        't': 'contribute_start',
+        'title': title,
+        'mime': mime,
+        'by': ?by,
+      })));
+      const chunkSize = 16 * 1024;
+      const framesPerBurst = 8;
+      var sinceYield = 0;
+      for (var offset = 0; offset < bytes.length; offset += chunkSize) {
+        final end = (offset + chunkSize < bytes.length)
+            ? offset + chunkSize
+            : bytes.length;
+        ch.send(RTCDataChannelMessage.fromBinary(
+            Uint8List.sublistView(bytes, offset, end)));
+        if (++sinceYield >= framesPerBurst) {
+          sinceYield = 0;
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        }
+      }
+      ch.send(RTCDataChannelMessage(jsonEncode({'t': 'contribute_eos'})));
+      return true;
+    } catch (e) {
+      onError?.call(e);
+      return false;
+    }
+  }
+
   /// Pick the next queue index. Shuffle → a random OTHER entry (never the same
   /// track twice in a row when the queue has more than one). In order → the
   /// next entry, wrapping to 0 only when repeat=all.
@@ -697,6 +773,8 @@ class LiveSessionController {
         RTCDataChannelInit()..ordered = true, // reliable + ordered file transfer
       );
       peer.channel = ch;
+      // Guests upload contributed tracks back over this same channel (Stage C).
+      ch.onMessage = (RTCDataChannelMessage m) => _onPeerContribution(peer, m);
       ch.onDataChannelState = (RTCDataChannelState s) {
         _log('host: dc($peerId) state → $s');
         if (s == RTCDataChannelState.RTCDataChannelOpen) {
@@ -802,6 +880,73 @@ class LiveSessionController {
     for (final p in _peers.values) {
       if (p.channel != null) unawaited(_streamTrackToPeer(p, bytes, mime));
     }
+  }
+
+  // A single guest contribution can't exceed this (keeps one listener from
+  // flooding the room over a relay). ~20 MB comfortably covers a full song.
+  static const int _maxContribBytes = 20 * 1024 * 1024;
+
+  /// HOST: a guest is uploading a track over their data channel — reassemble it
+  /// (framed contribute_start → binary → contribute_eos) and drop it into the
+  /// up-next queue, attributed. Gated on [allowContributions] and size-capped.
+  /// Per-peer buffers live on [_Peer] so concurrent uploads don't interleave.
+  void _onPeerContribution(_Peer p, RTCDataChannelMessage m) {
+    if (m.isBinary) {
+      if (!p.contribbing) return;
+      p.contribBytes += m.binary.length;
+      if (p.contribBytes > _maxContribBytes) {
+        // Overflowed the cap — abandon this contribution quietly.
+        p.contribbing = false;
+        p.contribChunks.clear();
+        p.contribBytes = 0;
+      } else {
+        p.contribChunks.add(m.binary);
+      }
+      return;
+    }
+    try {
+      final j = jsonDecode(m.text) as Map<String, dynamic>;
+      switch (j['t']) {
+        case 'contribute_start':
+          if (!allowContributions) return; // guests aren't allowed right now
+          p.contribbing = true;
+          p.contribChunks.clear();
+          p.contribBytes = 0;
+          p.contribTitle = (j['title'] as String?)?.trim();
+          p.contribMime = (j['mime'] as String?) ?? 'audio/mpeg';
+          p.contribBy = (j['by'] as String?)?.trim();
+          break;
+        case 'contribute_eos':
+          if (!p.contribbing) return;
+          p.contribbing = false;
+          final total = p.contribBytes;
+          if (total <= 0) {
+            p.contribChunks.clear();
+            return;
+          }
+          final bytes = Uint8List(total);
+          var off = 0;
+          for (final c in p.contribChunks) {
+            bytes.setRange(off, off + c.length, c);
+            off += c.length;
+          }
+          p.contribChunks.clear();
+          p.contribBytes = 0;
+          final title = (p.contribTitle?.isNotEmpty ?? false)
+              ? p.contribTitle!
+              : 'A guest track';
+          final by =
+              (p.contribBy?.isNotEmpty ?? false) ? p.contribBy! : 'a guest';
+          unawaited(addTrack(LiveTrack(
+            bytes: bytes,
+            title: title,
+            mime: p.contribMime ?? 'audio/mpeg',
+            contributor: by,
+          )));
+          liveHostNotify?.call('$by added "$title" to the queue');
+          break;
+      }
+    } catch (_) {}
   }
 
   Future<void> _closePeer(int peerId) async {
@@ -1260,6 +1405,8 @@ class LiveSessionController {
         // the start.
         if (repeatMode != 'off') _sendControl({'type': 'repeat', 'mode': repeatMode});
         if (shuffle) _sendControl({'type': 'shuffle', 'on': true});
+        // Catch a late joiner up on whether guest contributions are open.
+        if (allowContributions) _sendControl({'type': 'contrib', 'on': true});
       } else if (type == 'ctl') {
         // A listener requested a transport action. The host executes it
         // authoritatively; the resulting play/pause/position/track_change
@@ -1361,9 +1508,21 @@ class LiveSessionController {
         remoteQueueTitles
           ..clear()
           ..addAll(items);
+        // Parallel attribution list (may be absent on older hosts).
+        final by = (msg['by'] as List?)
+            ?.map((e) => e == null ? null : e.toString())
+            .toList();
+        remoteQueueBy.clear();
+        if (by != null) remoteQueueBy.addAll(by);
         final idx = msg['index'];
         if (idx is int) remoteIndex = idx;
         onQueueChanged?.call();
+        break;
+      case 'contrib':
+        // Host toggled whether guests may add songs — mirror it so our
+        // "Add a song" button appears/hides.
+        remoteContribAllowed = msg['on'] == true;
+        onContribChanged?.call();
         break;
       case 'repeat':
         // Host set the session repeat mode — mirror it so our button matches.
@@ -1504,6 +1663,14 @@ class _Peer {
   // stream (which yields between frames) aborts instead of interleaving its
   // frames/eos with the newer track's on the same channel.
   int streamEpoch = 0;
+  // Inbound contribution (this guest → host upload) reassembly, per peer so
+  // concurrent uploads from different guests never interleave.
+  bool contribbing = false;
+  final List<Uint8List> contribChunks = [];
+  int contribBytes = 0;
+  String? contribTitle;
+  String? contribMime;
+  String? contribBy;
 }
 
 /// A [StreamAudioSource] backed entirely by an in-memory byte buffer.

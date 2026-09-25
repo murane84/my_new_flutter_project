@@ -1,8 +1,13 @@
 fastapi
 uvicorn
 websockets
-sqlalchemy
-psycopg2
+# Pin to the 2.0 line: an unpinned SQLAlchemy rebuild changed which Postgres
+# driver a bare "postgresql://" URL resolves to (reaching for psycopg v3), which
+# broke the deploy. Staying on 2.0.x keeps the driver + declarative API stable.
+sqlalchemy>=2.0,<2.1
+# psycopg2-binary ships a precompiled wheel (no libpq/gcc build step on the
+# host) — reliable on Railway/nixpacks. config.py forces the psycopg2 dialect.
+psycopg2-binary
 python-dotenv
 passlib==1.7.4
 bcrypt==4.0.1

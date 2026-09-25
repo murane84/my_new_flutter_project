@@ -17,6 +17,17 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+# Pin the DBAPI driver explicitly. A bare "postgresql://" URL lets SQLAlchemy
+# choose the default Postgres driver, and a newer (unpinned) SQLAlchemy reaches
+# for psycopg v3 ("postgresql+psycopg") — which we don't ship — so the app
+# crashed on boot with "ModuleNotFoundError: No module named 'psycopg'". Forcing
+# the psycopg2 dialect keeps the driver deterministic across rebuilds and
+# matches the psycopg2-binary wheel in requirements.txt. An explicit
+# "postgresql+<driver>://" URL is left untouched.
+if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace(
+        "postgresql://", "postgresql+psycopg2://", 1)
+
 if not DATABASE_URL:
     # Safe local fallback so the app can still boot for quick tests.
     DATABASE_URL = "sqlite:///./local_dev.db"

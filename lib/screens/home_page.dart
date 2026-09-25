@@ -1506,6 +1506,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         sessionId: sessionId,
         track: track,
         peerName: hostName,
+        myName: _username.isNotEmpty ? _username : null,
       ),
     );
   }

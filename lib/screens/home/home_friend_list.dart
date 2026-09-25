@@ -1798,6 +1798,7 @@ extension _HomeFriendListView on HomePageState {
         sessionId: sid,
         track: track,
         peerName: host,
+        myName: _username.isNotEmpty ? _username : null,
       ),
     );
   }

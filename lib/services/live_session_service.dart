@@ -1510,7 +1510,7 @@ class LiveSessionController {
           ..addAll(items);
         // Parallel attribution list (may be absent on older hosts).
         final by = (msg['by'] as List?)
-            ?.map((e) => e == null ? null : e.toString())
+            ?.map((e) => e?.toString())
             .toList();
         remoteQueueBy.clear();
         if (by != null) remoteQueueBy.addAll(by);

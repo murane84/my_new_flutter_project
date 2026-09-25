@@ -787,7 +787,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final stats = (_space['stats'] as Map?) ?? const {};
     final days = (stats['days_in_song'] as num?)?.toInt() ?? 0;
     final streak = (stats['listen_streak'] as num?)?.toInt() ?? 0;
-    final since = _closeSince();
+    // "Close since" already lives in the header — reuse this third slot for a
+    // live keepsake count instead of repeating the date.
+    final momentCount = (_space['moment_count'] as num?)?.toInt() ??
+        ((_space['moments'] as List?)?.length ?? 0);
     final divider = Container(
       width: 1,
       height: 26,
@@ -805,7 +808,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           divider,
           _statSeg(scheme, '🔥', '$streak', 'listen streak'),
           divider,
-          _statSeg(scheme, '💫', since == '—' ? '—' : since, 'close since'),
+          _statSeg(scheme, '💛', '$momentCount',
+              momentCount == 1 ? 'moment' : 'moments'),
         ],
       ),
     );
@@ -1074,20 +1078,44 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        // The lightest touch: a warm "thinking of you" ping to the partner.
-        TextButton.icon(
-          onPressed: _nudging ? null : _nudge,
-          style: TextButton.styleFrom(foregroundColor: _accent),
-          icon: _nudging
-              ? SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: _accent),
-                )
-              : const Text('💭', style: TextStyle(fontSize: 16)),
-          label: const Text('Thinking of you'),
+        const SizedBox(height: 10),
+        // The lightest touch: a warm "thinking of you" ping — styled as a soft
+        // accent pill so it reads as a real (if gentle) third action.
+        Center(
+          child: Material(
+            color: _accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(24),
+            child: InkWell(
+              onTap: _nudging ? null : _nudge,
+              borderRadius: BorderRadius.circular(24),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _nudging
+                        ? SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: _accent),
+                          )
+                        : const Text('💭', style: TextStyle(fontSize: 15)),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Thinking of you',
+                      style: TextStyle(
+                        color: _accent,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
       ],
     );

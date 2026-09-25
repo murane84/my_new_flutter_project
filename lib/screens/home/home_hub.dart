@@ -22,7 +22,16 @@ extension _HomeHub on HomePageState {
       ColorScheme scheme,
       Color textColor) {
     final harmony = _friendLayer == 'harmony';
-    final entries = harmony ? harmonyEntries : circleEntries;
+    // On the CIRCLE layer, pin Status & Stories at the top (compact, horizontal)
+    // and let ONLY the conversation list scroll beneath it — same behaviour as
+    // the desktop column, so the story tray never scrolls away.
+    final entries = harmony
+        ? harmonyEntries
+        : circleEntries
+            .where((e) =>
+                e['kind'] != 'stories' &&
+                !(e['kind'] == 'header' && e['label'] == 'Status & Stories'))
+            .toList();
     return Column(
       children: [
         // Contextual search — follows the open layer, each with its own box.
@@ -33,6 +42,7 @@ extension _HomeHub on HomePageState {
           harmony ? _filterSpaces : _filterFriends,
         ),
         const SizedBox(height: 10),
+        if (!harmony && _myUserId != null) _pinnedStories(scheme),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _onPullToRefresh,

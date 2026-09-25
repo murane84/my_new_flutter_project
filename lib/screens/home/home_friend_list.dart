@@ -216,6 +216,14 @@ extension _HomeFriendListView on HomePageState {
       List<Map<String, dynamic>> combined,
       ColorScheme scheme,
       Color textColor) {
+    // Desktop/web CIRCLE column: pin "Status & Stories" at the top so it never
+    // scrolls away, and let ONLY the conversation list scroll beneath it. Split
+    // the stories header + tray out of the scrollable entries.
+    final convoEntries = circleEntries
+        .where((e) =>
+            e['kind'] != 'stories' &&
+            !(e['kind'] == 'header' && e['label'] == 'Status & Stories'))
+        .toList();
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -228,14 +236,18 @@ extension _HomeFriendListView on HomePageState {
                   'your closest, in tune', _harmonyBadge(),
                   onRefresh: _onPullToRefresh),
               Padding(
-                padding: const EdgeInsets.only(right: 6, bottom: 8),
+                padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
                 child: _friendSearchField(scheme, _spaceSearchCtrl,
                     'Search your spaces…', _filterSpaces),
               ),
               Expanded(
                 child: ListView.builder(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.only(right: 6),
+                  // Symmetric horizontal inset so the Our Space hero + Live Room
+                  // cards float with EQUAL left/right margins on every platform
+                  // (web included) — an asymmetric right-only pad left the web
+                  // build's cards looking edge-shifted vs desktop/Android.
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
                   itemCount: harmonyEntries.length,
                   itemBuilder: (_, i) =>
                       _friendEntry(harmonyEntries, i, scheme, textColor),
@@ -258,10 +270,13 @@ extension _HomeFriendListView on HomePageState {
                   'your people & chats', _circleBadge(),
                   onRefresh: _onPullToRefresh),
               Padding(
-                padding: const EdgeInsets.only(left: 6, bottom: 8),
+                padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
                 child: _friendSearchField(scheme, _searchCtrl,
                     'Search chats & people…', _filterFriends),
               ),
+              // Pinned, compact Status & Stories (scrolls horizontally on its
+              // own); stays visible while the conversation list scrolls.
+              if (_myUserId != null) _pinnedStories(scheme),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _onPullToRefresh,
@@ -269,10 +284,10 @@ extension _HomeFriendListView on HomePageState {
                       ? _emptyConversations(scheme)
                       : ListView.builder(
                           physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.only(left: 6),
-                          itemCount: circleEntries.length,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          itemCount: convoEntries.length,
                           itemBuilder: (_, i) =>
-                              _friendEntry(circleEntries, i, scheme, textColor),
+                              _friendEntry(convoEntries, i, scheme, textColor),
                         ),
                 ),
               ),
@@ -287,7 +302,7 @@ extension _HomeFriendListView on HomePageState {
   /// flagship name + a soft one-line tagline + the same persistent badge the
   /// mobile hub uses, over a hairline.
   Widget _layerColumnHeader(ColorScheme scheme, String name, IconData icon,
-      String tagline, int badge, {VoidCallback? onRefresh}) {
+      String tagline, int badge, {Future<void> Function()? onRefresh}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(6, 2, 6, 8),
       child: Column(
@@ -320,19 +335,10 @@ extension _HomeFriendListView on HomePageState {
               ),
               if (badge > 0) _hubBadgePill(scheme, badge),
               // Desktop has no pull-to-refresh gesture, so give each column a
-              // manual reload (spaces / chats update on tap instead of waiting
-              // for the next automatic load).
+              // manual reload. The icon spins while the reload runs so the tap
+              // clearly registers (it looked dead before).
               if (onRefresh != null)
-                IconButton(
-                  onPressed: onRefresh,
-                  tooltip: 'Refresh',
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                  iconSize: 17,
-                  color: scheme.onSurfaceVariant,
-                  icon: const Icon(Icons.refresh_rounded),
-                ),
+                _RefreshSpinButton(onRefresh: onRefresh, scheme: scheme),
             ],
           ),
           const SizedBox(height: 8),
@@ -342,11 +348,47 @@ extension _HomeFriendListView on HomePageState {
     );
   }
 
+  /// Compact "Status & Stories" pinned atop the desktop CIRCLE column. Stays put
+  /// while the conversation list scrolls, and the tray scrolls horizontally.
+  Widget _pinnedStories(ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(6, 0, 6, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Text(
+              'STATUS & STORIES',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.1,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          StoriesTray(
+            apiBase: _apiBase,
+            myUserId: _myUserId,
+            myName: _username.isNotEmpty ? _username : 'You',
+            myAvatarUrl: _myAvatar,
+            groups: _storyGroups,
+            onReload: _fetchStories,
+          ),
+          const SizedBox(height: 4),
+          Container(height: 1, color: scheme.outlineVariant.withAlpha(45)),
+          const SizedBox(height: 4),
+        ],
+      ),
+    );
+  }
+
   /// Harmony empty-state — shown when the user has pinned no bonds yet, so the
   /// column reads as an invitation instead of a mysterious blank.
   Widget _noSpacesCard(ColorScheme scheme) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(0, 2, 6, 12),
+      margin: const EdgeInsets.fromLTRB(0, 2, 0, 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
@@ -1513,9 +1555,9 @@ extension _HomeFriendListView on HomePageState {
 
   Widget _liveRoomShell(ColorScheme scheme, bool dark, {required Widget child}) {
     return Container(
-      // Flush-left (0) to line up with the Our Space hero above it, which sits
-      // at the column edge and relies on the list's right:6 padding — a left
-      // margin here pushed the Live Room card 6px in and misaligned the cards.
+      // No horizontal margin: the Our Space hero and this card both inherit the
+      // list's symmetric horizontal:6 padding, so they float with equal left/
+      // right margins and line up on desktop, Android AND web.
       margin: const EdgeInsets.fromLTRB(0, 2, 0, 12),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
@@ -1863,6 +1905,71 @@ extension _HomeFriendListView on HomePageState {
             const SizedBox(height: 8),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// A refresh icon that spins while its async reload runs, so a desktop/web tap
+/// visibly registers instead of feeling dead. Keeps spinning a short minimum so
+/// even an instant reload reads as "picked up".
+class _RefreshSpinButton extends StatefulWidget {
+  final Future<void> Function() onRefresh;
+  final ColorScheme scheme;
+  const _RefreshSpinButton({required this.onRefresh, required this.scheme});
+
+  @override
+  State<_RefreshSpinButton> createState() => _RefreshSpinButtonState();
+}
+
+class _RefreshSpinButtonState extends State<_RefreshSpinButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 700),
+  );
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _run() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    _ctrl.repeat();
+    final start = DateTime.now();
+    try {
+      await widget.onRefresh();
+    } catch (_) {
+      // Reload failures surface elsewhere; the spinner just needs to stop.
+    }
+    // Spin for at least ~650ms so a fast reload still feels acknowledged.
+    final elapsed = DateTime.now().difference(start).inMilliseconds;
+    if (elapsed < 650) {
+      await Future<void>.delayed(Duration(milliseconds: 650 - elapsed));
+    }
+    if (!mounted) return;
+    _ctrl.stop();
+    _ctrl.value = 0;
+    setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: _busy ? null : _run,
+      tooltip: 'Refresh',
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      iconSize: 17,
+      color: widget.scheme.onSurfaceVariant,
+      icon: RotationTransition(
+        turns: _ctrl,
+        child: const Icon(Icons.refresh_rounded),
       ),
     );
   }

@@ -34,6 +34,12 @@ const Map<String, Color> kSpacePalette = {
 
 Color spaceThemeColor(String? key) => kSpacePalette[key] ?? const Color(0xFFFF5A5F);
 
+/// Bumped by the home socket whenever a bond action (moment, reaction, playlist
+/// add, accept) arrives, so an OPEN Our Space page reloads itself and both
+/// partners see the action live. It carries no payload — a bump just means
+/// "something in a bond changed, re-fetch if you're showing one".
+final ValueNotifier<int> spaceEventBus = ValueNotifier<int>(0);
+
 /// Derive a friendly title for a Space from its members (excluding me).
 String deriveSpaceName(Map<String, dynamic> space, int? myUserId) {
   final explicit = (space['name'] ?? '').toString().trim();
@@ -89,16 +95,24 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     // Repaint when the partner starts/stops/changes what they're playing, so the
     // "tune in together" card appears and clears live.
     NowPlayingPresence.instance.addListener(_onPresence);
+    // Reload when a bond action lands over the socket, so an action one partner
+    // takes shows up on the other's open page without a manual refresh.
+    spaceEventBus.addListener(_onSpaceEvent);
   }
 
   @override
   void dispose() {
     NowPlayingPresence.instance.removeListener(_onPresence);
+    spaceEventBus.removeListener(_onSpaceEvent);
     super.dispose();
   }
 
   void _onPresence() {
     if (mounted) setState(() {});
+  }
+
+  void _onSpaceEvent() {
+    if (mounted) _load();
   }
 
   int? get _partnerId {
@@ -479,6 +493,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
           children: [
             _header(scheme, title),
+            _pendingPartnerBanner(scheme),
             _milestoneBanner(scheme),
             const SizedBox(height: 18),
             _statsRow(scheme),
@@ -600,6 +615,39 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         ),
         child: child,
       );
+
+  // ── pending partner (bond not yet mutual) ────────────────────────────────
+  Widget _pendingPartnerBanner(ColorScheme scheme) {
+    if ((_space['status'] ?? 'active').toString() != 'pending_partner') {
+      return const SizedBox.shrink();
+    }
+    final name =
+        _others.isNotEmpty ? (_others.first['username'] ?? 'them').toString() : 'them';
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          color: scheme.surfaceContainerHighest,
+          border: Border.all(color: _accent.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.hourglass_top_rounded, size: 18, color: _accent),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Waiting for $name to accept — this becomes a two-way Space once '
+                'they join.',
+                style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   // ── milestones ───────────────────────────────────────────────────────────
   Widget _milestoneBanner(ColorScheme scheme) {

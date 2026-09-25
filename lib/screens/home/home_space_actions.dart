@@ -105,7 +105,9 @@ extension _HomeSpaceActions on HomePageState {
       _openSpace(existing);
       return;
     }
-    _pinAsSpace(friendId, name);
+    showToast(context, 'Send $name a bond request first to share moments',
+        type: ToastType.info);
+    _requestBond(friendId, name);
   }
 
   /// Quick manage menu for a Space (long-press the hero or a chip): open, make
@@ -225,18 +227,18 @@ extension _HomeSpaceActions on HomePageState {
     }
   }
 
-  /// Pin a friend as an Our Space (from the friend-row quick sheet). Handles the
-  /// free-tier cap with a gentle upsell instead of a dead error.
-  Future<void> _pinAsSpace(int friendId, String name) async {
-    final res = await ApiService().createSpace(memberIds: [friendId]);
+  /// Ask a friend to pin a bond. The Space is NOT created now — it's born for
+  /// both partners only when they accept. Handles the free-tier cap with a
+  /// gentle upsell instead of a dead error.
+  Future<void> _requestBond(int friendId, String name) async {
+    final res = await ApiService().requestBond(memberId: friendId);
     if (!mounted) return;
     if (res == null) {
-      showToast(context, 'Could not create the Space — try again',
+      showToast(context, 'Could not send the request — try again',
           type: ToastType.error);
       return;
     }
     if (res['error'] == 'together_required') {
-      // Hit the free-tier cap → send them to the Together paywall.
       showToast(context,
           (res['detail'] ?? 'Upgrade to Together to pin more Spaces.').toString(),
           type: ToastType.info);
@@ -244,15 +246,57 @@ extension _HomeSpaceActions on HomePageState {
       return;
     }
     if (res['error'] != null) {
-      showToast(
-          context,
-          (res['detail'] ?? 'Could not pin that Space.').toString(),
+      // e.g. already sharing / already pending / they invited you first.
+      showToast(context,
+          (res['detail'] ?? 'Could not send that request.').toString(),
           type: ToastType.info);
+      _loadBondRequests();
       return;
     }
+    showToast(context, 'Bond request sent — waiting for $name to accept 💞',
+        type: ToastType.success);
+    _loadBondRequests();
+  }
+
+  /// Accept an incoming bond request → the Space is created for both of you.
+  Future<void> _acceptBondRequest(Map<String, dynamic> req) async {
+    final id = (req['id'] as num?)?.toInt();
+    if (id == null) return;
+    final res = await ApiService().acceptBondRequest(id);
+    if (!mounted) return;
+    if (res == null) {
+      showToast(context, 'Could not accept — try again', type: ToastType.error);
+      return;
+    }
+    if (res['error'] == 'together_required') {
+      showToast(context,
+          (res['detail'] ?? 'Upgrade to Together to accept this bond.')
+              .toString(),
+          type: ToastType.info);
+      _openTogether();
+      return;
+    }
+    if (res['error'] != null) {
+      showToast(context,
+          (res['detail'] ?? 'Could not accept that request.').toString(),
+          type: ToastType.info);
+      _loadBondRequests();
+      return;
+    }
+    await _loadBondRequests();
     await _loadSpaces();
     if (!mounted) return;
-    _openSpace(res);
+    showToast(context, 'Bond pinned 💞', type: ToastType.success);
+    _openSpace(res); // the freshly created Space
+  }
+
+  /// Politely decline an incoming bond request.
+  Future<void> _declineBondRequest(Map<String, dynamic> req) async {
+    final id = (req['id'] as num?)?.toInt();
+    if (id == null) return;
+    await ApiService().declineBondRequest(id);
+    if (!mounted) return;
+    _loadBondRequests();
   }
 
   /// A friend row's long-press quick sheet: pin as Our Space, call, or open chat.
@@ -294,10 +338,10 @@ extension _HomeSpaceActions on HomePageState {
             ListTile(
               leading: Icon(Icons.favorite_rounded, color: scheme.primary),
               title: const Text('Pin as Our Space'),
-              subtitle: const Text('Make this bond a place you can return to'),
+              subtitle: const Text('Send a bond request — they confirm to pin'),
               onTap: () {
                 Navigator.pop(ctx);
-                if (fid > 0) _pinAsSpace(fid, name);
+                if (fid > 0) _requestBond(fid, name);
               },
             ),
             ListTile(

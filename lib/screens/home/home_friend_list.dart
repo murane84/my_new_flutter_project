@@ -144,6 +144,8 @@ extension _HomeFriendListView on HomePageState {
         key: const ValueKey('friendList'),
         children: [
           if (_isSharing) _buildShareBanner(scheme),
+          if (_incomingBondRequests.isNotEmpty)
+            _buildBondRequestsBanner(scheme),
           Expanded(
             child: _isLoadingFriends
                 ? const Center(child: CircularProgressIndicator())
@@ -1039,7 +1041,7 @@ extension _HomeFriendListView on HomePageState {
     final fid = int.tryParse(chosen['id'].toString()) ?? -1;
     final nm = _contactDisplayName(
         chosen['phone']?.toString(), chosen['username'] as String? ?? '');
-    if (fid > 0) _pinAsSpace(fid, nm);
+    if (fid > 0) _requestBond(fid, nm);
   }
 
   /// Banner shown across the top of the chat list while a photo shared into
@@ -1089,6 +1091,100 @@ extension _HomeFriendListView on HomePageState {
               minimumSize: const Size(0, 32),
             ),
             child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _hasIncomingBondFrom(int friendId) {
+    if (friendId <= 0) return false;
+    for (final r in _incomingBondRequests) {
+      if ((r['from_user_id'] as num?)?.toInt() == friendId) return true;
+    }
+    return false;
+  }
+
+  /// Incoming "pin a bond" requests awaiting my yes/no — a banner at the top of
+  /// the list (shown in every layer). Accept creates Our Space for both.
+  Widget _buildBondRequestsBanner(ColorScheme scheme) {
+    return Column(
+      children: [
+        for (final req in _incomingBondRequests.take(3))
+          _bondRequestCard(scheme, req),
+      ],
+    );
+  }
+
+  Widget _bondRequestCard(ColorScheme scheme, Map<String, dynamic> req) {
+    final from = (req['from_user'] as Map?)?.cast<String, dynamic>();
+    final name = (from?['username'] ?? 'Someone').toString();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.primary.withAlpha(120)),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: scheme.primary.withAlpha(60),
+            child: Text(
+              (name.isNotEmpty ? name[0] : '?').toUpperCase(),
+              style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: scheme.onPrimaryContainer),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$name wants to pin a bond 💞',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: scheme.onPrimaryContainer,
+                  ),
+                ),
+                Text(
+                  'Accept to open Our Space together',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: scheme.onPrimaryContainer.withAlpha(200),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: () => _declineBondRequest(req),
+            style: TextButton.styleFrom(
+              foregroundColor: scheme.onPrimaryContainer,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              minimumSize: const Size(0, 32),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('Decline'),
+          ),
+          const SizedBox(width: 4),
+          FilledButton(
+            onPressed: () => _acceptBondRequest(req),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              minimumSize: const Size(0, 34),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('Accept'),
           ),
         ],
       ),
@@ -1186,6 +1282,25 @@ extension _HomeFriendListView on HomePageState {
                 ],
               ),
             ),
+            if (_hasIncomingBondFrom(int.tryParse(f['id'].toString()) ?? -1)) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '💞 bond',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(width: 6),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,

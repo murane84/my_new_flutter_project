@@ -655,3 +655,31 @@ class PlaylistTrack(Base):
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class BondRequest(Base):
+    """A pending "pin a bond" handshake. A Space is created for BOTH partners
+    only once the recipient accepts — so an Our Space is mutual by construction
+    rather than a unilateral pin. Kept in its own table (auto-created; no
+    migration) so bond status can be derived at read time without altering
+    RelationshipSpace. `status`: pending | accepted | declined | cancelled."""
+    __tablename__ = "bond_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    from_user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    to_user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    status = Column(
+        String, nullable=False, default="pending", server_default="pending",
+    )
+    # An optional name the requester suggested for the Space.
+    name = Column(String, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    responded_at = Column(DateTime(timezone=True), nullable=True)

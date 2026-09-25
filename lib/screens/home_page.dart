@@ -156,6 +156,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // so it costs nothing in the background. The primary (hero) renders as the
   // wedge at the very top of the friend list.
   List<Map<String, dynamic>> _spaces = [];
+  // Pending incoming bond requests (the "pin a bond" handshake) awaiting MY
+  // yes/no — drives the friend-list banner + friend-tile chip. Loaded once + on
+  // refresh and kept live by the bond_request* socket events.
+  List<Map<String, dynamic>> _incomingBondRequests = [];
   // Monetization: whether the signed-in user is on the Together plan. Drives the
   // hero badge and unlocks the multiple-Spaces gate. Loaded once + on refresh.
   bool _isTogether = false;
@@ -310,6 +314,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _loadCachedFriends();    // show cached list instantly (no spinner flash)
     _fetchFriends();          // then refresh from network
     _loadSpaces();            // pinned "Our Space" hero(es) — one-shot, no poll
+    _loadBondRequests();      // pending "pin a bond" requests (banner + chip)
     _loadPlan();              // Together entitlement (badge + gating)
     _fetchStories();          // active stories for the tray + tile rings
     _loadLayoutState();
@@ -1305,6 +1310,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           .toString();
       if (mounted) showToast(context, line, type: ToastType.info);
       _loadSpaces();
+      spaceEventBus.value++; // live-reload an open Our Space page
       return;
     }
     // Your partner reacted to a moment you pinned.
@@ -1316,6 +1322,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         showToast(context, '$who reacted $emoji to your moment',
             type: ToastType.info);
       }
+      spaceEventBus.value++;
       return;
     }
     // Your partner added a song to Our Playlist — warm toast + refresh the hero.
@@ -1327,6 +1334,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           .toString();
       if (mounted) showToast(context, line, type: ToastType.info);
       _loadSpaces();
+      spaceEventBus.value++;
       return;
     }
     // Your partner tapped "Thinking of you" in Our Space — a warm live ping.
@@ -1336,6 +1344,33 @@ class HomePageState extends rp.ConsumerState<HomePage>
               '${data['from_username'] ?? 'Someone'} is thinking of you 💭')
           .toString();
       if (mounted) showToast(context, line, type: ToastType.info);
+      return;
+    }
+    // Someone wants to pin a bond with you → show the approval banner + toast.
+    if (type == 'bond_request') {
+      final data = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final line = (data['line'] ??
+              '${data['from_username'] ?? 'Someone'} wants to pin a bond 💞')
+          .toString();
+      if (mounted) showToast(context, line, type: ToastType.info);
+      _loadBondRequests();
+      return;
+    }
+    // They accepted your bond → the Space is live for both of you.
+    if (type == 'bond_request_accepted') {
+      final data = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final line = (data['line'] ??
+              '${data['from_username'] ?? 'Someone'} accepted — your Space is '
+                  'live 🎉')
+          .toString();
+      if (mounted) showToast(context, line, type: ToastType.success);
+      _loadBondRequests();
+      _loadSpaces();
+      return;
+    }
+    // A bond request was declined or withdrawn → clear it from my lists quietly.
+    if (type == 'bond_request_declined' || type == 'bond_request_cancelled') {
+      _loadBondRequests();
       return;
     }
     // A friend posted a story → refresh the feed so their ring appears on the
@@ -3423,6 +3458,19 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final spaces = await ApiService().listSpaces();
     if (!mounted) return;
     setState(() => _spaces = spaces);
+  }
+
+  /// Load pending bond requests (best-effort). Runs on init, on refresh, and
+  /// whenever a bond_request* socket event lands.
+  Future<void> _loadBondRequests() async {
+    final data = await ApiService().listBondRequests();
+    if (!mounted) return;
+    setState(() {
+      _incomingBondRequests = ((data['incoming'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
+          .toList();
+    });
   }
 
   /// Load the Together entitlement (fail-soft → free).

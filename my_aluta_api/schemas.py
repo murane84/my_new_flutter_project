@@ -357,6 +357,12 @@ class SpaceUpdate(BaseModel):
     is_primary: Optional[bool] = None
 
 
+class BondRequestCreate(BaseModel):
+    # The friend to invite into an Our Space; a mutual friend, 1:1.
+    member_id: int
+    name: Optional[str] = None
+
+
 class MomentCreate(BaseModel):
     kind: str                       # dedication | voice | photo | song | note
     ref: Optional[str] = None       # media URL / track JSON / text — kind decides

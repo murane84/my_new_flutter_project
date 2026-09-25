@@ -12,15 +12,17 @@ real shared-listening surface (Listen-Together / Rooms) produces the events to
 populate them. We deliberately do NOT stand up an always-on listen-logging
 pipeline before a live surface needs it.
 """
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_
 from typing import Optional
 from pydantic import BaseModel
 
 from database import get_db
 from models import (
     User, RelationshipSpace, SpaceMember, PinnedMoment, MomentReaction,
-    PlaylistTrack,
+    PlaylistTrack, BondRequest,
 )
 import crud
 import schemas
@@ -68,9 +70,10 @@ def _member_dicts(db: Session, space: RelationshipSpace) -> list:
     return out
 
 
-def _space_brief(db: Session, space: RelationshipSpace) -> dict:
+def _space_brief(db: Session, space: RelationshipSpace,
+                 current_user_id: Optional[int] = None) -> dict:
     """The light shape used in the list / hero card."""
-    return {
+    data = {
         "id": space.id,
         "owner_id": space.owner_id,
         "name": space.name,
@@ -81,6 +84,9 @@ def _space_brief(db: Session, space: RelationshipSpace) -> dict:
         "members": _member_dicts(db, space),
         "moment_count": len(space.moments),
     }
+    if current_user_id is not None:
+        data["status"] = _space_status(db, space, current_user_id)
+    return data
 
 
 def _partner_id(space: RelationshipSpace, current_user_id: int) -> Optional[int]:
@@ -119,6 +125,214 @@ def _bond_space_ids(db: Session, space: RelationshipSpace,
     if sib is not None:
         ids.add(sib.id)
     return list(ids)
+
+
+# ── bond handshake (request → approve → both Spaces created) ──────────────────
+def _pair_pending_or_accepted(db: Session, a: int, b: int):
+    """Any pending/accepted BondRequest between a and b (either direction)."""
+    return (
+        db.query(BondRequest)
+        .filter(
+            BondRequest.status.in_(("pending", "accepted")),
+            or_(
+                and_(BondRequest.from_user_id == a, BondRequest.to_user_id == b),
+                and_(BondRequest.from_user_id == b, BondRequest.to_user_id == a),
+            ),
+        )
+        .first()
+    )
+
+
+def _space_status(db: Session, space: RelationshipSpace,
+                  current_user_id: int) -> str:
+    """A bond is 'active' when both partners hold a Space for it (mutual) or an
+    accepted request exists; 'pending_partner' when only I've pinned and the
+    friend hasn't joined yet. Group Spaces are always 'active'. Status is DERIVED
+    (no column on RelationshipSpace), so legacy one-sided pins convert for free."""
+    partner = _partner_id(space, current_user_id)
+    if partner is None:
+        return "active"
+    if _sibling_space(db, space, current_user_id) is not None:
+        return "active"
+    acc = (
+        db.query(BondRequest)
+        .filter(
+            BondRequest.status == "accepted",
+            or_(
+                and_(BondRequest.from_user_id == current_user_id,
+                     BondRequest.to_user_id == partner),
+                and_(BondRequest.from_user_id == partner,
+                     BondRequest.to_user_id == current_user_id),
+            ),
+        )
+        .first()
+    )
+    return "active" if acc is not None else "pending_partner"
+
+
+def _space_owned_with(db: Session, owner_id: int, partner_id: int):
+    """The Space `owner_id` pinned whose member set is exactly {owner, partner}."""
+    candidates = (
+        db.query(RelationshipSpace)
+        .join(SpaceMember, SpaceMember.space_id == RelationshipSpace.id)
+        .filter(RelationshipSpace.owner_id == owner_id,
+                SpaceMember.user_id == partner_id)
+        .all()
+    )
+    for c in candidates:
+        if {m.user_id for m in c.members} == {owner_id, partner_id}:
+            return c
+    return None
+
+
+def _has_space_room(db: Session, user: User) -> bool:
+    count = (
+        db.query(RelationshipSpace)
+        .filter(RelationshipSpace.owner_id == user.id)
+        .count()
+    )
+    plan = current_user_plan(user)
+    cap = TOGETHER_SPACE_CAP if plan == "together" else FREE_SPACE_CAP
+    return count < cap
+
+
+def _create_bond_space(db: Session, owner_id: int, partner_id: int,
+                       name: Optional[str] = None) -> RelationshipSpace:
+    """Create one owner-scoped mirror Space for a bond (default theme; the owner
+    edits their own colour later). First Space becomes that owner's hero."""
+    owner = db.query(User).filter(User.id == owner_id).first()
+    existing = (
+        db.query(RelationshipSpace)
+        .filter(RelationshipSpace.owner_id == owner_id)
+        .count()
+    )
+    space = RelationshipSpace(
+        owner_id=owner_id,
+        name=(name or None),
+        theme=None,
+        is_primary=(existing == 0),
+        plan_tier=current_user_plan(owner) if owner else "free",
+    )
+    db.add(space)
+    db.flush()
+    db.add(SpaceMember(space_id=space.id, user_id=owner_id))
+    db.add(SpaceMember(space_id=space.id, user_id=partner_id))
+    db.commit()
+    db.refresh(space)
+    return space
+
+
+def _user_brief(db: Session, uid: int) -> Optional[dict]:
+    u = db.query(User).filter(User.id == uid).first()
+    if not u:
+        return None
+    return {"id": u.id, "username": u.username, "avatar_url": u.avatar_url}
+
+
+def _request_dict(db: Session, req: BondRequest) -> dict:
+    return {
+        "id": req.id,
+        "from_user_id": req.from_user_id,
+        "to_user_id": req.to_user_id,
+        "status": req.status,
+        "name": req.name,
+        "from_user": _user_brief(db, req.from_user_id),
+        "to_user": _user_brief(db, req.to_user_id),
+        "created_at": req.created_at.isoformat() if req.created_at else None,
+    }
+
+
+def _push(uid: int, title: str, body: str, kind: str) -> None:
+    if send_push_to_user is None:
+        return
+    try:
+        send_push_to_user(uid, {"type": kind, "title": title, "body": body})
+    except Exception:
+        pass
+
+
+def _notify_bond_request(db: Session, req: BondRequest, from_user: User) -> None:
+    who = from_user.username or "Someone"
+    line = f"{who} wants to pin a bond with you 💞"
+    try:
+        safe_notify_user(req.to_user_id, {
+            "type": "bond_request",
+            "data": {
+                "request_id": req.id,
+                "from_id": from_user.id,
+                "from_username": who,
+                "line": line,
+            },
+        })
+    except Exception:
+        pass
+    _push(req.to_user_id, "Our Space 💞", line, "bond_request")
+
+
+def _notify_bond_accepted(db: Session, req: BondRequest, accepter: User) -> None:
+    who = accepter.username or "Someone"
+    line = f"{who} accepted — your Space is live 🎉"
+    try:
+        safe_notify_user(req.from_user_id, {
+            "type": "bond_request_accepted",
+            "data": {
+                "request_id": req.id,
+                "from_id": accepter.id,
+                "from_username": who,
+                "line": line,
+            },
+        })
+    except Exception:
+        pass
+    _push(req.from_user_id, "Our Space 🎉", line, "bond_request_accepted")
+
+
+def _notify_bond_resolved(req: BondRequest, kind: str, target_id: int) -> None:
+    """A soft, socket-only nudge so a stale request clears on the other side
+    (a decline or a withdrawal). No push — a 'no' shouldn't buzz a phone."""
+    try:
+        safe_notify_user(target_id, {
+            "type": kind,
+            "data": {"request_id": req.id},
+        })
+    except Exception:
+        pass
+
+
+def _maybe_backfill_bond_request(db: Session, space: RelationshipSpace,
+                                 current_user: User) -> None:
+    """Convert a legacy one-sided pin into the handshake model: if I hold a 1:1
+    Space with no partner mirror and no request has ever passed between us, send
+    the partner a pending request so they can join. Runs once per bond."""
+    partner = _partner_id(space, current_user.id)
+    if partner is None:
+        return
+    if _sibling_space(db, space, current_user.id) is not None:
+        return
+    already = (
+        db.query(BondRequest)
+        .filter(
+            or_(
+                and_(BondRequest.from_user_id == current_user.id,
+                     BondRequest.to_user_id == partner),
+                and_(BondRequest.from_user_id == partner,
+                     BondRequest.to_user_id == current_user.id),
+            ),
+        )
+        .first()
+    )
+    if already is not None:
+        return
+    req = BondRequest(
+        from_user_id=current_user.id,
+        to_user_id=partner,
+        name=space.name,
+        status="pending",
+    )
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    _notify_bond_request(db, req, current_user)
 
 
 def _moment_dict(db: Session, m: PinnedMoment, current_user_id: int) -> dict:
@@ -265,7 +479,7 @@ def _notify_partner_playlist(db: Session, space: RelationshipSpace,
 
 
 def _space_full(db: Session, space: RelationshipSpace, current_user: User) -> dict:
-    data = _space_brief(db, space)
+    data = _space_brief(db, space, current_user.id)
     # Stats: real shared-listening maths for a 1:1 bond (streak, days, your song,
     # milestones); honestly empty for a non-pair Space.
     partner = _partner_id(space, current_user.id)
@@ -313,8 +527,15 @@ def list_spaces(
         .filter(RelationshipSpace.owner_id == current_user.id)
         .all()
     )
+    # Convert any legacy one-sided pins into the handshake model (best-effort,
+    # once per bond) so the partner gets a chance to join and go two-way.
+    for s in spaces:
+        try:
+            _maybe_backfill_bond_request(db, s, current_user)
+        except Exception:
+            db.rollback()
     spaces.sort(key=lambda s: (0 if s.is_primary else 1, -s.id))
-    return {"spaces": [_space_brief(db, s) for s in spaces]}
+    return {"spaces": [_space_brief(db, s, current_user.id) for s in spaces]}
 
 
 @router.post("")
@@ -388,6 +609,160 @@ def create_space(
     db.commit()
     db.refresh(space)
     return _space_full(db, space, current_user)
+
+
+# ── bond requests (must be declared BEFORE "/{space_id}" so the literal paths
+#    win over the int path-param) ───────────────────────────────────────────────
+@router.post("/request")
+def request_bond(
+    payload: schemas.BondRequestCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Ask a friend to pin a bond. Nothing is created yet — the Space is born for
+    BOTH of you only when they accept. They get a live banner + push."""
+    partner = int(payload.member_id)
+    if partner == current_user.id:
+        raise HTTPException(status_code=400,
+                            detail="You can't pin a bond with yourself")
+    friend_ids = crud._get_friend_ids(db, current_user.id)
+    if partner not in friend_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="You can only pin people already in your circle")
+    # Already sharing an active bond?
+    mine = _space_owned_with(db, current_user.id, partner)
+    if mine is not None and _space_status(db, mine, current_user.id) == "active":
+        raise HTTPException(status_code=409, detail="You already share a Space")
+    # A pending request already in flight?
+    pending = _pair_pending_or_accepted(db, current_user.id, partner)
+    if pending is not None and pending.status == "pending":
+        if pending.to_user_id == current_user.id:
+            raise HTTPException(
+                status_code=409,
+                detail="They already invited you — accept their request instead")
+        raise HTTPException(
+            status_code=409, detail="You already have a pending request")
+    if not _has_space_room(db, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=("The free plan keeps one Our Space. Upgrade to Together to "
+                    "pin more of the people who matter."))
+    req = BondRequest(
+        from_user_id=current_user.id,
+        to_user_id=partner,
+        name=(payload.name or None),
+        status="pending",
+    )
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    _notify_bond_request(db, req, current_user)
+    return _request_dict(db, req)
+
+
+@router.get("/requests")
+def list_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Pending bond requests: `incoming` awaiting my yes/no, `outgoing` awaiting
+    theirs."""
+    incoming = (
+        db.query(BondRequest)
+        .filter(BondRequest.to_user_id == current_user.id,
+                BondRequest.status == "pending")
+        .order_by(BondRequest.id.desc())
+        .all()
+    )
+    outgoing = (
+        db.query(BondRequest)
+        .filter(BondRequest.from_user_id == current_user.id,
+                BondRequest.status == "pending")
+        .order_by(BondRequest.id.desc())
+        .all()
+    )
+    return {
+        "incoming": [_request_dict(db, r) for r in incoming],
+        "outgoing": [_request_dict(db, r) for r in outgoing],
+    }
+
+
+@router.post("/requests/{request_id}/accept")
+def accept_bond(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Accept a bond: officially create the Space for BOTH partners (each owns
+    their own mirror with their own colour) and tell the requester it's live."""
+    req = db.query(BondRequest).filter(BondRequest.id == request_id).first()
+    if not req or req.to_user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if req.status != "pending":
+        raise HTTPException(status_code=409,
+                            detail="This request was already handled")
+    requester = req.from_user_id
+    # My (accepter's) mirror.
+    my_space = _space_owned_with(db, current_user.id, requester)
+    if my_space is None:
+        if not _has_space_room(db, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=("You've reached your Space limit. Free up one or upgrade "
+                        "to Together to accept this bond."))
+        my_space = _create_bond_space(db, current_user.id, requester)
+    # The requester's mirror (best-effort — if they're now at their cap we still
+    # keep mine; their side forms when they have room / re-open).
+    their_space = _space_owned_with(db, requester, current_user.id)
+    if their_space is None:
+        requester_user = db.query(User).filter(User.id == requester).first()
+        if requester_user is not None and _has_space_room(db, requester_user):
+            _create_bond_space(db, requester, current_user.id, name=req.name)
+    req.status = "accepted"
+    req.responded_at = datetime.now(timezone.utc)
+    db.commit()
+    _notify_bond_accepted(db, req, current_user)
+    db.refresh(my_space)
+    return _space_full(db, my_space, current_user)
+
+
+@router.post("/requests/{request_id}/decline")
+def decline_bond(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    req = db.query(BondRequest).filter(BondRequest.id == request_id).first()
+    if not req or req.to_user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if req.status != "pending":
+        raise HTTPException(status_code=409,
+                            detail="This request was already handled")
+    req.status = "declined"
+    req.responded_at = datetime.now(timezone.utc)
+    db.commit()
+    _notify_bond_resolved(req, "bond_request_declined", req.from_user_id)
+    return {"ok": True}
+
+
+@router.post("/requests/{request_id}/cancel")
+def cancel_bond(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    req = db.query(BondRequest).filter(BondRequest.id == request_id).first()
+    if not req or req.from_user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if req.status != "pending":
+        raise HTTPException(status_code=409,
+                            detail="This request was already handled")
+    req.status = "cancelled"
+    req.responded_at = datetime.now(timezone.utc)
+    db.commit()
+    _notify_bond_resolved(req, "bond_request_cancelled", req.to_user_id)
+    return {"ok": True}
 
 
 @router.get("/{space_id}")

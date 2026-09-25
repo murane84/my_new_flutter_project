@@ -1173,6 +1173,132 @@ class ApiService {
     }
   }
 
+  /// Send a bond request to a friend. Nothing is created until they accept.
+  /// Returns the request map on success; on 402/409 returns {'error', 'detail'}
+  /// so the caller can upsell / explain; null on other failures.
+  Future<Map<String, dynamic>?> requestBond({
+    required int memberId,
+    String? name,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/spaces/request'),
+        headers: _authHeaders(token),
+        body: jsonEncode({
+          'member_id': memberId,
+          'name': ?name,
+        }),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+        return null;
+      }
+      if (resp.statusCode == 402 || resp.statusCode == 409) {
+        String detail = 'Could not send that request.';
+        try {
+          final d = jsonDecode(resp.body);
+          if (d is Map && d['detail'] is String) detail = d['detail'];
+        } catch (_) {}
+        return {
+          'error': resp.statusCode == 402 ? 'together_required' : 'conflict',
+          'detail': detail,
+        };
+      }
+      return null;
+    } catch (e) {
+      _logger.w('requestBond failed: $e');
+      return null;
+    }
+  }
+
+  /// Pending bond requests: {'incoming': [...], 'outgoing': [...]}.
+  Future<Map<String, dynamic>> listBondRequests() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return {'incoming': [], 'outgoing': []};
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/spaces/requests'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return {'incoming': [], 'outgoing': []};
+    } catch (e) {
+      _logger.w('listBondRequests failed: $e');
+      return {'incoming': [], 'outgoing': []};
+    }
+  }
+
+  /// Accept a bond request → the Space is created for both. Returns the full
+  /// Space on success, or {'error','detail'} on 402/409.
+  Future<Map<String, dynamic>?> acceptBondRequest(int requestId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/spaces/requests/$requestId/accept'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+        return null;
+      }
+      if (resp.statusCode == 402 || resp.statusCode == 409) {
+        String detail = 'Could not accept that request.';
+        try {
+          final d = jsonDecode(resp.body);
+          if (d is Map && d['detail'] is String) detail = d['detail'];
+        } catch (_) {}
+        return {
+          'error': resp.statusCode == 402 ? 'together_required' : 'conflict',
+          'detail': detail,
+        };
+      }
+      return null;
+    } catch (e) {
+      _logger.w('acceptBondRequest failed: $e');
+      return null;
+    }
+  }
+
+  /// Decline a bond request (recipient).
+  Future<bool> declineBondRequest(int requestId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/spaces/requests/$requestId/decline'),
+        headers: _authHeaders(token),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.w('declineBondRequest failed: $e');
+      return false;
+    }
+  }
+
+  /// Withdraw a bond request you sent (requester).
+  Future<bool> cancelBondRequest(int requestId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/spaces/requests/$requestId/cancel'),
+        headers: _authHeaders(token),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.w('cancelBondRequest failed: $e');
+      return false;
+    }
+  }
+
   /// Full detail for one Space: members, stats, moments.
   Future<Map<String, dynamic>?> getSpace(int id) async {
     try {

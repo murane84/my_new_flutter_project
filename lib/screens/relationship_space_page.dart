@@ -87,6 +87,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   Color get _accent => spaceThemeColor(_space['theme'] as String?);
 
   bool _nudging = false;
+  // Collapsible sections (space-saving on mobile; both start open on first view
+  // so nothing feels hidden, and the user can fold what they don't need).
+  bool _detailsOpen = false; // "Your song & milestones"
+  bool _playlistOpen = true; // "Our Playlist"
 
   @override
   void initState() {
@@ -486,49 +490,103 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           ),
         ],
       ),
-      builder: (context, isWide) => RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-          children: [
-            _header(scheme, title),
-            _pendingPartnerBanner(scheme),
-            _milestoneBanner(scheme),
-            const SizedBox(height: 18),
-            _statsRow(scheme),
-            _nextMilestoneHint(scheme),
-            const SizedBox(height: 18),
-            _yourSong(scheme),
-            const SizedBox(height: 22),
-            _tuneInCard(scheme),
-            _actions(scheme),
-            const SizedBox(height: 26),
-            _playlistSection(scheme),
-            const SizedBox(height: 26),
-            Row(
+      builder: (context, isWide) => LayoutBuilder(
+        builder: (context, constraints) {
+          // Two columns once there's real width (tablet landscape / desktop):
+          // the "summary" rail on the left, the living content (playlist +
+          // moments) on the right so it gets the room it deserves.
+          final twoCol = constraints.maxWidth >= 720;
+          final left = _summarySections(scheme, title);
+          final right = _contentSections(scheme, moments);
+          if (twoCol) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Pinned moments',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        color: scheme.onSurface)),
-                const Spacer(),
-                if (_loading)
-                  const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2)),
+                SizedBox(
+                  width: 340,
+                  child: RefreshIndicator(
+                    onRefresh: _load,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 8, 8, 20),
+                      children: left,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _load,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(8, 8, 16, 20),
+                      children: right,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
+          return RefreshIndicator(
+            onRefresh: _load,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+              children: [
+                ...left,
+                const SizedBox(height: 24),
+                ...right,
               ],
             ),
-            const SizedBox(height: 12),
-            if (moments.isEmpty)
-              _momentsEmpty(scheme)
-            else
-              _momentsTimeline(scheme, moments),
-          ],
-        ),
+          );
+        },
       ),
+    );
+  }
+
+  /// The identity + at-a-glance rail: who you are, the slim stats bar, the live
+  /// actions, and the collapsible bond details.
+  List<Widget> _summarySections(ColorScheme scheme, String title) => [
+        _header(scheme, title),
+        _pendingPartnerBanner(scheme),
+        _milestoneBanner(scheme),
+        const SizedBox(height: 14),
+        _statsStrip(scheme),
+        const SizedBox(height: 14),
+        _tuneInCard(scheme),
+        _actions(scheme),
+        const SizedBox(height: 14),
+        _bondDetails(scheme),
+      ];
+
+  /// The living content: the shared playlist and the pinned-moments timeline.
+  List<Widget> _contentSections(
+          ColorScheme scheme, List<Map<String, dynamic>> moments) =>
+      [
+        _playlistSection(scheme),
+        const SizedBox(height: 22),
+        _momentsHeader(scheme),
+        const SizedBox(height: 12),
+        if (moments.isEmpty)
+          _momentsEmpty(scheme)
+        else
+          _momentsTimeline(scheme, moments),
+      ];
+
+  Widget _momentsHeader(ColorScheme scheme) {
+    return Row(
+      children: [
+        Text('Pinned moments',
+            style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+                color: scheme.onSurface)),
+        const Spacer(),
+        if (_loading)
+          const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2)),
+      ],
     );
   }
 
@@ -536,7 +594,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   Widget _header(ColorScheme scheme, String title) {
     final others = _others;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
         gradient: LinearGradient(
@@ -551,18 +609,18 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       child: Column(
         children: [
           _overlappedAvatars(others),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           Text(
             title,
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 22,
+              fontSize: 20,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.2,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 5),
           Text(
             'Close since ${_closeSince()}',
             style: TextStyle(
@@ -579,26 +637,26 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final rightName =
         others.isNotEmpty ? (others.first['username'] ?? '').toString() : '';
     return SizedBox(
-      height: 72,
+      height: 62,
       child: Stack(
         alignment: Alignment.center,
         children: [
           Padding(
-            padding: const EdgeInsets.only(right: 48),
+            padding: const EdgeInsets.only(right: 44),
             child: _ringed(
               child: InitialsAvatar(
                 name: (widget.myName ?? 'You').isEmpty ? 'You' : widget.myName!,
-                radius: 30,
+                radius: 26,
                 imageUrl: widget.myAvatarUrl,
               ),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.only(left: 48),
+            padding: const EdgeInsets.only(left: 44),
             child: _ringed(
               child: InitialsAvatar(
                   name: rightName.isEmpty ? '?' : rightName,
-                  radius: 30,
+                  radius: 26,
                   imageUrl: rightUrl),
             ),
           ),
@@ -724,111 +782,184 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
-  // ── stats ─────────────────────────────────────────────────────────────────
-  Widget _statsRow(ColorScheme scheme) {
+  // ── stats (slim, one bar) ─────────────────────────────────────────────────
+  Widget _statsStrip(ColorScheme scheme) {
     final stats = (_space['stats'] as Map?) ?? const {};
     final days = (stats['days_in_song'] as num?)?.toInt() ?? 0;
     final streak = (stats['listen_streak'] as num?)?.toInt() ?? 0;
-    return Row(
-      children: [
-        _statTile(scheme, '🎧', '$days', 'days in a song'),
-        const SizedBox(width: 10),
-        _statTile(scheme, '🔥', '$streak', 'listen streak'),
-        const SizedBox(width: 10),
-        _statTile(scheme, '💫', _closeSince() == '—' ? '—' : 'Since',
-            _closeSince()),
-      ],
+    final since = _closeSince();
+    final divider = Container(
+      width: 1,
+      height: 26,
+      color: scheme.outlineVariant.withValues(alpha: 0.5),
     );
-  }
-
-  Widget _statTile(
-      ColorScheme scheme, String emoji, String big, String label) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          children: [
-            Text(emoji, style: const TextStyle(fontSize: 18)),
-            const SizedBox(height: 6),
-            Text(big,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                    color: scheme.onSurface)),
-            const SizedBox(height: 2),
-            Text(label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 10.5, color: scheme.onSurfaceVariant)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── your song ───────────────────────────────────────────────────────────
-  Widget _yourSong(ColorScheme scheme) {
-    final song = (_space['stats'] as Map?)?['your_song'];
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: _accent.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(Icons.music_note_rounded, color: _accent),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: song is Map
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Your song',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: scheme.onSurfaceVariant)),
-                      const SizedBox(height: 2),
-                      Text('${song['title'] ?? ''}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: scheme.onSurface)),
-                    ],
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Your song',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: scheme.onSurface)),
-                      const SizedBox(height: 3),
-                      Text(
-                        'The track you two play most will show here as you listen together.',
-                        style: TextStyle(
-                            fontSize: 12, color: scheme.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-          ),
+          _statSeg(scheme, '🎧', '$days', 'days in a song'),
+          divider,
+          _statSeg(scheme, '🔥', '$streak', 'listen streak'),
+          divider,
+          _statSeg(scheme, '💫', since == '—' ? '—' : since, 'close since'),
         ],
       ),
+    );
+  }
+
+  Widget _statSeg(
+      ColorScheme scheme, String emoji, String value, String label) {
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 13)),
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13.5,
+                        color: scheme.onSurface)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 1),
+          Text(label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style:
+                  TextStyle(fontSize: 9.5, color: scheme.onSurfaceVariant)),
+        ],
+      ),
+    );
+  }
+
+  // ── bond details (collapsible: your song + next milestone) ────────────────
+  Widget _bondDetails(ColorScheme scheme) {
+    final stats = (_space['stats'] as Map?) ?? const {};
+    final song = stats['your_song'];
+    final songTitle =
+        (song is Map) ? (song['title'] ?? '').toString().trim() : '';
+    final next = stats['next_milestone'];
+    final hasHint =
+        next is Map && ((next['remaining'] as num?)?.toInt() ?? 0) > 0;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () => setState(() => _detailsOpen = !_detailsOpen),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+              child: Row(
+                children: [
+                  Icon(Icons.auto_awesome_rounded, size: 18, color: _accent),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Your song & milestones',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                color: scheme.onSurface)),
+                        if (!_detailsOpen) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            songTitle.isNotEmpty
+                                ? songTitle
+                                : 'Tap to see your bond details',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 11.5,
+                                color: scheme.onSurfaceVariant),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: _detailsOpen ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: Icon(Icons.expand_more_rounded,
+                        color: scheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_detailsOpen)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              child: Column(
+                children: [
+                  _yourSongInner(scheme, song),
+                  if (hasHint) ...[
+                    const SizedBox(height: 12),
+                    _nextMilestoneHint(scheme),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _yourSongInner(ColorScheme scheme, dynamic song) {
+    final has = song is Map && (song['title'] ?? '').toString().trim().isNotEmpty;
+    return Row(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: _accent.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Icon(Icons.music_note_rounded, color: _accent, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Your song',
+                  style:
+                      TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+              const SizedBox(height: 2),
+              Text(
+                has
+                    ? '${song['title']}'
+                    : 'The track you two play most shows here as you listen together.',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontWeight: has ? FontWeight.w700 : FontWeight.w400,
+                    fontSize: has ? 14 : 12,
+                    color: has ? scheme.onSurface : scheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -975,14 +1106,40 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       children: [
         Row(
           children: [
-            Text('🎶', style: const TextStyle(fontSize: 15)),
-            const SizedBox(width: 6),
-            Text('Our Playlist',
-                style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    color: scheme.onSurface)),
-            const Spacer(),
+            Expanded(
+              child: InkWell(
+                onTap: () => setState(() => _playlistOpen = !_playlistOpen),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      const Text('🎶', style: TextStyle(fontSize: 15)),
+                      const SizedBox(width: 6),
+                      Text('Our Playlist',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: scheme.onSurface)),
+                      if (tracks.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Text('(${tracks.length})',
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: scheme.onSurfaceVariant)),
+                      ],
+                      const SizedBox(width: 4),
+                      AnimatedRotation(
+                        turns: _playlistOpen ? 0.5 : 0,
+                        duration: const Duration(milliseconds: 180),
+                        child: Icon(Icons.expand_more_rounded,
+                            size: 20, color: scheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
             TextButton.icon(
               onPressed: _addToPlaylist,
               style: TextButton.styleFrom(foregroundColor: _accent),
@@ -991,11 +1148,13 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        if (tracks.isEmpty)
-          _playlistEmpty(scheme)
-        else
-          for (final t in tracks) _trackRow(scheme, t),
+        if (_playlistOpen) ...[
+          const SizedBox(height: 8),
+          if (tracks.isEmpty)
+            _playlistEmpty(scheme)
+          else
+            for (final t in tracks) _trackRow(scheme, t),
+        ],
       ],
     );
   }

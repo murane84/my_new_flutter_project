@@ -56,6 +56,16 @@ extension _HomeSpaceActions on HomePageState {
         myName: _username.isNotEmpty ? _username : 'You',
         myAvatarUrl: _avatarFull(_myAvatar),
         onChanged: _loadSpaces,
+        // Hand Our Space the SAME app-wide ⋮ menu the home header uses, so the
+        // user can navigate the platform (Together, Groups, Friends, Profile,
+        // Sign out…) without minimising the Space first. Built here because
+        // these actions live on HomePageState; anchored to the Space header's
+        // own context so its popups present over the current route.
+        mainMenuBuilder: (menuCtx) => _buildOverflowMenu(
+          menuCtx,
+          Provider.of<ThemeProvider>(menuCtx, listen: false),
+          Theme.of(menuCtx).colorScheme,
+        ),
       ),
       // Dismiss reads as "minimize" — and when we know where it was opened from,
       // it genies straight back into that bond point instead of sliding down.

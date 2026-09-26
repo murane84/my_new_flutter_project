@@ -1,5 +1,29 @@
 import 'package:flutter/material.dart';
 
+/// The global-space position of the most recent pointer-down anywhere in the
+/// app, recorded by [GlobalTapOrigin] near the app root. Every [showAppPopup]
+/// defaults its genie origin to this, so opening/closing ANY popup animates
+/// from the exact button/tile the user just tapped — its real "home" spot —
+/// without each call site having to pass a position.
+Offset? gLastTapDownGlobal;
+
+/// Wrap the app (via MaterialApp.builder) with this so every tap records its
+/// point for the popup genie. Translucent + non-consuming: it never affects
+/// hit-testing, scrolling or taps.
+class GlobalTapOrigin extends StatelessWidget {
+  final Widget child;
+  const GlobalTapOrigin({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (e) => gLastTapDownGlobal = e.position,
+      child: child,
+    );
+  }
+}
+
 /// Presents [child] as a popup that emerges FROM THE FOOTER, floating upward —
 /// consistent with the music panel and the app's bottom sheets (rather than
 /// dropping down from the header, which clashed with those surfaces and their
@@ -21,14 +45,17 @@ Future<T?> showAppPopup<T>(
   // Drop any active text focus so opening the popup never carries a keyboard
   // in with it.
   FocusManager.instance.primaryFocus?.unfocus();
-  // Resolve the launch point to an alignment for the scale anchor.
-  final Alignment? genieAlign = origin == null
+  // GLOBAL RULE: default the genie origin to wherever the user just tapped, so
+  // every page opens from / minimises back into the tapped button/tile. An
+  // explicit [origin] (e.g. the recorded bond tap) still wins.
+  final launchPoint = origin ?? gLastTapDownGlobal;
+  final Alignment? genieAlign = launchPoint == null
       ? null
       : () {
           final size = MediaQuery.of(context).size;
           return Alignment(
-            ((origin.dx / size.width) * 2 - 1).clamp(-1.0, 1.0),
-            ((origin.dy / size.height) * 2 - 1).clamp(-1.0, 1.0),
+            ((launchPoint.dx / size.width) * 2 - 1).clamp(-1.0, 1.0),
+            ((launchPoint.dy / size.height) * 2 - 1).clamp(-1.0, 1.0),
           );
         }();
   final result = await showGeneralDialog<T>(
@@ -46,12 +73,13 @@ Future<T?> showAppPopup<T>(
       );
       if (genieAlign != null) {
         // Genie: shrink deep into the launch point (and grow out of it on open)
-        // while fading, so the page looks sucked into / poured out of the bond.
-        // The RepaintBoundary keeps the scale/fade transforming a cached layer.
+        // while fading, so the page looks sucked into / poured out of the exact
+        // spot the user tapped. RepaintBoundary keeps the scale/fade transforming
+        // a cached layer for a smooth run.
         return FadeTransition(
           opacity: curved,
           child: ScaleTransition(
-            scale: Tween<double>(begin: 0.08, end: 1.0).animate(curved),
+            scale: Tween<double>(begin: 0.12, end: 1.0).animate(curved),
             alignment: genieAlign,
             child: RepaintBoundary(child: c),
           ),

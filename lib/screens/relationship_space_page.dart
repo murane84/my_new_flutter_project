@@ -382,6 +382,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   // On narrow screens the section list lives in a left drawer that slides in
   // over the content; this tracks whether it's showing.
   bool _navDrawerOpen = false;
+  // The global-space point the CURRENT section was opened from (the tapped tile
+  // on the dashboard). Drives the genie so a section scales OUT of that tile on
+  // open and is absorbed BACK into it on close — the same "emerge from what you
+  // tapped" language the whole Our Space popup uses.
+  Offset? _sectionOrigin;
   // Drives the book's page-turn between memories (adjacent pages peek like a
   // real book at viewportFraction < 1).
   final PageController _diaryPageCtrl = PageController(viewportFraction: 0.92);
@@ -848,25 +853,34 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           ),
         ],
       ),
-      // Our Diary takes over the body as a full page BELOW this header (the
+      // A section takes over the body as a full page BELOW this header (the
       // "Our Space" title + minimize stay visible); its own back arrow returns.
-      // The two views cross-fade + gently rise/settle so opening and closing the
-      // diary eases in and out instead of snapping.
+      // The two views cross-fade + GENIE from the tapped tile: the incoming view
+      // scales up out of that exact spot and the outgoing one is absorbed back
+      // into it — the same "emerge from what you tapped" language the whole Our
+      // Space popup uses, so opening a section feels continuous with opening the
+      // page itself instead of a flat cross-fade.
       builder: (context, isWide) => AnimatedSwitcher(
-        duration: const Duration(milliseconds: 340),
+        duration: const Duration(milliseconds: 360),
         switchInCurve: Curves.easeOutCubic,
         switchOutCurve: Curves.easeInCubic,
         transitionBuilder: (child, anim) {
-          final entering = child.key == const ValueKey('section');
-          // The section rises up as it emerges; the dashboard settles back down
-          // — so the two feel like one turning to the other, not a hard cut.
-          final begin =
-              entering ? const Offset(0, 0.05) : const Offset(0, -0.03);
+          // Anchor the scale at the tile the section was launched from. Both the
+          // incoming child (anim 0→1: grows from the tile) and the outgoing one
+          // (anim 1→0: shrinks into the tile) share this alignment, so open and
+          // close both pivot on that point. Fall back to centre if we never
+          // recorded a tap.
+          final align =
+              genieAlignmentFor(context, _sectionOrigin) ?? Alignment.center;
           return FadeTransition(
             opacity: anim,
-            child: SlideTransition(
-              position: Tween<Offset>(begin: begin, end: Offset.zero)
-                  .animate(anim),
+            child: ScaleTransition(
+              // Start at 0.82 (not 0) — a gentle grow/tuck, not a full zoom, so
+              // the switch stays elegant inside the already-open page.
+              scale: Tween<double>(begin: 0.82, end: 1.0).animate(
+                CurvedAnimation(parent: anim, curve: Curves.easeOutCubic),
+              ),
+              alignment: align,
               child: child,
             ),
           );
@@ -1224,6 +1238,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   void _goSection(String key) =>
       setState(() {
+        // Remember WHERE this was tapped so the section genies out of that exact
+        // tile (dashboard) or sidebar/drawer row. Only capture on a fresh open
+        // from the dashboard — switching section→section keeps the first tile's
+        // origin so a later "back" still collapses toward where you came in.
+        if (_section == null) _sectionOrigin = gLastTapDownGlobal;
         _section = key;
         _navDrawerOpen = false;
       });

@@ -15,6 +15,7 @@ import '../utils/app_config.dart';
 import '../screens/api_service.dart';
 import 'audio_handler.dart';
 import 'ice_config.dart';
+import 'live_audio_cache.dart';
 
 /// "Listen together" live session client.
 ///
@@ -107,6 +108,12 @@ class LiveTrack {
   // Set when a listener contributed this track (their display name); null for
   // the host's own tracks. Drives the "added by X" attribution in the queue.
   final String? contributor;
+
+  // Content fingerprint of [bytes] (lazy + cached). Used to offer/skip transfers
+  // so a listener that already holds this exact song plays it from its own cache
+  // instead of waiting for the whole stream again.
+  String? _hash;
+  String get hash => _hash ??= liveTrackFingerprint(bytes);
 }
 
 class LiveSessionController {
@@ -123,6 +130,9 @@ class LiveSessionController {
     } else {
       player = AudioPlayer();
     }
+    // Warm the persistent audio cache so cache hits (skip re-download) work from
+    // the first track. Best-effort; never blocks session start.
+    LiveAudioCache.instance.init();
   }
 
   static bool get _androidEffects =>
@@ -214,6 +224,28 @@ class LiveSessionController {
   final BytesBuilder _incoming = BytesBuilder(copy: false);
   String _incomingMime = 'audio/mpeg';
   bool _listenerStarted = false;
+
+  // ── prefetch / cache state ────────────────────────────────────────────────
+  // Host: fingerprint of the current track's bytes, so we can OFFER it (by hash)
+  // before streaming — a listener that already cached it skips the transfer.
+  String? _hostHash;
+  // Host: bumped on every track change so a stale scheduled prefetch (for the
+  // previous track) never fires.
+  int _prefetchGen = 0;
+  // The union of content-hashes the OTHER side(s) already hold, learned from a
+  // one-shot "manifest" each device sends when its data channel opens. On the
+  // host this lets the "Add song" picker flag tracks the partner can start
+  // instantly (zero transfer, via the have/need cache path). Best-effort and
+  // purely advisory — an empty or stale set just means no ⚡ hints, never a bug.
+  final Set<String> _peerInstantHashes = <String>{};
+  // Listener: the hash to file the streamed song under once it fully arrives
+  // (set on a cache MISS; cleared after caching on eos).
+  String? _pendingCacheHash;
+  // Listener: an in-flight PREFETCH transfer (a not-yet-current queue track the
+  // host is pushing ahead), reassembled separately from the live audio buffer.
+  bool _receivingPrefetch = false;
+  final BytesBuilder _prefetchBuf = BytesBuilder(copy: false);
+  String? _prefetchHash;
   // Listener's view of the host's transport, tracked from session_state / play /
   // pause / position so that when a freshly-buffered track's `eos` fires we
   // resume at the host's position and DON'T autoplay if the host is paused.
@@ -483,6 +515,7 @@ class LiveSessionController {
     };
     _hostMeta = meta;
     _hostBytes = audioBytes;
+    _hostHash = liveTrackFingerprint(audioBytes);
     // Seed the queue with this first track.
     queue
       ..clear()
@@ -654,6 +687,14 @@ class LiveSessionController {
     currentIndex = index;
     final t = queue[index];
     _hostBytes = t.bytes;
+    _hostHash = t.hash;
+    // Abort any in-flight prefetch to every peer BEFORE we start this track's
+    // live transfer, so a stray prefetch frame can never interleave with the
+    // live audio on the reliable (ordered) channel.
+    for (final p in _peers.values) {
+      p.prefetchEpoch++;
+    }
+    final gen = ++_prefetchGen;
     _hostMeta = {
       'type': 'meta',
       'track': {'title': t.title, 'mime': t.mime},
@@ -661,16 +702,15 @@ class LiveSessionController {
     try {
       await player.setAudioSource(
           BytesAudioSource(t.bytes, contentType: t.mime));
-      // Tell the listener a new track is starting (UI title/clear "lost"),
-      // then stream the new bytes P2P over each open data channel. The data
-      // channel's own track_start → eos framing drives the listener's buffer
-      // reset + playback (see _streamTrackToPeer / _bindListenerChannel).
+      // Tell the listener a new track is starting (UI title/clear "lost"), then
+      // OFFER it by hash: a listener that already cached this exact song plays
+      // it from its own copy instantly; only a miss triggers the byte stream.
       _sendControl({
         'type': 'track_change',
         'track': {'title': t.title, 'mime': t.mime},
       });
       if (_peerPresent) {
-        _streamTrackToAllPeers(t.bytes, t.mime);
+        _offerTrackToAllPeers();
       }
       _setCurrentTitle(t.title);
       // Fire-and-forget (see startHost): play()'s future completes on track END.
@@ -685,6 +725,11 @@ class LiveSessionController {
     // completion still auto-advances.
     Future<void>.delayed(const Duration(milliseconds: 800), () {
       _switchingTrack = false;
+    });
+    // Once the live transfer has surely settled, quietly pre-push the NEXT
+    // queued track to each listener so advancing to it is instant.
+    Future<void>.delayed(const Duration(milliseconds: 3500), () {
+      if (_prefetchGen == gen) _maybePrefetch();
     });
   }
 
@@ -773,15 +818,19 @@ class LiveSessionController {
         RTCDataChannelInit()..ordered = true, // reliable + ordered file transfer
       );
       peer.channel = ch;
-      // Guests upload contributed tracks back over this same channel (Stage C).
-      ch.onMessage = (RTCDataChannelMessage m) => _onPeerContribution(peer, m);
+      // Listener → host messages over this same channel: guest contributions
+      // AND the cache-control replies (have / need / prefetch_need).
+      ch.onMessage = (RTCDataChannelMessage m) => _onPeerInbound(peer, m);
       ch.onDataChannelState = (RTCDataChannelState s) {
         _log('host: dc($peerId) state → $s');
         if (s == RTCDataChannelState.RTCDataChannelOpen) {
-          final bytes = _hostBytes;
-          if (bytes != null) {
-            unawaited(_streamTrackToPeer(peer, bytes, _hostMime()));
-          }
+          // Tell this listener which songs we can serve instantly (and it will
+          // reply with its own) so the picker can flag zero-transfer choices.
+          _sendManifest(peer.channel);
+          // Offer the current track by hash instead of blindly streaming: the
+          // listener plays from its cache if it already has this exact song
+          // (instant — a huge win on re-joins), else it asks us to stream.
+          _offerTrackToPeer(peer);
         }
       };
 
@@ -806,6 +855,7 @@ class LiveSessionController {
     // and bails out mid-loop. The listener's `track_start` clears the buffer, so
     // even a straggler frame from the old stream is discarded harmlessly.
     final epoch = ++p.streamEpoch;
+    p.liveStreaming = true; // block prefetch from interleaving while we stream
     try {
       // Fast-join (#1): for an MP3, once the host is a few seconds into the
       // track, skip streaming the already-played head — send only from ~the
@@ -872,25 +922,159 @@ class LiveSessionController {
     } catch (e) {
       _log('host: stream error: $e');
       onError?.call(e);
+    } finally {
+      // Only the CURRENT stream clears the flag — a superseded one mustn't clear
+      // the flag its replacement just set.
+      if (p.streamEpoch == epoch) p.liveStreaming = false;
     }
   }
 
-  /// Stream a track to every connected peer (1 today; N in a room).
-  void _streamTrackToAllPeers(Uint8List bytes, String mime) {
+  // ── offer / prefetch (cache-aware transfer) ───────────────────────────────
+  /// Offer the CURRENT track (by hash) to every connected peer, so a listener
+  /// that already cached it plays from its copy instead of re-downloading.
+  void _offerTrackToAllPeers() {
     for (final p in _peers.values) {
-      if (p.channel != null) unawaited(_streamTrackToPeer(p, bytes, mime));
+      if (p.channel != null) _offerTrackToPeer(p);
     }
+  }
+
+  /// Content-hashes the other side already holds (learned from its manifest), so
+  /// the "Add song" picker can flag which tracks a partner can start instantly.
+  /// A read-only snapshot; empty until the first manifest arrives.
+  Set<String> get peerInstantHashes => Set<String>.of(_peerInstantHashes);
+
+  /// Announce which songs THIS device can play with zero transfer, so the other
+  /// side's picker can flag them. Sent once per channel as it opens; capped by
+  /// [LiveAudioCache.knownKeys] so the control message stays small. Best-effort.
+  void _sendManifest(RTCDataChannel? ch) {
+    if (ch == null) return;
+    try {
+      final hashes = LiveAudioCache.instance.knownKeys();
+      ch.send(RTCDataChannelMessage(
+          jsonEncode({'t': 'manifest', 'hashes': hashes})));
+    } catch (_) {}
+  }
+
+  /// Fold a peer's manifest into our instant-playable set (advisory only).
+  void _ingestManifest(Map<String, dynamic> j) {
+    final raw = j['hashes'];
+    if (raw is! List) return;
+    for (final h in raw) {
+      if (h is String && h.isNotEmpty) _peerInstantHashes.add(h);
+    }
+  }
+
+  /// Offer the current track to one peer: send its hash + the host's current
+  /// transport, then wait briefly for `have`/`need`. If neither arrives (an old
+  /// client, or a lost reply), fall back to streaming so playback never stalls.
+  void _offerTrackToPeer(_Peer p) {
+    final ch = p.channel;
+    final bytes = _hostBytes;
+    if (ch == null || bytes == null) return;
+    final hash = _hostHash ??= liveTrackFingerprint(bytes);
+    p.pendingOfferHash = hash;
+    final epoch = ++p.offerEpoch;
+    try {
+      ch.send(RTCDataChannelMessage(jsonEncode({
+        't': 'track_offer',
+        'hash': hash,
+        'mime': _hostMime(),
+        'pos': player.position.inMilliseconds,
+        'playing': player.playing,
+      })));
+    } catch (_) {}
+    Future<void>.delayed(const Duration(milliseconds: 900), () {
+      // Still unanswered for THIS offer → stream it the old way.
+      if (p.offerEpoch == epoch && p.pendingOfferHash == hash) {
+        p.pendingOfferHash = null;
+        final b = _hostBytes;
+        if (b != null && p.channel != null) {
+          unawaited(_streamTrackToPeer(p, b, _hostMime()));
+        }
+      }
+    });
+  }
+
+  /// Pre-push the NEXT queued track to each peer during idle time, so advancing
+  /// to it is instant. Best-effort; a listener that already has it stays silent.
+  void _maybePrefetch() {
+    if (role != LiveRole.host) return;
+    final ni = currentIndex + 1;
+    if (ni < 0 || ni >= queue.length) return;
+    final t = queue[ni];
+    for (final p in _peers.values) {
+      if (p.channel != null) _prefetchToPeer(p, t);
+    }
+  }
+
+  void _prefetchToPeer(_Peer p, LiveTrack t) {
+    final ch = p.channel;
+    if (ch == null) return;
+    try {
+      // Offer only; the listener replies `prefetch_need` ONLY if it lacks it.
+      ch.send(RTCDataChannelMessage(jsonEncode({
+        't': 'prefetch_offer',
+        'hash': t.hash,
+        'mime': t.mime,
+      })));
+    } catch (_) {}
+  }
+
+  /// Stream a prefetch track to one peer (framed prefetch_start → binary →
+  /// prefetch_eos, kept distinct from live audio). Aborts the instant a track
+  /// change bumps this peer's prefetch epoch, so it can never collide with the
+  /// live stream on the ordered channel.
+  Future<void> _streamPrefetchToPeer(_Peer p, LiveTrack t) async {
+    final ch = p.channel;
+    if (ch == null || p.liveStreaming) return;
+    final epoch = ++p.prefetchEpoch;
+    try {
+      ch.send(RTCDataChannelMessage(jsonEncode({
+        't': 'prefetch_start',
+        'hash': t.hash,
+        'mime': t.mime,
+      })));
+      final bytes = t.bytes;
+      const chunkSize = 16 * 1024;
+      const framesPerBurst = 4; // gentler than live — this is background
+      var sinceYield = 0;
+      for (var offset = 0; offset < bytes.length; offset += chunkSize) {
+        if (p.prefetchEpoch != epoch) return; // aborted by a track change
+        final end = (offset + chunkSize < bytes.length)
+            ? offset + chunkSize
+            : bytes.length;
+        ch.send(RTCDataChannelMessage.fromBinary(
+            Uint8List.sublistView(bytes, offset, end)));
+        if (++sinceYield >= framesPerBurst) {
+          sinceYield = 0;
+          await Future<void>.delayed(const Duration(milliseconds: 3));
+        }
+      }
+      if (p.prefetchEpoch != epoch) return;
+      ch.send(RTCDataChannelMessage(jsonEncode({
+        't': 'prefetch_eos',
+        'hash': t.hash,
+      })));
+    } catch (_) {}
+  }
+
+  LiveTrack? _trackByHash(String hash) {
+    for (final t in queue) {
+      if (t.hash == hash) return t;
+    }
+    return null;
   }
 
   // A single guest contribution can't exceed this (keeps one listener from
   // flooding the room over a relay). ~20 MB comfortably covers a full song.
   static const int _maxContribBytes = 20 * 1024 * 1024;
 
-  /// HOST: a guest is uploading a track over their data channel — reassemble it
-  /// (framed contribute_start → binary → contribute_eos) and drop it into the
-  /// up-next queue, attributed. Gated on [allowContributions] and size-capped.
-  /// Per-peer buffers live on [_Peer] so concurrent uploads don't interleave.
-  void _onPeerContribution(_Peer p, RTCDataChannelMessage m) {
+  /// HOST: inbound from a listener over its data channel. Binary is only ever a
+  /// guest contribution upload; text is either a contribution marker
+  /// (contribute_start/eos) or a cache-control reply (have / need /
+  /// prefetch_need). Per-peer buffers live on [_Peer] so concurrent uploads
+  /// don't interleave.
+  void _onPeerInbound(_Peer p, RTCDataChannelMessage m) {
     if (m.isBinary) {
       if (!p.contribbing) return;
       p.contribBytes += m.binary.length;
@@ -944,6 +1128,44 @@ class LiveSessionController {
             contributor: by,
           )));
           liveHostNotify?.call('$by added "$title" to the queue');
+          break;
+        case 'have':
+          // The listener already had this song cached and is playing from it —
+          // cancel our pending offer so we don't also stream it.
+          if ((j['hash'] ?? '').toString() == p.pendingOfferHash) {
+            p.pendingOfferHash = null;
+            p.offerEpoch++;
+          }
+          break;
+        case 'need':
+          {
+            // The listener lacks it → stream now (offer fallback cancelled).
+            final h = (j['hash'] ?? '').toString();
+            p.pendingOfferHash = null;
+            p.offerEpoch++;
+            final bytes = _hostBytes;
+            if (bytes != null && h == _hostHash) {
+              unawaited(_streamTrackToPeer(p, bytes, _hostMime()));
+            }
+          }
+          break;
+        case 'prefetch_need':
+          {
+            // The listener wants the offered NEXT track pre-cached → push it in
+            // the background.
+            final h = (j['hash'] ?? '').toString();
+            final t = _trackByHash(h);
+            // Never start a prefetch while a live transfer to this peer is still
+            // going — it would interleave with the audio on the channel.
+            if (t != null && !p.liveStreaming) {
+              unawaited(_streamPrefetchToPeer(p, t));
+            }
+          }
+          break;
+        case 'manifest':
+          // The listener told us which songs it can play instantly → fold into
+          // the set the picker consults. Advisory only.
+          _ingestManifest(j);
           break;
       }
     } catch (_) {}
@@ -1006,16 +1228,32 @@ class LiveSessionController {
   void _bindListenerChannel(RTCDataChannel ch) {
     _lchan = ch;
     _log('listener: audio data channel bound');
+    // Announce our own cached songs to the host so its picker can flag the ones
+    // we can start instantly. Best-effort, once per bind.
+    _sendManifest(ch);
     ch.onMessage = (RTCDataChannelMessage m) async {
       if (m.isBinary) {
-        _incoming.add(m.binary);
+        // While a PREFETCH transfer is in progress its bytes go to a separate
+        // buffer (destined for the cache, not the player); otherwise it's live
+        // audio for the current track.
+        if (_receivingPrefetch) {
+          _prefetchBuf.add(m.binary);
+        } else {
+          _incoming.add(m.binary);
+        }
         return;
       }
       try {
         final j = jsonDecode(m.text) as Map<String, dynamic>;
         switch (j['t']) {
+          case 'track_offer':
+            await _onTrackOffer(j);
+            break;
           case 'track_start':
             _log('listener: track_start');
+            // A live track begins — any partial prefetch is now moot; drop it.
+            _receivingPrefetch = false;
+            _prefetchBuf.clear();
             final mime = j['mime'];
             if (mime is String) _incomingMime = mime;
             // Real-time offset of the first byte we're about to receive: >0 when
@@ -1030,17 +1268,112 @@ class LiveSessionController {
             } catch (_) {}
             break;
           case 'eos':
-            _log('listener: eos — buffered ${_incoming.length} bytes');
+            final full = _incoming.toBytes();
+            _log('listener: eos — buffered ${full.length} bytes');
             // The host stamped its position + play state on the terminator.
             final pos = j['pos'];
             if (pos is int) _hostPositionMs = pos;
             final playing = j['playing'];
             if (playing is bool) _hostPlaying = playing;
+            // Cache the freshly-streamed song for instant reuse next time — but
+            // only a FULL-from-start transfer (a trimmed fast-join tail is only
+            // part of the song and must never be cached as the whole thing).
+            final h = _pendingCacheHash;
+            if (h != null && _listenerBaseMs == 0 && full.isNotEmpty) {
+              unawaited(LiveAudioCache.instance.put(h, full));
+            }
+            _pendingCacheHash = null;
             await _startListenerPlayback(autoplay: true);
+            break;
+          case 'prefetch_offer':
+            {
+              final hash = (j['hash'] ?? '').toString();
+              // Request it ONLY if we don't already hold it.
+              if (hash.isNotEmpty && !LiveAudioCache.instance.hasSync(hash)) {
+                try {
+                  _lchan?.send(RTCDataChannelMessage(
+                      jsonEncode({'t': 'prefetch_need', 'hash': hash})));
+                } catch (_) {}
+              }
+            }
+            break;
+          case 'prefetch_start':
+            _receivingPrefetch = true;
+            _prefetchHash = (j['hash'] ?? '').toString();
+            _prefetchBuf.clear();
+            break;
+          case 'prefetch_eos':
+            {
+              _receivingPrefetch = false;
+              final h = _prefetchHash;
+              final bytes = _prefetchBuf.toBytes();
+              _prefetchBuf.clear();
+              _prefetchHash = null;
+              if (h != null && h.isNotEmpty && bytes.isNotEmpty) {
+                unawaited(LiveAudioCache.instance.put(h, bytes));
+              }
+            }
+            break;
+          case 'manifest':
+            // The host announced its instant-playable songs. We fold them in for
+            // symmetry (harmless; the picker lives host-side).
+            _ingestManifest(j);
             break;
         }
       } catch (_) {}
     };
+  }
+
+  /// LISTENER: the host offered the current track by hash. Play from our cache
+  /// if we have it (instant, no transfer), else ask the host to stream it and
+  /// file it away as it arrives.
+  Future<void> _onTrackOffer(Map<String, dynamic> j) async {
+    final hash = (j['hash'] ?? '').toString();
+    final mime = (j['mime'] ?? 'audio/mpeg').toString();
+    final pos = j['pos'];
+    final playing = j['playing'];
+    if (pos is int) _hostPositionMs = pos;
+    if (playing is bool) _hostPlaying = playing;
+    _incomingMime = mime;
+    if (hash.isEmpty) return;
+    final cached = await LiveAudioCache.instance.get(hash);
+    final ch = _lchan;
+    if (cached != null && cached.isNotEmpty) {
+      _log('listener: cache HIT $hash (${cached.length}b) — instant play');
+      try {
+        ch?.send(RTCDataChannelMessage(jsonEncode({'t': 'have', 'hash': hash})));
+      } catch (_) {}
+      await _playListenerBytes(cached, mime);
+    } else {
+      _log('listener: cache MISS $hash — requesting stream');
+      _pendingCacheHash = hash;
+      try {
+        ch?.send(RTCDataChannelMessage(jsonEncode({'t': 'need', 'hash': hash})));
+      } catch (_) {}
+    }
+  }
+
+  /// LISTENER: play a full song we already hold (from cache), synced to the
+  /// host's current position — no waiting on a transfer.
+  Future<void> _playListenerBytes(Uint8List bytes, String mime) async {
+    if (bytes.isEmpty) return;
+    _incoming.clear();
+    _listenerBaseMs = 0; // a cached copy is always full-from-0
+    _listenerStarted = true;
+    try {
+      await player.stop();
+    } catch (_) {}
+    try {
+      await player.setAudioSource(BytesAudioSource(bytes, contentType: mime));
+      if (_hostPositionMs > 0) {
+        await _listenerSeekReal(_hostPositionMs);
+      }
+      if (_hostPlaying) unawaited(player.play());
+    } catch (e) {
+      _listenerStarted = false;
+      _log('listener: cache playback failed: $e');
+      onError?.call(e);
+    }
   }
 
   Future<void> _closeListenerPc() async {
@@ -1639,6 +1972,12 @@ class LiveSessionController {
     _incoming.clear();
     _listenerStarted = false;
     _listenerBaseMs = 0;
+    // Reset cache/prefetch transfer state so a later session starts clean.
+    _receivingPrefetch = false;
+    _prefetchBuf.clear();
+    _prefetchHash = null;
+    _pendingCacheHash = null;
+    _peerInstantHashes.clear();
     try {
       await player.stop();
     } catch (_) {}
@@ -1663,6 +2002,17 @@ class _Peer {
   // stream (which yields between frames) aborts instead of interleaving its
   // frames/eos with the newer track's on the same channel.
   int streamEpoch = 0;
+  // True while a LIVE track transfer to this peer is in progress, so a prefetch
+  // never starts mid-stream and interleave-corrupts the audio on the channel.
+  bool liveStreaming = false;
+  // Cache offer in flight for this peer: the hash we offered and an epoch that a
+  // have/need reply (or a newer offer) supersedes, cancelling the stream-anyway
+  // fallback timer.
+  String? pendingOfferHash;
+  int offerEpoch = 0;
+  // Bumped whenever the host changes track, so an in-flight background PREFETCH
+  // to this peer aborts before it can interleave with the new live stream.
+  int prefetchEpoch = 0;
   // Inbound contribution (this guest → host upload) reassembly, per peer so
   // concurrent uploads from different guests never interleave.
   bool contribbing = false;

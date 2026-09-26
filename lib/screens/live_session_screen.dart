@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../services/live_session_service.dart';
+import '../services/live_audio_cache.dart' show liveTrackFingerprint;
 import 'home_page.dart' show playbackBus, playlistNotifier;
 import '../state/playback_state.dart';
 import '../utils/file_bytes.dart';
@@ -176,6 +177,12 @@ void _finalizeMinimizedEnd() {
 
 class _LiveSessionScreenState extends State<LiveSessionScreen> {
   late LiveSessionController _c;
+  // Song-picker hints: a track's content fingerprint cached by file path (so we
+  // only ever read+hash a given file once per session), and whether the partner
+  // can already play it instantly. Populated by a bounded background pass when
+  // the picker opens; purely advisory (a ⚡ chip), never blocks adding a song.
+  final Map<String, String> _fpByPath = {};
+  final Set<String> _instantPaths = {};
   String _status = 'Connecting…';
   String _title = '';
   bool _ready = false;
@@ -1168,40 +1175,109 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(heading,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 15)),
-              ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          // Kick off the (bounded) pass that flags partner-instant songs, then
+          // rebuild the sheet as each result lands. Runs once per open.
+          _computeInstantHints(loaded, () {
+            if (ctx.mounted) setSheet(() {});
+          });
+          return SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(heading,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15)),
+                  ),
+                ),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: loaded.length,
+                    itemBuilder: (_, i) {
+                      final p = loaded[i];
+                      final instant = _instantPaths.contains(p);
+                      return ListTile(
+                        leading: Icon(Icons.music_note_rounded,
+                            color: scheme.primary),
+                        title: Text(_titleFromPath(p),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        trailing: instant
+                            ? Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: scheme.primary.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.bolt_rounded,
+                                        size: 14, color: scheme.primary),
+                                    const SizedBox(width: 2),
+                                    Text('Instant',
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: scheme.primary)),
+                                  ],
+                                ),
+                              )
+                            : null,
+                        onTap: () => Navigator.pop(ctx, p),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 4),
+              ],
             ),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: loaded.length,
-                itemBuilder: (_, i) {
-                  final p = loaded[i];
-                  return ListTile(
-                    leading: Icon(Icons.music_note_rounded,
-                        color: scheme.primary),
-                    title: Text(_titleFromPath(p),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                    onTap: () => Navigator.pop(ctx, p),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 4),
-          ],
-        ),
+          );
+        },
       ),
     );
+  }
+
+  // Whether the instant-hint pass is already running for the current open (so
+  // the StatefulBuilder rebuild doesn't launch a second one).
+  bool _computingHints = false;
+
+  /// Read+fingerprint each loaded song (bounded, sequential, cached by path) and
+  /// mark the ones the partner can play with zero transfer. Best-effort: any
+  /// read error just leaves that song un-flagged. [onProgress] is called as
+  /// results accumulate so the open picker can repaint.
+  Future<void> _computeInstantHints(
+      List<String> loaded, VoidCallback onProgress) async {
+    if (_computingHints) return;
+    final peerHashes = _c.peerInstantHashes;
+    if (peerHashes.isEmpty) return; // nothing known yet → no hints to show
+    _computingHints = true;
+    try {
+      const cap = 80; // don't hash an unbounded library on one picker open
+      for (final p in loaded.take(cap)) {
+        var fp = _fpByPath[p];
+        if (fp == null) {
+          try {
+            final bytes = Uint8List.fromList(await readFileBytes(p));
+            if (bytes.isEmpty) continue;
+            fp = liveTrackFingerprint(bytes);
+            _fpByPath[p] = fp;
+          } catch (_) {
+            continue;
+          }
+        }
+        // Newly discovered instant match → repaint the open sheet.
+        if (peerHashes.contains(fp) && _instantPaths.add(p)) onProgress();
+      }
+    } finally {
+      _computingHints = false;
+    }
   }
 
   Future<void> _addSongToQueue() async {

@@ -1052,24 +1052,39 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         Text(
           title,
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.white,
             fontSize: 20,
             fontWeight: FontWeight.w800,
             letterSpacing: 0.2,
+            shadows: [
+              Shadow(
+                color: Colors.black.withValues(alpha: 0.22),
+                blurRadius: 6,
+                offset: const Offset(0, 1.5),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 5),
         Text(
           'Close since ${_closeSince()}',
           style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.9), fontSize: 12.5),
+            color: Colors.white.withValues(alpha: 0.92),
+            fontSize: 12.5,
+            shadows: [
+              Shadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
         ),
       ],
     );
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
         gradient: LinearGradient(
@@ -1080,9 +1095,41 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             _accent.withValues(alpha: 0.55),
           ],
         ),
+        // A soft coloured lift so the whole banner floats off the surface.
+        boxShadow: [
+          BoxShadow(
+            color: _accent.withValues(alpha: 0.32),
+            blurRadius: 22,
+            spreadRadius: -6,
+            offset: const Offset(0, 12),
+          ),
+        ],
       ),
-      child: LayoutBuilder(
-        builder: (ctx, c) {
+      child: Stack(
+        children: [
+          // Top-lit sheen: a faint white glow from above, so the banner reads
+          // as a gently curved, lit surface rather than a flat colour fill.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(22),
+                  gradient: RadialGradient(
+                    center: const Alignment(0, -1.05),
+                    radius: 1.1,
+                    colors: [
+                      Colors.white.withValues(alpha: 0.22),
+                      Colors.white.withValues(alpha: 0.0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            child: LayoutBuilder(
+              builder: (ctx, c) {
           // Wide enough to seat the two stats LEFT and RIGHT of the identity
           // block, so the hero stays short instead of growing taller. Below the
           // threshold we stack the stats under the name (the old compact row).
@@ -1117,29 +1164,74 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
               if (hasStats) _heroStats(),
             ],
           );
-        },
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  /// A vertical stat block that sits beside the identity in the wide hero.
+  /// A vertical stat block that sits beside the identity in the wide hero —
+  /// styled as a soft frosted "glass" chip that rises off the banner (a
+  /// translucent fill, a light top edge and a gentle drop shadow) so the number
+  /// and label stand out instead of being washed into the Space colour.
   Widget _heroSideStat(String emoji, String value, String label) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(emoji, style: const TextStyle(fontSize: 20)),
-        const SizedBox(height: 3),
-        Text(value,
-            style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 19)),
-        const SizedBox(height: 1),
-        Text(label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.85), fontSize: 11)),
-      ],
+    const glyphShadow = Shadow(
+      color: Color(0x33000000),
+      blurRadius: 3,
+      offset: Offset(0, 1),
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        // Frosted glass: brighter at the top, dimmer at the base — a lit facet.
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.white.withValues(alpha: 0.30),
+            Colors.white.withValues(alpha: 0.12),
+          ],
+        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.45)),
+        boxShadow: [
+          // Cast shadow (depth) + a soft inner-ish top highlight (bevel).
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+          BoxShadow(
+            color: Colors.white.withValues(alpha: 0.25),
+            blurRadius: 1,
+            spreadRadius: -1,
+            offset: const Offset(0, -1),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(emoji,
+              style: const TextStyle(fontSize: 20, shadows: [glyphShadow])),
+          const SizedBox(height: 3),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 19,
+                  shadows: [glyphShadow])),
+          const SizedBox(height: 1),
+          Text(label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.92),
+                  fontSize: 11,
+                  shadows: const [glyphShadow])),
+        ],
+      ),
     );
   }
 
@@ -1151,35 +1243,61 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final days = (stats['days_in_song'] as num?)?.toInt() ?? 0;
     final streak = (stats['listen_streak'] as num?)?.toInt() ?? 0;
     if (days == 0 && streak == 0) return const SizedBox.shrink();
-    Widget chip(String emoji, String value, String label) => Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(emoji, style: const TextStyle(fontSize: 12)),
-            const SizedBox(width: 4),
-            Text(value,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12.5)),
-            const SizedBox(width: 4),
-            Text(label,
-                style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    fontSize: 11.5)),
-          ],
+    const glyphShadow = Shadow(
+      color: Color(0x33000000),
+      blurRadius: 3,
+      offset: Offset(0, 1),
+    );
+    // Each stat is a small frosted pill so it lifts off the banner colour.
+    Widget chip(String emoji, String value, String label) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.white.withValues(alpha: 0.28),
+                Colors.white.withValues(alpha: 0.12),
+              ],
+            ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.42)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(emoji,
+                  style: const TextStyle(fontSize: 12, shadows: [glyphShadow])),
+              const SizedBox(width: 5),
+              Text(value,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12.5,
+                      shadows: [glyphShadow])),
+              const SizedBox(width: 4),
+              Text(label,
+                  style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.92),
+                      fontSize: 11.5,
+                      shadows: const [glyphShadow])),
+            ],
+          ),
         );
     return Padding(
-      padding: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.only(top: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           chip('🔥', '$streak', streak == 1 ? 'day streak' : 'day streak'),
-          Container(
-            width: 1,
-            height: 12,
-            margin: const EdgeInsets.symmetric(horizontal: 12),
-            color: Colors.white.withValues(alpha: 0.35),
-          ),
+          const SizedBox(width: 10),
           chip('🎧', '$days', days == 1 ? 'day in a song' : 'days in a song'),
         ],
       ),
@@ -1253,9 +1371,31 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   Widget _ringed({required Widget child}) => Container(
         padding: const EdgeInsets.all(3),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.white,
+          // A subtly bevelled white ring (bright top-left → cooler bottom-right)
+          // reads as a rounded, lit rim rather than a flat white circle.
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Colors.white, Color(0xFFEDEDF2)],
+          ),
+          boxShadow: [
+            // Cast shadow lifts the avatar off the banner…
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.28),
+              blurRadius: 12,
+              spreadRadius: -1,
+              offset: const Offset(0, 6),
+            ),
+            // …and a faint white halo softens the rim into the light.
+            BoxShadow(
+              color: Colors.white.withValues(alpha: 0.35),
+              blurRadius: 3,
+              spreadRadius: -2,
+              offset: const Offset(0, -1),
+            ),
+          ],
         ),
         child: child,
       );

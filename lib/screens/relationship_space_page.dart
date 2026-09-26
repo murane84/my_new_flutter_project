@@ -388,11 +388,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   // On narrow screens the section list lives in a left drawer that slides in
   // over the content; this tracks whether it's showing.
   bool _navDrawerOpen = false;
-  // The global-space point the CURRENT section was opened from (the tapped tile
-  // on the dashboard). Drives the genie so a section scales OUT of that tile on
-  // open and is absorbed BACK into it on close — the same "emerge from what you
-  // tapped" language the whole Our Space popup uses.
-  Offset? _sectionOrigin;
   // Drives the book's page-turn between memories (adjacent pages peek like a
   // real book at viewportFraction < 1).
   final PageController _diaryPageCtrl = PageController(viewportFraction: 0.92);
@@ -763,7 +758,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   }
 
   Future<void> _editSpace() async {
-    final changed = await showModalBottomSheet<bool>(
+    // The settings sheet returns 'saved' (name/theme/hero changed), 'unpin'
+    // (the user chose Unpin from inside settings), or null (dismissed).
+    final result = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -777,9 +774,13 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         spaceId: _id,
       ),
     );
-    if (changed == true) {
+    if (!mounted) return;
+    if (result == 'saved') {
       await _load();
       widget.onChanged?.call();
+    } else if (result == 'unpin') {
+      // Unpin now lives inside settings; run the same confirm-and-remove flow.
+      await _unpin();
     }
   }
 
@@ -852,15 +853,15 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       headerAction: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // ONE "Space settings" control — the old pencil (edit) and pin/unpin
+          // are merged here: name, theme, hero and unpin all live inside the
+          // settings sheet, so unpin is just one action among the space's
+          // settings rather than a top-level button of its own. The tune glyph
+          // reads as "adjust this space" (a hybrid of edit + manage).
           HeaderActionButton(
-            tooltip: 'Edit',
-            icon: Icons.edit_outlined,
+            tooltip: 'Space settings',
+            icon: Icons.tune_rounded,
             onPressed: _editSpace,
-          ),
-          HeaderActionButton(
-            tooltip: 'Unpin',
-            icon: Icons.push_pin_outlined,
-            onPressed: _unpin,
           ),
           // The platform's main (⋮) menu, carried straight into Our Space so the
           // user can reach Together, Groups, Friends, Devices, Profile, Sign out
@@ -875,32 +876,25 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       ),
       // A section takes over the body as a full page BELOW this header (the
       // "Our Space" title + minimize stay visible); its own back arrow returns.
-      // The two views cross-fade + GENIE from the tapped tile: the incoming view
-      // scales up out of that exact spot and the outgoing one is absorbed back
-      // into it — the same "emerge from what you tapped" language the whole Our
-      // Space popup uses, so opening a section feels continuous with opening the
-      // page itself instead of a flat cross-fade.
+      // The two views cross-fade while the incoming one gently RISES and the
+      // outgoing one SETTLES — so opening/closing a section eases in and out
+      // instead of snapping, without the tile-anchored zoom (which read as too
+      // busy for an in-body switch).
       builder: (context, isWide) => AnimatedSwitcher(
-        duration: const Duration(milliseconds: 360),
+        duration: const Duration(milliseconds: 340),
         switchInCurve: Curves.easeOutCubic,
         switchOutCurve: Curves.easeInCubic,
         transitionBuilder: (child, anim) {
-          // Anchor the scale at the tile the section was launched from. Both the
-          // incoming child (anim 0→1: grows from the tile) and the outgoing one
-          // (anim 1→0: shrinks into the tile) share this alignment, so open and
-          // close both pivot on that point. Fall back to centre if we never
-          // recorded a tap.
-          final align =
-              genieAlignmentFor(context, _sectionOrigin) ?? Alignment.center;
+          final entering = child.key == const ValueKey('section');
+          // The section rises up as it emerges; the dashboard settles back down
+          // — so the two feel like one turning to the other, not a hard cut.
+          final begin =
+              entering ? const Offset(0, 0.05) : const Offset(0, -0.03);
           return FadeTransition(
             opacity: anim,
-            child: ScaleTransition(
-              // Start at 0.82 (not 0) — a gentle grow/tuck, not a full zoom, so
-              // the switch stays elegant inside the already-open page.
-              scale: Tween<double>(begin: 0.82, end: 1.0).animate(
-                CurvedAnimation(parent: anim, curve: Curves.easeOutCubic),
-              ),
-              alignment: align,
+            child: SlideTransition(
+              position:
+                  Tween<Offset>(begin: begin, end: Offset.zero).animate(anim),
               child: child,
             ),
           );
@@ -1276,11 +1270,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   void _goSection(String key) =>
       setState(() {
-        // Remember WHERE this was tapped so the section genies out of that exact
-        // tile (dashboard) or sidebar/drawer row. Only capture on a fresh open
-        // from the dashboard — switching section→section keeps the first tile's
-        // origin so a later "back" still collapses toward where you came in.
-        if (_section == null) _sectionOrigin = gLastTapDownGlobal;
         _section = key;
         _navDrawerOpen = false;
       });
@@ -4098,7 +4087,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     );
     if (!mounted) return;
     setState(() => _busy = false);
-    Navigator.pop(context, ok != null);
+    Navigator.pop(context, ok != null ? 'saved' : null);
   }
 
   @override
@@ -4111,7 +4100,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Edit Space',
+          Text('Space settings',
               style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 16,
@@ -4188,6 +4177,32 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2))
                   : const Text('Save'),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Divider(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+          const SizedBox(height: 2),
+          // Unpin now lives HERE — one of the space's settings, not a separate
+          // top-level header button. It just closes this sheet and hands 'unpin'
+          // back to the page, which runs the confirm-and-remove flow.
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed:
+                  _busy ? null : () => Navigator.pop(context, 'unpin'),
+              style: TextButton.styleFrom(
+                foregroundColor: scheme.error,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              ),
+              icon: const Icon(Icons.link_off_rounded, size: 20),
+              label: const Text('Unpin this Space'),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 8, top: 2),
+            child: Text(
+              'Removes the profile & pinned moments. Your chats stay.',
+              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
             ),
           ),
         ],

@@ -1405,6 +1405,18 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                   color: scheme.outlineVariant.withValues(alpha: 0.5)),
               const SizedBox(height: 8),
               for (final s in _visibleSections()) _sidebarItem(scheme, s),
+              // The "Thinking of you 💭" nudge — the lightest touch across the
+              // bond — sits below the section list as a special action, so it's
+              // always one tap away from any section (wide rail AND mobile
+              // drawer), not just the dashboard.
+              if (_partnerId != null) ...[
+                const SizedBox(height: 6),
+                Divider(
+                    height: 1,
+                    color: scheme.outlineVariant.withValues(alpha: 0.5)),
+                const SizedBox(height: 12),
+                _quickPill(scheme),
+              ],
             ],
           ),
         ),

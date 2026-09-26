@@ -313,15 +313,20 @@ class _LegalFullPage extends StatelessWidget {
                 ),
               ),
               // Body — centred + width-capped on desktop, full-bleed on phone.
+              // SafeArea keeps the last content clear of the phone's bottom
+              // gesture/nav bar (the page runs edge-to-edge to the screen edge).
               Expanded(
-                child: isWide
-                    ? Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 720),
-                          child: body(context),
-                        ),
-                      )
-                    : body(context),
+                child: SafeArea(
+                  top: false,
+                  child: isWide
+                      ? Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 720),
+                            child: body(context),
+                          ),
+                        )
+                      : body(context),
+                ),
               ),
             ],
           ),

@@ -1,214 +1,84 @@
 import 'package:flutter/material.dart';
 
+import '../utils/popup_shell.dart' show gLastTapDownGlobal, genieAlignmentFor;
+
 // Height of the Aluta app header (toolbar). The full-page legal views start
 // just under it, so the "Aluta" title + overflow (⋮) menu stay visible above.
 const double _kAppHeaderHeight = kToolbarHeight;
 
-/// Opens the "Legal & About" chooser as a FULL PAGE that fills everything below
-/// the app header (unlike Our Space, which covers the whole screen — here the
-/// "Aluta" title + ⋮ menu stay in view up top).
-void showLegalMenu(BuildContext context) {
-  _showLegalFullPage(
-    context,
-    title: 'Legal & About',
-    icon: Icons.shield_outlined,
-    bodyBuilder: (ctx) => _LegalChooserBody(
-      onPrivacy: () => _open(ctx, 'Privacy Policy',
-          Icons.privacy_tip_rounded, _privacy),
-      onTerms: () =>
-          _open(ctx, 'Terms of Service', Icons.description_rounded, _terms),
-      onAbout: () => _open(ctx, 'About Aluta', Icons.info_rounded, _about),
-    ),
-  );
-}
-
-/// The chooser body — three tappable, raised rows (Privacy / Terms / About).
-class _LegalChooserBody extends StatelessWidget {
-  const _LegalChooserBody(
-      {required this.onPrivacy,
-      required this.onTerms,
-      required this.onAbout});
-
-  final VoidCallback onPrivacy;
-  final VoidCallback onTerms;
-  final VoidCallback onAbout;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-      children: [
-        _chooserRow(context, Icons.privacy_tip_rounded, 'Privacy Policy',
-            'How your information is handled', onPrivacy),
-        const SizedBox(height: 12),
-        _chooserRow(context, Icons.description_rounded, 'Terms of Service',
-            'The rules for using Aluta', onTerms),
-        const SizedBox(height: 12),
-        _chooserRow(context, Icons.info_rounded, 'About Aluta',
-            'What Aluta is and what it does', onAbout),
-      ],
-    );
-  }
-}
-
-Widget _chooserRow(BuildContext ctx, IconData icon, String label,
-    String subtitle, VoidCallback onTap) {
-  final scheme = Theme.of(ctx).colorScheme;
-  final dark = Theme.of(ctx).brightness == Brightness.dark;
-  return Material(
-    color: Colors.transparent,
-    child: Ink(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: dark
-              ? [
-                  scheme.surfaceContainerHigh,
-                  scheme.surfaceContainer,
-                ]
-              : [
-                  Colors.white,
-                  scheme.surfaceContainerHighest,
-                ],
-        ),
-        border: Border.all(color: scheme.outlineVariant.withAlpha(90)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(dark ? 60 : 22),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-          BoxShadow(
-            color: Colors.white.withAlpha(dark ? 10 : 150),
-            blurRadius: 1,
-            offset: const Offset(0, -1),
-          ),
-        ],
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      scheme.primary.withAlpha(40),
-                      scheme.primary.withAlpha(20),
-                    ],
-                  ),
-                ),
-                child: Icon(icon, size: 22, color: scheme.primary),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(label,
-                        style: TextStyle(
-                            fontSize: 15.5,
-                            fontWeight: FontWeight.w800,
-                            color: scheme.onSurface)),
-                    const SizedBox(height: 2),
-                    Text(subtitle,
-                        style: TextStyle(
-                            fontSize: 12.5,
-                            color: scheme.onSurfaceVariant)),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right_rounded,
-                  color: scheme.onSurfaceVariant.withAlpha(160)),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-void _open(BuildContext ctx, String title, IconData icon, String body) {
-  // Close the chooser page first, then open the document as its own full page.
-  Navigator.pop(ctx);
-  _showLegalDoc(ctx, title, icon, body);
-}
+/// Opens the full-page "Legal & About" hub below the app header. The three
+/// documents (Privacy / Terms / About) share ONE page with a PERSISTENT tab bar,
+/// so after reading one you can switch straight to another — no going back up to
+/// the ⋮ menu. Unlike Our Space (whole-screen), the "Aluta" title + ⋮ menu stay
+/// visible up top, and tapping there (tap-out) closes the hub.
+void showLegalMenu(BuildContext context) => _showLegalHub(context, 0);
 
 // ── Public entry points ──────────────────────────────────────────────────────
-// Open a single document page directly (e.g. from the consent gate), with no
-// chooser to close first. These share the SAME content + styling as the
-// "Legal & About" menu, so there's one source of truth for each document.
+// Open the hub focused on a specific document (e.g. from the consent gate). All
+// share the SAME content + styling, so there's one source of truth per document.
 
-void showPrivacyPolicy(BuildContext ctx) =>
-    _showLegalDoc(ctx, 'Privacy Policy', Icons.privacy_tip_rounded, _privacy);
+void showPrivacyPolicy(BuildContext ctx) => _showLegalHub(ctx, 0);
 
-void showTermsOfUse(BuildContext ctx) =>
-    _showLegalDoc(ctx, 'Terms of Service', Icons.description_rounded, _terms);
+void showTermsOfUse(BuildContext ctx) => _showLegalHub(ctx, 1);
 
-void showAboutAluta(BuildContext ctx) =>
-    _showLegalDoc(ctx, 'About Aluta', Icons.info_rounded, _about);
+void showAboutAluta(BuildContext ctx) => _showLegalHub(ctx, 2);
 
-void _showLegalDoc(
-    BuildContext ctx, String title, IconData icon, String body) {
-  _showLegalFullPage(
-    ctx,
-    title: title,
-    icon: icon,
-    bodyBuilder: (dctx) => Scrollbar(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: _legalBody(dctx, body),
-        ),
-      ),
-    ),
-  );
+/// One legal document, in tab order.
+class _LegalDoc {
+  const _LegalDoc(this.tab, this.title, this.icon, this.body);
+  final String tab; // short label for the persistent tab bar
+  final String title; // full title for the header
+  final IconData icon;
+  final String body;
 }
 
-/// Shared presenter: renders [bodyBuilder] as a FULL PAGE that fills the screen
-/// BELOW the app header — full width, edge-to-edge, down to the bottom — so the
-/// "Aluta" title + ⋮ menu remain visible above it. Rounded top corners give it a
-/// "risen to full" feel that's distinct from Our Space's whole-screen takeover.
-/// It rises up + fades in on open and reverses on dismiss.
-void _showLegalFullPage(
-  BuildContext ctx, {
-  required String title,
-  required IconData icon,
-  required WidgetBuilder bodyBuilder,
-}) {
+const List<_LegalDoc> _kLegalDocs = [
+  _LegalDoc('Privacy', 'Privacy Policy', Icons.privacy_tip_rounded, _privacy),
+  _LegalDoc('Terms', 'Terms of Service', Icons.description_rounded, _terms),
+  _LegalDoc('About', 'About Aluta', Icons.info_rounded, _about),
+];
+
+/// Presents the hub as a FULL PAGE below the app header, with a genie open/close
+/// that grows from / collapses into the exact spot the user tapped (the ⋮ menu
+/// item), like Our Space. A transparent barrier keeps the header + ⋮ menu fully
+/// visible; tapping the exposed header strip (tap-out) dismisses.
+void _showLegalHub(BuildContext ctx, int initialIndex) {
+  // The tapped menu item is the genie's "home" spot (snapshot at open; the item
+  // unmounts once tapped, so a live resolver isn't needed here).
+  final origin = gLastTapDownGlobal;
   showGeneralDialog(
     context: ctx,
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
-    // Light scrim so the header strip above the page stays clearly visible.
-    barrierColor: Colors.black.withAlpha(64),
+    // Transparent: nothing dims the header strip above the page, so the "Aluta"
+    // title + ⋮ menu stay clearly visible, and a tap up there closes the hub.
+    barrierColor: Colors.transparent,
     transitionDuration: const Duration(milliseconds: 300),
-    pageBuilder: (_, _, _) =>
-        _LegalFullPage(title: title, icon: icon, body: bodyBuilder),
-    transitionBuilder: (_, anim, _, child) {
+    pageBuilder: (_, _, _) => _LegalHub(initialIndex: initialIndex),
+    transitionBuilder: (dctx, anim, _, child) {
       final curved = CurvedAnimation(
         parent: anim,
         curve: Curves.easeOutCubic,
         reverseCurve: Curves.easeInCubic,
       );
+      final genie = genieAlignmentFor(dctx, origin);
+      if (genie != null) {
+        // Genie: grow out of the tapped point on open, collapse back into it on
+        // close, while fading — exactly like the Our Space page.
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.12, end: 1.0).animate(curved),
+            alignment: genie,
+            child: RepaintBoundary(child: child),
+          ),
+        );
+      }
+      // Fallback (origin unknown): rise up + fade, reversing on close.
       return FadeTransition(
         opacity: curved,
         child: SlideTransition(
-          // Rise up into place from just below (and slide back down on close).
-          position: Tween<Offset>(
-                  begin: const Offset(0, 0.06), end: Offset.zero)
+          position: Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
               .animate(curved),
           child: child,
         ),
@@ -217,16 +87,20 @@ void _showLegalFullPage(
   );
 }
 
-/// The full-page legal view: an opaque surface pinned under the app header,
-/// filling the rest of the screen. Rounded top, squared bottom (it meets the
-/// screen edge), a header bar (icon + title + close) and a flexible body.
-class _LegalFullPage extends StatelessWidget {
-  const _LegalFullPage(
-      {required this.title, required this.icon, required this.body});
+/// The full-page legal hub: an opaque surface pinned under the app header,
+/// filling the rest of the screen, with a PERSISTENT tab bar so all three docs
+/// are one tap apart. Rounded top, squared bottom (it meets the screen edge).
+class _LegalHub extends StatefulWidget {
+  const _LegalHub({required this.initialIndex});
 
-  final String title;
-  final IconData icon;
-  final WidgetBuilder body;
+  final int initialIndex;
+
+  @override
+  State<_LegalHub> createState() => _LegalHubState();
+}
+
+class _LegalHubState extends State<_LegalHub> {
+  late int _index = widget.initialIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -235,6 +109,7 @@ class _LegalFullPage extends StatelessWidget {
     final isWide = media.size.width >= 640;
     // Clear the Aluta app header (status bar + toolbar) so it stays in view.
     final topInset = media.padding.top + _kAppHeaderHeight;
+    final doc = _kLegalDocs[_index];
 
     return Padding(
       padding: EdgeInsets.only(top: topInset),
@@ -273,15 +148,9 @@ class _LegalFullPage extends StatelessWidget {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              // Header row — icon chip + title + close.
+              // Header row — current doc's icon + title + close.
               Container(
-                padding: const EdgeInsets.fromLTRB(16, 8, 10, 12),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                        color: scheme.outlineVariant.withAlpha(70)),
-                  ),
-                ),
+                padding: const EdgeInsets.fromLTRB(16, 8, 10, 8),
                 child: Row(
                   children: [
                     Container(
@@ -291,12 +160,12 @@ class _LegalFullPage extends StatelessWidget {
                         color: scheme.primary.withAlpha(28),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(icon, size: 19, color: scheme.primary),
+                      child: Icon(doc.icon, size: 19, color: scheme.primary),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        title,
+                        doc.title,
                         style: const TextStyle(
                             fontSize: 16.5, fontWeight: FontWeight.w700),
                       ),
@@ -312,9 +181,11 @@ class _LegalFullPage extends StatelessWidget {
                   ],
                 ),
               ),
-              // Body — centred + width-capped on desktop, full-bleed on phone.
-              // SafeArea keeps the last content clear of the phone's bottom
-              // gesture/nav bar (the page runs edge-to-edge to the screen edge).
+              // PERSISTENT tab bar — switch documents without leaving the page.
+              _tabBar(scheme, isWide),
+              Divider(height: 1, color: scheme.outlineVariant.withAlpha(70)),
+              // Body — width-capped + centred on desktop, full-bleed on phone.
+              // SafeArea keeps the last content clear of the phone gesture bar.
               Expanded(
                 child: SafeArea(
                   top: false,
@@ -322,10 +193,92 @@ class _LegalFullPage extends StatelessWidget {
                       ? Center(
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 720),
-                            child: body(context),
+                            child: _body(doc),
                           ),
                         )
-                      : body(context),
+                      : _body(doc),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // The scrollable document body. Keyed by index so switching tabs starts the
+  // new document from the top rather than inheriting the previous scroll.
+  Widget _body(_LegalDoc doc) {
+    return Scrollbar(
+      child: SingleChildScrollView(
+        key: ValueKey(_index),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: _legalBody(context, doc.body),
+        ),
+      ),
+    );
+  }
+
+  // The persistent segmented tab row (horizontally scrollable if it's tight).
+  Widget _tabBar(ColorScheme scheme, bool isWide) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 2, 12, 10),
+      alignment: isWide ? Alignment.center : Alignment.centerLeft,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (int i = 0; i < _kLegalDocs.length; i++) ...[
+              if (i > 0) const SizedBox(width: 8),
+              _tab(scheme, i),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tab(ColorScheme scheme, int i) {
+    final doc = _kLegalDocs[i];
+    final selected = i == _index;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: selected ? null : () => setState(() => _index = i),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: selected
+                ? scheme.primary.withAlpha(30)
+                : scheme.surfaceContainerHighest.withAlpha(120),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: selected
+                  ? scheme.primary.withAlpha(150)
+                  : scheme.outlineVariant.withAlpha(80),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(doc.icon,
+                  size: 16,
+                  color:
+                      selected ? scheme.primary : scheme.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Text(
+                doc.tab,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                  color: selected ? scheme.primary : scheme.onSurfaceVariant,
                 ),
               ),
             ],

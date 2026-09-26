@@ -683,3 +683,44 @@ class BondRequest(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     responded_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class DiaryEntry(Base):
+    """"Our Diary" — a shared romantic notebook for the two partners in a Space.
+    Either partner writes; BOTH see every entry (the diary belongs to the bond,
+    not to one person), so it strengthens the bond rather than being a private
+    journal. Keyed by pair_key='loId:hiId' (sorted) exactly like the playlist and
+    streak series, so it survives no matter which owner-scoped Space is read and
+    needs no migration to be two-way.
+
+    `kind`: 'memory' (something already shared, past) | 'plan' (something ahead).
+    A 'plan' may carry `plan_date` (when it's meant to happen) and be `pinned` to
+    request a reminder — the client schedules the actual device notification and
+    also surfaces pinned upcoming plans in-app. Auto-created table; no ALTER."""
+    __tablename__ = "diary_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pair_key = Column(String, nullable=False, index=True)
+    author_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+        index=True,
+    )
+    # 'memory' (past shared moment) | 'plan' (future plan involving both)
+    kind = Column(String, nullable=False, default="memory",
+                  server_default="memory")
+    title = Column(String, nullable=True)
+    body = Column(Text, nullable=False)
+    # Only meaningful for a 'plan': the day it's meant to happen (drives the
+    # reminder + the upcoming-plans ordering). Null for a 'memory'.
+    plan_date = Column(Date, nullable=True, index=True)
+    # A 'plan' the couple pinned for a reminder notification.
+    pinned = Column(Boolean, nullable=False, default=False,
+                    server_default="false")
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    author = relationship("User", foreign_keys=[author_id], passive_deletes=True)

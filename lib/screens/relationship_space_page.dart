@@ -4305,119 +4305,258 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     Navigator.pop(context, ok != null ? 'saved' : null);
   }
 
+  Widget _label(ColorScheme scheme, String t) => Padding(
+        padding: const EdgeInsets.only(bottom: 9),
+        child: Text(t,
+            style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.6,
+                color: scheme.onSurfaceVariant)),
+      );
+
+  /// A theme swatch with a clean COLOURED halo (outer ring in the swatch's own
+  /// colour + a white gap) when picked — softer and more premium than the old
+  /// hard black ring, and it grows a touch so the choice is unmistakable.
+  Widget _swatch(MapEntry<String, Color> entry) {
+    final sel = _theme == entry.key;
+    return GestureDetector(
+      onTap: () => setState(() => _theme = entry.key),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.all(sel ? 3 : 0),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+              color: sel ? entry.value : Colors.transparent, width: 2),
+        ),
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: entry.value,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: sel ? 2 : 0),
+            boxShadow: [
+              BoxShadow(
+                color: entry.value.withValues(alpha: sel ? 0.45 : 0.25),
+                blurRadius: sel ? 10 : 5,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: sel
+              ? const Icon(Icons.check_rounded, color: Colors.white, size: 20)
+              : null,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final bottom = MediaQuery.of(context).viewInsets.bottom;
+    // The settings preview the CHOSEN theme live: the picked swatch, the Save
+    // button and the Hero switch all adopt this colour as you tap around.
+    final accent = spaceThemeColor(_theme);
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 18, 20, 18 + bottom),
+      padding: EdgeInsets.fromLTRB(20, 10, 20, 16 + bottom),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Space settings',
-              style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 16,
-                  color: scheme.onSurface)),
-          const SizedBox(height: 14),
+          // Grab handle.
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: scheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          // Header with a themed icon chip.
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.tune_rounded, size: 18, color: accent),
+              ),
+              const SizedBox(width: 10),
+              Text('Space settings',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 17,
+                      color: scheme.onSurface)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _label(scheme, 'NAME'),
           TextField(
             controller: _c,
             decoration: InputDecoration(
-              labelText: 'Name',
+              hintText: 'What do you call this bond?',
               filled: true,
               fillColor: scheme.surfaceContainerHighest,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide.none,
               ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: accent, width: 1.6),
+              ),
             ),
           ),
-          const SizedBox(height: 16),
-          Text('Theme',
-              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
-          const SizedBox(height: 10),
+          const SizedBox(height: 20),
+          _label(scheme, 'THEME'),
           Wrap(
-            spacing: 12,
-            runSpacing: 12,
+            spacing: 14,
+            runSpacing: 14,
             children: [
-              for (final entry in kSpacePalette.entries)
-                GestureDetector(
-                  onTap: () => setState(() => _theme = entry.key),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: entry.value,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: _theme == entry.key
-                            ? scheme.onSurface
-                            : Colors.transparent,
-                        width: 3,
-                      ),
-                    ),
-                    child: _theme == entry.key
-                        ? const Icon(Icons.check,
-                            color: Colors.white, size: 20)
-                        : null,
-                  ),
-                ),
+              for (final entry in kSpacePalette.entries) _swatch(entry),
             ],
           ),
-          const SizedBox(height: 8),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Hero Space'),
-            subtitle: Text(
-              widget.initialPrimary
-                  ? 'This bond leads your list'
-                  : 'Show this bond at the top of your list',
-              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          const SizedBox(height: 20),
+          // Hero row, grouped on a soft surface. Already-hero shows a clear
+          // "Leading" badge instead of a dead, greyed-out toggle.
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(14),
             ),
-            value: _primary,
-            // Already the hero → can't unset directly (promote another instead).
-            onChanged: widget.initialPrimary
-                ? null
-                : (v) => setState(() => _primary = v),
+            child: Row(
+              children: [
+                Icon(Icons.workspace_premium_rounded, size: 20, color: accent),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Hero Space',
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: scheme.onSurface)),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.initialPrimary
+                            ? 'This bond leads your list'
+                            : 'Show this bond at the top of your list',
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                if (widget.initialPrimary)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_rounded, size: 14, color: accent),
+                        const SizedBox(width: 4),
+                        Text('Leading',
+                            style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                                color: accent)),
+                      ],
+                    ),
+                  )
+                else
+                  Switch(
+                    value: _primary,
+                    activeThumbColor: Colors.white,
+                    activeTrackColor: accent,
+                    onChanged: (v) => setState(() => _primary = v),
+                  ),
+              ],
+            ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
             child: FilledButton(
               onPressed: _busy ? null : _save,
+              style: FilledButton.styleFrom(
+                backgroundColor: accent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
               child: _busy
                   ? const SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Save'),
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Save',
+                      style: TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w700)),
             ),
           ),
-          const SizedBox(height: 6),
-          Divider(color: scheme.outlineVariant.withValues(alpha: 0.5)),
-          const SizedBox(height: 2),
-          // Unpin now lives HERE — one of the space's settings, not a separate
-          // top-level header button. It just closes this sheet and hands 'unpin'
-          // back to the page, which runs the confirm-and-remove flow.
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed:
-                  _busy ? null : () => Navigator.pop(context, 'unpin'),
-              style: TextButton.styleFrom(
-                foregroundColor: scheme.error,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          const SizedBox(height: 16),
+          // Danger zone — Unpin set apart in a faint red panel so it reads as
+          // the destructive action, not just another link.
+          Material(
+            color: scheme.error.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(14),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: _busy ? null : () => Navigator.pop(context, 'unpin'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: scheme.error.withValues(alpha: 0.20)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.link_off_rounded,
+                        size: 20, color: scheme.error),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Unpin this Space',
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: scheme.error)),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Removes the profile & pinned moments. Your chats stay.',
+                            style: TextStyle(
+                                fontSize: 11.5,
+                                color: scheme.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              icon: const Icon(Icons.link_off_rounded, size: 20),
-              label: const Text('Unpin this Space'),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(left: 8, top: 2),
-            child: Text(
-              'Removes the profile & pinned moments. Your chats stay.',
-              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
             ),
           ),
         ],

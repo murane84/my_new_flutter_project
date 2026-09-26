@@ -84,6 +84,10 @@ class AppPopupShell extends StatelessWidget {
   // as "tuck this away" rather than "close".
   final IconData closeIcon;
   final String closeTooltip;
+  // When true the page takes the WHOLE screen (edge-to-edge, covering the app
+  // chrome) instead of floating as a card — for an immersive, focused surface.
+  // The minimize control + the minimize-down animation still bring it back.
+  final bool fullScreen;
 
   const AppPopupShell({
     super.key,
@@ -94,13 +98,88 @@ class AppPopupShell extends StatelessWidget {
     this.desktopMaxWidth = 760,
     this.closeIcon = Icons.close_rounded,
     this.closeTooltip = 'Close',
+    this.fullScreen = false,
   });
+
+  /// The shared header bar (icon + title + optional action + close/minimize).
+  Widget _header(BuildContext context, ColorScheme scheme) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withAlpha(120),
+        border: Border(
+          bottom: BorderSide(color: scheme.outlineVariant.withAlpha(70)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: scheme.primary.withAlpha(28),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 19, color: scheme.primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                  fontSize: 16.5, fontWeight: FontWeight.w700),
+            ),
+          ),
+          ?headerAction,
+          IconButton(
+            tooltip: closeTooltip,
+            icon: Icon(closeIcon),
+            onPressed: () {
+              FocusScope.of(context).unfocus();
+              Navigator.of(context).pop();
+            },
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final media = MediaQuery.of(context);
     final isWide = media.size.width >= 720;
+
+    if (fullScreen) {
+      // Fill the whole screen. The header sits below the status bar; the body
+      // gets the rest. On wide screens the CONTENT is centred to a comfortable
+      // width so it never sprawls, while the surface itself stays edge-to-edge.
+      final body = builder(context, isWide);
+      return SizedBox.expand(
+        child: Material(
+        color: scheme.surface,
+        child: Padding(
+          padding: EdgeInsets.only(top: media.padding.top),
+          child: Column(
+            children: [
+              _header(context, scheme),
+              Expanded(
+                child: isWide
+                    ? Center(
+                        child: ConstrainedBox(
+                          constraints:
+                              BoxConstraints(maxWidth: desktopMaxWidth),
+                          child: body,
+                        ),
+                      )
+                    : body,
+              ),
+            ],
+          ),
+        ),
+      ),
+      );
+    }
     // Clear the Aluta app header (toolbar + status bar) with a small gap when the
     // card is tall — but the card is bottom-anchored, so short pages hug the
     // footer and rise from there.
@@ -143,46 +222,7 @@ class AppPopupShell extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainerHighest.withAlpha(120),
-                      border: Border(
-                        bottom: BorderSide(
-                            color: scheme.outlineVariant.withAlpha(70)),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 34,
-                          height: 34,
-                          decoration: BoxDecoration(
-                            color: scheme.primary.withAlpha(28),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(icon, size: 19, color: scheme.primary),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: const TextStyle(
-                                fontSize: 16.5, fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        ?headerAction,
-                        IconButton(
-                          tooltip: closeTooltip,
-                          icon: Icon(closeIcon),
-                          onPressed: () {
-                            FocusScope.of(context).unfocus();
-                            Navigator.of(context).pop();
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
+                  _header(context, scheme),
                   Flexible(child: builder(context, isWide)),
                 ],
               ),

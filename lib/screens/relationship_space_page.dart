@@ -4790,7 +4790,13 @@ class _MemoryDetailSheet extends StatefulWidget {
 class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
   late Map<String, dynamic> _e = Map<String, dynamic>.from(widget.entry);
   final TextEditingController _c = TextEditingController();
+  final ScrollController _listC = ScrollController();
   bool _sending = false;
+  // The memory body starts collapsed on this comment-focused page so the thread
+  // gets the room; the reader expands it if they want the full text.
+  bool _memoExpanded = false;
+  // Rebuilds the send button's enabled state as the field fills/empties.
+  bool _hasText = false;
   // The id of the comment being edited (its text is loaded into the composer),
   // or null when composing a new comment.
   int? _editingId;
@@ -4860,11 +4866,37 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
     // commented), re-fetch THIS memory so its reactions + comment feed update in
     // place without a manual refresh.
     spaceEventBus.addListener(_onBus);
+    _c.addListener(_onText);
+    // Open on the NEWEST comment, like any chat thread.
+    _scrollToBottom(animated: false);
+  }
+
+  void _onText() {
+    final has = _c.text.trim().isNotEmpty;
+    if (has != _hasText) setState(() => _hasText = has);
+  }
+
+  /// Drop the comment list to the bottom so the latest message is in view —
+  /// on open and after sending. Post-frame so the new row is laid out first.
+  void _scrollToBottom({bool animated = true}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_listC.hasClients) return;
+      final max = _listC.position.maxScrollExtent;
+      if (animated) {
+        _listC.animateTo(max,
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeOut);
+      } else {
+        _listC.jumpTo(max);
+      }
+    });
   }
 
   @override
   void dispose() {
     spaceEventBus.removeListener(_onBus);
+    _c.removeListener(_onText);
+    _listC.dispose();
     _c.dispose();
     super.dispose();
   }
@@ -4879,7 +4911,12 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
         .map((e) => Map<String, dynamic>.from(e))
         .where((e) => (e['id'] as num?)?.toInt() == id)
         .toList();
-    if (match.isNotEmpty) setState(() => _e = match.first);
+    if (match.isNotEmpty) {
+      final before = _comments.length;
+      setState(() => _e = match.first);
+      // A comment arrived live (e.g. the partner replied) → bring it into view.
+      if (_comments.length > before) _scrollToBottom();
+    }
   }
 
   List<Map<String, dynamic>> get _comments =>
@@ -4935,6 +4972,8 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
     });
     if (c != null) {
       widget.onChanged?.call();
+      // Follow a freshly sent comment down to it (an edit stays in place).
+      if (editing == null) _scrollToBottom();
     } else if (mounted) {
       showToast(
           context,
@@ -4959,6 +4998,29 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
       });
       widget.onChanged?.call();
     }
+  }
+
+  /// The memory body text in the author's font; [maxLines] null = full text.
+  Widget _memoBody(ColorScheme scheme, String body, int? maxLines) {
+    return Text(
+      body,
+      maxLines: maxLines,
+      overflow: maxLines == null ? null : TextOverflow.ellipsis,
+      style: TextStyle(
+          fontFamily: diaryFontFamily((_e['font'] ?? '').toString()),
+          fontSize: 14.5,
+          height: 1.5,
+          color: scheme.onSurface),
+    );
+  }
+
+  /// Two comments count as the same run when they're from the same side of the
+  /// bond (so a run of yours, or a run of theirs, groups under one avatar).
+  bool _sameRun(Map<String, dynamic> a, Map<String, dynamic> b) {
+    if ((a['mine'] == true) != (b['mine'] == true)) return false;
+    final ai = ((a['author'] as Map?)?['id'] as num?)?.toInt();
+    final bi = ((b['author'] as Map?)?['id'] as num?)?.toInt();
+    return ai == bi;
   }
 
   @override
@@ -5036,18 +5098,36 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
                   ),
                   if (body.isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 168),
-                      child: SingleChildScrollView(
-                        child: Text(body,
-                            style: TextStyle(
-                                fontFamily: diaryFontFamily(
-                                    (_e['font'] ?? '').toString()),
-                                fontSize: 14.5,
-                                height: 1.5,
-                                color: scheme.onSurface)),
-                      ),
+                    // Collapsed to a few lines by default so the CONVERSATION is
+                    // the focus; expands (and scrolls, if very long) on request.
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOut,
+                      alignment: Alignment.topCenter,
+                      child: _memoExpanded
+                          ? ConstrainedBox(
+                              constraints:
+                                  const BoxConstraints(maxHeight: 300),
+                              child: SingleChildScrollView(
+                                child: _memoBody(scheme, body, null),
+                              ),
+                            )
+                          : _memoBody(scheme, body, 3),
                     ),
+                    if (body.length > 140)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: GestureDetector(
+                          onTap: () => setState(
+                              () => _memoExpanded = !_memoExpanded),
+                          child: Text(
+                              _memoExpanded ? 'Show less' : 'Show more',
+                              style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: _accent)),
+                        ),
+                      ),
                   ],
                   const SizedBox(height: 12),
                   diaryReactionRow(
@@ -5083,22 +5163,40 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
             Flexible(
               child: comments.isEmpty
                   ? Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 6, 18, 14),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                            'No comments yet — start the conversation.',
-                            style: TextStyle(
-                                fontSize: 12.5,
-                                color: scheme.onSurfaceVariant)),
+                      padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.forum_outlined,
+                              size: 30,
+                              color: _accent.withValues(alpha: 0.55)),
+                          const SizedBox(height: 8),
+                          Text('No comments yet',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: scheme.onSurface)),
+                          const SizedBox(height: 2),
+                          Text('Be the first to say something 💬',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: scheme.onSurfaceVariant)),
+                        ],
                       ),
                     )
                   : ListView.builder(
-                      shrinkWrap: true,
+                      controller: _listC,
                       padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
                       itemCount: comments.length,
-                      itemBuilder: (ctx, i) =>
-                          _commentBubble(scheme, comments[i]),
+                      itemBuilder: (ctx, i) {
+                        // Show the avatar only on the LAST bubble of a run and
+                        // tighten spacing within a run, so a burst of messages
+                        // from one person reads as a group, like a chat.
+                        final grouped = i < comments.length - 1 &&
+                            _sameRun(comments[i], comments[i + 1]);
+                        return _commentBubble(scheme, comments[i],
+                            showAvatar: !grouped, grouped: grouped);
+                      },
                     ),
             ),
             Divider(height: 1, color: scheme.outlineVariant),
@@ -5168,10 +5266,13 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
                           ),
                         )
                       : IconButton.filled(
-                          onPressed: _addComment,
+                          // Disabled (dimmed) until there's something to send.
+                          onPressed: _hasText ? _addComment : null,
                           style: IconButton.styleFrom(
                               backgroundColor: _accent,
-                              foregroundColor: Colors.white),
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor:
+                                  _accent.withValues(alpha: 0.35)),
                           icon: const Icon(Icons.send_rounded, size: 18),
                         ),
                 ],
@@ -5186,19 +5287,24 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
   /// A comment as a circle-chat bubble: the sender's photo only (no name), mine
   /// on the right (accent-tinted), the partner's on the left (surface), each
   /// with the near-square tail corner — the same language as the Circle chats.
-  Widget _commentBubble(ColorScheme scheme, Map<String, dynamic> cm) {
+  Widget _commentBubble(ColorScheme scheme, Map<String, dynamic> cm,
+      {bool showAvatar = true, bool grouped = false}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final mine = cm['mine'] == true;
     final author = (cm['author'] as Map?)?.cast<String, dynamic>();
     final body = (cm['body'] ?? '').toString();
     final created = DateTime.tryParse((cm['created_at'] ?? '').toString());
     final cid = (cm['id'] as num?)?.toInt();
-    final avatar = diaryAuthorBadge(
-      name: (author?['username'] ?? '?').toString(),
-      imageUrl:
-          resolveAvatarUrl(author?['avatar_url']?.toString(), widget.apiBase),
-      radius: 12,
-    );
+    // Avatar only on the last bubble of a run; a same-size spacer otherwise so
+    // grouped bubbles stay in the same column.
+    final Widget avatar = showAvatar
+        ? diaryAuthorBadge(
+            name: (author?['username'] ?? '?').toString(),
+            imageUrl: resolveAvatarUrl(
+                author?['avatar_url']?.toString(), widget.apiBase),
+            radius: 12,
+          )
+        : const SizedBox(width: 24);
     final bubbleColor = mine
         ? _accent.withValues(alpha: isDark ? 0.30 : 0.16)
         : scheme.surfaceContainerHighest;
@@ -5210,7 +5316,7 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
         onLongPress: mine && cid != null ? () => _commentActions(cm) : null,
         onSecondaryTap: mine && cid != null ? () => _commentActions(cm) : null,
         child: Container(
-          margin: const EdgeInsets.only(bottom: 8),
+          margin: EdgeInsets.only(bottom: grouped ? 3 : 8),
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 7),
         decoration: BoxDecoration(
           color: bubbleColor,

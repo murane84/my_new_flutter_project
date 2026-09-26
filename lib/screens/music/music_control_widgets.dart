@@ -100,30 +100,30 @@ class _SpeedPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    return GestureDetector(
-      onTap: onClose,
-      behavior: HitTestBehavior.opaque,
-      child: Align(
-        alignment: Alignment.bottomRight,
-        child: GestureDetector(
-          onTap: () {}, // absorb inner taps
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 56),
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: scheme.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                  color: scheme.primary.withAlpha(130)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withAlpha(70),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Column(
+    // Just the card now — the caller owns the tap-outside barrier, the
+    // position (just above the speed button) and the genie scale, so this
+    // widget is a clean leaf that scales/collapses into the button.
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.of(context).size.width - 32,
+      ),
+      child: GestureDetector(
+        onTap: () {}, // absorb inner taps so they don't reach the barrier
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: scheme.primary.withAlpha(130)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(70),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -191,7 +191,6 @@ class _SpeedPanel extends StatelessWidget {
             ),
           ),
         ),
-      ),
     );
   }
 }

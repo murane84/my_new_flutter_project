@@ -1780,31 +1780,50 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           // thread while the header (and its toggle) stay visible. It is no
           // longer rendered inline in the music panel here.
 
-          // ── Speed popup — scales from the speed button (bottom-right) ──
+          // ── Speed popup — genies straight up out of / down into the speed
+          // button (bottom-right), instead of drifting to the screen corner. ──
           if (_showSpeedPanel)
-            Positioned(
-              right: 0,
-              bottom: 0,
-              left: 0,
-              child: ScaleTransition(
-                scale: CurvedAnimation(
-                  parent: _speedCtrl,
-                  curve: Curves.easeOutBack,
-                  reverseCurve: Curves.easeIn,
-                ),
-                // Anchor at bottom-right where the speed button lives
-                alignment: Alignment.bottomRight,
-                child: FadeTransition(
-                  opacity: _speedCtrl,
-                  child: _SpeedPanel(
-                    currentSpeed: _speed,
-                    onSelect: (s) {
-                      _setSpeed(s);
-                      _toggleSpeedPanel();
-                    },
-                    onClose: _toggleSpeedPanel,
+            Positioned.fill(
+              child: Stack(
+                children: [
+                  // Tap-outside barrier, fading in/out with the panel.
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _toggleSpeedPanel,
+                      child: FadeTransition(
+                        opacity: _speedCtrl,
+                        child: const SizedBox.expand(),
+                      ),
+                    ),
                   ),
-                ),
+                  // The card sits just above the speed button and scales from its
+                  // OWN bottom-right corner, so it collapses straight down into
+                  // the button rather than toward the screen corner.
+                  Positioned(
+                    right: 16,
+                    bottom: 56,
+                    child: FadeTransition(
+                      opacity: _speedCtrl,
+                      child: ScaleTransition(
+                        scale: CurvedAnimation(
+                          parent: _speedCtrl,
+                          curve: Curves.easeOutBack,
+                          reverseCurve: Curves.easeIn,
+                        ),
+                        alignment: Alignment.bottomRight,
+                        child: _SpeedPanel(
+                          currentSpeed: _speed,
+                          onSelect: (s) {
+                            _setSpeed(s);
+                            _toggleSpeedPanel();
+                          },
+                          onClose: _toggleSpeedPanel,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
 

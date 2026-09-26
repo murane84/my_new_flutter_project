@@ -788,6 +788,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       // A soft ambient backdrop (theme-tinted wash + corner glows) so the hero
       // and tiles float on atmosphere instead of a flat white sheet.
       backdrop: _pageBackdrop(scheme),
+      // Header controls rendered as raised 3D chips to match the page's depth.
+      raisedActions: true,
       // Wider than the default popup so the two-column (summary rail + content)
       // layout has real room on desktop/web/tablet. Narrow screens still get a
       // near-full-width card and the single-column stack.
@@ -795,14 +797,14 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       headerAction: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
+          HeaderActionButton(
             tooltip: 'Edit',
-            icon: const Icon(Icons.edit_outlined),
+            icon: Icons.edit_outlined,
             onPressed: _editSpace,
           ),
-          IconButton(
+          HeaderActionButton(
             tooltip: 'Unpin',
-            icon: const Icon(Icons.push_pin_outlined),
+            icon: Icons.push_pin_outlined,
             onPressed: _unpin,
           ),
         ],

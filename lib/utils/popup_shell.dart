@@ -95,6 +95,10 @@ class AppPopupShell extends StatelessWidget {
   // edge, even when the content itself is centre-constrained on wide screens),
   // to give the page atmosphere/depth instead of a flat fill.
   final Widget? backdrop;
+  // When true the header's dismiss control renders as a raised 3D chip (see
+  // [HeaderActionButton]) so it matches a depth-styled page instead of a flat
+  // icon. Callers style their own [headerAction] buttons to match.
+  final bool raisedActions;
 
   const AppPopupShell({
     super.key,
@@ -107,6 +111,7 @@ class AppPopupShell extends StatelessWidget {
     this.closeTooltip = 'Close',
     this.fullScreen = false,
     this.backdrop,
+    this.raisedActions = false,
   });
 
   /// The shared header bar (icon + title + optional action + close/minimize).
@@ -139,14 +144,24 @@ class AppPopupShell extends StatelessWidget {
             ),
           ),
           ?headerAction,
-          IconButton(
-            tooltip: closeTooltip,
-            icon: Icon(closeIcon),
-            onPressed: () {
-              FocusScope.of(context).unfocus();
-              Navigator.of(context).pop();
-            },
-          ),
+          if (raisedActions)
+            HeaderActionButton(
+              icon: closeIcon,
+              tooltip: closeTooltip,
+              onPressed: () {
+                FocusScope.of(context).unfocus();
+                Navigator.of(context).pop();
+              },
+            )
+          else
+            IconButton(
+              tooltip: closeTooltip,
+              icon: Icon(closeIcon),
+              onPressed: () {
+                FocusScope.of(context).unfocus();
+                Navigator.of(context).pop();
+              },
+            ),
         ],
       ),
     );
@@ -246,5 +261,98 @@ class AppPopupShell extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// A small raised "3D" icon button for header actions (edit / pin / minimize):
+/// a lightly top-lit chip with a hairline rim, a soft drop shadow and a faint
+/// top highlight, so the controls sit UP off the header instead of reading as
+/// flat glyphs. Pressing it sinks slightly for tactile feedback.
+class HeaderActionButton extends StatefulWidget {
+  final IconData icon;
+  final String? tooltip;
+  final VoidCallback? onPressed;
+  const HeaderActionButton({
+    super.key,
+    required this.icon,
+    this.tooltip,
+    this.onPressed,
+  });
+
+  @override
+  State<HeaderActionButton> createState() => _HeaderActionButtonState();
+}
+
+class _HeaderActionButtonState extends State<HeaderActionButton> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final btn = AnimatedScale(
+      scale: _down ? 0.92 : 1.0,
+      duration: const Duration(milliseconds: 110),
+      curve: Curves.easeOut,
+      child: Container(
+        width: 38,
+        height: 38,
+        margin: const EdgeInsets.symmetric(horizontal: 3),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              isDark ? scheme.surfaceContainerHigh : Colors.white,
+              isDark
+                  ? scheme.surfaceContainer
+                  : scheme.surfaceContainerHighest,
+            ],
+          ),
+          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+          boxShadow: _down
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.42 : 0.14),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: isDark ? 0.05 : 0.9),
+                    blurRadius: 1,
+                    spreadRadius: -1,
+                    offset: const Offset(0, -1),
+                  ),
+                ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: widget.onPressed,
+            onHighlightChanged: (v) {
+              if (mounted) setState(() => _down = v);
+            },
+            splashColor: scheme.primary.withValues(alpha: 0.12),
+            highlightColor: Colors.transparent,
+            child: Center(
+              child: Icon(widget.icon, size: 18, color: scheme.onSurface),
+            ),
+          ),
+        ),
+      ),
+    );
+    return widget.tooltip != null
+        ? Tooltip(message: widget.tooltip!, child: btn)
+        : btn;
   }
 }

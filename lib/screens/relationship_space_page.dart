@@ -881,7 +881,15 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   // ── feature tiles (each opens a floating card) ────────────────────────────
   Widget _tilesSection(ColorScheme scheme, List<Map<String, dynamic>> moments) {
-    final playlistCount = ((_space['playlist'] as List?) ?? const []).length;
+    // Prefer the server COUNT fields (present in the light list payload too), so
+    // the badges are correct on the very first paint instead of waiting for the
+    // full lists to arrive on the follow-up fetch.
+    int countOf(String key, int fallback) =>
+        (_space[key] as num?)?.toInt() ?? fallback;
+    final playlistCount = countOf(
+        'playlist_count', ((_space['playlist'] as List?) ?? const []).length);
+    final momentsCount = countOf('moment_count', moments.length);
+    final diaryCount = countOf('diary_count', _diary.length);
     final tiles = <Widget>[
       if (_partnerId != null)
         _featureTile(scheme,
@@ -895,7 +903,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           tileKey: _kMoments,
           icon: Icons.favorite_rounded,
           label: 'Pinned moments',
-          count: moments.length,
+          count: momentsCount,
           subtitle: 'Dedications & notes',
           onTap: () => _openMoments(_globalCenter(_kMoments))),
       if (_partnerId != null)
@@ -903,7 +911,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             tileKey: _kDiary,
             icon: Icons.menu_book_rounded,
             label: 'Our Diary',
-            count: _diary.length,
+            count: diaryCount,
             subtitle: 'Memories & plans ahead',
             onTap: () => _openDiary(_globalCenter(_kDiary))),
       _featureTile(scheme,

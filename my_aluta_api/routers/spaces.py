@@ -1423,6 +1423,21 @@ def react_diary_entry(
         db.add(DiaryReaction(
             entry_id=entry.id, user_id=current_user.id, emoji=emoji))
     db.commit()
+    # Live-nudge the partner so an open Our Space page / memory updates without
+    # a manual refresh (no push — reactions are lightweight).
+    if partner:
+        try:
+            safe_notify_user(partner, {
+                "type": "space_diary_react",
+                "data": {
+                    "space_id": space.id,
+                    "entry_id": entry.id,
+                    "from_id": current_user.id,
+                    "emoji": emoji,
+                },
+            })
+        except Exception:
+            pass
     return _diary_dict(db, entry, current_user.id)
 
 
@@ -1528,6 +1543,39 @@ def delete_diary_comment(
     db.delete(comment)
     db.commit()
     return {"ok": True}
+
+
+@router.patch("/{space_id}/diary/{entry_id}/comments/{comment_id}")
+def edit_diary_comment(
+    space_id: int,
+    entry_id: int,
+    comment_id: int,
+    payload: _DiaryCommentBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Edit a comment. Only its own author may change it."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    entry = _diary_entry_or_404(db, pk, entry_id)
+    comment = db.query(DiaryComment).filter(
+        DiaryComment.id == comment_id,
+        DiaryComment.entry_id == entry.id,
+    ).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if comment.author_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="You can only edit your own comment")
+    body = (payload.body or "").strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="A comment needs some text")
+    comment.body = body[:2000]
+    db.commit()
+    db.refresh(comment)
+    return _comment_dict(db, comment, current_user.id)
 
 
 @router.delete("/{space_id}/moments/{moment_id}")

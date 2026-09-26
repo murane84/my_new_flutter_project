@@ -1518,6 +1518,7 @@ class ApiService {
     String? title,
     String? planDate,
     bool pinned = false,
+    String? font,
   }) async {
     try {
       final token = await _getToken();
@@ -1531,6 +1532,7 @@ class ApiService {
           'title': ?title,
           'plan_date': ?planDate,
           'pinned': pinned,
+          'font': ?font,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
@@ -1554,6 +1556,7 @@ class ApiService {
     String? title,
     String? planDate,
     bool? pinned,
+    String? font,
   }) async {
     try {
       final token = await _getToken();
@@ -1567,6 +1570,7 @@ class ApiService {
           'title': ?title,
           'plan_date': ?planDate,
           'pinned': ?pinned,
+          'font': ?font,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {

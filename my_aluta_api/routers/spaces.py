@@ -56,6 +56,8 @@ class _DiaryBody(BaseModel):
     # 'YYYY-MM-DD' for a plan; ignored for a memory.
     plan_date: Optional[str] = None
     pinned: Optional[bool] = False
+    # The author's chosen typeface for this memory (client font key).
+    font: Optional[str] = None
 
 
 class _DiaryEditBody(BaseModel):
@@ -66,6 +68,7 @@ class _DiaryEditBody(BaseModel):
     body: Optional[str] = None
     plan_date: Optional[str] = None
     pinned: Optional[bool] = None
+    font: Optional[str] = None
 
 
 class _DiaryReactBody(BaseModel):
@@ -607,6 +610,7 @@ def _diary_dict(db: Session, e: DiaryEntry, current_user_id: int) -> dict:
         "body": e.body,
         "plan_date": e.plan_date.isoformat() if e.plan_date else None,
         "pinned": bool(e.pinned),
+        "font": e.font,
         "author_id": e.author_id,
         "author": {
             "id": author.id,
@@ -1284,6 +1288,7 @@ def add_diary_entry(
         body=body[:4000],
         plan_date=plan_date,
         pinned=pinned,
+        font=((payload.font or "").strip().lower()[:24] or None),
     )
     db.add(entry)
     db.commit()
@@ -1300,9 +1305,11 @@ def edit_diary_entry(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Edit a diary entry. Either partner may refine the shared notebook (it's
-    communal, like the playlist). Only provided fields change; `plan_date` may be
-    cleared with an empty string, and `pinned`/`plan_date` only apply to plans."""
+    """Edit a diary entry. A MEMORY carries its author's unique touch, so only
+    its author may edit it — the partner can react and comment, but not rewrite
+    someone else's memory. PLANS stay jointly editable (a plan involves both).
+    Only provided fields change; `plan_date` may be cleared with an empty
+    string, and `pinned`/`plan_date` only apply to plans."""
     space = _owned_space_or_404(db, space_id, current_user.id)
     pk, partner = _bond_pair_key(space, current_user.id)
     if pk is None:
@@ -1313,6 +1320,12 @@ def edit_diary_entry(
     ).first()
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
+    # Only the author may edit their own memory (plans are jointly editable).
+    if entry.kind == "memory" and entry.author_id and \
+            entry.author_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the author can edit their memory")
     if payload.kind is not None:
         k = payload.kind.strip().lower()
         if k in _VALID_DIARY_KINDS:
@@ -1328,6 +1341,8 @@ def edit_diary_entry(
         entry.plan_date = _parse_plan_date(payload.plan_date)
     if payload.pinned is not None:
         entry.pinned = bool(payload.pinned)
+    if payload.font is not None:
+        entry.font = (payload.font.strip().lower()[:24] or None)
     # A memory can't carry a plan date or a pin.
     if entry.kind != "plan":
         entry.plan_date = None
@@ -1345,19 +1360,26 @@ def delete_diary_entry(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Remove a diary entry. Either partner can prune the shared notebook. Scoped
+    """Remove a diary entry. Only the author may delete their own MEMORY (you
+    can't erase your partner's memory); PLANS remain jointly removable. Scoped
     by pair_key so you can only touch your own bond's diary."""
     space = _owned_space_or_404(db, space_id, current_user.id)
     pk, partner = _bond_pair_key(space, current_user.id)
     if pk is None:
         raise HTTPException(status_code=404, detail="Entry not found")
-    deleted = db.query(DiaryEntry).filter(
+    entry = db.query(DiaryEntry).filter(
         DiaryEntry.id == entry_id,
         DiaryEntry.pair_key == pk,
-    ).delete(synchronize_session=False)
-    db.commit()
-    if not deleted:
+    ).first()
+    if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
+    if entry.kind == "memory" and entry.author_id and \
+            entry.author_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the author can delete their memory")
+    db.delete(entry)
+    db.commit()
     return {"ok": True}
 
 

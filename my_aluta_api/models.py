@@ -716,6 +716,11 @@ class DiaryEntry(Base):
     # A 'plan' the couple pinned for a reminder notification.
     pinned = Column(Boolean, nullable=False, default=False,
                     server_default="false")
+    # The author's chosen typeface for THIS memory — a client font key
+    # ('serif' | 'typewriter' | 'handwriting' | null=default). Each author's
+    # memories carry their own 'hand', which both partners see, so the shared
+    # notebook keeps each person's unique touch. Auto-created column; no ALTER.
+    font = Column(String, nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

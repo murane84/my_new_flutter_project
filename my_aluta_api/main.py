@@ -141,6 +141,9 @@ def ensure_media_schema():
         # Monetization: the 'Together' entitlement (free | together) + when it began.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_tier VARCHAR DEFAULT 'free'",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS together_since TIMESTAMPTZ",
+        # Our Diary: the author's per-memory typeface (client font key; null =
+        # default). Added here in case diary_entries predates the column.
+        "ALTER TABLE diary_entries ADD COLUMN IF NOT EXISTS font VARCHAR",
     ]
     try:
         with engine.begin() as conn:

@@ -102,6 +102,19 @@ class _LegalHub extends StatefulWidget {
 
 class _LegalHubState extends State<_LegalHub> {
   late int _index = widget.initialIndex;
+  // Tabs the user visited before the current one, most-recent last. Back steps
+  // through these — landing on the previous tab — and only closes the hub once
+  // there's no earlier tab left, matching the app-wide "back = previous page,
+  // then minimise" rule (same contract Our Space and the home stack use).
+  final List<int> _history = [];
+
+  void _selectTab(int i) {
+    if (i == _index) return;
+    setState(() {
+      _history.add(_index);
+      _index = i;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -112,7 +125,14 @@ class _LegalHubState extends State<_LegalHub> {
     final topInset = media.padding.top + _kAppHeaderHeight;
     final doc = _kLegalDocs[_index];
 
-    return Padding(
+    return PopScope(
+      // Only let the hub close when there's no earlier tab to step back to.
+      canPop: _history.isEmpty,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop || _history.isEmpty) return;
+        setState(() => _index = _history.removeLast());
+      },
+      child: Padding(
       padding: EdgeInsets.only(top: topInset),
       child: Material(
         type: MaterialType.transparency,
@@ -206,6 +226,7 @@ class _LegalHubState extends State<_LegalHub> {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -271,7 +292,7 @@ class _LegalHubState extends State<_LegalHub> {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: selected ? null : () => setState(() => _index = i),
+        onTap: selected ? null : () => _selectTab(i),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOut,

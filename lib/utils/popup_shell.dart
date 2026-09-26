@@ -88,6 +88,10 @@ class AppPopupShell extends StatelessWidget {
   // chrome) instead of floating as a card — for an immersive, focused surface.
   // The minimize control + the minimize-down animation still bring it back.
   final bool fullScreen;
+  // An optional decorative layer painted BEHIND the full-screen content (edge to
+  // edge, even when the content itself is centre-constrained on wide screens),
+  // to give the page atmosphere/depth instead of a flat fill.
+  final Widget? backdrop;
 
   const AppPopupShell({
     super.key,
@@ -99,6 +103,7 @@ class AppPopupShell extends StatelessWidget {
     this.closeIcon = Icons.close_rounded,
     this.closeTooltip = 'Close',
     this.fullScreen = false,
+    this.backdrop,
   });
 
   /// The shared header bar (icon + title + optional action + close/minimize).
@@ -157,27 +162,34 @@ class AppPopupShell extends StatelessWidget {
       final body = builder(context, isWide);
       return SizedBox.expand(
         child: Material(
-        color: scheme.surface,
-        child: Padding(
-          padding: EdgeInsets.only(top: media.padding.top),
-          child: Column(
+          color: scheme.surface,
+          child: Stack(
             children: [
-              _header(context, scheme),
-              Expanded(
-                child: isWide
-                    ? Center(
-                        child: ConstrainedBox(
-                          constraints:
-                              BoxConstraints(maxWidth: desktopMaxWidth),
-                          child: body,
-                        ),
-                      )
-                    : body,
+              // Full-bleed atmosphere behind everything (glow/gradient).
+              if (backdrop != null)
+                Positioned.fill(child: IgnorePointer(child: backdrop!)),
+              Padding(
+                padding: EdgeInsets.only(top: media.padding.top),
+                child: Column(
+                  children: [
+                    _header(context, scheme),
+                    Expanded(
+                      child: isWide
+                          ? Center(
+                              child: ConstrainedBox(
+                                constraints:
+                                    BoxConstraints(maxWidth: desktopMaxWidth),
+                                child: body,
+                              ),
+                            )
+                          : body,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
-      ),
       );
     }
     // Clear the Aluta app header (toolbar + status bar) with a small gap when the

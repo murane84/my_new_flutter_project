@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from database import get_db
 from models import (
     User, RelationshipSpace, SpaceMember, PinnedMoment, MomentReaction,
-    PlaylistTrack, BondRequest, DiaryEntry,
+    PlaylistTrack, BondRequest, DiaryEntry, DiaryReaction, DiaryComment,
 )
 from datetime import date as _date
 import crud
@@ -66,6 +66,14 @@ class _DiaryEditBody(BaseModel):
     body: Optional[str] = None
     plan_date: Optional[str] = None
     pinned: Optional[bool] = None
+
+
+class _DiaryReactBody(BaseModel):
+    emoji: str
+
+
+class _DiaryCommentBody(BaseModel):
+    body: str
 
 # Free tier: one pinned Space. Raised for the Together plan (checked per-user).
 # Scarcity is the point (spec §2.1). Free keeps a single hero Space; the Together
@@ -513,10 +521,47 @@ def _parse_plan_date(raw):
         return None
 
 
+def _comment_dict(db: Session, c: DiaryComment, current_user_id: int) -> dict:
+    author = c.author or (
+        db.query(User).filter(User.id == c.author_id).first()
+        if c.author_id else None
+    )
+    return {
+        "id": c.id,
+        "body": c.body,
+        "author_id": c.author_id,
+        "author": {
+            "id": author.id,
+            "username": author.username,
+            "avatar_url": author.avatar_url,
+        } if author else None,
+        "mine": c.author_id == current_user_id,
+        "created_at": c.created_at.isoformat() if c.created_at else None,
+    }
+
+
 def _diary_dict(db: Session, e: DiaryEntry, current_user_id: int) -> dict:
     author = e.author or (
         db.query(User).filter(User.id == e.author_id).first()
         if e.author_id else None
+    )
+    reacts = (
+        db.query(DiaryReaction)
+        .filter(DiaryReaction.entry_id == e.id)
+        .all()
+    )
+    # Per-emoji counts + which emojis THIS user has added (for highlight/toggle).
+    counts: dict = {}
+    mine: list = []
+    for r in reacts:
+        counts[r.emoji] = counts.get(r.emoji, 0) + 1
+        if r.user_id == current_user_id and r.emoji not in mine:
+            mine.append(r.emoji)
+    comments = (
+        db.query(DiaryComment)
+        .filter(DiaryComment.entry_id == e.id)
+        .order_by(DiaryComment.id.asc())
+        .all()
     )
     return {
         "id": e.id,
@@ -534,6 +579,11 @@ def _diary_dict(db: Session, e: DiaryEntry, current_user_id: int) -> dict:
         "mine": e.author_id == current_user_id,
         "created_at": e.created_at.isoformat() if e.created_at else None,
         "updated_at": e.updated_at.isoformat() if e.updated_at else None,
+        # Reactions: a list of {emoji, count}, plus the caller's own emojis.
+        "reactions": [{"emoji": k, "count": v} for k, v in counts.items()],
+        "my_reactions": mine,
+        "comment_count": len(comments),
+        "comments": [_comment_dict(db, c, current_user_id) for c in comments],
     }
 
 
@@ -1266,6 +1316,153 @@ def delete_diary_entry(
     db.commit()
     if not deleted:
         raise HTTPException(status_code=404, detail="Entry not found")
+    return {"ok": True}
+
+
+def _diary_entry_or_404(db: Session, pk: str, entry_id: int) -> DiaryEntry:
+    entry = db.query(DiaryEntry).filter(
+        DiaryEntry.id == entry_id,
+        DiaryEntry.pair_key == pk,
+    ).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return entry
+
+
+@router.post("/{space_id}/diary/{entry_id}/react")
+def react_diary_entry(
+    space_id: int,
+    entry_id: int,
+    payload: _DiaryReactBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Toggle an emoji reaction on a diary entry for the current user. Adding the
+    same emoji again removes it; a user may hold several distinct emojis. Either
+    partner can react, author or not. Returns the refreshed entry."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    entry = _diary_entry_or_404(db, pk, entry_id)
+    emoji = (payload.emoji or "").strip()
+    if not emoji or len(emoji) > 16:
+        raise HTTPException(status_code=400, detail="A reaction needs an emoji")
+    existing = db.query(DiaryReaction).filter(
+        DiaryReaction.entry_id == entry.id,
+        DiaryReaction.user_id == current_user.id,
+        DiaryReaction.emoji == emoji,
+    ).first()
+    if existing:
+        db.delete(existing)
+    else:
+        db.add(DiaryReaction(
+            entry_id=entry.id, user_id=current_user.id, emoji=emoji))
+    db.commit()
+    return _diary_dict(db, entry, current_user.id)
+
+
+@router.get("/{space_id}/diary/{entry_id}/comments")
+def get_diary_comments(
+    space_id: int,
+    entry_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The comment thread under one diary entry, oldest-first."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    entry = _diary_entry_or_404(db, pk, entry_id)
+    rows = (
+        db.query(DiaryComment)
+        .filter(DiaryComment.entry_id == entry.id)
+        .order_by(DiaryComment.id.asc())
+        .all()
+    )
+    return {"comments": [_comment_dict(db, c, current_user.id) for c in rows]}
+
+
+@router.post("/{space_id}/diary/{entry_id}/comments")
+def add_diary_comment(
+    space_id: int,
+    entry_id: int,
+    payload: _DiaryCommentBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Add a comment to a diary entry's thread. Shared across the bond; notifies
+    the partner so the conversation feels live."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    entry = _diary_entry_or_404(db, pk, entry_id)
+    body = (payload.body or "").strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="A comment needs some text")
+    comment = DiaryComment(
+        entry_id=entry.id, author_id=current_user.id, body=body[:2000])
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    # Best-effort ping to the partner.
+    if partner:
+        who = current_user.username or "Someone"
+        title = (entry.title or "").strip()
+        line = (f"{who} commented on “{title}”"
+                if title else f"{who} commented in your diary")
+        try:
+            safe_notify_user(partner, {
+                "type": "space_diary_comment",
+                "data": {
+                    "space_id": space.id,
+                    "entry_id": entry.id,
+                    "from_id": current_user.id,
+                    "from_username": who,
+                    "line": line,
+                },
+            })
+        except Exception:
+            pass
+        if send_push_to_user is not None:
+            try:
+                send_push_to_user(partner, {
+                    "type": "space_diary_comment",
+                    "title": "Our Diary 💬",
+                    "body": line,
+                })
+            except Exception:
+                pass
+    return _comment_dict(db, comment, current_user.id)
+
+
+@router.delete("/{space_id}/diary/{entry_id}/comments/{comment_id}")
+def delete_diary_comment(
+    space_id: int,
+    entry_id: int,
+    comment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete a comment. Only its own author may remove it."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    entry = _diary_entry_or_404(db, pk, entry_id)
+    comment = db.query(DiaryComment).filter(
+        DiaryComment.id == comment_id,
+        DiaryComment.entry_id == entry.id,
+    ).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if comment.author_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="You can only delete your own comment")
+    db.delete(comment)
+    db.commit()
     return {"ok": True}
 
 

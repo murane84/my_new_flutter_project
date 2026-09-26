@@ -1596,6 +1596,94 @@ class ApiService {
     }
   }
 
+  /// Toggle an emoji reaction on a diary entry. Returns the refreshed entry map
+  /// (with updated reactions/my_reactions), or null on failure.
+  Future<Map<String, dynamic>?> reactDiaryEntry(
+      int spaceId, int entryId, String emoji) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/diary/$entryId/react'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'emoji': emoji}),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('reactDiaryEntry failed: $e');
+      return null;
+    }
+  }
+
+  /// The comment thread under a diary entry (oldest-first).
+  Future<List<Map<String, dynamic>>> getDiaryComments(
+      int spaceId, int entryId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return const [];
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/diary/$entryId/comments'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        final list = (data is Map ? data['comments'] : data) as List?;
+        return (list ?? const [])
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+      return const [];
+    } catch (e) {
+      _logger.w('getDiaryComments failed: $e');
+      return const [];
+    }
+  }
+
+  /// Add a comment to a diary entry's thread. Returns the created comment, or null.
+  Future<Map<String, dynamic>?> addDiaryComment(
+      int spaceId, int entryId, String body) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/diary/$entryId/comments'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'body': body}),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('addDiaryComment failed: $e');
+      return null;
+    }
+  }
+
+  /// Delete one of your own diary comments.
+  Future<bool> deleteDiaryComment(
+      int spaceId, int entryId, int commentId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.delete(
+        Uri.parse(
+            '${await _baseUrl}/spaces/$spaceId/diary/$entryId/comments/$commentId'),
+        headers: _authHeaders(token),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.w('deleteDiaryComment failed: $e');
+      return false;
+    }
+  }
+
   /// Remove a pinned moment.
   Future<bool> deleteMoment(int spaceId, int momentId) async {
     try {

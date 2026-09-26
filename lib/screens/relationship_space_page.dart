@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 
 import 'api_service.dart';
 import 'home_page.dart' show playbackBus, playlistNotifier;
@@ -41,6 +42,210 @@ Color spaceThemeColor(String? key) => kSpacePalette[key] ?? const Color(0xFFFF5A
 // height (~58px) so the two photos remain the banner's anchor.
 const double _kHeroStatW = 96;
 const double _kHeroStatH = 54;
+
+// Diary reactions: the quick presets shown first; "More…" opens the full emoji
+// keyboard so any emoji can be used. Both partners can react to any entry.
+const List<String> _kQuickReactions = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
+// Bodies longer than this are collapsed in the diary list; a "Read more" opens
+// the full memory in its own card.
+const int _kMemoryPreviewChars = 240;
+
+/// A compact "N minutes/hours/days ago" for diary timestamps.
+String _diaryAgo(DateTime dt) {
+  final d = DateTime.now().difference(dt.toLocal());
+  if (d.inMinutes < 1) return 'just now';
+  if (d.inMinutes < 60) return '${d.inMinutes}m';
+  if (d.inHours < 24) return '${d.inHours}h';
+  if (d.inDays < 7) return '${d.inDays}d';
+  return DateFormat('MMM d').format(dt.toLocal());
+}
+
+/// Pick a reaction emoji: a row of quick presets, or "More…" for the full
+/// emoji keyboard. Returns the chosen glyph, or null if dismissed.
+Future<String?> pickDiaryReaction(BuildContext context, Color accent) {
+  final scheme = Theme.of(context).colorScheme;
+  return showModalBottomSheet<String>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: scheme.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (ctx) {
+      var showAll = false;
+      return StatefulBuilder(
+        builder: (ctx, setS) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: scheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2)),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('React',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          color: scheme.onSurface)),
+                ),
+              ),
+              if (!showAll) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final em in _kQuickReactions)
+                        InkWell(
+                          onTap: () => Navigator.pop(ctx, em),
+                          borderRadius: BorderRadius.circular(14),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            child: Text(em, style: const TextStyle(fontSize: 28)),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => setS(() => showAll = true),
+                  style: TextButton.styleFrom(foregroundColor: accent),
+                  icon: const Icon(Icons.add_reaction_outlined, size: 18),
+                  label: const Text('More emoji'),
+                ),
+                const SizedBox(height: 6),
+              ] else
+                SizedBox(
+                  height: 280,
+                  child: EmojiPicker(
+                    onEmojiSelected: (cat, emoji) =>
+                        Navigator.pop(ctx, emoji.emoji),
+                    config: Config(
+                      height: 280,
+                      emojiViewConfig: EmojiViewConfig(
+                        emojiSizeMax: 26,
+                        columns: 8,
+                        backgroundColor: scheme.surface,
+                        buttonMode: ButtonMode.MATERIAL,
+                      ),
+                      categoryViewConfig: CategoryViewConfig(
+                        backgroundColor: scheme.surfaceContainerHighest,
+                        indicatorColor: accent,
+                        iconColor: scheme.onSurfaceVariant,
+                        iconColorSelected: accent,
+                        dividerColor: scheme.outlineVariant.withAlpha(80),
+                      ),
+                      bottomActionBarConfig: BottomActionBarConfig(
+                        backgroundColor: scheme.surfaceContainerHighest,
+                        buttonColor: scheme.surfaceContainerHighest,
+                        buttonIconColor: accent,
+                      ),
+                      searchViewConfig: SearchViewConfig(
+                        backgroundColor: scheme.surfaceContainerHighest,
+                        buttonIconColor: accent,
+                        hintText: 'Search emoji',
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/// The reaction strip for a diary entry: a chip per emoji (with its count,
+/// highlighted when I'm one of the reactors) plus a "React" button. [onToggle]
+/// adds/removes my reaction of that emoji; [onAdd] opens the picker.
+Widget diaryReactionRow({
+  required ColorScheme scheme,
+  required Color accent,
+  required Map<String, dynamic> entry,
+  required void Function(String emoji) onToggle,
+  required VoidCallback onAdd,
+}) {
+  final reactions = ((entry['reactions'] as List?) ?? const [])
+      .whereType<Map>()
+      .toList();
+  final mine = ((entry['my_reactions'] as List?) ?? const [])
+      .map((e) => e.toString())
+      .toSet();
+  Widget chip(String emoji, int count, bool isMine) => InkWell(
+        onTap: () => onToggle(emoji),
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          decoration: BoxDecoration(
+            color: isMine
+                ? accent.withValues(alpha: 0.16)
+                : scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+                color: isMine
+                    ? accent.withValues(alpha: 0.55)
+                    : scheme.outlineVariant.withValues(alpha: 0.5)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 14)),
+              if (count > 0) ...[
+                const SizedBox(width: 4),
+                Text('$count',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isMine ? accent : scheme.onSurfaceVariant)),
+              ],
+            ],
+          ),
+        ),
+      );
+  return Wrap(
+    spacing: 6,
+    runSpacing: 6,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    children: [
+      for (final r in reactions)
+        chip(r['emoji'].toString(), (r['count'] as num?)?.toInt() ?? 0,
+            mine.contains(r['emoji'].toString())),
+      InkWell(
+        onTap: onAdd,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: accent.withValues(alpha: 0.5)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add_reaction_outlined, size: 15, color: accent),
+              const SizedBox(width: 4),
+              Text('React',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: accent)),
+            ],
+          ),
+        ),
+      ),
+    ],
+  );
+}
 
 /// Bumped by the home socket whenever a bond action (moment, reaction, playlist
 /// add, accept) arrives, so an OPEN Our Space page reloads itself and both
@@ -2199,12 +2404,31 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           if (body.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(body,
+                maxLines: body.length > _kMemoryPreviewChars ? 5 : null,
+                overflow: body.length > _kMemoryPreviewChars
+                    ? TextOverflow.ellipsis
+                    : TextOverflow.clip,
                 style: TextStyle(
                     fontSize: 13, height: 1.3, color: scheme.onSurface)),
+            if (body.length > _kMemoryPreviewChars)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => _openMemoryDetail(e),
+                  style: TextButton.styleFrom(
+                    foregroundColor: _accent,
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    minimumSize: const Size(0, 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('Read more'),
+                ),
+              ),
           ],
           const SizedBox(height: 6),
           Text(mine ? 'You' : (authorName.isEmpty ? 'Partner' : authorName),
               style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+          _diaryEngagement(scheme, e),
         ],
       ),
     );
@@ -2268,11 +2492,81 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           if (body.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(body,
+                maxLines: body.length > _kMemoryPreviewChars ? 5 : null,
+                overflow: body.length > _kMemoryPreviewChars
+                    ? TextOverflow.ellipsis
+                    : TextOverflow.clip,
                 style: TextStyle(
                     fontSize: 13.5, height: 1.35, color: scheme.onSurface)),
+            if (body.length > _kMemoryPreviewChars)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => _openMemoryDetail(e),
+                  style: TextButton.styleFrom(
+                    foregroundColor: _accent,
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    minimumSize: const Size(0, 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('Read more'),
+                ),
+              ),
           ],
+          _diaryEngagement(scheme, e),
         ],
       ),
+    );
+  }
+
+  /// Reactions + a comment affordance under a diary entry, so the two can react
+  /// and talk on that specific memory/plan without leaving the list.
+  Widget _diaryEngagement(ColorScheme scheme, Map<String, dynamic> e) {
+    final count = (e['comment_count'] as num?)?.toInt() ??
+        ((e['comments'] as List?)?.length ?? 0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 10),
+        diaryReactionRow(
+          scheme: scheme,
+          accent: _accent,
+          entry: e,
+          onToggle: (em) => _reactDiary(e, em),
+          onAdd: () async {
+            final em = await pickDiaryReaction(context, _accent);
+            if (em != null && mounted) _reactDiary(e, em);
+          },
+        ),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: () => _openMemoryDetail(e),
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.mode_comment_outlined,
+                    size: 16, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 6),
+                Text(
+                  count == 0
+                      ? 'Comment'
+                      : (count == 1 ? '1 comment' : '$count comments'),
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurfaceVariant),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.chevron_right_rounded,
+                    size: 16, color: scheme.onSurfaceVariant),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -2302,6 +2596,86 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     if (diff > 1) return 'in $diff days';
     if (diff == -1) return 'yesterday';
     return '${-diff} days ago';
+  }
+
+  /// The current version of a diary entry by id (so an open detail card and the
+  /// list stay in sync after a reload).
+  Map<String, dynamic>? _diaryById(int id) {
+    for (final e in _diary) {
+      if ((e['id'] as num?)?.toInt() == id) return e;
+    }
+    return null;
+  }
+
+  /// Toggle my [emoji] reaction on a diary entry from the list, then reload so
+  /// the counts update in place.
+  Future<void> _reactDiary(Map<String, dynamic> e, String emoji) async {
+    final id = (e['id'] as num?)?.toInt();
+    if (id == null) return;
+    final updated = await ApiService().reactDiaryEntry(_id, id, emoji);
+    if (!mounted) return;
+    if (updated == null) {
+      showToast(context, 'Could not react — try again', type: ToastType.error);
+      return;
+    }
+    await _load();
+  }
+
+  /// Open the full-read card for one memory/plan: complete text, reactions and
+  /// the comment thread. Grows from / is absorbed back into its row.
+  void _openMemoryDetail(Map<String, dynamic> e, [Offset? origin]) {
+    final id = (e['id'] as num?)?.toInt();
+    if (id == null) return;
+    _absorbDialog<void>(
+      origin: origin,
+      builder: (dctx) => _MemoryDetailSheet(
+        spaceId: _id,
+        entry: _diaryById(id) ?? e,
+        accent: _accent,
+        onChanged: () {
+          if (mounted) _load();
+        },
+      ),
+    );
+  }
+
+  /// A centered dialog whose open/close scales + fades toward [origin] (a tile
+  /// or row), so a card looks absorbed back into where it came from. Shared by
+  /// the feature cards and the memory-detail card.
+  Future<T?> _absorbDialog<T>({
+    required Offset? origin,
+    required WidgetBuilder builder,
+  }) {
+    final media = MediaQuery.of(context).size;
+    final align = origin == null
+        ? Alignment.center
+        : Alignment(
+            ((origin.dx / media.width) * 2 - 1).clamp(-1.0, 1.0),
+            ((origin.dy / media.height) * 2 - 1).clamp(-1.0, 1.0),
+          );
+    return showGeneralDialog<T>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Minimize',
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      transitionDuration: const Duration(milliseconds: 260),
+      pageBuilder: (dctx, _, _) => builder(dctx),
+      transitionBuilder: (dctx, anim, _, child) {
+        final curved = CurvedAnimation(
+          parent: anim,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.55, end: 1.0).animate(curved),
+            alignment: align,
+            child: child,
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _addDiaryEntry() async {
@@ -3164,6 +3538,343 @@ class _DiaryComposerState extends State<_DiaryComposer> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── memory / plan detail card (full read + reactions + comments) ───────────
+class _MemoryDetailSheet extends StatefulWidget {
+  final int spaceId;
+  final Map<String, dynamic> entry;
+  final Color accent;
+  final VoidCallback? onChanged;
+  const _MemoryDetailSheet({
+    required this.spaceId,
+    required this.entry,
+    required this.accent,
+    this.onChanged,
+  });
+
+  @override
+  State<_MemoryDetailSheet> createState() => _MemoryDetailSheetState();
+}
+
+class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
+  late Map<String, dynamic> _e = Map<String, dynamic>.from(widget.entry);
+  final TextEditingController _c = TextEditingController();
+  bool _sending = false;
+
+  Color get _accent => widget.accent;
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> get _comments =>
+      ((_e['comments'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((c) => Map<String, dynamic>.from(c))
+          .toList();
+
+  Future<void> _toggle(String emoji) async {
+    final id = (_e['id'] as num).toInt();
+    final updated =
+        await ApiService().reactDiaryEntry(widget.spaceId, id, emoji);
+    if (!mounted) return;
+    if (updated != null) {
+      setState(() => _e = updated);
+      widget.onChanged?.call();
+    } else {
+      showToast(context, 'Could not react — try again', type: ToastType.error);
+    }
+  }
+
+  Future<void> _addComment() async {
+    final text = _c.text.trim();
+    if (text.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    final id = (_e['id'] as num).toInt();
+    final c = await ApiService().addDiaryComment(widget.spaceId, id, text);
+    if (!mounted) return;
+    setState(() {
+      _sending = false;
+      if (c != null) {
+        final list = List<Map<String, dynamic>>.from(
+            (_e['comments'] as List?) ?? const []);
+        list.add(Map<String, dynamic>.from(c));
+        _e['comments'] = list;
+        _e['comment_count'] = list.length;
+        _c.clear();
+      }
+    });
+    if (c != null) {
+      widget.onChanged?.call();
+    } else if (mounted) {
+      showToast(context, 'Could not add comment', type: ToastType.error);
+    }
+  }
+
+  Future<void> _deleteComment(int cid) async {
+    final id = (_e['id'] as num).toInt();
+    final ok = await ApiService().deleteDiaryComment(widget.spaceId, id, cid);
+    if (!mounted) return;
+    if (ok) {
+      setState(() {
+        final list = List<Map<String, dynamic>>.from(
+            (_e['comments'] as List?) ?? const []);
+        list.removeWhere((x) => (x['id'] as num?)?.toInt() == cid);
+        _e['comments'] = list;
+        _e['comment_count'] = list.length;
+      });
+      widget.onChanged?.call();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final title = (_e['title'] ?? '').toString().trim();
+    final body = (_e['body'] ?? '').toString().trim();
+    final mine = _e['mine'] == true;
+    final author = (_e['author'] as Map?)?.cast<String, dynamic>();
+    final authorName = mine ? 'You' : (author?['username'] ?? '').toString();
+    final created = DateTime.tryParse((_e['created_at'] ?? '').toString());
+    final isPlan = (_e['kind'] ?? '') == 'plan';
+    final comments = _comments;
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 36),
+      backgroundColor: scheme.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 560,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 14, 8, 10),
+              child: Row(
+                children: [
+                  Icon(isPlan ? Icons.event_rounded : Icons.menu_book_rounded,
+                      color: _accent),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                        title.isNotEmpty
+                            ? title
+                            : (isPlan ? 'Plan' : 'Memory'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                            color: scheme.onSurface)),
+                  ),
+                  IconButton(
+                    tooltip: 'Minimize',
+                    icon: const Icon(Icons.close_fullscreen_rounded),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: scheme.outlineVariant),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 13,
+                          backgroundColor: _accent.withValues(alpha: 0.25),
+                          child: Text(
+                            (authorName.isNotEmpty ? authorName[0] : '·')
+                                .toUpperCase(),
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _accent),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(authorName.isEmpty ? 'Someone' : authorName,
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                color: scheme.onSurface)),
+                        const Spacer(),
+                        if (created != null)
+                          Text(_diaryAgo(created),
+                              style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: scheme.onSurfaceVariant)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (body.isNotEmpty)
+                      Text(body,
+                          style: TextStyle(
+                              fontSize: 14.5,
+                              height: 1.4,
+                              color: scheme.onSurface)),
+                    const SizedBox(height: 14),
+                    diaryReactionRow(
+                      scheme: scheme,
+                      accent: _accent,
+                      entry: _e,
+                      onToggle: _toggle,
+                      onAdd: () async {
+                        final em = await pickDiaryReaction(context, _accent);
+                        if (em != null && mounted) _toggle(em);
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    Divider(height: 1, color: scheme.outlineVariant),
+                    const SizedBox(height: 10),
+                    Text(
+                        comments.isEmpty
+                            ? 'Comments'
+                            : 'Comments (${comments.length})',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            color: scheme.onSurface)),
+                    const SizedBox(height: 8),
+                    if (comments.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                            'No comments yet — start the conversation.',
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                color: scheme.onSurfaceVariant)),
+                      )
+                    else
+                      for (final cm in comments) _commentTile(scheme, cm),
+                  ],
+                ),
+              ),
+            ),
+            Divider(height: 1, color: scheme.outlineVariant),
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                  14, 10, 14, 12 + MediaQuery.of(context).viewInsets.bottom),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _c,
+                      minLines: 1,
+                      maxLines: 4,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _addComment(),
+                      decoration: InputDecoration(
+                        hintText: 'Add a comment…',
+                        isDense: true,
+                        filled: true,
+                        fillColor: scheme.surfaceContainerHighest,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(22),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _sending
+                      ? SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: _accent),
+                          ),
+                        )
+                      : IconButton.filled(
+                          onPressed: _addComment,
+                          style: IconButton.styleFrom(
+                              backgroundColor: _accent,
+                              foregroundColor: Colors.white),
+                          icon: const Icon(Icons.send_rounded, size: 18),
+                        ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _commentTile(ColorScheme scheme, Map<String, dynamic> cm) {
+    final mine = cm['mine'] == true;
+    final author = (cm['author'] as Map?)?.cast<String, dynamic>();
+    final name = mine ? 'You' : (author?['username'] ?? 'Someone').toString();
+    final body = (cm['body'] ?? '').toString();
+    final created = DateTime.tryParse((cm['created_at'] ?? '').toString());
+    final cid = (cm['id'] as num?)?.toInt();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 10,
+                backgroundColor: _accent.withValues(alpha: 0.22),
+                child: Text(
+                  (name.isNotEmpty ? name[0] : '·').toUpperCase(),
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: _accent),
+                ),
+              ),
+              const SizedBox(width: 7),
+              Text(name,
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                      color: scheme.onSurface)),
+              const Spacer(),
+              if (created != null)
+                Text(_diaryAgo(created),
+                    style: TextStyle(
+                        fontSize: 10.5, color: scheme.onSurfaceVariant)),
+              if (mine && cid != null)
+                InkWell(
+                  onTap: () => _deleteComment(cid),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: Icon(Icons.close_rounded,
+                        size: 15, color: scheme.onSurfaceVariant),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(body,
+              style: TextStyle(
+                  fontSize: 13, height: 1.3, color: scheme.onSurface)),
+        ],
       ),
     );
   }

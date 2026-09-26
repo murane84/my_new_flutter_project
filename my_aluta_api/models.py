@@ -724,3 +724,51 @@ class DiaryEntry(Base):
     )
 
     author = relationship("User", foreign_keys=[author_id], passive_deletes=True)
+
+
+class DiaryReaction(Base):
+    """A partner's emoji reaction on a diary entry. Slack-style: a person may add
+    several DISTINCT emojis to one entry (one row each), and toggling the same
+    emoji off removes it — so counts per emoji reflect who felt what. Either
+    partner can react to any entry, author or not. Auto-created; no ALTER."""
+    __tablename__ = "diary_reactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    entry_id = Column(
+        Integer, ForeignKey("diary_entries.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    emoji = Column(String, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint('entry_id', 'user_id', 'emoji', name='_diary_react_uc'),
+    )
+
+
+class DiaryComment(Base):
+    """A comment under a diary entry — the growing conversation about a memory or
+    plan. Each entry has its own thread; comments are shared across the bond
+    (both partners see them) and ordered oldest-first. Auto-created; no ALTER."""
+    __tablename__ = "diary_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    entry_id = Column(
+        Integer, ForeignKey("diary_entries.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    author_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    body = Column(Text, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    author = relationship("User", foreign_keys=[author_id], passive_deletes=True)

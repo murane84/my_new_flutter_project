@@ -4,7 +4,15 @@ import 'package:flutter/material.dart';
 /// consistent with the music panel and the app's bottom sheets (rather than
 /// dropping down from the header, which clashed with those surfaces and their
 /// controls). Fades + rises on entry.
-Future<T?> showAppPopup<T>(BuildContext context, Widget child) async {
+Future<T?> showAppPopup<T>(
+  BuildContext context,
+  Widget child, {
+  // When true, the card scales + fades toward the bottom (its footer "home")
+  // on entry and — crucially — on exit, so dismissing it reads as MINIMIZING
+  // the card back down rather than a hard cut. Used by Our Space so tapping the
+  // minimize button feels like tucking the page away for a moment.
+  bool minimizeStyle = false,
+}) async {
   // Drop any active text focus so opening the popup never carries a keyboard
   // in with it.
   FocusManager.instance.primaryFocus?.unfocus();
@@ -13,10 +21,33 @@ Future<T?> showAppPopup<T>(BuildContext context, Widget child) async {
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
     barrierColor: Colors.black.withAlpha(90),
-    transitionDuration: const Duration(milliseconds: 260),
+    transitionDuration: const Duration(milliseconds: 300),
+    reverseTransitionDuration: const Duration(milliseconds: 260),
     pageBuilder: (_, _, _) => child,
     transitionBuilder: (_, anim, _, c) {
-      final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
+      final curved = CurvedAnimation(
+        parent: anim,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      if (minimizeStyle) {
+        // Shrink toward the bottom-centre and slide down: on reverse (dismiss)
+        // this plays backwards, so the card looks absorbed back down to where
+        // it lives instead of vanishing in place.
+        return FadeTransition(
+          opacity: curved,
+          child: SlideTransition(
+            position: Tween<Offset>(
+                    begin: const Offset(0, 0.12), end: Offset.zero)
+                .animate(curved),
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.86, end: 1.0).animate(curved),
+              alignment: Alignment.bottomCenter,
+              child: c,
+            ),
+          ),
+        );
+      }
       return FadeTransition(
         opacity: curved,
         child: SlideTransition(
@@ -49,6 +80,11 @@ class AppPopupShell extends StatelessWidget {
   final Widget? headerAction;
   final double desktopMaxWidth;
   final Widget Function(BuildContext context, bool isWide) builder;
+  // The trailing dismiss control. Defaults to a plain close; a page that opened
+  // with `minimizeStyle` can pass a minimize glyph + tooltip so the button reads
+  // as "tuck this away" rather than "close".
+  final IconData closeIcon;
+  final String closeTooltip;
 
   const AppPopupShell({
     super.key,
@@ -57,6 +93,8 @@ class AppPopupShell extends StatelessWidget {
     required this.builder,
     this.headerAction,
     this.desktopMaxWidth = 760,
+    this.closeIcon = Icons.close_rounded,
+    this.closeTooltip = 'Close',
   });
 
   @override
@@ -136,8 +174,8 @@ class AppPopupShell extends StatelessWidget {
                         ),
                         ?headerAction,
                         IconButton(
-                          tooltip: 'Close',
-                          icon: const Icon(Icons.close_rounded),
+                          tooltip: closeTooltip,
+                          icon: Icon(closeIcon),
                           onPressed: () {
                             FocusScope.of(context).unfocus();
                             Navigator.of(context).pop();

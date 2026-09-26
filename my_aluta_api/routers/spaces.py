@@ -100,8 +100,15 @@ def _member_dicts(db: Session, space: RelationshipSpace) -> list:
 
 
 def _space_brief(db: Session, space: RelationshipSpace,
-                 current_user_id: Optional[int] = None) -> dict:
-    """The light shape used in the list / hero card."""
+                 current_user_id: Optional[int] = None,
+                 include_stats: bool = False) -> dict:
+    """The light shape used in the list / hero card.
+
+    When [include_stats] is set (the spaces LIST), it also carries the bond's
+    stats + the playlist/diary counts, so opening the Space page paints fully on
+    the first frame — the badges and streak don't have to wait on a second
+    round-trip (which was visibly laggy on the slower web fetch). `_space_full`
+    leaves it off and computes its own stats."""
     data = {
         "id": space.id,
         "owner_id": space.owner_id,
@@ -115,6 +122,36 @@ def _space_brief(db: Session, space: RelationshipSpace,
     }
     if current_user_id is not None:
         data["status"] = _space_status(db, space, current_user_id)
+        # Bond-scoped moment count (both partners' mirror Spaces), so the badge
+        # matches the full page's moments list instead of shifting after load.
+        try:
+            bond_ids = _bond_space_ids(db, space, current_user_id)
+            data["moment_count"] = (
+                db.query(PinnedMoment)
+                .filter(PinnedMoment.space_id.in_(bond_ids)).count()
+            )
+        except Exception:
+            pass
+        # Cheap per-bond counts for the tile badges (0 for a non-pair Space).
+        pk, partner = _bond_pair_key(space, current_user_id)
+        if pk is not None:
+            data["playlist_count"] = (
+                db.query(PlaylistTrack)
+                .filter(PlaylistTrack.pair_key == pk).count()
+            )
+            data["diary_count"] = (
+                db.query(DiaryEntry)
+                .filter(DiaryEntry.pair_key == pk).count()
+            )
+        else:
+            data["playlist_count"] = 0
+            data["diary_count"] = 0
+        if include_stats and partner is not None:
+            close_since_date = (
+                space.created_at.date() if space.created_at else None)
+            st = bonding.bond_stats(
+                db, current_user_id, partner, close_since_date)
+            data["stats"] = {"close_since": data["close_since"], **st}
     return data
 
 
@@ -709,7 +746,12 @@ def list_spaces(
         except Exception:
             db.rollback()
     spaces.sort(key=lambda s: (0 if s.is_primary else 1, -s.id))
-    return {"spaces": [_space_brief(db, s, current_user.id) for s in spaces]}
+    return {
+        "spaces": [
+            _space_brief(db, s, current_user.id, include_stats=True)
+            for s in spaces
+        ]
+    }
 
 
 @router.post("")

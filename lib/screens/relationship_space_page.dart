@@ -343,6 +343,11 @@ class RelationshipSpacePage extends StatefulWidget {
   final String? myName;      // the signed-in user's display name
   final String? myAvatarUrl; // full URL of the signed-in user's photo
   final VoidCallback? onChanged; // ask HomePage to reload its hero
+  // Builds the app-wide overflow (⋮) menu so Our Space can carry the SAME
+  // platform menu the home header has — a user deep in Our Space can jump to
+  // Together, Groups, Friends, Profile, Sign out… without minimising first.
+  // HomePage supplies this (it owns those actions); null → the ⋮ is hidden.
+  final WidgetBuilder? mainMenuBuilder;
 
   const RelationshipSpacePage({
     super.key,
@@ -352,6 +357,7 @@ class RelationshipSpacePage extends StatefulWidget {
     this.myName,
     this.myAvatarUrl,
     this.onChanged,
+    this.mainMenuBuilder,
   });
 
   @override
@@ -851,6 +857,15 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             icon: Icons.push_pin_outlined,
             onPressed: _unpin,
           ),
+          // The platform's main (⋮) menu, carried straight into Our Space so the
+          // user can reach Together, Groups, Friends, Devices, Profile, Sign out
+          // etc. from here — the same overflow menu the home header shows, built
+          // by HomePage (it owns those actions). Rendered exactly as on home (a
+          // plain kebab) so it reads as the SAME control, not a new one.
+          if (widget.mainMenuBuilder != null) ...[
+            const SizedBox(width: 4),
+            widget.mainMenuBuilder!(context),
+          ],
         ],
       ),
       // A section takes over the body as a full page BELOW this header (the

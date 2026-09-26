@@ -823,7 +823,12 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         .map((m) => Map<String, dynamic>.from(m))
         .toList();
 
-    return AppPopupShell(
+    // Back (Android system back button OR the edge-swipe-back gesture) should
+    // step BACK THROUGH Our Space's own layers first — close an open nav drawer,
+    // then a section → the dashboard — and only dismiss the whole page once
+    // we're already on the dashboard. Without this, an edge swipe inside a
+    // section popped the entire popup straight back to Harmony/Circle.
+    final shell = AppPopupShell(
       title: 'Our Space',
       icon: Icons.favorite_rounded,
       // Our Space takes the WHOLE screen — an immersive, focused surface for the
@@ -916,6 +921,24 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                 child: _sectionScaffold(scheme),
               ),
       ),
+    );
+
+    return PopScope(
+      // Only let the route itself pop when we're already at the top level (the
+      // dashboard, no drawer showing). Otherwise we intercept back and unwind
+      // one layer at a time below.
+      canPop: _section == null && !_navDrawerOpen,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_navDrawerOpen) {
+          setState(() => _navDrawerOpen = false);
+        } else if (_section != null) {
+          // Return to the Our Space dashboard instead of closing the page — the
+          // section genies back into the tile it came from.
+          setState(() => _section = null);
+        }
+      },
+      child: shell,
     );
   }
 

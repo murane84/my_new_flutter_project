@@ -36,6 +36,12 @@ const Map<String, Color> kSpacePalette = {
 
 Color spaceThemeColor(String? key) => kSpacePalette[key] ?? const Color(0xFFFF5A5F);
 
+// The matched fixed size of the two hero stat chips. Both share this exact size
+// so they read as a pair, and it's kept a touch under the avatar cluster's
+// height (~58px) so the two photos remain the banner's anchor.
+const double _kHeroStatW = 96;
+const double _kHeroStatH = 54;
+
 /// Bumped by the home socket whenever a bond action (moment, reaction, playlist
 /// add, accept) arrives, so an OPEN Our Space page reloads itself and both
 /// partners see the action live. It carries no payload — a bump just means
@@ -1172,65 +1178,76 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
-  /// A vertical stat block that sits beside the identity in the wide hero —
-  /// styled as a soft frosted "glass" chip that rises off the banner (a
-  /// translucent fill, a light top edge and a gentle drop shadow) so the number
-  /// and label stand out instead of being washed into the Space colour.
+  /// A frosted "glass" stat chip beside the identity in the wide hero. Both
+  /// chips share ONE fixed size ([_kHeroStatW] × [_kHeroStatH]) so they read as
+  /// a matched pair, and that size is kept a touch smaller than the avatar
+  /// cluster so the two photos stay the anchor of the banner.
   Widget _heroSideStat(String emoji, String value, String label) {
     const glyphShadow = Shadow(
       color: Color(0x33000000),
       blurRadius: 3,
       offset: Offset(0, 1),
     );
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        // Frosted glass: brighter at the top, dimmer at the base — a lit facet.
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.white.withValues(alpha: 0.30),
-            Colors.white.withValues(alpha: 0.12),
+    return SizedBox(
+      width: _kHeroStatW,
+      height: _kHeroStatH,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          // Frosted glass: brighter at the top, dimmer at the base — a lit facet.
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.white.withValues(alpha: 0.30),
+              Colors.white.withValues(alpha: 0.12),
+            ],
+          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.45)),
+          boxShadow: [
+            // Cast shadow (depth) + a soft top highlight (bevel).
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.14),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
+            BoxShadow(
+              color: Colors.white.withValues(alpha: 0.25),
+              blurRadius: 1,
+              spreadRadius: -1,
+              offset: const Offset(0, -1),
+            ),
           ],
         ),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.45)),
-        boxShadow: [
-          // Cast shadow (depth) + a soft inner-ish top highlight (bevel).
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.14),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-          BoxShadow(
-            color: Colors.white.withValues(alpha: 0.25),
-            blurRadius: 1,
-            spreadRadius: -1,
-            offset: const Offset(0, -1),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(emoji,
-              style: const TextStyle(fontSize: 20, shadows: [glyphShadow])),
-          const SizedBox(height: 3),
-          Text(value,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 19,
-                  shadows: [glyphShadow])),
-          const SizedBox(height: 1),
-          Text(label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.92),
-                  fontSize: 11,
-                  shadows: const [glyphShadow])),
-        ],
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(emoji,
+                    style: const TextStyle(fontSize: 15, shadows: [glyphShadow])),
+                const SizedBox(width: 5),
+                Text(value,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 17,
+                        shadows: [glyphShadow])),
+              ],
+            ),
+            const SizedBox(height: 1),
+            Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    shadows: [glyphShadow])),
+          ],
+        ),
       ),
     );
   }

@@ -181,24 +181,24 @@ class _LegalHubState extends State<_LegalHub> {
                   ],
                 ),
               ),
-              // PERSISTENT tab bar — switch documents without leaving the page.
-              _tabBar(scheme, isWide),
+              // Divider directly under the title — the content scrolls right
+              // below it, so the title (e.g. "Terms of Service") is never
+              // crowded by the tabs. The switcher now lives in the footer.
               Divider(height: 1, color: scheme.outlineVariant.withAlpha(70)),
               // Body — width-capped + centred on desktop, full-bleed on phone.
-              // SafeArea keeps the last content clear of the phone gesture bar.
+              // Scrolls BETWEEN the title above and the footer tab bar below.
               Expanded(
-                child: SafeArea(
-                  top: false,
-                  child: isWide
-                      ? Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 720),
-                            child: _body(doc),
-                          ),
-                        )
-                      : _body(doc),
-                ),
+                child: isWide
+                    ? Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 720),
+                          child: _body(doc),
+                        ),
+                      )
+                    : _body(doc),
               ),
+              // PERSISTENT switcher — pinned to the FOOTER as equal-width pills.
+              _footerTabs(scheme, isWide),
             ],
           ),
         ),
@@ -221,22 +221,41 @@ class _LegalHubState extends State<_LegalHub> {
     );
   }
 
-  // The persistent segmented tab row (horizontally scrollable if it's tight).
-  Widget _tabBar(ColorScheme scheme, bool isWide) {
+  // The persistent switcher, pinned to the FOOTER as three EQUAL-WIDTH pills so
+  // the row is balanced across the width. Its own top border + surface tint set
+  // it apart as a footer bar, and SafeArea keeps it above the phone gesture bar.
+  Widget _footerTabs(ColorScheme scheme, bool isWide) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final row = Row(
+      children: [
+        for (int i = 0; i < _kLegalDocs.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(child: _tab(scheme, i)),
+        ],
+      ],
+    );
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 2, 12, 10),
-      alignment: isWide ? Alignment.center : Alignment.centerLeft,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (int i = 0; i < _kLegalDocs.length; i++) ...[
-              if (i > 0) const SizedBox(width: 8),
-              _tab(scheme, i),
-            ],
-          ],
+      decoration: BoxDecoration(
+        color: dark
+            ? scheme.surfaceContainerHigh.withAlpha(150)
+            : scheme.surfaceContainerHighest.withAlpha(120),
+        border: Border(
+          top: BorderSide(color: scheme.outlineVariant.withAlpha(90)),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          child: isWide
+              ? Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    child: row,
+                  ),
+                )
+              : row,
         ),
       ),
     );
@@ -265,20 +284,25 @@ class _LegalHubState extends State<_LegalHub> {
                   : scheme.outlineVariant.withAlpha(80),
             ),
           ),
+          // Centre the icon + label inside the equal-width pill.
           child: Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(doc.icon,
                   size: 16,
                   color:
                       selected ? scheme.primary : scheme.onSurfaceVariant),
               const SizedBox(width: 6),
-              Text(
-                doc.tab,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                  color: selected ? scheme.primary : scheme.onSurfaceVariant,
+              Flexible(
+                child: Text(
+                  doc.tab,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                    color: selected ? scheme.primary : scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ],

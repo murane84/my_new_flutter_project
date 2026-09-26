@@ -1660,7 +1660,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
               const SizedBox(width: 10),
               Icon(Icons.menu_book_rounded, color: _accent, size: 20),
               const SizedBox(width: 6),
-              Text('Our Diary',
+              // Just "Diary" here — "Our Diary" reads awkwardly right beneath the
+              // "Our Space" app header.
+              Text('Diary',
                   style: TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 16,

@@ -1383,9 +1383,17 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   /// active one highlighted. [onClose] (drawer mode) adds a minimize button.
   Widget _sectionSidebar(ColorScheme scheme, {VoidCallback? onClose}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // In DRAWER mode (onClose != null) the card is flush to the screen edge and
+    // runs the full page height, so rounding its OUTER (left/top/bottom) corners
+    // just exposes the dimmed page behind as dark notches. Square those; round
+    // only the inner RIGHT edge that floats over the content.
+    final drawer = onClose != null;
+    final radius = drawer
+        ? const BorderRadius.horizontal(right: Radius.circular(18))
+        : BorderRadius.circular(18);
     return DecoratedBox(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: radius,
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
@@ -1398,7 +1406,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.42 : 0.14),
             blurRadius: 18,
-            offset: const Offset(0, 8),
+            // Cast the shadow to the RIGHT (over the content) in drawer mode so
+            // it never darkens the flush left edge; straight down for the rail.
+            offset: drawer ? const Offset(6, 0) : const Offset(0, 8),
           ),
         ],
       ),
@@ -1508,8 +1518,26 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
+  /// How many items a section holds, for the sidebar badges (null = no count,
+  /// e.g. Song & milestones). Uses the server COUNT fields with a live fallback.
+  int? _sectionCount(String key) {
+    switch (key) {
+      case 'playlist':
+        return (_space['playlist_count'] as num?)?.toInt() ??
+            ((_space['playlist'] as List?) ?? const []).length;
+      case 'moments':
+        return (_space['moment_count'] as num?)?.toInt() ??
+            ((_space['moments'] as List?) ?? const []).length;
+      case 'diary':
+        return (_space['diary_count'] as num?)?.toInt() ?? _diary.length;
+      default:
+        return null;
+    }
+  }
+
   Widget _sidebarItem(ColorScheme scheme, (String, IconData, String) s) {
     final active = _section == s.$1;
+    final count = _sectionCount(s.$1);
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Material(
@@ -1520,7 +1548,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOut,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+            padding: const EdgeInsets.fromLTRB(8, 11, 10, 11),
             decoration: BoxDecoration(
               color:
                   active ? _accent.withValues(alpha: 0.14) : Colors.transparent,
@@ -1532,6 +1560,19 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             ),
             child: Row(
               children: [
+                // Active "rail" indicator — a short accent bar on the left. A
+                // fixed-width slot (transparent when idle) keeps every icon
+                // aligned whether or not the bar is showing.
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: 3,
+                  height: active ? 18 : 0,
+                  decoration: BoxDecoration(
+                    color: active ? _accent : Colors.transparent,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Icon(s.$2,
                     size: 18,
                     color: active ? _accent : scheme.onSurfaceVariant),
@@ -1546,11 +1587,34 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                               active ? FontWeight.w800 : FontWeight.w600,
                           color: active ? _accent : scheme.onSurface)),
                 ),
+                if (count != null && count > 0) ...[
+                  const SizedBox(width: 8),
+                  _sidebarCountBadge(count, active),
+                ],
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  /// A small count pill on a sidebar row — filled accent on the active row,
+  /// a faint accent tint on the others.
+  Widget _sidebarCountBadge(int count, bool active) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 22),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: active ? _accent : _accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text('$count',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+              color: active ? Colors.white : _accent)),
     );
   }
 

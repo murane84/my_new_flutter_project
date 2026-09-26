@@ -17,8 +17,8 @@ To publish an update:
 """
 
 # Bump this (and the date) whenever the policy or terms materially change.
-CURRENT_POLICY_VERSION = 1
-POLICY_EFFECTIVE_DATE = "13 August 2026"
+CURRENT_POLICY_VERSION = 2
+POLICY_EFFECTIVE_DATE = "26 September 2026"
 
 # The docs are served by the API itself (see main.py), so the client only needs
 # the paths; it prefixes them with the API origin. Kept relative so the same
@@ -35,6 +35,15 @@ POLICY_SUMMARY = {
         "continue. They explain what data Aluta handles (note: messages and "
         "media are not end-to-end encrypted in this beta build), the third-party "
         "services it uses, and the rules for using the app."
+    ),
+    2: (
+        "We've updated Aluta's Privacy Policy and Terms to cover new features: "
+        "\"Our Space\" (a private space you share with one partner — a shared "
+        "playlist, pinned moments, and live Listen Together) and \"Our Diary\" "
+        "(shared memories and future plans you can both react to and comment on, "
+        "with on-device reminders for plans you pin). Everything in a Space is "
+        "visible to both members. Please review and accept the updated documents "
+        "to continue."
     ),
 }
 

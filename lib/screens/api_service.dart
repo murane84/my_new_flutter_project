@@ -1483,6 +1483,119 @@ class ApiService {
     }
   }
 
+  // ── Our Diary (shared notebook: memories + plans) ──────────────────────────
+  /// Fetch the shared diary for a space (plans-first, soonest upcoming). Returns
+  /// the list of entry maps, or an empty list on failure.
+  Future<List<Map<String, dynamic>>> getDiary(int spaceId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return const [];
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/diary'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        final list = (data is Map ? data['entries'] : data) as List?;
+        return (list ?? const [])
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+      return const [];
+    } catch (e) {
+      _logger.w('getDiary failed: $e');
+      return const [];
+    }
+  }
+
+  /// Write a diary entry. [kind] is 'memory' or 'plan'; [planDate] ('YYYY-MM-DD')
+  /// and [pinned] apply to plans. Returns the created entry map, or null.
+  Future<Map<String, dynamic>?> addDiaryEntry(
+    int spaceId, {
+    required String kind,
+    required String body,
+    String? title,
+    String? planDate,
+    bool pinned = false,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/diary'),
+        headers: _authHeaders(token),
+        body: jsonEncode({
+          'kind': kind,
+          'body': body,
+          'title': ?title,
+          'plan_date': ?planDate,
+          'pinned': pinned,
+        }),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('addDiaryEntry failed: $e');
+      return null;
+    }
+  }
+
+  /// Edit a diary entry — only the fields you pass change. Pass an empty
+  /// [planDate] to clear a plan's date. Returns the updated entry map, or null.
+  Future<Map<String, dynamic>?> editDiaryEntry(
+    int spaceId,
+    int entryId, {
+    String? kind,
+    String? body,
+    String? title,
+    String? planDate,
+    bool? pinned,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.patch(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/diary/$entryId'),
+        headers: _authHeaders(token),
+        body: jsonEncode({
+          'kind': ?kind,
+          'body': ?body,
+          'title': ?title,
+          'plan_date': ?planDate,
+          'pinned': ?pinned,
+        }),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('editDiaryEntry failed: $e');
+      return null;
+    }
+  }
+
+  /// Remove a diary entry (either partner can prune the shared notebook).
+  Future<bool> deleteDiaryEntry(int spaceId, int entryId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.delete(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/diary/$entryId'),
+        headers: _authHeaders(token),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.w('deleteDiaryEntry failed: $e');
+      return false;
+    }
+  }
+
   /// Remove a pinned moment.
   Future<bool> deleteMoment(int spaceId, int momentId) async {
     try {

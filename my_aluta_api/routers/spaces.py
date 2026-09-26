@@ -22,8 +22,9 @@ from pydantic import BaseModel
 from database import get_db
 from models import (
     User, RelationshipSpace, SpaceMember, PinnedMoment, MomentReaction,
-    PlaylistTrack, BondRequest,
+    PlaylistTrack, BondRequest, DiaryEntry,
 )
+from datetime import date as _date
 import crud
 import schemas
 import bonding
@@ -45,6 +46,26 @@ class _TrackBody(BaseModel):
     title: str
     artist: Optional[str] = None
     ref: Optional[str] = None
+
+
+class _DiaryBody(BaseModel):
+    # A shared diary entry. `kind`: 'memory' (past) | 'plan' (future).
+    kind: Optional[str] = "memory"
+    title: Optional[str] = None
+    body: str
+    # 'YYYY-MM-DD' for a plan; ignored for a memory.
+    plan_date: Optional[str] = None
+    pinned: Optional[bool] = False
+
+
+class _DiaryEditBody(BaseModel):
+    # All optional — only provided fields change. `plan_date` may be cleared by
+    # sending an empty string.
+    kind: Optional[str] = None
+    title: Optional[str] = None
+    body: Optional[str] = None
+    plan_date: Optional[str] = None
+    pinned: Optional[bool] = None
 
 # Free tier: one pinned Space. Raised for the Together plan (checked per-user).
 # Scarcity is the point (spec §2.1). Free keeps a single hero Space; the Together
@@ -478,6 +499,107 @@ def _notify_partner_playlist(db: Session, space: RelationshipSpace,
             pass
 
 
+_VALID_DIARY_KINDS = {"memory", "plan"}
+
+
+def _parse_plan_date(raw):
+    """Parse 'YYYY-MM-DD' → date (best-effort). Empty/None/garbage → None, so a
+    plan without a set day, or a cleared one, is simply undated."""
+    if not raw:
+        return None
+    try:
+        return _date.fromisoformat(str(raw)[:10])
+    except Exception:
+        return None
+
+
+def _diary_dict(db: Session, e: DiaryEntry, current_user_id: int) -> dict:
+    author = e.author or (
+        db.query(User).filter(User.id == e.author_id).first()
+        if e.author_id else None
+    )
+    return {
+        "id": e.id,
+        "kind": e.kind,
+        "title": e.title,
+        "body": e.body,
+        "plan_date": e.plan_date.isoformat() if e.plan_date else None,
+        "pinned": bool(e.pinned),
+        "author_id": e.author_id,
+        "author": {
+            "id": author.id,
+            "username": author.username,
+            "avatar_url": author.avatar_url,
+        } if author else None,
+        "mine": e.author_id == current_user_id,
+        "created_at": e.created_at.isoformat() if e.created_at else None,
+        "updated_at": e.updated_at.isoformat() if e.updated_at else None,
+    }
+
+
+def _diary_for(db: Session, space: RelationshipSpace,
+               current_user_id: int) -> list:
+    """The shared diary for this bond (both partners' entries). Plans first,
+    ordered by their date (soonest upcoming first), then memories newest-first —
+    so what's ahead sits at the top and the history reads back in time."""
+    pk, _partner = _bond_pair_key(space, current_user_id)
+    if pk is None:
+        return []
+    rows = (
+        db.query(DiaryEntry)
+        .filter(DiaryEntry.pair_key == pk)
+        .all()
+    )
+    plans = [r for r in rows if r.kind == "plan"]
+    memories = [r for r in rows if r.kind != "plan"]
+    # Plans: dated ones by date ascending (soonest first), undated ones last.
+    plans.sort(key=lambda r: (r.plan_date is None,
+                              r.plan_date or _date.max, -r.id))
+    memories.sort(key=lambda r: -r.id)
+    return [_diary_dict(db, r, current_user_id) for r in plans + memories]
+
+
+def _notify_partner_diary(db: Session, space: RelationshipSpace,
+                          current_user: User, entry: DiaryEntry) -> None:
+    """Tell the partner the diary just grew — a shared notebook only feels shared
+    if the other person knows it changed. Best-effort socket + push."""
+    partner = _partner_id(space, current_user.id)
+    if not partner:
+        return
+    who = current_user.username or "Someone"
+    if entry.kind == "plan":
+        line = f"{who} added a plan to your diary 🗓️"
+    else:
+        line = f"{who} wrote a memory in your diary 📖"
+    try:
+        safe_notify_user(partner, {
+            "type": "space_diary",
+            "data": {
+                "space_id": space.id,
+                "entry_id": entry.id,
+                "from_id": current_user.id,
+                "from_username": who,
+                "kind": entry.kind,
+                "title": entry.title,
+                "plan_date": entry.plan_date.isoformat()
+                if entry.plan_date else None,
+                "pinned": bool(entry.pinned),
+                "line": line,
+            },
+        })
+    except Exception:
+        pass
+    if send_push_to_user is not None:
+        try:
+            send_push_to_user(partner, {
+                "type": "space_diary",
+                "title": "Our Diary 📖",
+                "body": line,
+            })
+        except Exception:
+            pass
+
+
 def _space_full(db: Session, space: RelationshipSpace, current_user: User) -> dict:
     data = _space_brief(db, space, current_user.id)
     # Stats: real shared-listening maths for a 1:1 bond (streak, days, your song,
@@ -501,6 +623,8 @@ def _space_full(db: Session, space: RelationshipSpace, current_user: User) -> di
     data["moments"] = [_moment_dict(db, m, current_user.id) for m in moments]
     # "Our Playlist" — the shared crate for this bond (both partners' adds).
     data["playlist"] = _playlist_for(db, space, current_user.id)
+    # "Our Diary" — the shared notebook (memories + upcoming plans) for the bond.
+    data["diary"] = _diary_for(db, space, current_user.id)
     return data
 
 
@@ -1021,6 +1145,127 @@ def remove_track(
         raise HTTPException(status_code=404, detail="Track not found")
     db.delete(track)
     db.commit()
+    return {"ok": True}
+
+
+@router.get("/{space_id}/diary")
+def get_diary(
+    space_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The shared diary for this bond — both partners' entries (memories + plans),
+    plans-first ordered soonest-upcoming."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    return {"entries": _diary_for(db, space, current_user.id)}
+
+
+@router.post("/{space_id}/diary")
+def add_diary_entry(
+    space_id: int,
+    payload: _DiaryBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Write a diary entry. Shared across the bond via pair_key so the partner
+    sees it too, and notifies them so the notebook feels co-authored."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(
+            status_code=400,
+            detail="This space has no partner to share a diary with")
+    body = (payload.body or "").strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="A diary entry needs some text")
+    kind = (payload.kind or "memory").strip().lower()
+    if kind not in _VALID_DIARY_KINDS:
+        kind = "memory"
+    title = (payload.title or "").strip() or None
+    plan_date = _parse_plan_date(payload.plan_date) if kind == "plan" else None
+    pinned = bool(payload.pinned) and kind == "plan"
+    entry = DiaryEntry(
+        pair_key=pk,
+        author_id=current_user.id,
+        kind=kind,
+        title=title[:200] if title else None,
+        body=body[:4000],
+        plan_date=plan_date,
+        pinned=pinned,
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    _notify_partner_diary(db, space, current_user, entry)
+    return _diary_dict(db, entry, current_user.id)
+
+
+@router.patch("/{space_id}/diary/{entry_id}")
+def edit_diary_entry(
+    space_id: int,
+    entry_id: int,
+    payload: _DiaryEditBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Edit a diary entry. Either partner may refine the shared notebook (it's
+    communal, like the playlist). Only provided fields change; `plan_date` may be
+    cleared with an empty string, and `pinned`/`plan_date` only apply to plans."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    entry = db.query(DiaryEntry).filter(
+        DiaryEntry.id == entry_id,
+        DiaryEntry.pair_key == pk,
+    ).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    if payload.kind is not None:
+        k = payload.kind.strip().lower()
+        if k in _VALID_DIARY_KINDS:
+            entry.kind = k
+    if payload.title is not None:
+        t = payload.title.strip()
+        entry.title = t[:200] if t else None
+    if payload.body is not None:
+        b = payload.body.strip()
+        if b:
+            entry.body = b[:4000]
+    if payload.plan_date is not None:
+        entry.plan_date = _parse_plan_date(payload.plan_date)
+    if payload.pinned is not None:
+        entry.pinned = bool(payload.pinned)
+    # A memory can't carry a plan date or a pin.
+    if entry.kind != "plan":
+        entry.plan_date = None
+        entry.pinned = False
+    entry.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(entry)
+    return _diary_dict(db, entry, current_user.id)
+
+
+@router.delete("/{space_id}/diary/{entry_id}")
+def delete_diary_entry(
+    space_id: int,
+    entry_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Remove a diary entry. Either partner can prune the shared notebook. Scoped
+    by pair_key so you can only touch your own bond's diary."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    deleted = db.query(DiaryEntry).filter(
+        DiaryEntry.id == entry_id,
+        DiaryEntry.pair_key == pk,
+    ).delete(synchronize_session=False)
+    db.commit()
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Entry not found")
     return {"ok": True}
 
 

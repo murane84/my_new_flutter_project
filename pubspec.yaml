@@ -149,6 +149,11 @@ dependencies:
 
   # Notifications
   flutter_local_notifications: ^22.2.0
+  # Time-zone database for scheduling local notifications on a specific future
+  # day (Our Diary plan reminders). Already pulled in transitively by
+  # flutter_local_notifications; declared here so we can import it directly.
+  # Pinned on the 0.11 line (matches the resolved transitive version).
+  timezone: ^0.11.0
   # Push notifications (Firebase Cloud Messaging) so messages/calls wake the
   # phone when the app is backgrounded or closed. Android/iOS only — every call
   # is guarded off on web/Windows/Linux (no FCM there). Requires the Firebase

@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest.dart' as tzdata;
 
 /// Native bridge (see android MainActivity) for OS state the notification
 /// plugin can't report — currently the full-screen-intent grant.
@@ -157,9 +159,27 @@ const _callNotifId = 2001;
 // instead of the short message notification sound.
 const _systemRingtoneUri = 'content://settings/system/ringtone';
 
+const _diaryChannelId = 'aluta_diary_plans';
+const _diaryChannelName = 'Diary plan reminders';
+// Notification-id namespace for scheduled diary-plan reminders, so they can be
+// reconciled (cancelled/rescheduled) without touching message/call ids. A plan
+// with entry id E schedules at (_diaryNotifBase + E).
+const int _diaryNotifBase = 3000000;
+const int _diaryNotifMax = 3999999;
+
+bool _tzReady = false;
+void _ensureTimeZones() {
+  if (_tzReady) return;
+  try {
+    tzdata.initializeTimeZones();
+    _tzReady = true;
+  } catch (_) {/* best-effort — scheduling just no-ops if this fails */}
+}
+
 Future<void> initNotifications() async {
   if (_ready || kIsWeb) return;
   try {
+    _ensureTimeZones();
     const android =
         AndroidInitializationSettings('@mipmap/launcher_icon');
     await _fln.initialize(
@@ -204,7 +224,122 @@ Future<void> initNotifications() async {
             Int64List.fromList(<int>[0, 1000, 800, 1000, 800, 1000]),
       ),
     );
+    // Gentle, low-key channel for Our Diary plan reminders (a warm nudge, not a
+    // ring). Default importance so it lands quietly in the shade.
+    await android_?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _diaryChannelId,
+        _diaryChannelName,
+        description: 'Reminders for plans you pinned in Our Diary',
+        importance: Importance.defaultImportance,
+      ),
+    );
     _ready = true;
+  } catch (_) {/* best-effort */}
+}
+
+// ── Our Diary: pinned-plan reminders ─────────────────────────────────────────
+
+/// A plan the couple pinned for a reminder. [id] is the diary entry id (used to
+/// derive a stable notification id so a reschedule replaces the old one).
+class PlanReminder {
+  final int id;
+  final String title; // what to show (plan title, else a snippet of the body)
+  final DateTime date; // the plan's day (local); reminder fires that morning
+  const PlanReminder({required this.id, required this.title, required this.date});
+}
+
+int _diaryNotifId(int entryId) {
+  final v = _diaryNotifBase + entryId;
+  return v > _diaryNotifMax ? _diaryNotifBase + (entryId % 1000000) : v;
+}
+
+/// The exact instant a reminder should fire for [day]: 9:00am on that calendar
+/// day in the DEVICE's local wall-clock, expressed as a UTC-anchored TZDateTime
+/// (so it fires at 9am local regardless of the tz database's default location —
+/// we don't need to know the device's IANA zone name). Null if that instant is
+/// already in the past.
+tz.TZDateTime? _reminderInstant(DateTime day) {
+  // 9am on the plan's day, in local wall-clock; toUtc() applies the device's
+  // real offset to get the correct absolute instant.
+  final localNine = DateTime(day.year, day.month, day.day, 9, 0);
+  final utc = localNine.toUtc();
+  final when = tz.TZDateTime.from(utc, tz.UTC);
+  final now = tz.TZDateTime.now(tz.UTC);
+  if (!when.isAfter(now)) {
+    // Same-day-but-past (e.g. pinned in the afternoon for today): nudge shortly
+    // so a plan for "today" still reminds. A truly past day → skip.
+    if (day.year == now.toLocal().year &&
+        day.month == now.toLocal().month &&
+        day.day == now.toLocal().day) {
+      return now.add(const Duration(minutes: 1));
+    }
+    return null;
+  }
+  return when;
+}
+
+Future<void> _scheduleDiaryReminder(PlanReminder p) async {
+  final when = _reminderInstant(p.date);
+  if (when == null) return;
+  final title = p.title.trim().isEmpty ? 'A plan for today 💛' : p.title.trim();
+  try {
+    await _fln.zonedSchedule(
+      id: _diaryNotifId(p.id),
+      title: 'Upcoming plan 💛',
+      body: title,
+      scheduledDate: when,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _diaryChannelId,
+          _diaryChannelName,
+          channelDescription: 'Reminders for plans you pinned in Our Diary',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+          icon: '@mipmap/launcher_icon',
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: '{"type":"diary_plan"}',
+    );
+  } catch (_) {/* best-effort — exact-alarm perms etc. */}
+}
+
+/// Reconcile the OS's scheduled diary reminders to exactly [plans]: schedule the
+/// ones that should exist, and cancel any previously-scheduled diary reminder
+/// (in our id namespace) that's no longer pinned — so unpinning on either
+/// partner's device clears the reminder here on the next space open. Idempotent
+/// and best-effort; a no-op on web.
+Future<void> syncDiaryReminders(List<PlanReminder> plans) async {
+  if (kIsWeb) return;
+  try {
+    if (!_ready) await initNotifications();
+    _ensureTimeZones();
+    final wantIds = <int>{for (final p in plans) _diaryNotifId(p.id)};
+    // Cancel stale ones still pending in our namespace.
+    try {
+      final pending = await _fln.pendingNotificationRequests();
+      for (final req in pending) {
+        if (req.id >= _diaryNotifBase &&
+            req.id <= _diaryNotifMax &&
+            !wantIds.contains(req.id)) {
+          await _fln.cancel(id: req.id);
+        }
+      }
+    } catch (_) {/* listing not supported → skip the prune */}
+    // (Re)schedule the desired set (same id replaces any existing one).
+    for (final p in plans) {
+      await _scheduleDiaryReminder(p);
+    }
+  } catch (_) {/* best-effort */}
+}
+
+/// Cancel a single diary reminder immediately (e.g. the user just unpinned or
+/// deleted the plan) without waiting for the next reconcile.
+Future<void> cancelDiaryReminder(int entryId) async {
+  if (kIsWeb) return;
+  try {
+    await _fln.cancel(id: _diaryNotifId(entryId));
   } catch (_) {/* best-effort */}
 }
 

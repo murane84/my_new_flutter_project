@@ -93,6 +93,22 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   // the main surface underneath it. Cleared when the card closes.
   VoidCallback? _sheetRefresh;
 
+  // A stable key per feature tile, so its on-screen centre can anchor the
+  // open/close animation of its floating card (the card grows FROM and is
+  // absorbed BACK TO its own tile).
+  final GlobalKey _kPlaylist = GlobalKey();
+  final GlobalKey _kMoments = GlobalKey();
+  final GlobalKey _kDiary = GlobalKey();
+  final GlobalKey _kSong = GlobalKey();
+
+  /// The global-space centre of a tile (via its key), or null if not laid out.
+  Offset? _globalCenter(GlobalKey k) {
+    final ctx = k.currentContext;
+    final box = ctx?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return null;
+    return box.localToGlobal(box.size.center(Offset.zero));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -513,6 +529,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     return AppPopupShell(
       title: 'Our Space',
       icon: Icons.favorite_rounded,
+      // The dismiss control reads as "minimize" (paired with the minimize-down
+      // exit animation), so ducking out to Circle feels like tucking the page
+      // away rather than closing it.
+      closeIcon: Icons.close_fullscreen_rounded,
+      closeTooltip: 'Minimize',
       // Wider than the default popup so the two-column (summary rail + content)
       // layout has real room on desktop/web/tablet. Narrow screens still get a
       // near-full-width card and the single-column stack.
@@ -570,30 +591,34 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final tiles = <Widget>[
       if (_partnerId != null)
         _featureTile(scheme,
+            tileKey: _kPlaylist,
             icon: Icons.queue_music_rounded,
             label: 'Our Playlist',
             count: playlistCount,
             subtitle: 'Songs + listen together',
-            onTap: _openPlaylist),
+            onTap: () => _openPlaylist(_globalCenter(_kPlaylist))),
       _featureTile(scheme,
+          tileKey: _kMoments,
           icon: Icons.favorite_rounded,
           label: 'Pinned moments',
           count: moments.length,
           subtitle: 'Dedications & notes',
-          onTap: _openMoments),
+          onTap: () => _openMoments(_globalCenter(_kMoments))),
       if (_partnerId != null)
         _featureTile(scheme,
+            tileKey: _kDiary,
             icon: Icons.menu_book_rounded,
             label: 'Our Diary',
             count: _diary.length,
             subtitle: 'Memories & plans ahead',
-            onTap: _openDiary),
+            onTap: () => _openDiary(_globalCenter(_kDiary))),
       _featureTile(scheme,
+          tileKey: _kSong,
           icon: Icons.auto_awesome_rounded,
           label: 'Song & milestones',
           count: null,
           subtitle: _songSubtitle(),
-          onTap: _openSongMilestones),
+          onTap: () => _openSongMilestones(_globalCenter(_kSong))),
     ];
     return LayoutBuilder(
       builder: (ctx, c) {
@@ -636,6 +661,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   Widget _featureTile(
     ColorScheme scheme, {
+    Key? tileKey,
     required IconData icon,
     required String label,
     required int? count,
@@ -647,11 +673,17 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     // avoids the release-web bug where stretch (or a fixed height that's too
     // short) plus a Spacer-containing row breaks sizing and kills taps.
     return Material(
+      key: tileKey,
       color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
+        // A faint wash of the Space's own colour on hover/press — a subtle
+        // touch, not a strong fill.
+        hoverColor: _accent.withValues(alpha: 0.06),
+        highlightColor: _accent.withValues(alpha: 0.05),
+        splashColor: _accent.withValues(alpha: 0.10),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -771,13 +803,28 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     required IconData icon,
     required Widget Function(void Function() refresh) body,
     Widget Function(void Function() refresh)? footer,
+    Offset? origin,
   }) async {
     final scheme = Theme.of(context).colorScheme;
+    final media = MediaQuery.of(context).size;
+    // Anchor the grow/shrink at the tile's on-screen direction (falls back to
+    // centre), so the card appears to emerge FROM its tile and, on minimize, be
+    // absorbed BACK INTO it.
+    final align = origin == null
+        ? Alignment.center
+        : Alignment(
+            ((origin.dx / media.width) * 2 - 1).clamp(-1.0, 1.0),
+            ((origin.dy / media.height) * 2 - 1).clamp(-1.0, 1.0),
+          );
     var open = true;
-    await showDialog<void>(
+    await showGeneralDialog<void>(
       context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Minimize',
       barrierColor: Colors.black.withValues(alpha: 0.45),
-      builder: (dctx) {
+      transitionDuration: const Duration(milliseconds: 260),
+      reverseTransitionDuration: const Duration(milliseconds: 220),
+      pageBuilder: (dctx, _, _) {
         return StatefulBuilder(
           builder: (dctx, setSheet) {
             void refresh() {
@@ -813,7 +860,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                                     color: scheme.onSurface)),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.close_rounded),
+                            tooltip: 'Minimize',
+                            icon: const Icon(Icons.close_fullscreen_rounded),
                             onPressed: () => Navigator.pop(dctx),
                           ),
                         ],
@@ -840,14 +888,30 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           },
         );
       },
+      transitionBuilder: (dctx, anim, _, child) {
+        final curved = CurvedAnimation(
+          parent: anim,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.55, end: 1.0).animate(curved),
+            alignment: align,
+            child: child,
+          ),
+        );
+      },
     );
     open = false;
     _sheetRefresh = null;
   }
 
-  void _openPlaylist() {
+  void _openPlaylist([Offset? origin]) {
     final scheme = Theme.of(context).colorScheme;
     _openFeatureSheet(
+      origin: origin,
       title: 'Our Playlist',
       icon: Icons.queue_music_rounded,
       body: (refresh) {
@@ -885,9 +949,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
-  void _openMoments() {
+  void _openMoments([Offset? origin]) {
     final scheme = Theme.of(context).colorScheme;
     _openFeatureSheet(
+      origin: origin,
       title: 'Pinned moments',
       icon: Icons.favorite_rounded,
       body: (refresh) {
@@ -911,9 +976,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
-  void _openSongMilestones() {
+  void _openSongMilestones([Offset? origin]) {
     final scheme = Theme.of(context).colorScheme;
     _openFeatureSheet(
+      origin: origin,
       title: 'Song & milestones',
       icon: Icons.auto_awesome_rounded,
       body: (refresh) {
@@ -950,9 +1016,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
-  void _openDiary() {
+  void _openDiary([Offset? origin]) {
     final scheme = Theme.of(context).colorScheme;
     _openFeatureSheet(
+      origin: origin,
       title: 'Our Diary',
       icon: Icons.menu_book_rounded,
       body: (refresh) => _diaryContent(scheme),

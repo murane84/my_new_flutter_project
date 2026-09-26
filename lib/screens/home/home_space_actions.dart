@@ -42,6 +42,9 @@ extension _HomeSpaceActions on HomePageState {
         myAvatarUrl: _avatarFull(_myAvatar),
         onChanged: _loadSpaces,
       ),
+      // Dismiss reads as "minimize back down" rather than a hard close, so the
+      // user can duck out to Circle/chat and reopen without feeling cut off.
+      minimizeStyle: true,
     );
     _loadSpaces();
   }

@@ -2220,10 +2220,32 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   }
 
   Widget _memoryMenuButton(Map<String, dynamic> e, Color ink) {
+    final scheme = Theme.of(context).colorScheme;
+    Widget row(IconData icon, String label, Color color) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(width: 12),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w600, color: color)),
+          ],
+        );
     return PopupMenuButton<String>(
       tooltip: 'Options',
+      // Drop UNDER the trigger, styled like the app's other menus: rounded with
+      // a soft accent hairline, iconized rows, and a clearly destructive Delete.
       icon: Icon(Icons.more_horiz_rounded,
           size: 18, color: ink.withValues(alpha: 0.6)),
+      color: scheme.surface,
+      elevation: 12,
+      shadowColor: Colors.black.withValues(alpha: 0.28),
+      position: PopupMenuPosition.under,
+      menuPadding: const EdgeInsets.symmetric(vertical: 6),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: _accent.withValues(alpha: 0.35), width: 1),
+      ),
       onSelected: (v) {
         if (v == 'edit') {
           _editDiaryEntry(e);
@@ -2231,9 +2253,28 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           _deleteDiaryEntry(e);
         }
       },
-      itemBuilder: (_) => const [
-        PopupMenuItem(value: 'edit', child: Text('Edit')),
-        PopupMenuItem(value: 'delete', child: Text('Delete')),
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: 'edit',
+          height: 42,
+          child: row(Icons.edit_outlined, 'Edit', scheme.onSurface),
+        ),
+        PopupMenuItem(
+          enabled: false,
+          height: 8,
+          padding: EdgeInsets.zero,
+          child: Divider(
+              height: 1,
+              thickness: 1,
+              indent: 12,
+              endIndent: 12,
+              color: scheme.outlineVariant.withValues(alpha: 0.6)),
+        ),
+        PopupMenuItem(
+          value: 'delete',
+          height: 42,
+          child: row(Icons.delete_outline_rounded, 'Delete', scheme.error),
+        ),
       ],
     );
   }
@@ -4809,33 +4850,83 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
     final cid = (cm['id'] as num?)?.toInt();
     if (cid == null) return;
     final scheme = Theme.of(context).colorScheme;
+    final preview = (cm['body'] ?? '').toString().trim();
+    // One action row: a rounded, full-width tappable with an icon + label,
+    // tinted for a destructive action.
+    Widget action(IconData icon, String label, Color color, VoidCallback tap) =>
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: Material(
+            color: color.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(14),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: tap,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                child: Row(
+                  children: [
+                    Icon(icon, size: 20, color: color),
+                    const SizedBox(width: 14),
+                    Text(label,
+                        style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: color)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
     showModalBottomSheet(
       context: context,
       backgroundColor: scheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        side: BorderSide(color: _accent.withValues(alpha: 0.28)),
       ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ListTile(
-              leading: Icon(Icons.edit_rounded, color: _accent),
-              title: const Text('Edit'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _startEditComment(cm);
-              },
+            const SizedBox(height: 10),
+            // Grab handle.
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: scheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
             ),
-            ListTile(
-              leading: Icon(Icons.delete_outline_rounded, color: scheme.error),
-              title: Text('Delete', style: TextStyle(color: scheme.error)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _deleteComment(cid);
-              },
-            ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 12),
+            // Which comment — a quiet one-line quote so it's clear what you're
+            // about to edit or delete.
+            if (preview.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                child: Text('“$preview”',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontStyle: FontStyle.italic,
+                        color: scheme.onSurfaceVariant)),
+              ),
+            action(Icons.edit_outlined, 'Edit', _accent, () {
+              Navigator.pop(ctx);
+              _startEditComment(cm);
+            }),
+            action(Icons.delete_outline_rounded, 'Delete', scheme.error, () {
+              Navigator.pop(ctx);
+              _deleteComment(cid);
+            }),
+            const SizedBox(height: 10),
           ],
         ),
       ),

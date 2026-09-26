@@ -1053,22 +1053,34 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                     ],
                   ),
                 ),
-                if (count != null && count > 0) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: _accent.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text('$count',
-                        style: TextStyle(
-                            color: _accent,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 12.5)),
+                // Fade + scale the count in when the fetch lands, rather than
+                // snapping a badge out of nowhere.
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  transitionBuilder: (child, anim) => FadeTransition(
+                    opacity: anim,
+                    child: ScaleTransition(scale: anim, child: child),
                   ),
-                ],
+                  child: (count != null && count > 0)
+                      ? Padding(
+                          key: ValueKey('badge$count'),
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: _accent.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text('$count',
+                                style: TextStyle(
+                                    color: _accent,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12.5)),
+                          ),
+                        )
+                      : const SizedBox.shrink(key: ValueKey('noBadge')),
+                ),
                 const SizedBox(width: 6),
                 Icon(Icons.chevron_right_rounded,
                     size: 20, color: scheme.onSurfaceVariant),
@@ -1460,18 +1472,26 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
             child: LayoutBuilder(
               builder: (ctx, c) {
-          // Wide enough to seat the two stats LEFT and RIGHT of the identity
-          // block, so the hero stays short instead of growing taller. Below the
-          // threshold we stack the stats under the name (the old compact row).
-          final sideBySide = hasStats && c.maxWidth >= 440;
-          if (sideBySide) {
+          // Layout is decided by the PARTNER + width, not by whether stats have
+          // loaded yet — so the slots are reserved up-front and the numbers just
+          // FADE IN when the fetch lands, instead of snapping in and shoving the
+          // avatars around. `hasStats` only controls opacity.
+          const statFade = Duration(milliseconds: 340);
+          final hasPartner = others.isNotEmpty;
+          final wide = c.maxWidth >= 440;
+          if (hasPartner && wide) {
             return Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
                   child: Align(
                     alignment: Alignment.centerRight,
-                    child: _heroSideStat('🔥', '$streak', 'day streak'),
+                    child: AnimatedOpacity(
+                      opacity: hasStats ? 1 : 0,
+                      duration: statFade,
+                      curve: Curves.easeOut,
+                      child: _heroSideStat('🔥', '$streak', 'day streak'),
+                    ),
                   ),
                 ),
                 Padding(
@@ -1481,8 +1501,13 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                 Expanded(
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: _heroSideStat(
-                        '🎧', '$days', days == 1 ? 'day in a song' : 'days in a song'),
+                    child: AnimatedOpacity(
+                      opacity: hasStats ? 1 : 0,
+                      duration: statFade,
+                      curve: Curves.easeOut,
+                      child: _heroSideStat('🎧', '$days',
+                          days == 1 ? 'day in a song' : 'days in a song'),
+                    ),
                   ),
                 ),
               ],
@@ -1491,7 +1516,13 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           return Column(
             children: [
               identity,
-              if (hasStats) _heroStats(),
+              if (hasPartner)
+                AnimatedOpacity(
+                  opacity: hasStats ? 1 : 0,
+                  duration: statFade,
+                  curve: Curves.easeOut,
+                  child: _heroStats(),
+                ),
             ],
           );
               },
@@ -1583,7 +1614,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final stats = (_space['stats'] as Map?) ?? const {};
     final days = (stats['days_in_song'] as num?)?.toInt() ?? 0;
     final streak = (stats['listen_streak'] as num?)?.toInt() ?? 0;
-    if (days == 0 && streak == 0) return const SizedBox.shrink();
+    // NB: always renders (no early shrink) so the caller can reserve its space
+    // and fade it in when the stats load — the visibility is controlled by the
+    // AnimatedOpacity in _header, not by returning an empty box here.
     const glyphShadow = Shadow(
       color: Color(0x33000000),
       blurRadius: 3,

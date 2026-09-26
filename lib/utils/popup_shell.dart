@@ -32,7 +32,10 @@ Future<T?> showAppPopup<T>(
       if (minimizeStyle) {
         // Shrink toward the bottom-centre and slide down: on reverse (dismiss)
         // this plays backwards, so the card looks absorbed back down to where
-        // it lives instead of vanishing in place.
+        // it lives instead of vanishing in place. The RepaintBoundary lets the
+        // fade/scale/slide transform a CACHED layer instead of repainting the
+        // whole page (with its shadows, gradient and glows) every frame — which
+        // is what made the open feel choppy.
         return FadeTransition(
           opacity: curved,
           child: SlideTransition(
@@ -42,7 +45,7 @@ Future<T?> showAppPopup<T>(
             child: ScaleTransition(
               scale: Tween<double>(begin: 0.86, end: 1.0).animate(curved),
               alignment: Alignment.bottomCenter,
-              child: c,
+              child: RepaintBoundary(child: c),
             ),
           ),
         );

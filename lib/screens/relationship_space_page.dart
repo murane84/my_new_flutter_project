@@ -50,6 +50,42 @@ const List<String> _kQuickReactions = ['❤️', '👍', '😂', '😮', '😢',
 // the full memory in its own card.
 const int _kMemoryPreviewChars = 240;
 
+/// Resolve a (possibly relative) avatar path to a full URL against [apiBase].
+String? resolveAvatarUrl(String? raw, String apiBase) {
+  final s = raw?.toString() ?? '';
+  if (s.isEmpty) return null;
+  return s.startsWith('http') ? s : '$apiBase$s';
+}
+
+/// An author's profile photo in a small rounded badge (a white rim + soft
+/// shadow), like the avatars in the hero — falls back to coloured initials when
+/// there's no photo.
+Widget diaryAuthorBadge({
+  required String name,
+  String? imageUrl,
+  double radius = 14,
+}) {
+  return Container(
+    padding: const EdgeInsets.all(1.5),
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      color: Colors.white,
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.14),
+          blurRadius: 4,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    ),
+    child: InitialsAvatar(
+      name: name.isEmpty ? '?' : name,
+      radius: radius,
+      imageUrl: (imageUrl != null && imageUrl.isNotEmpty) ? imageUrl : null,
+    ),
+  );
+}
+
 /// A compact "N minutes/hours/days ago" for diary timestamps.
 String _diaryAgo(DateTime dt) {
   final d = DateTime.now().difference(dt.toLocal());
@@ -749,6 +785,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       // away rather than closing it.
       closeIcon: Icons.close_fullscreen_rounded,
       closeTooltip: 'Minimize',
+      // A soft ambient backdrop (theme-tinted wash + corner glows) so the hero
+      // and tiles float on atmosphere instead of a flat white sheet.
+      backdrop: _pageBackdrop(scheme),
       // Wider than the default popup so the two-column (summary rail + content)
       // layout has real room on desktop/web/tablet. Narrow screens still get a
       // near-full-width card and the single-column stack.
@@ -775,6 +814,46 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
           children: _mainSections(scheme, title, moments),
         ),
+      ),
+    );
+  }
+
+  /// The page's ambient backdrop: a barely-there vertical wash of the Space
+  /// colour top and bottom, plus two large soft glows drifting in from the
+  /// corners — subtle atmosphere so the hero and tiles read as floating.
+  Widget _pageBackdrop(ColorScheme scheme) {
+    Widget glow(double size, double alpha) => Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: RadialGradient(
+              colors: [
+                _accent.withValues(alpha: alpha),
+                _accent.withValues(alpha: 0),
+              ],
+            ),
+          ),
+        );
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            _accent.withValues(alpha: 0.07),
+            _accent.withValues(alpha: 0.0),
+            _accent.withValues(alpha: 0.05),
+          ],
+          stops: const [0.0, 0.45, 1.0],
+        ),
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(top: -110, right: -90, child: glow(300, 0.12)),
+          Positioned(bottom: -140, left: -110, child: glow(340, 0.09)),
+        ],
       ),
     );
   }
@@ -837,9 +916,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     ];
     return LayoutBuilder(
       builder: (ctx, c) {
-        // Two compact tiles per row once there's a little width (almost always,
-        // even on a phone); a single column only on the very narrowest cards.
-        final twoCol = c.maxWidth >= 360;
+        // Compact horizontal tiles: full-width rows on a phone (roomy for the
+        // title + subtitle), two-up only once there's real width (tablet/
+        // desktop). No CrossAxisAlignment.stretch anywhere — the tiles size to
+        // content, which also avoids the release-web intrinsic-measure bug.
+        final twoCol = c.maxWidth >= 560;
         if (!twoCol) {
           return Column(
             children: [
@@ -883,82 +964,116 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     required String subtitle,
     required VoidCallback onTap,
   }) {
-    // No fixed height and no Spacer/stretch: every tile has the same single-line
-    // structure, so tiles size to content and naturally match in a row. This
-    // avoids the release-web bug where stretch (or a fixed height that's too
-    // short) plus a Spacer-containing row breaks sizing and kills taps.
+    // Compact horizontal tile with depth: a raised, gently top-lit card (soft
+    // drop shadow + faint top highlight + hairline rim) carrying a 3D icon chip,
+    // the title + subtitle beside it, and the count/chevron trailing. Half the
+    // height of the old stacked tile.
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
       key: tileKey,
-      color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        // A faint wash of the Space's own colour on hover/press — a subtle
-        // touch, not a strong fill.
-        hoverColor: _accent.withValues(alpha: 0.06),
-        highlightColor: _accent.withValues(alpha: 0.05),
-        splashColor: _accent.withValues(alpha: 0.10),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(18),
+      child: Ink(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [scheme.surface, scheme.surfaceContainerHighest],
+          ),
+          border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: 0.35)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+            BoxShadow(
+              color: Colors.white.withValues(alpha: isDark ? 0.04 : 0.7),
+              blurRadius: 1,
+              spreadRadius: -1,
+              offset: const Offset(0, -1),
+            ),
+          ],
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          hoverColor: _accent.withValues(alpha: 0.06),
+          highlightColor: _accent.withValues(alpha: 0.05),
+          splashColor: _accent.withValues(alpha: 0.10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            child: Row(
+              children: [
+                // 3D icon chip.
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(13),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        _accent.withValues(alpha: 0.24),
+                        _accent.withValues(alpha: 0.12),
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _accent.withValues(alpha: 0.22),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Icon(icon, color: _accent, size: 22),
+                ),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              color: scheme.onSurface)),
+                      const SizedBox(height: 2),
+                      Text(subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 12, color: scheme.onSurfaceVariant)),
+                    ],
+                  ),
+                ),
+                if (count != null && count > 0) ...[
+                  const SizedBox(width: 8),
                   Container(
-                    width: 38,
-                    height: 38,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: _accent.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(11),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(icon, color: _accent, size: 20),
-                  ),
-                  if (count != null && count > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: _accent.withValues(alpha: 0.16),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text('$count',
-                          style: TextStyle(
-                              color: _accent,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12.5)),
-                    )
-                  else
-                    const SizedBox(height: 22),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 14,
-                      color: scheme.onSurface)),
-              const SizedBox(height: 2),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    child: Text('$count',
                         style: TextStyle(
-                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                            color: _accent,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12.5)),
                   ),
-                  Icon(Icons.chevron_right_rounded,
-                      size: 18, color: scheme.onSurfaceVariant),
                 ],
-              ),
-            ],
+                const SizedBox(width: 6),
+                Icon(Icons.chevron_right_rounded,
+                    size: 20, color: scheme.onSurfaceVariant),
+              ],
+            ),
           ),
         ),
       ),
@@ -2004,16 +2119,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           children: [
             Row(
               children: [
-                CircleAvatar(
-                  radius: 12,
-                  backgroundColor: _accent.withValues(alpha: 0.25),
-                  child: Text(
-                    (authorName.isNotEmpty ? authorName[0] : '·').toUpperCase(),
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: _accent),
-                  ),
+                diaryAuthorBadge(
+                  name: authorName,
+                  imageUrl: _full(author?['avatar_url']),
+                  radius: 13,
                 ),
                 const SizedBox(width: 8),
                 Icon(_momentIcon(kind), size: 14, color: _accent),
@@ -2457,16 +2566,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 12,
-                backgroundColor: _accent.withValues(alpha: 0.25),
-                child: Text(
-                  (authorName.isNotEmpty ? authorName[0] : '·').toUpperCase(),
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: _accent),
-                ),
+              diaryAuthorBadge(
+                name: authorName,
+                imageUrl: _full(author?['avatar_url']),
+                radius: 13,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -2636,6 +2739,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         spaceId: _id,
         entry: _diaryById(id) ?? e,
         accent: _accent,
+        apiBase: widget.apiBase,
         onChanged: () {
           if (mounted) _load();
         },
@@ -3552,11 +3656,13 @@ class _MemoryDetailSheet extends StatefulWidget {
   final int spaceId;
   final Map<String, dynamic> entry;
   final Color accent;
+  final String apiBase;
   final VoidCallback? onChanged;
   const _MemoryDetailSheet({
     required this.spaceId,
     required this.entry,
     required this.accent,
+    required this.apiBase,
     this.onChanged,
   });
 
@@ -3696,17 +3802,12 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
                   children: [
                     Row(
                       children: [
-                        CircleAvatar(
-                          radius: 13,
-                          backgroundColor: _accent.withValues(alpha: 0.25),
-                          child: Text(
-                            (authorName.isNotEmpty ? authorName[0] : '·')
-                                .toUpperCase(),
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: _accent),
-                          ),
+                        diaryAuthorBadge(
+                          name: authorName,
+                          imageUrl: resolveAvatarUrl(
+                              author?['avatar_url']?.toString(),
+                              widget.apiBase),
+                          radius: 15,
                         ),
                         const SizedBox(width: 8),
                         Text(authorName.isEmpty ? 'Someone' : authorName,
@@ -3840,16 +3941,11 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 10,
-                backgroundColor: _accent.withValues(alpha: 0.22),
-                child: Text(
-                  (name.isNotEmpty ? name[0] : '·').toUpperCase(),
-                  style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: _accent),
-                ),
+              diaryAuthorBadge(
+                name: name,
+                imageUrl: resolveAvatarUrl(
+                    author?['avatar_url']?.toString(), widget.apiBase),
+                radius: 11,
               ),
               const SizedBox(width: 7),
               Text(name,

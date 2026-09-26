@@ -1,99 +1,214 @@
 import 'package:flutter/material.dart';
 
-/// Opens a chooser with the legal / info pages.
+// Height of the Aluta app header (toolbar). The full-page legal views start
+// just under it, so the "Aluta" title + overflow (⋮) menu stay visible above.
+const double _kAppHeaderHeight = kToolbarHeight;
+
+/// Opens the "Legal & About" chooser as a FULL PAGE that fills everything below
+/// the app header (unlike Our Space, which covers the whole screen — here the
+/// "Aluta" title + ⋮ menu stay in view up top).
 void showLegalMenu(BuildContext context) {
-  final scheme = Theme.of(context).colorScheme;
-  showModalBottomSheet(
-    context: context,
-    backgroundColor: scheme.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  _showLegalFullPage(
+    context,
+    title: 'Legal & About',
+    icon: Icons.shield_outlined,
+    bodyBuilder: (ctx) => _LegalChooserBody(
+      onPrivacy: () => _open(ctx, 'Privacy Policy',
+          Icons.privacy_tip_rounded, _privacy),
+      onTerms: () =>
+          _open(ctx, 'Terms of Service', Icons.description_rounded, _terms),
+      onAbout: () => _open(ctx, 'About Aluta', Icons.info_rounded, _about),
     ),
-    builder: (ctx) => SafeArea(
-      top: false,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            margin: const EdgeInsets.only(top: 10, bottom: 6),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: scheme.onSurfaceVariant.withAlpha(80),
-              borderRadius: BorderRadius.circular(2),
-            ),
+  );
+}
+
+/// The chooser body — three tappable, raised rows (Privacy / Terms / About).
+class _LegalChooserBody extends StatelessWidget {
+  const _LegalChooserBody(
+      {required this.onPrivacy,
+      required this.onTerms,
+      required this.onAbout});
+
+  final VoidCallback onPrivacy;
+  final VoidCallback onTerms;
+  final VoidCallback onAbout;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      children: [
+        _chooserRow(context, Icons.privacy_tip_rounded, 'Privacy Policy',
+            'How your information is handled', onPrivacy),
+        const SizedBox(height: 12),
+        _chooserRow(context, Icons.description_rounded, 'Terms of Service',
+            'The rules for using Aluta', onTerms),
+        const SizedBox(height: 12),
+        _chooserRow(context, Icons.info_rounded, 'About Aluta',
+            'What Aluta is and what it does', onAbout),
+      ],
+    );
+  }
+}
+
+Widget _chooserRow(BuildContext ctx, IconData icon, String label,
+    String subtitle, VoidCallback onTap) {
+  final scheme = Theme.of(ctx).colorScheme;
+  final dark = Theme.of(ctx).brightness == Brightness.dark;
+  return Material(
+    color: Colors.transparent,
+    child: Ink(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: dark
+              ? [
+                  scheme.surfaceContainerHigh,
+                  scheme.surfaceContainer,
+                ]
+              : [
+                  Colors.white,
+                  scheme.surfaceContainerHighest,
+                ],
+        ),
+        border: Border.all(color: scheme.outlineVariant.withAlpha(90)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(dark ? 60 : 22),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text('Legal & About',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            ),
+          BoxShadow(
+            color: Colors.white.withAlpha(dark ? 10 : 150),
+            blurRadius: 1,
+            offset: const Offset(0, -1),
           ),
-          _tile(ctx, Icons.privacy_tip_rounded, 'Privacy Policy',
-              () => _open(ctx, 'Privacy Policy', Icons.privacy_tip_rounded, _privacy)),
-          _tile(ctx, Icons.description_rounded, 'Terms of Service',
-              () => _open(ctx, 'Terms of Service', Icons.description_rounded, _terms)),
-          _tile(ctx, Icons.info_rounded, 'About Aluta',
-              () => _open(ctx, 'About Aluta', Icons.info_rounded, _about)),
-          const SizedBox(height: 8),
         ],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      scheme.primary.withAlpha(40),
+                      scheme.primary.withAlpha(20),
+                    ],
+                  ),
+                ),
+                child: Icon(icon, size: 22, color: scheme.primary),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(label,
+                        style: TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w800,
+                            color: scheme.onSurface)),
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            color: scheme.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded,
+                  color: scheme.onSurfaceVariant.withAlpha(160)),
+            ],
+          ),
+        ),
       ),
     ),
   );
 }
 
-Widget _tile(BuildContext ctx, IconData icon, String label, VoidCallback onTap) {
-  final scheme = Theme.of(ctx).colorScheme;
-  return ListTile(
-    leading: Icon(icon, color: scheme.primary),
-    title: Text(label),
-    trailing: const Icon(Icons.chevron_right_rounded),
-    onTap: onTap,
-  );
-}
-
 void _open(BuildContext ctx, String title, IconData icon, String body) {
-  // Close the chooser sheet first, then float the document popup.
+  // Close the chooser page first, then open the document as its own full page.
   Navigator.pop(ctx);
-  _showLegalPopup(ctx, title, icon, body);
+  _showLegalDoc(ctx, title, icon, body);
 }
 
 // ── Public entry points ──────────────────────────────────────────────────────
-// Open a single document popup directly (e.g. from the consent gate), with no
-// chooser sheet to close first. These share the SAME content + styling as the
+// Open a single document page directly (e.g. from the consent gate), with no
+// chooser to close first. These share the SAME content + styling as the
 // "Legal & About" menu, so there's one source of truth for each document.
 
 void showPrivacyPolicy(BuildContext ctx) =>
-    _showLegalPopup(ctx, 'Privacy Policy', Icons.privacy_tip_rounded, _privacy);
+    _showLegalDoc(ctx, 'Privacy Policy', Icons.privacy_tip_rounded, _privacy);
 
 void showTermsOfUse(BuildContext ctx) =>
-    _showLegalPopup(ctx, 'Terms of Service', Icons.description_rounded, _terms);
+    _showLegalDoc(ctx, 'Terms of Service', Icons.description_rounded, _terms);
 
 void showAboutAluta(BuildContext ctx) =>
-    _showLegalPopup(ctx, 'About Aluta', Icons.info_rounded, _about);
+    _showLegalDoc(ctx, 'About Aluta', Icons.info_rounded, _about);
 
-void _showLegalPopup(
+void _showLegalDoc(
     BuildContext ctx, String title, IconData icon, String body) {
-  // Float the page as a top-anchored popup that sits BELOW the app header (so
-  // the Aluta title + theme/sign-out controls stay visible) and above the
-  // music/chat panels — wide on desktop, compact on phone.
+  _showLegalFullPage(
+    ctx,
+    title: title,
+    icon: icon,
+    bodyBuilder: (dctx) => Scrollbar(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: _legalBody(dctx, body),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Shared presenter: renders [bodyBuilder] as a FULL PAGE that fills the screen
+/// BELOW the app header — full width, edge-to-edge, down to the bottom — so the
+/// "Aluta" title + ⋮ menu remain visible above it. Rounded top corners give it a
+/// "risen to full" feel that's distinct from Our Space's whole-screen takeover.
+/// It rises up + fades in on open and reverses on dismiss.
+void _showLegalFullPage(
+  BuildContext ctx, {
+  required String title,
+  required IconData icon,
+  required WidgetBuilder bodyBuilder,
+}) {
   showGeneralDialog(
     context: ctx,
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
-    barrierColor: Colors.black.withAlpha(90),
-    transitionDuration: const Duration(milliseconds: 240),
+    // Light scrim so the header strip above the page stays clearly visible.
+    barrierColor: Colors.black.withAlpha(64),
+    transitionDuration: const Duration(milliseconds: 300),
     pageBuilder: (_, _, _) =>
-        _LegalPopup(title: title, icon: icon, body: body),
+        _LegalFullPage(title: title, icon: icon, body: bodyBuilder),
     transitionBuilder: (_, anim, _, child) {
-      final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
+      final curved = CurvedAnimation(
+        parent: anim,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
       return FadeTransition(
         opacity: curved,
         child: SlideTransition(
+          // Rise up into place from just below (and slide back down on close).
           position: Tween<Offset>(
-                  begin: const Offset(0, -0.04), end: Offset.zero)
+                  begin: const Offset(0, 0.06), end: Offset.zero)
               .animate(curved),
           child: child,
         ),
@@ -102,112 +217,113 @@ void _showLegalPopup(
   );
 }
 
-/// The polished, theme-aware legal popup — a rounded card anchored just under
-/// the app header. Wide-but-capped on desktop, near-full-width on mobile, and
-/// never taller than the space below the header (its body scrolls).
-class _LegalPopup extends StatelessWidget {
-  const _LegalPopup(
+/// The full-page legal view: an opaque surface pinned under the app header,
+/// filling the rest of the screen. Rounded top, squared bottom (it meets the
+/// screen edge), a header bar (icon + title + close) and a flexible body.
+class _LegalFullPage extends StatelessWidget {
+  const _LegalFullPage(
       {required this.title, required this.icon, required this.body});
 
   final String title;
   final IconData icon;
-  final String body;
+  final WidgetBuilder body;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final media = MediaQuery.of(context);
     final isWide = media.size.width >= 640;
-    // Clear the Aluta app header (toolbar + status bar) with a small gap.
-    final topInset = media.padding.top + 64;
-    final maxW = isWide ? 620.0 : media.size.width - 24;
-    final maxH = media.size.height - topInset - 20;
+    // Clear the Aluta app header (status bar + toolbar) so it stays in view.
+    final topInset = media.padding.top + _kAppHeaderHeight;
 
-    return Align(
-      alignment: Alignment.topCenter,
-      child: Padding(
-        padding: EdgeInsets.only(top: topInset, left: 12, right: 12, bottom: 12),
-        child: Material(
-          type: MaterialType.transparency,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxW, maxHeight: maxH),
-            child: Container(
-              decoration: BoxDecoration(
-                color: scheme.surface,
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: scheme.primary.withAlpha(130)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(70),
-                    blurRadius: 30,
-                    offset: const Offset(0, 12),
-                  ),
-                  BoxShadow(
-                    color: scheme.primary.withAlpha(26),
-                    blurRadius: 22,
-                    spreadRadius: -6,
-                  ),
-                ],
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Header row — icon chip + title + close.
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainerHighest.withAlpha(120),
-                      border: Border(
-                        bottom: BorderSide(
-                            color: scheme.outlineVariant.withAlpha(70)),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 34,
-                          height: 34,
-                          decoration: BoxDecoration(
-                            color: scheme.primary.withAlpha(28),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(icon, size: 19, color: scheme.primary),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: const TextStyle(
-                                fontSize: 16.5, fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Close',
-                          icon: const Icon(Icons.close_rounded),
-                          onPressed: () {
-                            FocusScope.of(context).unfocus();
-                            Navigator.of(context).pop();
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Scrollable, styled body.
-                  Flexible(
-                    child: Scrollbar(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 22),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: _legalBody(context, body),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+    return Padding(
+      padding: EdgeInsets.only(top: topInset),
+      child: Material(
+        type: MaterialType.transparency,
+        child: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border(
+              top: BorderSide(color: scheme.primary.withAlpha(120), width: 1),
+              left: BorderSide(color: scheme.primary.withAlpha(60), width: 1),
+              right: BorderSide(color: scheme.primary.withAlpha(60), width: 1),
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(80),
+                blurRadius: 26,
+                offset: const Offset(0, -6),
+              ),
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              // Grab handle — a small cue that this page can be dismissed.
+              Container(
+                margin: const EdgeInsets.only(top: 8, bottom: 2),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: scheme.onSurfaceVariant.withAlpha(70),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // Header row — icon chip + title + close.
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 8, 10, 12),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                        color: scheme.outlineVariant.withAlpha(70)),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withAlpha(28),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(icon, size: 19, color: scheme.primary),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                            fontSize: 16.5, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close',
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () {
+                        FocusScope.of(context).unfocus();
+                        Navigator.of(context).pop();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              // Body — centred + width-capped on desktop, full-bleed on phone.
+              Expanded(
+                child: isWide
+                    ? Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 720),
+                          child: body(context),
+                        ),
+                      )
+                    : body(context),
+              ),
+            ],
           ),
         ),
       ),

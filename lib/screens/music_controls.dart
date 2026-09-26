@@ -653,10 +653,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       return;
     }
     final path = _playlist[_currentIndex];
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+    // Genie in from the Lyrics button (consistent with the rest of the app),
+    // instead of the old slide-up. _LyricsView is a full-height
+    // DraggableScrollableSheet, so it still anchors + drags from the bottom.
+    showGeniePopup(
+      context,
+      barrierColor: Colors.black.withAlpha(120),
       builder: (_) => _LyricsView(
         title: _trackName,
         artist: _artistName,
@@ -1216,8 +1218,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     // highlight the active row.
     final activeMin = _sleepRemaining?.inMinutes;
 
-    showDialog(
-      context: context,
+    // Genie in from the Sleep button, to match Equalizer / Our Space / the rest.
+    // A Dialog self-centres, so scaling it from the tapped point reads clean.
+    showGeniePopup(
+      context,
       barrierColor: Colors.black.withAlpha(120),
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,

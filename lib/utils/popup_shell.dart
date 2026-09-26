@@ -441,7 +441,12 @@ class _HeaderActionButtonState extends State<HeaderActionButton> {
                   : scheme.surfaceContainerHighest,
             ],
           ),
-          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+          // Thin red-accent hairline — subtle, but enough to lift the chip off
+          // the surface and read as an Aluta control on every page that uses it.
+          border: Border.all(
+            color: scheme.primary.withValues(alpha: isDark ? 0.55 : 0.45),
+            width: 1,
+          ),
           boxShadow: _down
               ? [
                   BoxShadow(

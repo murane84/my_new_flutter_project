@@ -384,6 +384,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   // Drives the book's page-turn between memories (adjacent pages peek like a
   // real book at viewportFraction < 1).
   final PageController _diaryPageCtrl = PageController(viewportFraction: 0.92);
+  // The page currently centred — powers the prev/next arrows + the dots.
+  int _diaryPage = 0;
 
   /// The global-space centre of a tile (via its key), or null if not laid out.
   Offset? _globalCenter(GlobalKey k) {
@@ -1676,28 +1678,105 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
               ? SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   child: _diaryEmpty(scheme))
-              : PageView.builder(
-                  controller: _diaryPageCtrl,
-                  itemCount: mems.length,
-                  itemBuilder: (ctx, i) => AnimatedBuilder(
-                    animation: _diaryPageCtrl,
-                    builder: (ctx, child) {
-                      // Turning-page depth: the centred page is full size, the
-                      // peeking neighbours shrink slightly like leaves of a book.
-                      double t = 0;
-                      if (_diaryPageCtrl.hasClients &&
-                          _diaryPageCtrl.position.hasContentDimensions) {
-                        t = (_diaryPageCtrl.page ?? i.toDouble()) - i;
-                      }
-                      final scale = (1 - (t.abs() * 0.10)).clamp(0.88, 1.0);
-                      return Center(
-                        child: Transform.scale(scale: scale, child: child),
-                      );
-                    },
-                    child: _memoryBookPage(scheme, mems[i]),
-                  ),
+              : Stack(
+                  children: [
+                    Positioned.fill(
+                      // Let a mouse/trackpad DRAG turn pages on desktop, just
+                      // like a finger swipe on mobile (PageView ignores mouse
+                      // drag by default).
+                      child: ScrollConfiguration(
+                        behavior: ScrollConfiguration.of(context).copyWith(
+                          dragDevices: const {
+                            PointerDeviceKind.touch,
+                            PointerDeviceKind.mouse,
+                            PointerDeviceKind.trackpad,
+                            PointerDeviceKind.stylus,
+                          },
+                        ),
+                        child: PageView.builder(
+                        controller: _diaryPageCtrl,
+                        itemCount: mems.length,
+                        onPageChanged: (i) =>
+                            setState(() => _diaryPage = i),
+                        itemBuilder: (ctx, i) => AnimatedBuilder(
+                          animation: _diaryPageCtrl,
+                          builder: (ctx, child) {
+                            // Turning-page depth: the centred page is full size,
+                            // neighbours shrink slightly like leaves of a book.
+                            double t = 0;
+                            if (_diaryPageCtrl.hasClients &&
+                                _diaryPageCtrl.position.hasContentDimensions) {
+                              t = (_diaryPageCtrl.page ?? i.toDouble()) - i;
+                            }
+                            final scale =
+                                (1 - (t.abs() * 0.10)).clamp(0.88, 1.0);
+                            return Center(
+                              child:
+                                  Transform.scale(scale: scale, child: child),
+                            );
+                          },
+                          child: _memoryBookPage(scheme, mems[i]),
+                        ),
+                        ),
+                      ),
+                    ),
+                    // Prev / next page buttons — click on desktop, or swipe on
+                    // touch; each is shown only when there's a page that way.
+                    if (_diaryPage > 0)
+                      Positioned(
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: _diaryNavButton(
+                              scheme, Icons.chevron_left_rounded, () {
+                            _diaryPageCtrl.previousPage(
+                                duration: const Duration(milliseconds: 320),
+                                curve: Curves.easeOutCubic);
+                          }),
+                        ),
+                      ),
+                    if (_diaryPage < mems.length - 1)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: _diaryNavButton(
+                              scheme, Icons.chevron_right_rounded, () {
+                            _diaryPageCtrl.nextPage(
+                                duration: const Duration(milliseconds: 320),
+                                curve: Curves.easeOutCubic);
+                          }),
+                        ),
+                      ),
+                  ],
                 ),
         ),
+        // Page dots — which page you're on, and how many there are.
+        if (mems.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (int i = 0; i < mems.length; i++)
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOut,
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: i == _diaryPage ? 18 : 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: i == _diaryPage
+                          ? _accent
+                          : _accent.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         _diaryPlansStrip(scheme),
         // Raised 3D write button — full width on a phone, a centred pill capped
         // at a comfortable width on tablet/desktop so it never stretches edge to
@@ -1715,6 +1794,42 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           ),
         ),
       ],
+    );
+  }
+
+  /// A round raised page-turn button overlaid on the book (prev / next).
+  Widget _diaryNavButton(
+      ColorScheme scheme, IconData icon, VoidCallback onTap) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return SizedBox(
+      width: 42,
+      height: 42,
+      child: _PressableRaised(
+        onTap: onTap,
+        radius: 21,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [scheme.surfaceContainerHigh, scheme.surfaceContainer]
+              : [Colors.white, scheme.surfaceContainerHighest],
+        ),
+        border: Border.all(color: _accent.withValues(alpha: 0.45)),
+        shadows: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.42 : 0.16),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: Colors.white.withValues(alpha: isDark ? 0.05 : 0.9),
+            blurRadius: 1,
+            spreadRadius: -1,
+            offset: const Offset(0, -1),
+          ),
+        ],
+        child: Center(child: Icon(icon, size: 22, color: _accent)),
+      ),
     );
   }
 

@@ -148,6 +148,57 @@ Future<T?> showAppPopup<T>(
   return result;
 }
 
+/// Presents [builder]'s widget as a full-screen overlay with the app's GENIE
+/// transition — it grows out of / collapses back into the exact spot the user
+/// just tapped (recorded by [GlobalTapOrigin]), like Our Space and the popups.
+///
+/// Unlike [showAppPopup], this does NOT wrap the child in the popup card: the
+/// [builder] owns its own layout (a bottom-anchored sheet, a centred dialog,
+/// etc.), so existing sheets/dialogs can adopt the genie without being restyled.
+/// Use it to make a button's open animation consistent with the rest of the app.
+Future<T?> showGeniePopup<T>(
+  BuildContext context, {
+  required WidgetBuilder builder,
+  Color? barrierColor,
+  bool barrierDismissible = true,
+  String barrierLabel = 'Dismiss',
+}) async {
+  FocusManager.instance.primaryFocus?.unfocus();
+  // Snapshot the tapped point now (the launching button unmounts once tapped).
+  final origin = gLastTapDownGlobal;
+  final result = await showGeneralDialog<T>(
+    context: context,
+    barrierDismissible: barrierDismissible,
+    barrierLabel: barrierLabel,
+    barrierColor: barrierColor ?? Colors.black.withAlpha(120),
+    transitionDuration: const Duration(milliseconds: 300),
+    pageBuilder: (dctx, _, _) => builder(dctx),
+    transitionBuilder: (dctx, anim, _, child) {
+      final curved = CurvedAnimation(
+        parent: anim,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      final genie = genieAlignmentFor(dctx, origin);
+      if (genie != null) {
+        // Grow from the tapped point on open, collapse into it on close.
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.12, end: 1.0).animate(curved),
+            alignment: genie,
+            child: RepaintBoundary(child: child),
+          ),
+        );
+      }
+      // Fallback (origin unknown): a plain fade.
+      return FadeTransition(opacity: curved, child: child);
+    },
+  );
+  FocusManager.instance.primaryFocus?.unfocus();
+  return result;
+}
+
 /// The shared popup card: anchored ABOVE THE FOOTER (bottom-centre) and rising
 /// upward, wide-but-capped on desktop and near-full-width on phones, with a thin
 /// red-accent border, a header row (icon + title + optional action + close) and

@@ -848,19 +848,43 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       ),
       // Our Diary takes over the body as a full page BELOW this header (the
       // "Our Space" title + minimize stay visible); its own back arrow returns.
-      builder: (context, isWide) => _diaryOpen
-          ? Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-              child: _diaryBookView(scheme, isWide),
-            )
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-                children: _mainSections(scheme, title, moments),
-              ),
+      // The two views cross-fade + gently rise/settle so opening and closing the
+      // diary eases in and out instead of snapping.
+      builder: (context, isWide) => AnimatedSwitcher(
+        duration: const Duration(milliseconds: 340),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, anim) {
+          final entering = child.key == const ValueKey('diary');
+          // The diary rises up as it emerges; the tiles settle back down — so
+          // the two feel like one turning to the other, not a hard cut.
+          final begin =
+              entering ? const Offset(0, 0.05) : const Offset(0, -0.03);
+          return FadeTransition(
+            opacity: anim,
+            child: SlideTransition(
+              position: Tween<Offset>(begin: begin, end: Offset.zero)
+                  .animate(anim),
+              child: child,
             ),
+          );
+        },
+        child: _diaryOpen
+            ? Padding(
+                key: const ValueKey('diary'),
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+                child: _diaryBookView(scheme, isWide),
+              )
+            : RefreshIndicator(
+                key: const ValueKey('tiles'),
+                onRefresh: _load,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                  children: _mainSections(scheme, title, moments),
+                ),
+              ),
+      ),
     );
   }
 
@@ -1484,16 +1508,18 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                 ),
         ),
         _diaryPlansStrip(scheme),
+        // Raised 3D write button — full width on a phone, a centred pill capped
+        // at a comfortable width on tablet/desktop so it never stretches edge to
+        // edge on a big screen.
         Padding(
           padding: const EdgeInsets.fromLTRB(0, 8, 0, 2),
-          child: SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _addDiaryEntry,
-              style: FilledButton.styleFrom(
-                  backgroundColor: _accent, foregroundColor: Colors.white),
-              icon: const Icon(Icons.edit_rounded, size: 18),
-              label: const Text('Write in our diary'),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: SizedBox(
+                width: double.infinity,
+                child: _diaryWriteButton(scheme),
+              ),
             ),
           ),
         ),
@@ -1588,20 +1614,27 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                   ),
                 ),
               ),
-              // Footer: reactions + comment (readers can always do both).
+              // Footer: reactions + comment. A subtly raised strip; the two
+              // sit side-by-side once there's width, and stack on a phone.
               Container(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
                 decoration: BoxDecoration(
-                  color: (isDark ? Colors.black : _accent)
-                      .withValues(alpha: isDark ? 0.16 : 0.04),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      (isDark ? Colors.white : _accent)
+                          .withValues(alpha: isDark ? 0.05 : 0.03),
+                      (isDark ? Colors.black : _accent)
+                          .withValues(alpha: isDark ? 0.20 : 0.07),
+                    ],
+                  ),
                   border: Border(
-                      top: BorderSide(
-                          color: _accent.withValues(alpha: 0.12))),
+                      top: BorderSide(color: _accent.withValues(alpha: 0.14))),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    diaryReactionRow(
+                child: LayoutBuilder(
+                  builder: (ctx, c) {
+                    final reactions = diaryReactionRow(
                       scheme: scheme,
                       accent: _accent,
                       entry: e,
@@ -1610,35 +1643,28 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                         final em = await pickDiaryReaction(context, _accent);
                         if (em != null) _reactDiary(e, em);
                       },
-                    ),
-                    const SizedBox(height: 8),
-                    InkWell(
-                      onTap: () => _openMemoryDetail(e),
-                      borderRadius: BorderRadius.circular(10),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 4, horizontal: 2),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.mode_comment_outlined,
-                                size: 16, color: _accent),
-                            const SizedBox(width: 6),
-                            Text(
-                                commentCount == 0
-                                    ? 'Comment'
-                                    : '$commentCount ${commentCount == 1 ? 'comment' : 'comments'}',
-                                style: TextStyle(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: _accent)),
-                            Icon(Icons.chevron_right_rounded,
-                                size: 16, color: _accent),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+                    );
+                    final commentPill = _diaryCommentPill(
+                        scheme, commentCount, () => _openMemoryDetail(e));
+                    if (c.maxWidth >= 440) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(child: reactions),
+                          const SizedBox(width: 10),
+                          commentPill,
+                        ],
+                      );
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        reactions,
+                        const SizedBox(height: 10),
+                        commentPill,
+                      ],
+                    );
+                  },
                 ),
               ),
             ],
@@ -1649,6 +1675,104 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   }
 
   /// Edit/Delete menu — only ever shown on the author's own memory.
+  /// The raised 3D "Write in our diary" button (gradient body, down-shadow +
+  /// top highlight, press-sink) — the app's depth language on the primary CTA.
+  Widget _diaryWriteButton(ColorScheme scheme) {
+    return _PressableRaised(
+      onTap: _addDiaryEntry,
+      radius: 16,
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color.lerp(_accent, Colors.white, 0.14)!,
+          _accent,
+          Color.lerp(_accent, Colors.black, 0.20)!,
+        ],
+      ),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
+      shadows: [
+        BoxShadow(
+          color: _accent.withValues(alpha: 0.45),
+          blurRadius: 16,
+          offset: const Offset(0, 8),
+        ),
+        BoxShadow(
+          color: Colors.white.withValues(alpha: 0.22),
+          blurRadius: 1,
+          spreadRadius: -1,
+          offset: const Offset(0, -1),
+        ),
+      ],
+      child: const Padding(
+        padding: EdgeInsets.symmetric(vertical: 14),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.edit_rounded, size: 18, color: Colors.white),
+            SizedBox(width: 8),
+            Text('Write in our diary',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The raised 3D comment pill in a memory's footer.
+  Widget _diaryCommentPill(
+      ColorScheme scheme, int count, VoidCallback onTap) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return _PressableRaised(
+      onTap: onTap,
+      radius: 22,
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          isDark ? scheme.surfaceContainerHigh : Colors.white,
+          isDark ? scheme.surfaceContainer : scheme.surfaceContainerHighest,
+        ],
+      ),
+      border: Border.all(color: _accent.withValues(alpha: 0.45)),
+      shadows: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: isDark ? 0.40 : 0.12),
+          blurRadius: 8,
+          offset: const Offset(0, 3),
+        ),
+        BoxShadow(
+          color: Colors.white.withValues(alpha: isDark ? 0.05 : 0.9),
+          blurRadius: 1,
+          spreadRadius: -1,
+          offset: const Offset(0, -1),
+        ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.mode_comment_outlined, size: 16, color: _accent),
+            const SizedBox(width: 6),
+            Text(
+                count == 0
+                    ? 'Comment'
+                    : '$count ${count == 1 ? 'comment' : 'comments'}',
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: _accent)),
+            Icon(Icons.chevron_right_rounded, size: 16, color: _accent),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _memoryMenuButton(Map<String, dynamic> e, Color ink) {
     return PopupMenuButton<String>(
       tooltip: 'Options',
@@ -3710,6 +3834,65 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
 /// Write (or edit) a shared diary entry: a memory (something you shared) or a
 /// plan ahead (with an optional date + a pin for a reminder). Returns a map
 /// {kind, title, body, plan_date, pinned} on save, or null on cancel.
+/// A reusable raised, 3D tappable surface: gradient body, hairline border and
+/// layered shadows (down-shadow + top highlight), sinking flatter while held.
+/// Used for the diary's primary CTA and its comment pill.
+class _PressableRaised extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final double radius;
+  final Gradient gradient;
+  final BoxBorder? border;
+  final List<BoxShadow> shadows;
+  const _PressableRaised({
+    required this.child,
+    required this.onTap,
+    required this.gradient,
+    this.shadows = const [],
+    this.border,
+    this.radius = 14,
+  });
+
+  @override
+  State<_PressableRaised> createState() => _PressableRaisedState();
+}
+
+class _PressableRaisedState extends State<_PressableRaised> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = BorderRadius.circular(widget.radius);
+    return AnimatedScale(
+      scale: _down ? 0.97 : 1.0,
+      duration: const Duration(milliseconds: 110),
+      curve: Curves.easeOut,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: r,
+          gradient: widget.gradient,
+          border: widget.border,
+          // Sink: drop the lift while pressed so it reads as pushed in.
+          boxShadow: _down ? const [] : widget.shadows,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: r,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            borderRadius: r,
+            onTap: widget.onTap,
+            onHighlightChanged: (v) {
+              if (mounted) setState(() => _down = v);
+            },
+            child: widget.child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Faint horizontal rules + a soft left margin line, so a memory reads like a
 /// page from a lined notebook. Kept very low-contrast on purpose.
 class _RuledPaperPainter extends CustomPainter {

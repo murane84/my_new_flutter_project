@@ -4686,6 +4686,32 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
                     ),
             ),
             Divider(height: 1, color: scheme.outlineVariant),
+            // While editing a comment, a slim banner makes it obvious and offers
+            // a quick way out.
+            if (_editingId != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_rounded, size: 15, color: _accent),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text('Editing your comment',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: _accent)),
+                    ),
+                    TextButton(
+                      onPressed: _cancelEdit,
+                      style: TextButton.styleFrom(
+                          foregroundColor: scheme.onSurfaceVariant,
+                          visualDensity: VisualDensity.compact),
+                      child: const Text('Cancel'),
+                    ),
+                  ],
+                ),
+              ),
             Padding(
               padding: EdgeInsets.fromLTRB(
                   14, 10, 14, 12 + MediaQuery.of(context).viewInsets.bottom),
@@ -4699,7 +4725,9 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
                       textInputAction: TextInputAction.send,
                       onSubmitted: (_) => _addComment(),
                       decoration: InputDecoration(
-                        hintText: 'Add a comment…',
+                        hintText: _editingId != null
+                            ? 'Edit your comment…'
+                            : 'Add a comment…',
                         isDense: true,
                         filled: true,
                         fillColor: scheme.surfaceContainerHighest,

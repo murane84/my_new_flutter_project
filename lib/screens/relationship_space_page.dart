@@ -1427,42 +1427,65 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   Widget _sidebarCoupleHeader(ColorScheme scheme) {
     final title = deriveSpaceName(_space, widget.myUserId);
     final partner = _others.isNotEmpty ? _others.first : null;
-    return Column(
-      children: [
-        const SizedBox(height: 2),
-        SizedBox(
-          width: 70,
-          height: 44,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Positioned(
-                  left: 0,
-                  top: 1,
-                  child: diaryAuthorBadge(
-                      name: widget.myName ?? 'You',
-                      imageUrl: widget.myAvatarUrl,
-                      radius: 19)),
-              Positioned(
-                  right: 0,
-                  top: 1,
-                  child: diaryAuthorBadge(
-                      name: (partner?['username'] ?? '?').toString(),
-                      imageUrl: _full(partner?['avatar_url']),
-                      radius: 19)),
-            ],
-          ),
+    // A little HERO cap in the Space's own colour — the same warm gradient as
+    // the dashboard banner — so the couple badges sit on their bond's colour
+    // instead of a flat panel, giving the sidebar/drawer a bright anchor on top.
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            _accent,
+            _accent.withValues(alpha: 0.74),
+          ],
         ),
-        const SizedBox(height: 8),
-        Text(title,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 13,
-                color: scheme.onSurface)),
-      ],
+        boxShadow: [
+          BoxShadow(
+            color: _accent.withValues(alpha: 0.34),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          SizedBox(
+            width: 70,
+            height: 44,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned(
+                    left: 0,
+                    top: 1,
+                    child: diaryAuthorBadge(
+                        name: widget.myName ?? 'You',
+                        imageUrl: widget.myAvatarUrl,
+                        radius: 19)),
+                Positioned(
+                    right: 0,
+                    top: 1,
+                    child: diaryAuthorBadge(
+                        name: (partner?['username'] ?? '?').toString(),
+                        imageUrl: _full(partner?['avatar_url']),
+                        radius: 19)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(title,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  color: Colors.white)),
+        ],
+      ),
     );
   }
 
@@ -1703,19 +1726,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           padding: const EdgeInsets.fromLTRB(2, 2, 2, 8),
           child: Row(
             children: [
-              if (onMenu != null) ...[
-                HeaderActionButton(
-                  icon: Icons.view_sidebar_rounded,
-                  tooltip: 'Sections',
-                  onPressed: onMenu,
-                ),
-                const SizedBox(width: 6),
-              ],
-              HeaderActionButton(
-                icon: Icons.arrow_back_rounded,
-                tooltip: 'Back',
-                onPressed: () => setState(() => _section = null),
-              ),
+              // ONE segmented nav control (sections | back on narrow, just back
+              // on wide) instead of two separate chips crowding the corner.
+              _diaryNavCluster(scheme, onMenu),
               const SizedBox(width: 10),
               Icon(Icons.menu_book_rounded, color: _accent, size: 20),
               const SizedBox(width: 6),
@@ -1727,10 +1740,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                       fontSize: 16,
                       color: scheme.onSurface)),
               const Spacer(),
-              if (mems.isNotEmpty)
-                Text('${mems.length} ${mems.length == 1 ? 'page' : 'pages'}',
-                    style: TextStyle(
-                        fontSize: 12, color: scheme.onSurfaceVariant)),
+              // Page count is already shown by the dots below — no separate label.
             ],
           ),
         ),
@@ -1776,41 +1786,15 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                                   Transform.scale(scale: scale, child: child),
                             );
                           },
-                          child: _memoryBookPage(scheme, mems[i]),
+                          child: _memoryBookPage(
+                              scheme, mems[i], i, mems.length),
                         ),
                         ),
                       ),
                     ),
-                    // Prev / next page buttons — click on desktop, or swipe on
-                    // touch; each is shown only when there's a page that way.
-                    if (_diaryPage > 0)
-                      Positioned(
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        child: Center(
-                          child: _diaryNavButton(
-                              scheme, Icons.chevron_left_rounded, () {
-                            _diaryPageCtrl.previousPage(
-                                duration: const Duration(milliseconds: 320),
-                                curve: Curves.easeOutCubic);
-                          }),
-                        ),
-                      ),
-                    if (_diaryPage < mems.length - 1)
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        bottom: 0,
-                        child: Center(
-                          child: _diaryNavButton(
-                              scheme, Icons.chevron_right_rounded, () {
-                            _diaryPageCtrl.nextPage(
-                                duration: const Duration(milliseconds: 320),
-                                curve: Curves.easeOutCubic);
-                          }),
-                        ),
-                      ),
+                    // Page turning now lives on the page itself as a DOG-EAR
+                    // corner you tap or drag (see _memoryBookPage) — more
+                    // book-like, and it never covers the writing.
                   ],
                 ),
         ),
@@ -1858,16 +1842,25 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
-  /// A round raised page-turn button overlaid on the book (prev / next).
-  Widget _diaryNavButton(
-      ColorScheme scheme, IconData icon, VoidCallback onTap) {
+  /// The diary header's single segmented nav control: on narrow screens it
+  /// holds [sections | back] as one connected pill; on wide screens (no drawer)
+  /// it's just [back]. One unit reads calmer than two separate floating chips.
+  Widget _diaryNavCluster(ColorScheme scheme, VoidCallback? onMenu) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return SizedBox(
-      width: 42,
-      height: 42,
-      child: _PressableRaised(
-        onTap: onTap,
-        radius: 21,
+    Widget seg(IconData icon, String tip, VoidCallback onTap) => Tooltip(
+          message: tip,
+          child: InkResponse(
+            onTap: onTap,
+            radius: 26,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              child: Icon(icon, size: 20, color: _accent),
+            ),
+          ),
+        );
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(13),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -1876,20 +1869,30 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
               : [Colors.white, scheme.surfaceContainerHighest],
         ),
         border: Border.all(color: _accent.withValues(alpha: 0.45)),
-        shadows: [
+        boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.42 : 0.16),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-          BoxShadow(
-            color: Colors.white.withValues(alpha: isDark ? 0.05 : 0.9),
-            blurRadius: 1,
-            spreadRadius: -1,
-            offset: const Offset(0, -1),
+            color: Colors.black.withValues(alpha: isDark ? 0.36 : 0.12),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
-        child: Center(child: Icon(icon, size: 22, color: _accent)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(13),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (onMenu != null) ...[
+              seg(Icons.view_sidebar_rounded, 'Sections', onMenu),
+              Container(
+                  width: 1,
+                  height: 22,
+                  color: _accent.withValues(alpha: 0.22)),
+            ],
+            seg(Icons.arrow_back_rounded, 'Back',
+                () => setState(() => _section = null)),
+          ],
+        ),
       ),
     );
   }
@@ -1897,7 +1900,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   /// One memory rendered as a page of ruled paper, in its AUTHOR's font. Shows
   /// only the author's photo (no name); readers can react + comment; only the
   /// author gets the edit/delete menu.
-  Widget _memoryBookPage(ColorScheme scheme, Map<String, dynamic> e) {
+  Widget _memoryBookPage(
+      ColorScheme scheme, Map<String, dynamic> e, int index, int total) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final title = (e['title'] ?? '').toString().trim();
     final body = (e['body'] ?? '').toString().trim();
@@ -1910,23 +1914,38 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final rule = (isDark ? Colors.white : _accent)
         .withValues(alpha: isDark ? 0.06 : 0.10);
     final commentCount = (e['comment_count'] as num?)?.toInt() ?? 0;
+    // Who signs the entry — real username, or the reader's own name for a memory
+    // they wrote before the author record hydrates.
+    final signName = ((author?['username'] ?? '').toString().trim().isNotEmpty)
+        ? (author!['username']).toString().trim()
+        : (mine ? (widget.myName ?? '').trim() : '');
+    void turn(int dir) {
+      final target = index + dir;
+      if (target < 0 || target >= total) return;
+      _diaryPageCtrl.animateToPage(target,
+          duration: const Duration(milliseconds: 340),
+          curve: Curves.easeOutCubic);
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      child: Container(
-        decoration: BoxDecoration(
-          color: paper,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _accent.withValues(alpha: 0.20)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.42 : 0.16),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
+      child: Stack(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: paper,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _accent.withValues(alpha: 0.20)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.42 : 0.16),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: CustomPaint(
+            clipBehavior: Clip.antiAlias,
+            child: CustomPaint(
           painter: _RuledPaperPainter(
             line: rule,
             margin: _accent.withValues(alpha: 0.28),
@@ -1981,8 +2000,36 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                   ),
                 ),
               ),
-              // Footer: reactions + comment. A subtly raised strip; the two
-              // sit side-by-side once there's width, and stack on a phone.
+              // Sign off like a love letter — the author's name in a hand plus
+              // the full date, sitting low on the page, so a short memory's
+              // blank ruled space reads as a CLOSED entry, not an unfinished one.
+              if (signName.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 22, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('❦',
+                          style: TextStyle(
+                              fontSize: 14,
+                              color: _accent.withValues(alpha: 0.55))),
+                      Text('— $signName',
+                          style: TextStyle(
+                              fontFamily: diaryFontFamily('handwriting'),
+                              fontSize: 20,
+                              height: 1.15,
+                              color: ink.withValues(alpha: 0.9))),
+                      if (created != null)
+                        Text(
+                            DateFormat('d MMMM yyyy')
+                                .format(created.toLocal()),
+                            style: TextStyle(
+                                fontSize: 10.5,
+                                color: ink.withValues(alpha: 0.5))),
+                    ],
+                  ),
+                ),
+              // Footer: reactions + comment on one clean strip.
               Container(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
                 decoration: BoxDecoration(
@@ -2011,23 +2058,18 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                         if (em != null) _reactDiary(e, em);
                       },
                     );
-                    final commentPill = _diaryCommentPill(
-                        scheme, commentCount, () => _openMemoryDetail(e));
-                    if (c.maxWidth >= 440) {
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(child: reactions),
-                          const SizedBox(width: 10),
-                          commentPill,
-                        ],
-                      );
-                    }
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    // One strip always: reactions take the room they need, the
+                    // comment button trails — compact (icon + count) on a phone
+                    // so the two never have to stack onto two rows.
+                    final compact = c.maxWidth < 440;
+                    final commentPill = _diaryCommentPill(scheme, commentCount,
+                        () => _openMemoryDetail(e),
+                        compact: compact);
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        reactions,
-                        const SizedBox(height: 10),
+                        Expanded(child: reactions),
+                        const SizedBox(width: 8),
                         commentPill,
                       ],
                     );
@@ -2037,6 +2079,36 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             ],
           ),
         ),
+          ),
+          // Dog-ear page-turn corners ON the page: bottom-right turns to the
+          // next memory, bottom-left to the previous — tap the fold, or keep
+          // swiping/dragging the page. Shown only when a page exists that way,
+          // tucked exactly into the paper's corner.
+          if (index < total - 1)
+            Positioned(
+              right: 6,
+              bottom: 4,
+              child: _DiaryDogEar(
+                isNext: true,
+                paper: paper,
+                accent: _accent,
+                isDark: isDark,
+                onTap: () => turn(1),
+              ),
+            ),
+          if (index > 0)
+            Positioned(
+              left: 6,
+              bottom: 4,
+              child: _DiaryDogEar(
+                isNext: false,
+                paper: paper,
+                accent: _accent,
+                isDark: isDark,
+                onTap: () => turn(-1),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -2091,7 +2163,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   /// The raised 3D comment pill in a memory's footer.
   Widget _diaryCommentPill(
-      ColorScheme scheme, int count, VoidCallback onTap) {
+      ColorScheme scheme, int count, VoidCallback onTap,
+      {bool compact = false}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return _PressableRaised(
       onTap: onTap,
@@ -2119,21 +2192,27 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         ),
       ],
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        padding: EdgeInsets.symmetric(
+            horizontal: compact ? 12 : 14, vertical: 9),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.mode_comment_outlined, size: 16, color: _accent),
             const SizedBox(width: 6),
+            // Compact (phone footer): just the count, so it never forces a
+            // second row. Full: the worded label + a chevron affordance.
             Text(
-                count == 0
-                    ? 'Comment'
-                    : '$count ${count == 1 ? 'comment' : 'comments'}',
+                compact
+                    ? (count == 0 ? '0' : '$count')
+                    : (count == 0
+                        ? 'Comment'
+                        : '$count ${count == 1 ? 'comment' : 'comments'}'),
                 style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                     color: _accent)),
-            Icon(Icons.chevron_right_rounded, size: 16, color: _accent),
+            if (!compact)
+              Icon(Icons.chevron_right_rounded, size: 16, color: _accent),
           ],
         ),
       ),
@@ -4284,6 +4363,133 @@ class _PressableRaisedState extends State<_PressableRaised> {
       ),
     );
   }
+}
+
+/// A folded page-corner ("dog-ear") you tap to turn the diary. Bottom-right
+/// turns forward, bottom-left turns back — the little curl reads as a real
+/// book and, unlike the old floating arrow, never sits over the writing.
+class _DiaryDogEar extends StatelessWidget {
+  final bool isNext;
+  final Color paper;
+  final Color accent;
+  final bool isDark;
+  final VoidCallback onTap;
+  const _DiaryDogEar({
+    required this.isNext,
+    required this.paper,
+    required this.accent,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const s = 46.0;
+    return Semantics(
+      button: true,
+      label: isNext ? 'Next page' : 'Previous page',
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: CustomPaint(
+          size: const Size(s, s),
+          painter: _DogEarPainter(
+              isNext: isNext, paper: paper, accent: accent, isDark: isDark),
+        ),
+      ),
+    );
+  }
+}
+
+class _DogEarPainter extends CustomPainter {
+  final bool isNext;
+  final Color paper;
+  final Color accent;
+  final bool isDark;
+  _DogEarPainter({
+    required this.isNext,
+    required this.paper,
+    required this.accent,
+    required this.isDark,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    canvas.save();
+    // Paint a bottom-RIGHT fold, then mirror horizontally for the prev corner.
+    if (!isNext) {
+      canvas.translate(w, 0);
+      canvas.scale(-1, 1);
+    }
+    final creaseA = Offset(0, h); // bottom-left of the little square
+    final creaseB = Offset(w, 0); // top-right
+    final corner = Offset(w, h); // the folded page corner
+
+    // Soft shadow along the crease, cast up-left onto the page, so the corner
+    // reads as physically lifted.
+    canvas.drawLine(
+      creaseA,
+      creaseB,
+      Paint()
+        ..color = Colors.black.withValues(alpha: isDark ? 0.30 : 0.15)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+    );
+
+    // The flap (page underside): a triangle from the crease to the corner, with
+    // a gentle gradient + a whisper of the Space colour so it feels warm.
+    final flap = Path()
+      ..moveTo(creaseA.dx, creaseA.dy)
+      ..lineTo(corner.dx, corner.dy)
+      ..lineTo(creaseB.dx, creaseB.dy)
+      ..close();
+    final under =
+        Color.lerp(paper, isDark ? Colors.black : accent, isDark ? 0.35 : 0.20)!;
+    canvas.drawPath(
+      flap,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.bottomRight,
+          end: Alignment.topLeft,
+          colors: [under, paper],
+        ).createShader(Rect.fromLTWH(0, 0, w, h)),
+    );
+
+    // Crease highlight — the sharp top edge of the fold catching light.
+    canvas.drawLine(
+      creaseA,
+      creaseB,
+      Paint()
+        ..color = Colors.white.withValues(alpha: isDark ? 0.06 : 0.7)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+
+    // A faint chevron on the flap so the fold clearly reads as "turn the page".
+    final cx = w * 0.70, cy = h * 0.70, cs = 5.0;
+    canvas.drawPath(
+      Path()
+        ..moveTo(cx - cs, cy - cs)
+        ..lineTo(cx + cs * 0.4, cy)
+        ..lineTo(cx - cs, cy + cs),
+      Paint()
+        ..color = accent.withValues(alpha: 0.80)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _DogEarPainter old) =>
+      old.isNext != isNext ||
+      old.paper != paper ||
+      old.accent != accent ||
+      old.isDark != isDark;
 }
 
 /// Faint horizontal rules + a soft left margin line, so a memory reads like a

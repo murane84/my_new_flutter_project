@@ -651,9 +651,16 @@ def _diary_for(db: Session, space: RelationshipSpace,
 
 
 def _notify_partner_diary(db: Session, space: RelationshipSpace,
-                          current_user: User, entry: DiaryEntry) -> None:
-    """Tell the partner the diary just grew — a shared notebook only feels shared
-    if the other person knows it changed. Best-effort socket + push."""
+                          current_user: User, entry: DiaryEntry,
+                          action: str = "added") -> None:
+    """Tell the partner the diary changed — a shared notebook only feels shared
+    if the other person's open page updates the moment it changes. Best-effort
+    socket + push.
+
+    [action] is "added", "updated" (e.g. the author reworded a memory or changed
+    its font) or "removed". Only "added" is worth a toast + push; "updated" and
+    "removed" ship the socket event SILENTLY so the partner's page reloads
+    live without a noisy banner for every small edit."""
     partner = _partner_id(space, current_user.id)
     if not partner:
         return
@@ -675,12 +682,16 @@ def _notify_partner_diary(db: Session, space: RelationshipSpace,
                 "plan_date": entry.plan_date.isoformat()
                 if entry.plan_date else None,
                 "pinned": bool(entry.pinned),
-                "line": line,
+                "action": action,
+                # Toast copy only for a brand-new entry; edits/removes are silent.
+                "line": line if action == "added" else None,
             },
         })
     except Exception:
         pass
-    if send_push_to_user is not None:
+    # Never push-notify an edit or a delete — that would ping the partner's phone
+    # every time the author tweaks a word or a font. Only a NEW entry pushes.
+    if action == "added" and send_push_to_user is not None:
         try:
             send_push_to_user(partner, {
                 "type": "space_diary",
@@ -1350,6 +1361,9 @@ def edit_diary_entry(
     entry.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(entry)
+    # Push the change to the partner's open page so an edit (reworded text, a new
+    # font…) shows up instantly, without them having to pull-to-refresh. Silent.
+    _notify_partner_diary(db, space, current_user, entry, action="updated")
     return _diary_dict(db, entry, current_user.id)
 
 
@@ -1378,8 +1392,19 @@ def delete_diary_entry(
         raise HTTPException(
             status_code=403,
             detail="Only the author can delete their memory")
+    # Snapshot the fields the notifier needs into a DETACHED stand-in BEFORE the
+    # row is deleted — the real instance is expired after delete/commit.
+    _removed = DiaryEntry(
+        id=entry.id,
+        kind=entry.kind,
+        title=entry.title,
+        plan_date=entry.plan_date,
+        pinned=entry.pinned,
+    )
     db.delete(entry)
     db.commit()
+    # Tell the partner's open page it's gone so it disappears live (silent).
+    _notify_partner_diary(db, space, current_user, _removed, action="removed")
     return {"ok": True}
 
 

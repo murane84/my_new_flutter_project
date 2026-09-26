@@ -4654,6 +4654,11 @@ class _DiaryComposerState extends State<_DiaryComposer> {
             TextField(
               controller: _title,
               maxLength: 80,
+              // Type in the CHOSEN hand so the author sees the memory take that
+              // typeface live as they pick it (plans are joint → default font).
+              style: TextStyle(
+                  fontFamily: _planMode ? null : diaryFontFamily(_font),
+                  fontWeight: FontWeight.w700),
               decoration: InputDecoration(
                 hintText: _planMode
                     ? 'What are you planning? (a title)'
@@ -4671,6 +4676,9 @@ class _DiaryComposerState extends State<_DiaryComposer> {
               controller: _body,
               maxLines: 4,
               maxLength: 1000,
+              style: TextStyle(
+                  fontFamily: _planMode ? null : diaryFontFamily(_font),
+                  height: 1.5),
               decoration: InputDecoration(
                 hintText: _planMode
                     ? 'The details — where, when, why it’ll be special…'

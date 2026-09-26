@@ -22,7 +22,6 @@ Future<T?> showAppPopup<T>(
     barrierLabel: 'Dismiss',
     barrierColor: Colors.black.withAlpha(90),
     transitionDuration: const Duration(milliseconds: 300),
-    reverseTransitionDuration: const Duration(milliseconds: 260),
     pageBuilder: (_, _, _) => child,
     transitionBuilder: (_, anim, _, c) {
       final curved = CurvedAnimation(

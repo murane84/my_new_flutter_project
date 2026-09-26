@@ -823,7 +823,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       barrierLabel: 'Minimize',
       barrierColor: Colors.black.withValues(alpha: 0.45),
       transitionDuration: const Duration(milliseconds: 260),
-      reverseTransitionDuration: const Duration(milliseconds: 220),
       pageBuilder: (dctx, _, _) {
         return StatefulBuilder(
           builder: (dctx, setSheet) {

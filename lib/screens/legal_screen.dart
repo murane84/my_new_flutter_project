@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../utils/popup_shell.dart' show gLastTapDownGlobal, genieAlignmentFor;
+import '../utils/popup_shell.dart'
+    show gLastTapDownGlobal, genieAlignmentFor, HeaderActionButton;
 
 // Height of the Aluta app header (toolbar). The full-page legal views start
 // just under it, so the "Aluta" title + overflow (⋮) menu stay visible above.
@@ -170,9 +171,11 @@ class _LegalHubState extends State<_LegalHub> {
                             fontSize: 16.5, fontWeight: FontWeight.w700),
                       ),
                     ),
-                    IconButton(
+                    // Raised 3D dismiss chip — matches Our Space's header
+                    // actions instead of a flat icon button.
+                    HeaderActionButton(
+                      icon: Icons.close_rounded,
                       tooltip: 'Close',
-                      icon: const Icon(Icons.close_rounded),
                       onPressed: () {
                         FocusScope.of(context).unfocus();
                         Navigator.of(context).pop();
@@ -432,7 +435,7 @@ List<Widget> _legalBody(BuildContext context, String raw) {
 // the backend CURRENT_POLICY_VERSION is bumped), update this content too.
 const String _privacy = '''
 Aluta — Privacy Policy
-Development / Beta build · Last updated: 13 August 2026
+Development / Beta build · Last updated: 26 September 2026
 
 Aluta is an app in active development, provided for early testing. Features and
 data practices change frequently, and it is not yet intended for public
@@ -453,12 +456,21 @@ information. It is a good-faith draft by the developer, not legal advice.
   participants.
 - Stories: the ephemeral photo, video, text or "now playing" Stories you post and
   a list of which friends viewed them. Stories expire about 24 hours after posting.
+- Shared Spaces and diary ("Our Space"): when you and another person pin a bond,
+  Aluta creates a private Space that the two of you both see. It can hold a shared
+  playlist, "pinned moments" (with reactions), your shared listening history, and
+  a shared diary of past memories and future plans — including the title, text,
+  plan date, reactions and comments you each add. Everything in a Space is visible
+  to both members; there are no private-to-you entries. When you pin a plan for a
+  reminder, its date is used to schedule a notification (see device data below).
 - Contacts (only with your permission): to help you find friends, the app can
   read your address book and check which numbers belong to Aluta users; your saved
   contact names may be backed up privately so they show on your other devices.
 - Device and technical data: a push-notification token (Firebase Cloud Messaging)
-  to wake your device for messages and calls, information about linked devices so
-  you can sign them out, and crash/diagnostic reports via Sentry.
+  to wake your device for messages and calls, on-device reminder notifications
+  that Aluta schedules locally for the plans you pin in a Space (these stay on
+  your device), information about linked devices so you can sign them out, and
+  crash/diagnostic reports via Sentry.
 
 2. Calls, music and on-device data
 - Voice and group calls use a direct peer-to-peer connection (WebRTC). We do not
@@ -473,9 +485,10 @@ information. It is a good-faith draft by the developer, not legal advice.
 
 3. How we use your information
 We use your information only to operate the app: to authenticate you, deliver
-messages and media, place calls, sync music, post and view Stories, show
-presence, send notifications, match contacts (with permission) and diagnose
-crashes. We do NOT sell your personal data or use your messages for advertising.
+messages and media, place calls, sync music, post and view Stories, run your
+shared Spaces and diary and remind you of plans you pin, show presence, send
+notifications, match contacts (with permission) and diagnose crashes. We do NOT
+sell your personal data or use your messages for advertising.
 
 4. Third-party services
 Aluta relies on a few third parties, and using those features shares limited data
@@ -488,12 +501,15 @@ with them under their own policies:
   firewalls/NAT.
 
 We also share content with other users as an inherent part of the product — the
-people you message, call or share a Story with receive that content.
+people you message, call or share a Story with, and the partner you share a Space
+and diary with, receive that content.
 
 5. Data retention and deletion
 Messages and shared media are kept so your history is available across devices,
 until you or the other participant delete them, or you delete your account.
-Stories expire after about 24 hours. Some shared-media bytes are short-lived and
+Stories expire after about 24 hours. Space and diary content (moments, playlist,
+memories and plans, reactions and comments) is kept for both members until it is
+deleted or the bond is unpinned. Some shared-media bytes are short-lived and
 purged from the server after delivery. You can delete your account at any time
 from the Profile page; contact us for help exercising your data rights.
 
@@ -527,7 +543,7 @@ For any privacy questions or requests, contact us at: support@ozilane.com
 
 const String _terms = '''
 Aluta — Terms of Service
-Development / Beta build · Last updated: 13 August 2026
+Development / Beta build · Last updated: 26 September 2026
 
 Aluta is in active development, provided for early testing. Features change
 frequently, data may be reset, and the service may be unavailable or contain
@@ -558,13 +574,14 @@ overload, reverse-engineer or disrupt the Service; record others without the
 consent required by law; or scrape or harvest other users' data.
 
 4. Your content and shared media
-You keep ownership of the messages, photos, videos, voice notes, Stories and
-other content you create or share, and you are responsible for having the rights
-to share it. You grant us a limited licence to host, store, transmit and display
-your content only as needed to operate the Service — for example delivering a
-message, showing a Story to friends you chose, or syncing across your devices.
-This licence ends when the content is deleted, subject to normal backups. We do
-not use your content for advertising and do not sell it.
+You keep ownership of the messages, photos, videos, voice notes, Stories, diary
+entries and other content you create or share, and you are responsible for having
+the rights to share it. You grant us a limited licence to host, store, transmit
+and display your content only as needed to operate the Service — for example
+delivering a message, showing a Story to friends you chose, keeping a shared Space
+and diary in sync between its two members, or syncing across your devices. This
+licence ends when the content is deleted, subject to normal backups. We do not use
+your content for advertising and do not sell it.
 
 5. Music and third-party content
 Aluta plays music that already exists on your device and lets you share "now
@@ -572,11 +589,16 @@ playing" moments and listen together. You are responsible for having the rights
 to any music or media you play, share or stream. Song-recognition, GIF/sticker
 search and similar features rely on third-party providers and are offered "as is".
 
-6. Calls, Stories and shared sessions
+6. Calls, Stories, Spaces and shared sessions
 Calls connect peer-to-peer and are not recorded; you are responsible for any
 consent-to-record or privacy laws that apply to you. Stories expire after about
 24 hours, and people you share them with can see that you posted and (for
 friends) that they viewed — do not assume ephemeral content cannot be captured.
+A Space is shared between its two members: everything in it — the playlist, pinned
+moments, and the diary of memories and plans, with your reactions and comments —
+is visible to the other member, so share only what you're comfortable with them
+seeing, and keep it respectful and lawful. Either member can leave or unpin the
+bond.
 
 7. Third-party services
 The Service uses third parties (for example Firebase for notifications, GIPHY,
@@ -607,12 +629,13 @@ support@ozilane.com
 
 const String _about = '''
 About Aluta
-Development / Beta build · Last updated: 13 August 2026
+Development / Beta build · Last updated: 26 September 2026
 
 Aluta is a social app that brings your conversations and your music into one
-place — private and group chat, voice and group calls, ephemeral Stories, and a
-built-in music player with a shared "Listen Together" mode. It runs on Android,
-Windows desktop and the web.
+place — private and group chat, voice and group calls, ephemeral Stories, a
+built-in music player with a shared "Listen Together" mode, and private
+two-person Spaces with a shared diary. It runs on Android, Windows desktop and
+the web.
 
 What you can do today
 - Chat and media: one-to-one and group chats with photos, files, voice notes and
@@ -625,6 +648,10 @@ What you can do today
 - Music and Listen Together: play your own library with lock-screen, Bluetooth
   and car controls, tidy up song details, identify a song, share a track, and
   listen in sync with a friend.
+- Our Space and Our Diary: pin a bond with someone to open a private shared
+  Space — a shared playlist, pinned moments you can react to, live "Listen
+  Together", and a shared diary of memories and future plans that you can both
+  react to and comment on. Pin a plan and Aluta reminds you when it's near.
 - Presence and friends: online/last-seen presence, a friends list built from your
   contacts (with permission), and status rings.
 - Your account and devices: email sign-up, optional phone number and avatar,

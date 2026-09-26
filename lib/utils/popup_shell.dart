@@ -69,6 +69,14 @@ Future<T?> showAppPopup<T>(
   // open, the close genie still collapses into its new position. Falls back to
   // [origin], then the last global tap, then the bottom slide.
   Offset? Function()? originResolver,
+  // How long the open/minimise animation runs. A larger value makes a big
+  // surface (e.g. the full-screen Our Space page) ease in/out gracefully
+  // instead of snapping.
+  Duration duration = const Duration(milliseconds: 340),
+  // The genie's starting scale. The default 0.12 pops out of a tiny point
+  // (great for small popups); a big page passes a gentler value like 0.85 so it
+  // grows/settles softly from the tapped spot rather than zooming from nothing.
+  double genieMinScale = 0.12,
 }) async {
   // Drop any active text focus so opening the popup never carries a keyboard
   // in with it.
@@ -82,7 +90,7 @@ Future<T?> showAppPopup<T>(
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
     barrierColor: Colors.black.withAlpha(90),
-    transitionDuration: const Duration(milliseconds: 340),
+    transitionDuration: duration,
     pageBuilder: (_, _, _) => child,
     transitionBuilder: (dctx, anim, _, c) {
       final curved = CurvedAnimation(
@@ -102,7 +110,8 @@ Future<T?> showAppPopup<T>(
         return FadeTransition(
           opacity: curved,
           child: ScaleTransition(
-            scale: Tween<double>(begin: 0.12, end: 1.0).animate(curved),
+            scale: Tween<double>(begin: genieMinScale, end: 1.0)
+                .animate(curved),
             alignment: genieAlign,
             child: RepaintBoundary(child: c),
           ),

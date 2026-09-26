@@ -610,10 +610,14 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         }
         final rows = <Widget>[];
         for (var i = 0; i < tiles.length; i += 2) {
+          // NB: no CrossAxisAlignment.stretch here. The tiles have a fixed
+          // height (see _featureTile), so the two cells already match — and
+          // stretch would force an intrinsic-height measurement of a tile whose
+          // header row contains a Spacer/Expanded, which is illegal for a Flex
+          // and silently breaks sizing + hit-testing in a release web build.
           rows.add(Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(child: tiles[i]),
                 const SizedBox(width: 10),
@@ -638,6 +642,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     required String subtitle,
     required VoidCallback onTap,
   }) {
+    // No fixed height and no Spacer/stretch: every tile has the same single-line
+    // structure, so tiles size to content and naturally match in a row. This
+    // avoids the release-web bug where stretch (or a fixed height that's too
+    // short) plus a Spacer-containing row breaks sizing and kills taps.
     return Material(
       color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
       borderRadius: BorderRadius.circular(16),
@@ -648,8 +656,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
                     width: 38,
@@ -660,7 +671,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                     ),
                     child: Icon(icon, color: _accent, size: 20),
                   ),
-                  const Spacer(),
                   if (count != null && count > 0)
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -674,10 +684,12 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                               color: _accent,
                               fontWeight: FontWeight.w800,
                               fontSize: 12.5)),
-                    ),
+                    )
+                  else
+                    const SizedBox(height: 22),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Text(label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -960,6 +972,36 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   // ── header ───────────────────────────────────────────────────────────────
   Widget _header(ColorScheme scheme, String title) {
     final others = _others;
+    final stats = (_space['stats'] as Map?) ?? const {};
+    final days = (stats['days_in_song'] as num?)?.toInt() ?? 0;
+    final streak = (stats['listen_streak'] as num?)?.toInt() ?? 0;
+    final hasStats = others.isNotEmpty && (days > 0 || streak > 0);
+
+    // The identity block: avatars, name, close-since — always centred.
+    final identity = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _overlappedAvatars(others),
+        const SizedBox(height: 12),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.2,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          'Close since ${_closeSince()}',
+          style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.9), fontSize: 12.5),
+        ),
+      ],
+    );
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       decoration: BoxDecoration(
@@ -973,29 +1015,65 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           ],
         ),
       ),
-      child: Column(
-        children: [
-          _overlappedAvatars(others),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.2,
-            ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            'Close since ${_closeSince()}',
-            style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.9), fontSize: 12.5),
-          ),
-          if (others.isNotEmpty) _heroStats(),
-        ],
+      child: LayoutBuilder(
+        builder: (ctx, c) {
+          // Wide enough to seat the two stats LEFT and RIGHT of the identity
+          // block, so the hero stays short instead of growing taller. Below the
+          // threshold we stack the stats under the name (the old compact row).
+          final sideBySide = hasStats && c.maxWidth >= 440;
+          if (sideBySide) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: _heroSideStat('🔥', '$streak', 'day streak'),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  child: identity,
+                ),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: _heroSideStat(
+                        '🎧', '$days', days == 1 ? 'day in a song' : 'days in a song'),
+                  ),
+                ),
+              ],
+            );
+          }
+          return Column(
+            children: [
+              identity,
+              if (hasStats) _heroStats(),
+            ],
+          );
+        },
       ),
+    );
+  }
+
+  /// A vertical stat block that sits beside the identity in the wide hero.
+  Widget _heroSideStat(String emoji, String value, String label) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(emoji, style: const TextStyle(fontSize: 20)),
+        const SizedBox(height: 3),
+        Text(value,
+            style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 19)),
+        const SizedBox(height: 1),
+        Text(label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.85), fontSize: 11)),
+      ],
     );
   }
 

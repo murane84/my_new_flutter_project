@@ -364,10 +364,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   Color get _accent => spaceThemeColor(_space['theme'] as String?);
 
   bool _nudging = false;
-  // Set while a feature's floating card is open, so a data reload (from an
-  // in-card action or a live bond event) repaints the OPEN card too — not just
-  // the main surface underneath it. Cleared when the card closes.
-  VoidCallback? _sheetRefresh;
 
   // A stable key per feature tile, so its on-screen centre can anchor the
   // open/close animation of its floating card (the card grows FROM and is
@@ -377,9 +373,14 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   final GlobalKey _kDiary = GlobalKey();
   final GlobalKey _kSong = GlobalKey();
 
-  // Our Diary opens as a FULL PAGE below the Our Space header (the header +
-  // minimize stay on top); the book's own back arrow returns to the tiles.
-  bool _diaryOpen = false;
+  // A feature opens as a FULL PAGE below the Our Space header (the header +
+  // minimize stay on top). null = the tile dashboard; otherwise one of
+  // 'playlist' | 'moments' | 'diary' | 'song'. On wide screens a left sidebar
+  // lets you jump between sections without returning to the dashboard.
+  String? _section;
+  // On narrow screens the section list lives in a left drawer that slides in
+  // over the content; this tracks whether it's showing.
+  bool _navDrawerOpen = false;
   // Drives the book's page-turn between memories (adjacent pages peek like a
   // real book at viewportFraction < 1).
   final PageController _diaryPageCtrl = PageController(viewportFraction: 0.92);
@@ -431,8 +432,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     setState(() {
       if (full != null) _space = full;
     });
-    // Keep an open feature card in sync with the freshly-loaded data.
-    _sheetRefresh?.call();
     // Reconcile the device's pinned-plan reminders with the current diary.
     _syncReminders();
   }
@@ -855,9 +854,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         switchInCurve: Curves.easeOutCubic,
         switchOutCurve: Curves.easeInCubic,
         transitionBuilder: (child, anim) {
-          final entering = child.key == const ValueKey('diary');
-          // The diary rises up as it emerges; the tiles settle back down — so
-          // the two feel like one turning to the other, not a hard cut.
+          final entering = child.key == const ValueKey('section');
+          // The section rises up as it emerges; the dashboard settles back down
+          // — so the two feel like one turning to the other, not a hard cut.
           final begin =
               entering ? const Offset(0, 0.05) : const Offset(0, -0.03);
           return FadeTransition(
@@ -869,20 +868,20 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             ),
           );
         },
-        child: _diaryOpen
-            ? Padding(
-                key: const ValueKey('diary'),
-                padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-                child: _diaryBookView(scheme, isWide),
-              )
-            : RefreshIndicator(
-                key: const ValueKey('tiles'),
+        child: _section == null
+            ? RefreshIndicator(
+                key: const ValueKey('dashboard'),
                 onRefresh: _load,
                 child: ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
                   children: _mainSections(scheme, title, moments),
                 ),
+              )
+            : Padding(
+                key: const ValueKey('section'),
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+                child: _sectionScaffold(scheme),
               ),
       ),
     );
@@ -930,9 +929,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   /// Everything lives on ONE calm surface: a compact hero, any live/contextual
   /// strips, a quick "thinking of you" pill, and a row of feature tiles. Each
-  /// tile opens its details in a floating card (see [_openFeatureSheet]) so the
-  /// growing content of the playlist, moments and diary never pushes this main
-  /// card taller — it stays compact with every feature visible at a glance.
+  /// tile opens its details as an in-body section (see [_sectionScaffold]) so
+  /// the growing content of the playlist, moments and diary never pushes this
+  /// main card taller — it stays compact with every feature visible at a glance.
   List<Widget> _mainSections(
       ColorScheme scheme, String title, List<Map<String, dynamic>> moments) {
     final isPair = _partnerId != null;
@@ -1213,197 +1212,319 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
-  // ── floating feature card (a tap-opened overlay) ──────────────────────────
-  /// Open [body] in a centered floating card so a feature's details — however
-  /// long they grow — scroll inside the overlay instead of stretching the main
-  /// Our Space surface. [footer] holds the feature's primary actions. While the
-  /// card is open, [_sheetRefresh] repaints it whenever the space reloads.
-  Future<void> _openFeatureSheet({
-    required String title,
-    required IconData icon,
-    required Widget Function(void Function() refresh) body,
-    Widget Function(void Function() refresh)? footer,
-    Offset? origin,
-  }) async {
-    final scheme = Theme.of(context).colorScheme;
-    final media = MediaQuery.of(context).size;
-    // Anchor the grow/shrink at the tile's on-screen direction (falls back to
-    // centre), so the card appears to emerge FROM its tile and, on minimize, be
-    // absorbed BACK INTO it.
-    final align = origin == null
-        ? Alignment.center
-        : Alignment(
-            ((origin.dx / media.width) * 2 - 1).clamp(-1.0, 1.0),
-            ((origin.dy / media.height) * 2 - 1).clamp(-1.0, 1.0),
-          );
-    var open = true;
-    await showGeneralDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Minimize',
-      barrierColor: Colors.black.withValues(alpha: 0.45),
-      transitionDuration: const Duration(milliseconds: 260),
-      pageBuilder: (dctx, _, _) {
-        return StatefulBuilder(
-          builder: (dctx, setSheet) {
-            void refresh() {
-              if (open) setSheet(() {});
-            }
+  // Feature tiles now open IN-BODY as sections (see _sectionScaffold), so a
+  // sidebar/drawer can jump between them without returning to the dashboard.
+  void _openPlaylist([Offset? origin]) => _goSection('playlist');
+  void _openMoments([Offset? origin]) => _goSection('moments');
+  void _openSongMilestones([Offset? origin]) => _goSection('song');
+  void _openDiary([Offset? origin]) => _goSection('diary');
 
-            _sheetRefresh = refresh;
-            return Dialog(
-              insetPadding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 36),
-              backgroundColor: scheme.surface,
-              shape:
-                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: 560,
-                  maxHeight: MediaQuery.of(dctx).size.height * 0.82,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 14, 8, 10),
-                      child: Row(
-                        children: [
-                          Icon(icon, color: _accent),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(title,
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 16,
-                                    color: scheme.onSurface)),
-                          ),
-                          // Raised 3D minimize chip (red hairline), matching the
-                          // Our Space header + the rest of the app's popups.
-                          HeaderActionButton(
-                            tooltip: 'Minimize',
-                            icon: Icons.close_fullscreen_rounded,
-                            onPressed: () => Navigator.pop(dctx),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Divider(height: 1, color: scheme.outlineVariant),
-                    Flexible(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
-                        child: body(refresh),
-                      ),
-                    ),
-                    if (footer != null) ...[
-                      Divider(height: 1, color: scheme.outlineVariant),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-                        child: footer(refresh),
-                      ),
-                    ],
-                  ],
+  void _goSection(String key) =>
+      setState(() {
+        _section = key;
+        _navDrawerOpen = false;
+      });
+
+  // ── Section navigation (master–detail) ────────────────────────────────────
+  /// The sections available for this Space (playlist + diary only when paired).
+  List<(String, IconData, String)> _visibleSections() {
+    final pair = _partnerId != null;
+    return [
+      if (pair) ('playlist', Icons.queue_music_rounded, 'Our Playlist'),
+      ('moments', Icons.favorite_rounded, 'Pinned moments'),
+      if (pair) ('diary', Icons.menu_book_rounded, 'Our Diary'),
+      ('song', Icons.auto_awesome_rounded, 'Song & milestones'),
+    ];
+  }
+
+  /// Wide: a persistent left rail beside the content. Narrow: the content full
+  /// width with a left DRAWER (the same rail) that slides in over it — opened by
+  /// the header's list button, dismissed by tapping out, its minimize button, or
+  /// a swipe to the left.
+  Widget _sectionScaffold(ColorScheme scheme) {
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        final wide = c.maxWidth >= 720;
+        final content = _sectionContent(
+          scheme,
+          wide,
+          _section!,
+          onMenu: wide ? null : () => setState(() => _navDrawerOpen = true),
+        );
+        if (wide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(width: 214, child: _sectionSidebar(scheme)),
+              const SizedBox(width: 12),
+              Expanded(child: content),
+            ],
+          );
+        }
+        final drawerW = (c.maxWidth * 0.74).clamp(230.0, 330.0);
+        return Stack(
+          children: [
+            Positioned.fill(child: content),
+            // Scrim — fades in with the drawer; tap or swipe-left dismisses.
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: !_navDrawerOpen,
+                child: GestureDetector(
+                  onTap: () => setState(() => _navDrawerOpen = false),
+                  onHorizontalDragEnd: (d) {
+                    if ((d.primaryVelocity ?? 0) < 0) {
+                      setState(() => _navDrawerOpen = false);
+                    }
+                  },
+                  child: AnimatedOpacity(
+                    opacity: _navDrawerOpen ? 1 : 0,
+                    duration: const Duration(milliseconds: 260),
+                    child:
+                        Container(color: Colors.black.withValues(alpha: 0.4)),
+                  ),
                 ),
               ),
-            );
-          },
-        );
-      },
-      transitionBuilder: (dctx, anim, _, child) {
-        final curved = CurvedAnimation(
-          parent: anim,
-          curve: Curves.easeOutCubic,
-          reverseCurve: Curves.easeInCubic,
-        );
-        return FadeTransition(
-          opacity: curved,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.55, end: 1.0).animate(curved),
-            alignment: align,
-            child: child,
-          ),
+            ),
+            // The drawer — slides in from the left; swipe-left to close.
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+              top: 0,
+              bottom: 0,
+              width: drawerW,
+              left: _navDrawerOpen ? 0 : -(drawerW + 24),
+              child: GestureDetector(
+                onHorizontalDragEnd: (d) {
+                  if ((d.primaryVelocity ?? 0) < 0) {
+                    setState(() => _navDrawerOpen = false);
+                  }
+                },
+                child: _sectionSidebar(
+                  scheme,
+                  onClose: () => setState(() => _navDrawerOpen = false),
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
-    open = false;
-    _sheetRefresh = null;
   }
 
-  void _openPlaylist([Offset? origin]) {
-    final scheme = Theme.of(context).colorScheme;
-    _openFeatureSheet(
-      origin: origin,
-      title: 'Our Playlist',
-      icon: Icons.queue_music_rounded,
-      body: (refresh) {
-        final tracks = ((_space['playlist'] as List?) ?? const [])
-            .whereType<Map>()
-            .map((t) => Map<String, dynamic>.from(t))
-            .toList();
-        if (tracks.isEmpty) return _playlistEmpty(scheme);
-        return Column(children: [for (final t in tracks) _trackRow(scheme, t)]);
-      },
-      footer: (refresh) => Row(
-        children: [
-          Expanded(
-            child: FilledButton.icon(
-              onPressed: _listenTogether,
-              style: FilledButton.styleFrom(
-                  backgroundColor: _accent, foregroundColor: Colors.white),
-              icon: const Icon(Icons.play_arrow_rounded, size: 20),
-              label: const Text('Listen together'),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _addToPlaylist,
-              style: OutlinedButton.styleFrom(
-                  foregroundColor: _accent,
-                  side: BorderSide(color: _accent.withValues(alpha: 0.6))),
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Add song'),
-            ),
+  /// The section list rail: couple badge on top, then the sections with the
+  /// active one highlighted. [onClose] (drawer mode) adds a minimize button.
+  Widget _sectionSidebar(ColorScheme scheme, {VoidCallback? onClose}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: isDark
+              ? [scheme.surfaceContainerHigh, scheme.surfaceContainer]
+              : [Colors.white, scheme.surfaceContainerHighest],
+        ),
+        border: Border.all(color: _accent.withValues(alpha: 0.20)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.42 : 0.14),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
-    );
-  }
-
-  void _openMoments([Offset? origin]) {
-    final scheme = Theme.of(context).colorScheme;
-    _openFeatureSheet(
-      origin: origin,
-      title: 'Pinned moments',
-      icon: Icons.favorite_rounded,
-      body: (refresh) {
-        final moments = ((_space['moments'] as List?) ?? const [])
-            .whereType<Map>()
-            .map((m) => Map<String, dynamic>.from(m))
-            .toList();
-        if (moments.isEmpty) return _momentsEmpty(scheme);
-        return Column(children: [for (final m in moments) _momentCard(scheme, m)]);
-      },
-      footer: (refresh) => SizedBox(
-        width: double.infinity,
-        child: FilledButton.icon(
-          onPressed: _sendMoment,
-          style: FilledButton.styleFrom(
-              backgroundColor: _accent, foregroundColor: Colors.white),
-          icon: const Icon(Icons.favorite_border_rounded, size: 18),
-          label: const Text('Send a moment'),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (onClose != null)
+                Align(
+                  alignment: Alignment.topRight,
+                  child: HeaderActionButton(
+                    icon: Icons.chevron_left_rounded,
+                    tooltip: 'Hide',
+                    onPressed: onClose,
+                  ),
+                ),
+              _sidebarCoupleHeader(scheme),
+              const SizedBox(height: 10),
+              Divider(
+                  height: 1,
+                  color: scheme.outlineVariant.withValues(alpha: 0.5)),
+              const SizedBox(height: 8),
+              for (final s in _visibleSections()) _sidebarItem(scheme, s),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  void _openSongMilestones([Offset? origin]) {
-    final scheme = Theme.of(context).colorScheme;
-    _openFeatureSheet(
-      origin: origin,
-      title: 'Song & milestones',
-      icon: Icons.auto_awesome_rounded,
-      body: (refresh) {
+  Widget _sidebarCoupleHeader(ColorScheme scheme) {
+    final title = deriveSpaceName(_space, widget.myUserId);
+    final partner = _others.isNotEmpty ? _others.first : null;
+    return Column(
+      children: [
+        const SizedBox(height: 2),
+        SizedBox(
+          width: 70,
+          height: 44,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                  left: 0,
+                  top: 1,
+                  child: diaryAuthorBadge(
+                      name: widget.myName ?? 'You',
+                      imageUrl: widget.myAvatarUrl,
+                      radius: 19)),
+              Positioned(
+                  right: 0,
+                  top: 1,
+                  child: diaryAuthorBadge(
+                      name: (partner?['username'] ?? '?').toString(),
+                      imageUrl: _full(partner?['avatar_url']),
+                      radius: 19)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(title,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+                color: scheme.onSurface)),
+      ],
+    );
+  }
+
+  Widget _sidebarItem(ColorScheme scheme, (String, IconData, String) s) {
+    final active = _section == s.$1;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: active ? null : () => _goSection(s.$1),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+            decoration: BoxDecoration(
+              color:
+                  active ? _accent.withValues(alpha: 0.14) : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: active
+                      ? _accent.withValues(alpha: 0.5)
+                      : Colors.transparent),
+            ),
+            child: Row(
+              children: [
+                Icon(s.$2,
+                    size: 18,
+                    color: active ? _accent : scheme.onSurfaceVariant),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(s.$3,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight:
+                              active ? FontWeight.w800 : FontWeight.w600,
+                          color: active ? _accent : scheme.onSurface)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The content for a section. Diary keeps its own book header; the others use
+  /// a shared panel (back to dashboard + optional list button + body + footer).
+  Widget _sectionContent(ColorScheme scheme, bool isWide, String section,
+      {VoidCallback? onMenu}) {
+    switch (section) {
+      case 'diary':
+        return _diaryBookView(scheme, isWide, onMenu: onMenu);
+      case 'playlist':
+        final tracks = ((_space['playlist'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((t) => Map<String, dynamic>.from(t))
+            .toList();
+        return _sectionPanel(
+          scheme,
+          Icons.queue_music_rounded,
+          'Our Playlist',
+          onMenu: onMenu,
+          body: tracks.isEmpty
+              ? _playlistEmpty(scheme)
+              : Column(
+                  children: [for (final t in tracks) _trackRow(scheme, t)]),
+          footer: Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _listenTogether,
+                  style: FilledButton.styleFrom(
+                      backgroundColor: _accent,
+                      foregroundColor: Colors.white),
+                  icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                  label: const Text('Listen together'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _addToPlaylist,
+                  style: OutlinedButton.styleFrom(
+                      foregroundColor: _accent,
+                      side:
+                          BorderSide(color: _accent.withValues(alpha: 0.6))),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Add song'),
+                ),
+              ),
+            ],
+          ),
+        );
+      case 'moments':
+        final moments = ((_space['moments'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((m) => Map<String, dynamic>.from(m))
+            .toList();
+        return _sectionPanel(
+          scheme,
+          Icons.favorite_rounded,
+          'Pinned moments',
+          onMenu: onMenu,
+          body: moments.isEmpty
+              ? _momentsEmpty(scheme)
+              : Column(
+                  children: [for (final m in moments) _momentCard(scheme, m)]),
+          footer: SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _sendMoment,
+              style: FilledButton.styleFrom(
+                  backgroundColor: _accent, foregroundColor: Colors.white),
+              icon: const Icon(Icons.favorite_border_rounded, size: 18),
+              label: const Text('Send a moment'),
+            ),
+          ),
+        );
+      case 'song':
         final stats = (_space['stats'] as Map?) ?? const {};
         final song = stats['your_song'];
         final next = stats['next_milestone'];
@@ -1411,42 +1532,104 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             next is Map && ((next['remaining'] as num?)?.toInt() ?? 0) > 0;
         final days = (stats['days_in_song'] as num?)?.toInt() ?? 0;
         final streak = (stats['listen_streak'] as num?)?.toInt() ?? 0;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _yourSongInner(scheme, song),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                    child: _detailStat(scheme, '🎧', '$days',
-                        days == 1 ? 'day in a song' : 'days in a song')),
-                const SizedBox(width: 10),
-                Expanded(
-                    child: _detailStat(scheme, '🔥', '$streak',
-                        streak == 1 ? 'day streak' : 'day streak')),
+        return _sectionPanel(
+          scheme,
+          Icons.auto_awesome_rounded,
+          'Song & milestones',
+          onMenu: onMenu,
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _yourSongInner(scheme, song),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                      child: _detailStat(scheme, '🎧', '$days',
+                          days == 1 ? 'day in a song' : 'days in a song')),
+                  const SizedBox(width: 10),
+                  Expanded(
+                      child: _detailStat(scheme, '🔥', '$streak',
+                          streak == 1 ? 'day streak' : 'day streak')),
+                ],
+              ),
+              if (hasHint) ...[
+                const SizedBox(height: 14),
+                _nextMilestoneHint(scheme),
               ],
-            ),
-            if (hasHint) ...[
-              const SizedBox(height: 14),
-              _nextMilestoneHint(scheme),
             ],
-          ],
+          ),
         );
-      },
-    );
+      default:
+        return const SizedBox.shrink();
+    }
   }
 
-  void _openDiary([Offset? origin]) {
-    // Full page below the Our Space header — the book view (see _diaryBookView).
-    setState(() => _diaryOpen = true);
+  /// A section's chrome: header (optional list button + back to dashboard +
+  /// icon + title), a scrolling body, and an optional footer bar.
+  Widget _sectionPanel(
+    ColorScheme scheme,
+    IconData icon,
+    String title, {
+    required Widget body,
+    Widget? footer,
+    VoidCallback? onMenu,
+  }) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(2, 2, 2, 8),
+          child: Row(
+            children: [
+              if (onMenu != null) ...[
+                HeaderActionButton(
+                  icon: Icons.view_sidebar_rounded,
+                  tooltip: 'Sections',
+                  onPressed: onMenu,
+                ),
+                const SizedBox(width: 6),
+              ],
+              HeaderActionButton(
+                icon: Icons.arrow_back_rounded,
+                tooltip: 'Back',
+                onPressed: () => setState(() => _section = null),
+              ),
+              const SizedBox(width: 10),
+              Icon(icon, color: _accent, size: 20),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                        color: scheme.onSurface)),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(2, 2, 2, 8),
+            child: body,
+          ),
+        ),
+        if (footer != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(0, 8, 0, 2),
+            child: footer,
+          ),
+      ],
+    );
   }
 
   // ── Our Diary — the full-page book ────────────────────────────────────────
   /// The diary as a book: a slim back bar, then the memories as ruled-paper
   /// pages you turn one at a time, and a "write" button. Plans sit behind a
   /// small chip so the book stays about memories.
-  Widget _diaryBookView(ColorScheme scheme, bool isWide) {
+  Widget _diaryBookView(ColorScheme scheme, bool isWide,
+      {VoidCallback? onMenu}) {
     // Read like a journal: oldest memory first, newest last.
     final mems = List<Map<String, dynamic>>.from(_memories)
       ..sort((a, b) => (a['created_at'] ?? '')
@@ -1454,15 +1637,23 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           .compareTo((b['created_at'] ?? '').toString()));
     return Column(
       children: [
-        // Back to the tiles + title + page count.
+        // (List button on narrow) + back to the dashboard + title + page count.
         Padding(
           padding: const EdgeInsets.fromLTRB(2, 2, 2, 8),
           child: Row(
             children: [
+              if (onMenu != null) ...[
+                HeaderActionButton(
+                  icon: Icons.view_sidebar_rounded,
+                  tooltip: 'Sections',
+                  onPressed: onMenu,
+                ),
+                const SizedBox(width: 6),
+              ],
               HeaderActionButton(
                 icon: Icons.arrow_back_rounded,
                 tooltip: 'Back',
-                onPressed: () => setState(() => _diaryOpen = false),
+                onPressed: () => setState(() => _section = null),
               ),
               const SizedBox(width: 10),
               Icon(Icons.menu_book_rounded, color: _accent, size: 20),
@@ -4184,13 +4375,95 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
   late Map<String, dynamic> _e = Map<String, dynamic>.from(widget.entry);
   final TextEditingController _c = TextEditingController();
   bool _sending = false;
+  // The id of the comment being edited (its text is loaded into the composer),
+  // or null when composing a new comment.
+  int? _editingId;
 
   Color get _accent => widget.accent;
 
+  /// Long-press actions on your own comment — a clean sheet instead of an
+  /// inline "X". Edit loads it into the composer; Delete removes it.
+  void _commentActions(Map<String, dynamic> cm) {
+    final cid = (cm['id'] as num?)?.toInt();
+    if (cid == null) return;
+    final scheme = Theme.of(context).colorScheme;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(Icons.edit_rounded, color: _accent),
+              title: const Text('Edit'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _startEditComment(cm);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_outline_rounded, color: scheme.error),
+              title: Text('Delete', style: TextStyle(color: scheme.error)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _deleteComment(cid);
+              },
+            ),
+            const SizedBox(height: 6),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _startEditComment(Map<String, dynamic> cm) {
+    final cid = (cm['id'] as num?)?.toInt();
+    if (cid == null) return;
+    setState(() {
+      _editingId = cid;
+      _c.text = (cm['body'] ?? '').toString();
+      _c.selection = TextSelection.collapsed(offset: _c.text.length);
+    });
+  }
+
+  void _cancelEdit() {
+    setState(() {
+      _editingId = null;
+      _c.clear();
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Live updates: when a bond event lands over the socket (partner reacted or
+    // commented), re-fetch THIS memory so its reactions + comment feed update in
+    // place without a manual refresh.
+    spaceEventBus.addListener(_onBus);
+  }
+
   @override
   void dispose() {
+    spaceEventBus.removeListener(_onBus);
     _c.dispose();
     super.dispose();
+  }
+
+  Future<void> _onBus() async {
+    final id = (_e['id'] as num?)?.toInt();
+    if (id == null) return;
+    final full = await ApiService().getSpace(widget.spaceId);
+    if (!mounted || full == null) return;
+    final match = ((full['diary'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .where((e) => (e['id'] as num?)?.toInt() == id)
+        .toList();
+    if (match.isNotEmpty) setState(() => _e = match.first);
   }
 
   List<Map<String, dynamic>> get _comments =>
@@ -4217,23 +4490,42 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
     if (text.isEmpty || _sending) return;
     setState(() => _sending = true);
     final id = (_e['id'] as num).toInt();
-    final c = await ApiService().addDiaryComment(widget.spaceId, id, text);
+    final editing = _editingId;
+    final c = editing != null
+        ? await ApiService().editDiaryComment(widget.spaceId, id, editing, text)
+        : await ApiService().addDiaryComment(widget.spaceId, id, text);
     if (!mounted) return;
     setState(() {
       _sending = false;
       if (c != null) {
         final list = List<Map<String, dynamic>>.from(
             (_e['comments'] as List?) ?? const []);
-        list.add(Map<String, dynamic>.from(c));
+        if (editing != null) {
+          final idx =
+              list.indexWhere((x) => (x['id'] as num?)?.toInt() == editing);
+          if (idx >= 0) {
+            list[idx] = Map<String, dynamic>.from(c);
+          } else {
+            list.add(Map<String, dynamic>.from(c));
+          }
+        } else {
+          list.add(Map<String, dynamic>.from(c));
+        }
         _e['comments'] = list;
         _e['comment_count'] = list.length;
         _c.clear();
+        _editingId = null;
       }
     });
     if (c != null) {
       widget.onChanged?.call();
     } else if (mounted) {
-      showToast(context, 'Could not add comment', type: ToastType.error);
+      showToast(
+          context,
+          editing != null
+              ? 'Could not edit comment'
+              : 'Could not add comment',
+          type: ToastType.error);
     }
   }
 
@@ -4467,9 +4759,15 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
         ? _accent.withValues(alpha: isDark ? 0.30 : 0.16)
         : scheme.surfaceContainerHighest;
     final bubble = Flexible(
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 7),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        // Modern chat-style: long-press (or right-click) your OWN comment to
+        // edit or delete — no cramped inline "X".
+        onLongPress: mine && cid != null ? () => _commentActions(cm) : null,
+        onSecondaryTap: mine && cid != null ? () => _commentActions(cm) : null,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 7),
         decoration: BoxDecoration(
           color: bubbleColor,
           borderRadius: BorderRadius.only(
@@ -4498,17 +4796,19 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
                       style: TextStyle(
                           fontSize: 10, color: scheme.onSurfaceVariant)),
                 if (mine && cid != null) ...[
-                  const SizedBox(width: 6),
-                  InkWell(
-                    onTap: () => _deleteComment(cid),
-                    borderRadius: BorderRadius.circular(20),
-                    child: Icon(Icons.close_rounded,
-                        size: 13, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 5),
+                  GestureDetector(
+                    onTap: () => _commentActions(cm),
+                    child: Icon(Icons.more_horiz_rounded,
+                        size: 15,
+                        color:
+                            scheme.onSurfaceVariant.withValues(alpha: 0.75)),
                   ),
                 ],
               ],
             ),
           ],
+        ),
         ),
       ),
     );

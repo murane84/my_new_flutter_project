@@ -1348,6 +1348,22 @@ class HomePageState extends rp.ConsumerState<HomePage>
       spaceEventBus.value++;
       return;
     }
+    // Your partner wrote in, commented on, or reacted in Our Diary — live-
+    // refresh any open Our Space page (and its open memory + comment feed)
+    // without a manual refresh. A toast for a new entry/comment; reactions are
+    // silent (just the visual update).
+    if (type == 'space_diary' ||
+        type == 'space_diary_comment' ||
+        type == 'space_diary_react') {
+      final data = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final line = (data['line'] ?? '').toString();
+      if (type != 'space_diary_react' && line.isNotEmpty && mounted) {
+        showToast(context, line, type: ToastType.info);
+      }
+      _loadSpaces();
+      spaceEventBus.value++; // live-reload an open Our Space page + memory
+      return;
+    }
     // Your partner tapped "Thinking of you" in Our Space — a warm live ping.
     if (type == 'space_nudge') {
       final data = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};

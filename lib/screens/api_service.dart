@@ -1670,6 +1670,29 @@ class ApiService {
     }
   }
 
+  /// Edit one of your own diary comments; returns the updated comment or null.
+  Future<Map<String, dynamic>?> editDiaryComment(
+      int spaceId, int entryId, int commentId, String body) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.patch(
+        Uri.parse(
+            '${await _baseUrl}/spaces/$spaceId/diary/$entryId/comments/$commentId'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'body': body}),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('editDiaryComment failed: $e');
+      return null;
+    }
+  }
+
   /// Delete one of your own diary comments.
   Future<bool> deleteDiaryComment(
       int spaceId, int entryId, int commentId) async {

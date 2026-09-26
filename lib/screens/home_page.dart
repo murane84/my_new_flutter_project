@@ -230,6 +230,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // pill docked in the footer centre that reopens it.
   bool _barDismissed = false;
 
+  // Global-space point of the last tap that opens an Our Space (its bond hero /
+  // chip), so the Space page genies out of / back into that exact spot.
+  Offset? _spaceOpenOrigin;
+
   // Drives the app-wide playlist drawer's slide/fade (hosted below the active
   // header — see _playlistDrawerHost).
   late final AnimationController _playlistDrawerCtrl;

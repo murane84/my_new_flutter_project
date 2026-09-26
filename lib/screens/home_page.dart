@@ -233,6 +233,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // Global-space point of the last tap that opens an Our Space (its bond hero /
   // chip), so the Space page genies out of / back into that exact spot.
   Offset? _spaceOpenOrigin;
+  // The space whose tile was last tapped + a stable key per space tile, so the
+  // genie can resolve that tile's LIVE position (it survives the friend list
+  // reordering — new message, presence — while the Space page is open).
+  int? _spaceOpenOriginId;
+  final Map<int, GlobalKey> _spaceTileKeys = {};
+  GlobalKey _spaceTileKey(int id) =>
+      _spaceTileKeys.putIfAbsent(id, () => GlobalKey());
 
   // Drives the app-wide playlist drawer's slide/fade (hosted below the active
   // header — see _playlistDrawerHost).

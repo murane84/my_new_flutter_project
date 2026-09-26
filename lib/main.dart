@@ -28,6 +28,7 @@ import 'services/fcm_service.dart';
 import 'services/metadata_overrides.dart';
 import 'services/live_session_service.dart' show liveHostNotify;
 import 'utils/toast_helper.dart';
+import 'utils/popup_shell.dart' show GlobalTapOrigin;
 import 'screens/token_helper.dart' show warmMediaAuth;
 import 'state/playback_state.dart' show providerContainer;
 
@@ -386,6 +387,10 @@ class MyApp extends StatelessWidget {
           theme: _buildTheme(lightScheme),
           darkTheme: _buildTheme(darkScheme),
           themeMode: themeProvider.themeMode,
+          // Record every tap's position app-wide so any popup opened right after
+          // genies out of / back into that exact button/tile (see showAppPopup).
+          builder: (context, child) =>
+              GlobalTapOrigin(child: child ?? const SizedBox.shrink()),
           // Use `home:` (not initialRoute) so the root stack is a single route.
           // With initialRoute: '/splash', Flutter also generates a route for '/'
           // (the unknown-route "Page not found") and puts it underneath — which

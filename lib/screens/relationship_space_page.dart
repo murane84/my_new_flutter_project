@@ -1254,9 +1254,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                                     fontSize: 16,
                                     color: scheme.onSurface)),
                           ),
-                          IconButton(
+                          // Raised 3D minimize chip (red hairline), matching the
+                          // Our Space header + the rest of the app's popups.
+                          HeaderActionButton(
                             tooltip: 'Minimize',
-                            icon: const Icon(Icons.close_fullscreen_rounded),
+                            icon: Icons.close_fullscreen_rounded,
                             onPressed: () => Navigator.pop(dctx),
                           ),
                         ],
@@ -2759,28 +2761,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
-  Widget _diaryContent(ColorScheme scheme) {
-    final plans = _plans;
-    final mems = _memories;
-    if (plans.isEmpty && mems.isEmpty) return _diaryEmpty(scheme);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (plans.isNotEmpty) ...[
-          _diarySectionLabel(scheme, 'Plans ahead', '🗓️'),
-          const SizedBox(height: 8),
-          for (final e in plans) _planRow(scheme, e),
-          if (mems.isNotEmpty) const SizedBox(height: 14),
-        ],
-        if (mems.isNotEmpty) ...[
-          _diarySectionLabel(scheme, 'Memories', '📖'),
-          const SizedBox(height: 8),
-          for (final e in mems) _memoryRow(scheme, e),
-        ],
-      ],
-    );
-  }
-
   Widget _diaryEmpty(ColorScheme scheme) {
     return Container(
       width: double.infinity,
@@ -2917,87 +2897,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
-  Widget _memoryRow(ColorScheme scheme, Map<String, dynamic> e) {
-    final title = (e['title'] ?? '').toString().trim();
-    final body = (e['body'] ?? '').toString().trim();
-    final mine = e['mine'] == true;
-    final author = (e['author'] as Map?)?.cast<String, dynamic>();
-    final authorName = mine ? 'You' : (author?['username'] ?? '').toString();
-    final created = DateTime.tryParse((e['created_at'] ?? '').toString());
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              diaryAuthorBadge(
-                name: authorName,
-                imageUrl: _full(author?['avatar_url']),
-                radius: 13,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(authorName.isEmpty ? 'A memory' : authorName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12.5,
-                        color: scheme.onSurface)),
-              ),
-              if (created != null)
-                Text(_timeAgo(created),
-                    style: TextStyle(
-                        fontSize: 11, color: scheme.onSurfaceVariant)),
-              _diaryMenu(scheme, e),
-            ],
-          ),
-          if (title.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(title,
-                style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                    color: scheme.onSurface)),
-          ],
-          if (body.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(body,
-                maxLines: body.length > _kMemoryPreviewChars ? 5 : null,
-                overflow: body.length > _kMemoryPreviewChars
-                    ? TextOverflow.ellipsis
-                    : TextOverflow.clip,
-                style: TextStyle(
-                    fontSize: 13.5, height: 1.35, color: scheme.onSurface)),
-            if (body.length > _kMemoryPreviewChars)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: () => _openMemoryDetail(e),
-                  style: TextButton.styleFrom(
-                    foregroundColor: _accent,
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    minimumSize: const Size(0, 0),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: const Text('Read more'),
-                ),
-              ),
-          ],
-          _diaryEngagement(scheme, e),
-        ],
-      ),
-    );
-  }
-
-  /// Reactions + a comment affordance under a diary entry, so the two can react
-  /// and talk on that specific memory/plan without leaving the list.
   Widget _diaryEngagement(ColorScheme scheme, Map<String, dynamic> e) {
     final count = (e['comment_count'] as num?)?.toInt() ??
         ((e['comments'] as List?)?.length ?? 0);
@@ -4211,9 +4110,9 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
                             fontSize: 16,
                             color: scheme.onSurface)),
                   ),
-                  IconButton(
+                  HeaderActionButton(
                     tooltip: 'Minimize',
-                    icon: const Icon(Icons.close_fullscreen_rounded),
+                    icon: Icons.close_fullscreen_rounded,
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],

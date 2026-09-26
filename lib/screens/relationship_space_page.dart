@@ -740,6 +740,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     return AppPopupShell(
       title: 'Our Space',
       icon: Icons.favorite_rounded,
+      // Our Space takes the WHOLE screen — an immersive, focused surface for the
+      // couple, not a card floating over the app. The minimize control (below)
+      // + the minimize-down animation bring you back out.
+      fullScreen: true,
       // The dismiss control reads as "minimize" (paired with the minimize-down
       // exit animation), so ducking out to Circle feels like tucking the page
       // away rather than closing it.

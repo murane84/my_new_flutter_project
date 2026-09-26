@@ -12,16 +12,31 @@ Future<T?> showAppPopup<T>(
   // the card back down rather than a hard cut. Used by Our Space so tapping the
   // minimize button feels like tucking the page away for a moment.
   bool minimizeStyle = false,
+  // The global-space point the popup was launched FROM (e.g. the tapped bond
+  // hero). When given, the page GENIES out of / back into that exact point —
+  // emerging from the bond and being absorbed back into it — instead of the
+  // generic bottom slide. Takes precedence over [minimizeStyle].
+  Offset? origin,
 }) async {
   // Drop any active text focus so opening the popup never carries a keyboard
   // in with it.
   FocusManager.instance.primaryFocus?.unfocus();
+  // Resolve the launch point to an alignment for the scale anchor.
+  final Alignment? genieAlign = origin == null
+      ? null
+      : () {
+          final size = MediaQuery.of(context).size;
+          return Alignment(
+            ((origin.dx / size.width) * 2 - 1).clamp(-1.0, 1.0),
+            ((origin.dy / size.height) * 2 - 1).clamp(-1.0, 1.0),
+          );
+        }();
   final result = await showGeneralDialog<T>(
     context: context,
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
     barrierColor: Colors.black.withAlpha(90),
-    transitionDuration: const Duration(milliseconds: 300),
+    transitionDuration: const Duration(milliseconds: 340),
     pageBuilder: (_, _, _) => child,
     transitionBuilder: (_, anim, _, c) {
       final curved = CurvedAnimation(
@@ -29,6 +44,19 @@ Future<T?> showAppPopup<T>(
         curve: Curves.easeOutCubic,
         reverseCurve: Curves.easeInCubic,
       );
+      if (genieAlign != null) {
+        // Genie: shrink deep into the launch point (and grow out of it on open)
+        // while fading, so the page looks sucked into / poured out of the bond.
+        // The RepaintBoundary keeps the scale/fade transforming a cached layer.
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.08, end: 1.0).animate(curved),
+            alignment: genieAlign,
+            child: RepaintBoundary(child: c),
+          ),
+        );
+      }
       if (minimizeStyle) {
         // Shrink toward the bottom-centre and slide down: on reverse (dismiss)
         // this plays backwards, so the card looks absorbed back down to where
@@ -95,9 +123,10 @@ class AppPopupShell extends StatelessWidget {
   // edge, even when the content itself is centre-constrained on wide screens),
   // to give the page atmosphere/depth instead of a flat fill.
   final Widget? backdrop;
-  // When true the header's dismiss control renders as a raised 3D chip (see
-  // [HeaderActionButton]) so it matches a depth-styled page instead of a flat
-  // icon. Callers style their own [headerAction] buttons to match.
+  // The header's dismiss control renders as a raised 3D chip (see
+  // [HeaderActionButton]) so it matches the app's depth-styled surfaces. On by
+  // default for every popup; callers style their own [headerAction] buttons to
+  // match with [HeaderActionButton]. Set false for a deliberately flat header.
   final bool raisedActions;
 
   const AppPopupShell({
@@ -111,7 +140,7 @@ class AppPopupShell extends StatelessWidget {
     this.closeTooltip = 'Close',
     this.fullScreen = false,
     this.backdrop,
-    this.raisedActions = false,
+    this.raisedActions = true,
   });
 
   /// The shared header bar (icon + title + optional action + close/minimize).

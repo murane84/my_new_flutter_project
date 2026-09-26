@@ -31,7 +31,11 @@ extension _HomeSpaceActions on HomePageState {
   }
 
   /// Open a Space's relationship profile, then refresh the hero on return.
-  Future<void> _openSpace(Map<String, dynamic> space) async {
+  /// [origin] (a tap point on the bond hero/chip) makes the page genie out of
+  /// and back into that exact spot; falls back to the last recorded space tap.
+  Future<void> _openSpace(Map<String, dynamic> space, {Offset? origin}) async {
+    final launchFrom = origin ?? _spaceOpenOrigin;
+    _spaceOpenOrigin = null;
     await showAppPopup(
       navigatorKey.currentContext ?? context,
       RelationshipSpacePage(
@@ -42,9 +46,10 @@ extension _HomeSpaceActions on HomePageState {
         myAvatarUrl: _avatarFull(_myAvatar),
         onChanged: _loadSpaces,
       ),
-      // Dismiss reads as "minimize back down" rather than a hard close, so the
-      // user can duck out to Circle/chat and reopen without feeling cut off.
+      // Dismiss reads as "minimize" — and when we know where it was opened from,
+      // it genies straight back into that bond point instead of sliding down.
       minimizeStyle: true,
+      origin: launchFrom,
     );
     _loadSpaces();
   }

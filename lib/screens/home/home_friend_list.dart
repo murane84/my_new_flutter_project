@@ -600,6 +600,7 @@ extension _HomeFriendListView on HomePageState {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
+          onTapDown: (d) => _spaceOpenOrigin = d.globalPosition,
           onTap: () => _openSpace(space),
           onLongPress: () => _showSpaceManageSheet(space),
           child: Container(
@@ -897,6 +898,7 @@ extension _HomeFriendListView on HomePageState {
     }
 
     return GestureDetector(
+      onTapDown: (d) => _spaceOpenOrigin = d.globalPosition,
       onTap: () => _openSpace(space),
       onLongPress: () => _showSpaceManageSheet(space),
       child: Container(

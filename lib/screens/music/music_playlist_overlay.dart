@@ -149,6 +149,81 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       });
     }
     _loadTrackMeta();
+    _restoreFilters();
+  }
+
+  // ── Filter / sort persistence ───────────────────────────────────────────────
+  // The overlay is rebuilt every time the drawer opens, so the chosen filter and
+  // sort used to reset on collapse (and on app restart). We now persist them to
+  // SharedPreferences so the user's view sticks until they change it.
+  static const _kPlSortKey = 'pl_sort_v1';
+  static const _kPlSmartKey = 'pl_smart_v1';
+  static const _kPlFavKey = 'pl_fav_v1';
+  static const _kPlGroupKey = 'pl_group_v1';
+
+  Future<void> _restoreFilters() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      final sortIdx = p.getInt(_kPlSortKey);
+      final smartIdx = p.getInt(_kPlSmartKey);
+      final fav = p.getBool(_kPlFavKey) ?? false;
+      final group = p.getString(_kPlGroupKey);
+      setState(() {
+        if (sortIdx != null && sortIdx >= 0 && sortIdx < _PlSort.values.length) {
+          _sort = _PlSort.values[sortIdx];
+        }
+        if (smartIdx != null &&
+            smartIdx >= 0 &&
+            smartIdx < _Smart.values.length) {
+          _smart = _Smart.values[smartIdx];
+        }
+        _favOnly = fav;
+        _activeGroup = (group != null && group.isNotEmpty) ? group : null;
+        // The three filter kinds are mutually exclusive in the UI — keep only the
+        // most specific if an older/corrupt state stored more than one.
+        if (_favOnly) {
+          _smart = _Smart.none;
+          _activeGroup = null;
+        } else if (_activeGroup != null) {
+          _smart = _Smart.none;
+        }
+      });
+    } catch (_) {
+      // Prefs unavailable (private mode, first run) — just use defaults.
+    }
+  }
+
+  Future<void> _persistFilters() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setInt(_kPlSortKey, _sort.index);
+      await p.setInt(_kPlSmartKey, _smart.index);
+      await p.setBool(_kPlFavKey, _favOnly);
+      await p.setString(_kPlGroupKey, _activeGroup ?? '');
+    } catch (_) {}
+  }
+
+  /// A short label for the active sort mode (parallel to [_activeFilterLabel]).
+  String _activeSortLabel() {
+    switch (_sort) {
+      case _PlSort.az:
+        return 'A → Z';
+      case _PlSort.za:
+        return 'Z → A';
+      case _PlSort.artist:
+        return 'Artist';
+      case _PlSort.recent:
+        return 'Recent';
+      case _PlSort.fileName:
+        return 'File name';
+      case _PlSort.duration:
+        return 'Duration';
+      case _PlSort.size:
+        return 'Size';
+      case _PlSort.manual:
+        return 'Custom';
+    }
   }
 
   /// Populate the duration/size maps used by the Duration & File-size sorts.
@@ -653,6 +728,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             : null,
         onTap: () {
           setState(() => _sort = mode);
+          _persistFilters();
           Navigator.pop(context);
         },
       );
@@ -1072,14 +1148,13 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                     ),
                   ),
                   const SizedBox(width: 6),
-                  // Filter & play menu (All / Recent / Most played / groups /
-                  // New group + Play/Shuffle the current view).
+                  // Two DISTINCT controls (no longer a pair of look-alike
+                  // icons): the funnel picks WHICH tracks show (All / Recent /
+                  // groups + play), the swap-arrows pill picks their ORDER. Both
+                  // grow a label when active so their job is obvious at a glance.
                   _filterButton(scheme),
-                  const SizedBox(width: 2),
-                  // Sort button.
-                  _iconBtn(scheme, Icons.sort_rounded, 'Sort',
-                      () => _showSort(context),
-                      active: _sort != _PlSort.manual),
+                  const SizedBox(width: 6),
+                  _sortButton(scheme),
                 ],
               ),
             ),
@@ -1124,37 +1199,49 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         children: [
           Icon(Icons.queue_music_rounded, color: scheme.primary, size: 18),
           const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              'Playlist (${widget.playlist.length})',
-              style:
-                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              overflow: TextOverflow.ellipsis,
+          // Title + action icons share one Expanded group on the left; the
+          // collapse chevron is the last child, so it stays pinned flush to the
+          // far-right edge no matter how wide the drawer is stretched.
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    'Playlist (${widget.playlist.length})',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                _iconBtn(scheme, Icons.add_rounded, 'Add music', widget.onAdd),
+                _iconBtn(
+                  scheme,
+                  _favOnly ? Icons.favorite : Icons.favorite_border,
+                  'Favourites',
+                  () {
+                    setState(() {
+                      _favOnly = !_favOnly;
+                      if (_favOnly) {
+                        _activeGroup = null;
+                        _smart = _Smart.none;
+                      }
+                    });
+                    _persistFilters();
+                  },
+                  color: _favOnly ? Colors.pinkAccent : null,
+                ),
+                _iconBtn(scheme, Icons.checklist_rounded, 'Select', () {
+                  if (widget.playlist.isNotEmpty) {
+                    setState(() {
+                      _selecting = true;
+                      _selected.clear();
+                    });
+                  }
+                }),
+              ],
             ),
           ),
-          _iconBtn(scheme, Icons.add_rounded, 'Add music', widget.onAdd),
-          _iconBtn(
-            scheme,
-            _favOnly ? Icons.favorite : Icons.favorite_border,
-            'Favourites',
-            () => setState(() {
-              _favOnly = !_favOnly;
-              if (_favOnly) {
-                _activeGroup = null;
-                _smart = _Smart.none;
-              }
-            }),
-            color: _favOnly ? Colors.pinkAccent : null,
-          ),
-          _iconBtn(scheme, Icons.checklist_rounded, 'Select', () {
-            if (widget.playlist.isNotEmpty) {
-              setState(() {
-                _selecting = true;
-                _selected.clear();
-              });
-            }
-          }),
-          const Spacer(),
+          const SizedBox(width: 6),
           GestureDetector(
             onTap: widget.onClose,
             child: Tooltip(
@@ -1193,12 +1280,14 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       ),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.close_rounded),
-            visualDensity: VisualDensity.compact,
+          // Raised 3D chip (red hairline) — the old flat icon was near-invisible
+          // on the dark selection bar.
+          HeaderActionButton(
+            icon: Icons.close_rounded,
             tooltip: 'Cancel',
             onPressed: _exitSelect,
           ),
+          const SizedBox(width: 4),
           Text('${_selected.length} selected',
               style: const TextStyle(fontWeight: FontWeight.bold)),
           const Spacer(),
@@ -1278,6 +1367,51 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     );
   }
 
+  /// Sort control that mirrors [_filterButton] but is visually distinct — a
+  /// swap-arrows icon that grows a label (A → Z, Recent, …) when a non-default
+  /// order is active, so it never reads as a duplicate of the filter funnel.
+  Widget _sortButton(ColorScheme scheme) {
+    final on = _sort != _PlSort.manual;
+    final fg = on ? scheme.primary : scheme.onSurfaceVariant;
+    return Tooltip(
+      message: 'Sort order',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => _showSort(context),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: on ? 10 : 8, vertical: 7),
+          decoration: BoxDecoration(
+            color: on ? scheme.primary.withAlpha(28) : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+                color: on
+                    ? scheme.primary.withAlpha(120)
+                    : scheme.outlineVariant.withAlpha(120)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.swap_vert_rounded, size: 18, color: fg),
+              if (on) ...[
+                const SizedBox(width: 4),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 84),
+                  child: Text(
+                    _activeSortLabel(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w600, color: fg),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// The filter + play sheet: pick All / Recent / Most played / a group / make
   /// a new group, and Play or Shuffle the current view — everything the old
   /// chip row and Play/Shuffle row used to hold, now off the panel's main area.
@@ -1289,6 +1423,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
 
     void pick(VoidCallback apply) {
       setState(apply);
+      _persistFilters();
       Navigator.pop(context);
     }
 

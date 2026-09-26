@@ -35,7 +35,18 @@ extension _HomeSpaceActions on HomePageState {
   /// and back into that exact spot; falls back to the last recorded space tap.
   Future<void> _openSpace(Map<String, dynamic> space, {Offset? origin}) async {
     final launchFrom = origin ?? _spaceOpenOrigin;
+    // Remember which tile launched this so the minimize genie can re-read that
+    // tile's LIVE position each frame — even if the friend list reorders or the
+    // user scrolls it up/down while Our Space is open.
+    final tappedId = _spaceOpenOriginId ?? (space['id'] as num?)?.toInt();
     _spaceOpenOrigin = null;
+    _spaceOpenOriginId = null;
+    final resolver = tappedId == null
+        ? null
+        : () {
+            final k = _spaceTileKeys[tappedId];
+            return k == null ? null : globalCenterOfKey(k);
+          };
     await showAppPopup(
       navigatorKey.currentContext ?? context,
       RelationshipSpacePage(
@@ -48,8 +59,10 @@ extension _HomeSpaceActions on HomePageState {
       ),
       // Dismiss reads as "minimize" — and when we know where it was opened from,
       // it genies straight back into that bond point instead of sliding down.
+      // [origin] seeds the spot; [originResolver] keeps it live as the tile moves.
       minimizeStyle: true,
       origin: launchFrom,
+      originResolver: resolver,
     );
     _loadSpaces();
   }

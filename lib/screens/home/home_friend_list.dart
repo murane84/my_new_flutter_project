@@ -594,13 +594,18 @@ extension _HomeFriendListView on HomePageState {
       if (closeLabel.isNotEmpty) closeLabel,
       if (momentCount > 0) '$momentCount moment${momentCount == 1 ? '' : 's'}',
     ].join('  ·  ');
+    final spaceId = (space['id'] as num?)?.toInt();
     return Padding(
+      key: spaceId == null ? null : _spaceTileKey(spaceId),
       padding: const EdgeInsets.only(top: 4, bottom: 8),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTapDown: (d) => _spaceOpenOrigin = d.globalPosition,
+          onTapDown: (d) {
+            _spaceOpenOrigin = d.globalPosition;
+            _spaceOpenOriginId = spaceId;
+          },
           onTap: () => _openSpace(space),
           onLongPress: () => _showSpaceManageSheet(space),
           child: Container(
@@ -897,8 +902,13 @@ extension _HomeFriendListView on HomePageState {
       frontAvatar = SpinningVinylRing(ring: 2, color: accent, child: frontAvatar);
     }
 
+    final chipSpaceId = (space['id'] as num?)?.toInt();
     return GestureDetector(
-      onTapDown: (d) => _spaceOpenOrigin = d.globalPosition,
+      key: chipSpaceId == null ? null : _spaceTileKey(chipSpaceId),
+      onTapDown: (d) {
+        _spaceOpenOrigin = d.globalPosition;
+        _spaceOpenOriginId = chipSpaceId;
+      },
       onTap: () => _openSpace(space),
       onLongPress: () => _showSpaceManageSheet(space),
       child: Container(

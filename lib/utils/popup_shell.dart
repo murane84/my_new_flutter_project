@@ -24,6 +24,29 @@ class GlobalTapOrigin extends StatelessWidget {
   }
 }
 
+/// The current global-space CENTRE of the widget behind [key], or null if it's
+/// no longer laid out. Used as a live genie origin: read it each frame so the
+/// animation targets the button/tile's CURRENT position even if the list under
+/// it scrolled it up or down while the page was open.
+Offset? globalCenterOfKey(GlobalKey key) {
+  final ctx = key.currentContext;
+  final box = ctx?.findRenderObject();
+  if (box is! RenderBox || !box.hasSize) return null;
+  return box.localToGlobal(box.size.center(Offset.zero));
+}
+
+/// Map a global-space [point] to a [-1, 1] alignment within the screen, for
+/// anchoring a scale (genie). Null [point] → null (caller falls back).
+Alignment? genieAlignmentFor(BuildContext context, Offset? point) {
+  if (point == null) return null;
+  final size = MediaQuery.of(context).size;
+  if (size.width <= 0 || size.height <= 0) return null;
+  return Alignment(
+    ((point.dx / size.width) * 2 - 1).clamp(-1.0, 1.0),
+    ((point.dy / size.height) * 2 - 1).clamp(-1.0, 1.0),
+  );
+}
+
 /// Presents [child] as a popup that emerges FROM THE FOOTER, floating upward —
 /// consistent with the music panel and the app's bottom sheets (rather than
 /// dropping down from the header, which clashed with those surfaces and their
@@ -41,23 +64,19 @@ Future<T?> showAppPopup<T>(
   // emerging from the bond and being absorbed back into it — instead of the
   // generic bottom slide. Takes precedence over [minimizeStyle].
   Offset? origin,
+  // A LIVE origin: returns the launch widget's CURRENT global centre. Read every
+  // frame, so if the content scrolled the button up/down while the page was
+  // open, the close genie still collapses into its new position. Falls back to
+  // [origin], then the last global tap, then the bottom slide.
+  Offset? Function()? originResolver,
 }) async {
   // Drop any active text focus so opening the popup never carries a keyboard
   // in with it.
   FocusManager.instance.primaryFocus?.unfocus();
   // GLOBAL RULE: default the genie origin to wherever the user just tapped, so
-  // every page opens from / minimises back into the tapped button/tile. An
-  // explicit [origin] (e.g. the recorded bond tap) still wins.
-  final launchPoint = origin ?? gLastTapDownGlobal;
-  final Alignment? genieAlign = launchPoint == null
-      ? null
-      : () {
-          final size = MediaQuery.of(context).size;
-          return Alignment(
-            ((launchPoint.dx / size.width) * 2 - 1).clamp(-1.0, 1.0),
-            ((launchPoint.dy / size.height) * 2 - 1).clamp(-1.0, 1.0),
-          );
-        }();
+  // every page opens from / minimises back into the tapped button/tile. A live
+  // [originResolver] or an explicit [origin] still wins.
+  final snapshot = origin ?? gLastTapDownGlobal;
   final result = await showGeneralDialog<T>(
     context: context,
     barrierDismissible: true,
@@ -65,12 +84,16 @@ Future<T?> showAppPopup<T>(
     barrierColor: Colors.black.withAlpha(90),
     transitionDuration: const Duration(milliseconds: 340),
     pageBuilder: (_, _, _) => child,
-    transitionBuilder: (_, anim, _, c) {
+    transitionBuilder: (dctx, anim, _, c) {
       final curved = CurvedAnimation(
         parent: anim,
         curve: Curves.easeOutCubic,
         reverseCurve: Curves.easeInCubic,
       );
+      // Resolve the point LIVE each frame (resolver → snapshot), so the genie
+      // tracks the launch widget's real, current location.
+      final point = originResolver?.call() ?? snapshot;
+      final genieAlign = genieAlignmentFor(dctx, point);
       if (genieAlign != null) {
         // Genie: shrink deep into the launch point (and grow out of it on open)
         // while fading, so the page looks sucked into / poured out of the exact

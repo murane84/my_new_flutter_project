@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -969,6 +970,24 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
+          // A dense, whisper-faint confetti of tiny hearts + music notes across
+          // the WHOLE page — plain grey at a hair of opacity so it never fights
+          // the content above it, just quietly fuels the romantic, music-y mood.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _RomanticPatternPainter(
+                  color: (Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : const Color(0xFF6B6B6B))
+                      .withValues(
+                          alpha: Theme.of(context).brightness == Brightness.dark
+                              ? 0.035
+                              : 0.045),
+                ),
+              ),
+            ),
+          ),
           Positioned(top: -110, right: -90, child: glow(300, 0.12)),
           Positioned(bottom: -140, left: -110, child: glow(340, 0.09)),
         ],
@@ -4531,6 +4550,92 @@ class _DogEarPainter extends CustomPainter {
       old.paper != paper ||
       old.accent != accent ||
       old.isDark != isDark;
+}
+
+/// A dense scatter of tiny hearts + music notes tiled across the page, drawn in
+/// a single faint grey so it reads as barely-there texture — romantic, musical
+/// atmosphere that never competes with the content sitting above it.
+class _RomanticPatternPainter extends CustomPainter {
+  final Color color;
+  _RomanticPatternPainter({required this.color});
+
+  // Deterministic layout (fixed seed) so the confetti doesn't reshuffle every
+  // repaint — the pattern stays put as the page scrolls or rebuilds.
+  static const int _seed = 0xA1A;
+
+  void _heart(Canvas c, Offset o, double s, double rot, Paint p) {
+    c.save();
+    c.translate(o.dx, o.dy);
+    c.rotate(rot);
+    c.scale(s / 16.0);
+    // A small heart path centred on the origin (~16px design box).
+    final path = Path()
+      ..moveTo(0, 4)
+      ..cubicTo(-2, -1, -8, -1, -8, -5)
+      ..cubicTo(-8, -9, -3, -9, 0, -4.5)
+      ..cubicTo(3, -9, 8, -9, 8, -5)
+      ..cubicTo(8, -1, 2, -1, 0, 4)
+      ..close();
+    c.drawPath(path, p);
+    c.restore();
+  }
+
+  void _note(Canvas c, Offset o, double s, double rot, Paint p, Paint stroke) {
+    c.save();
+    c.translate(o.dx, o.dy);
+    c.rotate(rot);
+    c.scale(s / 16.0);
+    // Eighth note: a filled head, a stem, and a short flag.
+    c.drawOval(
+        Rect.fromCenter(center: const Offset(-3, 5), width: 6, height: 4.4), p);
+    final stem = Path()
+      ..moveTo(0, 5)
+      ..lineTo(0, -7);
+    c.drawPath(stem, stroke);
+    final flag = Path()
+      ..moveTo(0, -7)
+      ..quadraticBezierTo(5, -5.5, 4, -1);
+    c.drawPath(flag, stroke);
+    c.restore();
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+    final rnd = math.Random(_seed);
+    final fill = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.1
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
+    // A tight jittered grid → dense, almost-touching, but never a rigid lattice.
+    const cell = 40.0;
+    final cols = (size.width / cell).ceil() + 1;
+    final rows = (size.height / cell).ceil() + 1;
+    for (int gy = 0; gy < rows; gy++) {
+      for (int gx = 0; gx < cols; gx++) {
+        final jx = (rnd.nextDouble() - 0.5) * cell * 0.9;
+        final jy = (rnd.nextDouble() - 0.5) * cell * 0.9;
+        final o = Offset(gx * cell + jx, gy * cell + jy);
+        final s = 9.0 + rnd.nextDouble() * 6.0; // 9–15px
+        final rot = (rnd.nextDouble() - 0.5) * 0.9; // gentle tilt
+        if (rnd.nextBool()) {
+          _heart(canvas, o, s, rot, fill);
+        } else {
+          _note(canvas, o, s, rot, fill, stroke);
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RomanticPatternPainter old) =>
+      old.color != color;
 }
 
 /// Faint horizontal rules + a soft left margin line, so a memory reads like a

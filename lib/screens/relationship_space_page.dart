@@ -60,6 +60,35 @@ String? resolveAvatarUrl(String? raw, String apiBase) {
 /// An author's profile photo in a small rounded badge (a white rim + soft
 /// shadow), like the avatars in the hero — falls back to coloured initials when
 /// there's no photo.
+/// The diary typefaces, using only built-in font families (no assets). The
+/// stored KEY is the author's choice; both partners see each memory in its
+/// author's "hand", so each keeps a unique touch in the shared notebook.
+/// (Web renders all four; Android/desktop map serif/mono and fall back for
+/// handwriting — it degrades to the default rather than breaking.)
+const List<(String, String)> kDiaryFonts = [
+  ('', 'Classic'),
+  ('serif', 'Serif'),
+  ('typewriter', 'Typewriter'),
+  ('handwriting', 'Handwriting'),
+];
+
+/// Map a stored diary font key to a Flutter font-family string (null = default).
+String? diaryFontFamily(String? key) {
+  switch ((key ?? '').toLowerCase()) {
+    case 'serif':
+      return 'serif';
+    case 'typewriter':
+      return 'monospace';
+    case 'handwriting':
+      return 'cursive';
+    default:
+      return null;
+  }
+}
+
+/// The author's profile photo in a rounded badge — NAME-FREE by design (the
+/// diary shows only the face, never "You"/a username, on memories, comments and
+/// reactions), so the notebook stays personal without labels everywhere.
 Widget diaryAuthorBadge({
   required String name,
   String? imageUrl,
@@ -348,6 +377,13 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   final GlobalKey _kDiary = GlobalKey();
   final GlobalKey _kSong = GlobalKey();
 
+  // Our Diary opens as a FULL PAGE below the Our Space header (the header +
+  // minimize stay on top); the book's own back arrow returns to the tiles.
+  bool _diaryOpen = false;
+  // Drives the book's page-turn between memories (adjacent pages peek like a
+  // real book at viewportFraction < 1).
+  final PageController _diaryPageCtrl = PageController(viewportFraction: 0.92);
+
   /// The global-space centre of a tile (via its key), or null if not laid out.
   Offset? _globalCenter(GlobalKey k) {
     final ctx = k.currentContext;
@@ -372,6 +408,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   void dispose() {
     NowPlayingPresence.instance.removeListener(_onPresence);
     spaceEventBus.removeListener(_onSpaceEvent);
+    _diaryPageCtrl.dispose();
     super.dispose();
   }
 
@@ -809,14 +846,21 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           ),
         ],
       ),
-      builder: (context, isWide) => RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-          children: _mainSections(scheme, title, moments),
-        ),
-      ),
+      // Our Diary takes over the body as a full page BELOW this header (the
+      // "Our Space" title + minimize stay visible); its own back arrow returns.
+      builder: (context, isWide) => _diaryOpen
+          ? Padding(
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+              child: _diaryBookView(scheme, isWide),
+            )
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                children: _mainSections(scheme, title, moments),
+              ),
+            ),
     );
   }
 
@@ -1368,20 +1412,303 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   }
 
   void _openDiary([Offset? origin]) {
-    final scheme = Theme.of(context).colorScheme;
-    _openFeatureSheet(
-      origin: origin,
-      title: 'Our Diary',
-      icon: Icons.menu_book_rounded,
-      body: (refresh) => _diaryContent(scheme),
-      footer: (refresh) => SizedBox(
-        width: double.infinity,
-        child: FilledButton.icon(
-          onPressed: _addDiaryEntry,
-          style: FilledButton.styleFrom(
-              backgroundColor: _accent, foregroundColor: Colors.white),
-          icon: const Icon(Icons.edit_rounded, size: 18),
-          label: const Text('Write in our diary'),
+    // Full page below the Our Space header — the book view (see _diaryBookView).
+    setState(() => _diaryOpen = true);
+  }
+
+  // ── Our Diary — the full-page book ────────────────────────────────────────
+  /// The diary as a book: a slim back bar, then the memories as ruled-paper
+  /// pages you turn one at a time, and a "write" button. Plans sit behind a
+  /// small chip so the book stays about memories.
+  Widget _diaryBookView(ColorScheme scheme, bool isWide) {
+    // Read like a journal: oldest memory first, newest last.
+    final mems = List<Map<String, dynamic>>.from(_memories)
+      ..sort((a, b) => (a['created_at'] ?? '')
+          .toString()
+          .compareTo((b['created_at'] ?? '').toString()));
+    return Column(
+      children: [
+        // Back to the tiles + title + page count.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(2, 2, 2, 8),
+          child: Row(
+            children: [
+              HeaderActionButton(
+                icon: Icons.arrow_back_rounded,
+                tooltip: 'Back',
+                onPressed: () => setState(() => _diaryOpen = false),
+              ),
+              const SizedBox(width: 10),
+              Icon(Icons.menu_book_rounded, color: _accent, size: 20),
+              const SizedBox(width: 6),
+              Text('Our Diary',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                      color: scheme.onSurface)),
+              const Spacer(),
+              if (mems.isNotEmpty)
+                Text('${mems.length} ${mems.length == 1 ? 'page' : 'pages'}',
+                    style: TextStyle(
+                        fontSize: 12, color: scheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+        Expanded(
+          child: mems.isEmpty
+              ? SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: _diaryEmpty(scheme))
+              : PageView.builder(
+                  controller: _diaryPageCtrl,
+                  itemCount: mems.length,
+                  itemBuilder: (ctx, i) => AnimatedBuilder(
+                    animation: _diaryPageCtrl,
+                    builder: (ctx, child) {
+                      // Turning-page depth: the centred page is full size, the
+                      // peeking neighbours shrink slightly like leaves of a book.
+                      double t = 0;
+                      if (_diaryPageCtrl.hasClients &&
+                          _diaryPageCtrl.position.hasContentDimensions) {
+                        t = (_diaryPageCtrl.page ?? i.toDouble()) - i;
+                      }
+                      final scale = (1 - (t.abs() * 0.10)).clamp(0.88, 1.0);
+                      return Center(
+                        child: Transform.scale(scale: scale, child: child),
+                      );
+                    },
+                    child: _memoryBookPage(scheme, mems[i]),
+                  ),
+                ),
+        ),
+        _diaryPlansStrip(scheme),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(0, 8, 0, 2),
+          child: SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _addDiaryEntry,
+              style: FilledButton.styleFrom(
+                  backgroundColor: _accent, foregroundColor: Colors.white),
+              icon: const Icon(Icons.edit_rounded, size: 18),
+              label: const Text('Write in our diary'),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// One memory rendered as a page of ruled paper, in its AUTHOR's font. Shows
+  /// only the author's photo (no name); readers can react + comment; only the
+  /// author gets the edit/delete menu.
+  Widget _memoryBookPage(ColorScheme scheme, Map<String, dynamic> e) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final title = (e['title'] ?? '').toString().trim();
+    final body = (e['body'] ?? '').toString().trim();
+    final mine = e['mine'] == true;
+    final author = (e['author'] as Map?)?.cast<String, dynamic>();
+    final created = DateTime.tryParse((e['created_at'] ?? '').toString());
+    final font = diaryFontFamily((e['font'] ?? '').toString());
+    final paper = isDark ? const Color(0xFF211B17) : const Color(0xFFFFFDF5);
+    final ink = isDark ? const Color(0xFFEDE6DD) : const Color(0xFF352A20);
+    final rule = (isDark ? Colors.white : _accent)
+        .withValues(alpha: isDark ? 0.06 : 0.10);
+    final commentCount = (e['comment_count'] as num?)?.toInt() ?? 0;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      child: Container(
+        decoration: BoxDecoration(
+          color: paper,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _accent.withValues(alpha: 0.20)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.42 : 0.16),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: CustomPaint(
+          painter: _RuledPaperPainter(
+            line: rule,
+            margin: _accent.withValues(alpha: 0.28),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Author photo only (no name), the time, and the author's menu.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 14, 8, 6),
+                child: Row(
+                  children: [
+                    diaryAuthorBadge(
+                      name: (author?['username'] ?? '?').toString(),
+                      imageUrl: _full(author?['avatar_url']),
+                      radius: 15,
+                    ),
+                    const Spacer(),
+                    if (created != null)
+                      Text(_diaryAgo(created),
+                          style: TextStyle(
+                              fontSize: 11.5,
+                              color: ink.withValues(alpha: 0.6))),
+                    if (mine) _memoryMenuButton(e, ink),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(52, 2, 20, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (title.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(title,
+                              style: TextStyle(
+                                  fontFamily: font,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 19,
+                                  height: 1.6,
+                                  color: ink)),
+                        ),
+                      Text(body,
+                          style: TextStyle(
+                              fontFamily: font,
+                              fontSize: 15.5,
+                              height: 1.9,
+                              color: ink.withValues(alpha: 0.92))),
+                    ],
+                  ),
+                ),
+              ),
+              // Footer: reactions + comment (readers can always do both).
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                decoration: BoxDecoration(
+                  color: (isDark ? Colors.black : _accent)
+                      .withValues(alpha: isDark ? 0.16 : 0.04),
+                  border: Border(
+                      top: BorderSide(
+                          color: _accent.withValues(alpha: 0.12))),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    diaryReactionRow(
+                      scheme: scheme,
+                      accent: _accent,
+                      entry: e,
+                      onToggle: (em) => _reactDiary(e, em),
+                      onAdd: () async {
+                        final em = await pickDiaryReaction(context, _accent);
+                        if (em != null) _reactDiary(e, em);
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () => _openMemoryDetail(e),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 4, horizontal: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.mode_comment_outlined,
+                                size: 16, color: _accent),
+                            const SizedBox(width: 6),
+                            Text(
+                                commentCount == 0
+                                    ? 'Comment'
+                                    : '$commentCount ${commentCount == 1 ? 'comment' : 'comments'}',
+                                style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: _accent)),
+                            Icon(Icons.chevron_right_rounded,
+                                size: 16, color: _accent),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Edit/Delete menu — only ever shown on the author's own memory.
+  Widget _memoryMenuButton(Map<String, dynamic> e, Color ink) {
+    return PopupMenuButton<String>(
+      tooltip: 'Options',
+      icon: Icon(Icons.more_horiz_rounded,
+          size: 18, color: ink.withValues(alpha: 0.6)),
+      onSelected: (v) {
+        if (v == 'edit') {
+          _editDiaryEntry(e);
+        } else if (v == 'delete') {
+          _deleteDiaryEntry(e);
+        }
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: 'edit', child: Text('Edit')),
+        PopupMenuItem(value: 'delete', child: Text('Delete')),
+      ],
+    );
+  }
+
+  /// A small chip that opens the couple's upcoming plans (kept out of the book
+  /// so the pages stay about memories). Hidden when there are no plans.
+  Widget _diaryPlansStrip(ColorScheme scheme) {
+    final plans = _plans;
+    if (plans.isEmpty) return const SizedBox.shrink();
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: () => _showPlansSheet(scheme),
+        icon: const Text('🗓️', style: TextStyle(fontSize: 14)),
+        label: Text('Plans ahead (${plans.length})',
+            style: TextStyle(
+                color: _accent, fontWeight: FontWeight.w600, fontSize: 13)),
+      ),
+    );
+  }
+
+  void _showPlansSheet(ColorScheme scheme) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _diarySectionLabel(scheme, 'Plans ahead', '🗓️'),
+              const SizedBox(height: 10),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [for (final e in _plans) _planRow(scheme, e)],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2847,6 +3174,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       title: res['title'] as String?,
       planDate: res['plan_date'] as String?,
       pinned: res['pinned'] == true,
+      font: res['font'] as String?,
     );
     if (!mounted) return;
     if (saved != null) {
@@ -2878,6 +3206,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       title: (res['title'] ?? '') as String?,
       planDate: (res['plan_date'] ?? '') as String?,
       pinned: res['pinned'] as bool?,
+      font: res['font'] as String?,
     );
     if (!mounted) return;
     if (saved != null) {
@@ -3482,6 +3811,33 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
 /// Write (or edit) a shared diary entry: a memory (something you shared) or a
 /// plan ahead (with an optional date + a pin for a reminder). Returns a map
 /// {kind, title, body, plan_date, pinned} on save, or null on cancel.
+/// Faint horizontal rules + a soft left margin line, so a memory reads like a
+/// page from a lined notebook. Kept very low-contrast on purpose.
+class _RuledPaperPainter extends CustomPainter {
+  final Color line;
+  final Color margin;
+  _RuledPaperPainter({required this.line, required this.margin});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rule = Paint()
+      ..color = line
+      ..strokeWidth = 1;
+    const gap = 30.0;
+    for (double y = 62; y < size.height - 8; y += gap) {
+      canvas.drawLine(Offset(16, y), Offset(size.width - 16, y), rule);
+    }
+    final m = Paint()
+      ..color = margin
+      ..strokeWidth = 1.2;
+    canvas.drawLine(const Offset(40, 14), Offset(40, size.height - 12), m);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RuledPaperPainter old) =>
+      old.line != line || old.margin != margin;
+}
+
 class _DiaryComposer extends StatefulWidget {
   final Color accent;
   final Map<String, dynamic>? existing; // non-null when editing
@@ -3497,6 +3853,7 @@ class _DiaryComposerState extends State<_DiaryComposer> {
   bool _planMode = false;
   DateTime? _date;
   bool _pinned = false;
+  String _font = ''; // the author's chosen typeface for this memory
 
   @override
   void initState() {
@@ -3507,6 +3864,7 @@ class _DiaryComposerState extends State<_DiaryComposer> {
     _planMode = (e?['kind'] ?? 'memory').toString() == 'plan';
     _date = DateTime.tryParse((e?['plan_date'] ?? '').toString());
     _pinned = e?['pinned'] == true;
+    _font = (e?['font'] ?? '').toString();
   }
 
   @override
@@ -3546,6 +3904,8 @@ class _DiaryComposerState extends State<_DiaryComposer> {
       'body': body,
       'plan_date': planDate,
       'pinned': _planMode && _pinned,
+      // Font is the author's per-memory touch; plans (joint) don't carry one.
+      'font': _planMode ? '' : _font,
     });
   }
 
@@ -3584,6 +3944,31 @@ class _DiaryComposerState extends State<_DiaryComposer> {
                 ),
               ],
             ),
+            // A memory carries the author's own "hand" — pick a typeface both of
+            // you will see it in. (Plans are joint, so they use the default.)
+            if (!_planMode) ...[
+              const SizedBox(height: 14),
+              Text('Your handwriting',
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurfaceVariant)),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  for (final f in kDiaryFonts)
+                    ChoiceChip(
+                      label: Text(f.$2,
+                          style: TextStyle(fontFamily: diaryFontFamily(f.$1))),
+                      selected: _font == f.$1,
+                      selectedColor: widget.accent.withValues(alpha: 0.22),
+                      onSelected: (_) => setState(() => _font = f.$1),
+                    ),
+                ],
+              ),
+            ],
             const SizedBox(height: 14),
             TextField(
               controller: _title,
@@ -3791,9 +4176,7 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
     final scheme = Theme.of(context).colorScheme;
     final title = (_e['title'] ?? '').toString().trim();
     final body = (_e['body'] ?? '').toString().trim();
-    final mine = _e['mine'] == true;
     final author = (_e['author'] as Map?)?.cast<String, dynamic>();
-    final authorName = mine ? 'You' : (author?['username'] ?? '').toString();
     final created = DateTime.tryParse((_e['created_at'] ?? '').toString());
     final isPlan = (_e['kind'] ?? '') == 'plan';
     final comments = _comments;
@@ -3837,79 +4220,96 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
               ),
             ),
             Divider(height: 1, color: scheme.outlineVariant),
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        diaryAuthorBadge(
-                          name: authorName,
-                          imageUrl: resolveAvatarUrl(
-                              author?['avatar_url']?.toString(),
-                              widget.apiBase),
-                          radius: 15,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(authorName.isEmpty ? 'Someone' : authorName,
+            // PINNED memory — stays put while the comments scroll below it.
+            // Its body is capped + scrolls on its own so a long memory can't
+            // swallow the comment area.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      diaryAuthorBadge(
+                        name: (author?['username'] ?? '?').toString(),
+                        imageUrl: resolveAvatarUrl(
+                            author?['avatar_url']?.toString(), widget.apiBase),
+                        radius: 15,
+                      ),
+                      const Spacer(),
+                      if (created != null)
+                        Text(_diaryAgo(created),
                             style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                                color: scheme.onSurface)),
-                        const Spacer(),
-                        if (created != null)
-                          Text(_diaryAgo(created),
-                              style: TextStyle(
-                                  fontSize: 11.5,
-                                  color: scheme.onSurfaceVariant)),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    if (body.isNotEmpty)
-                      Text(body,
-                          style: TextStyle(
-                              fontSize: 14.5,
-                              height: 1.4,
-                              color: scheme.onSurface)),
-                    const SizedBox(height: 14),
-                    diaryReactionRow(
-                      scheme: scheme,
-                      accent: _accent,
-                      entry: _e,
-                      onToggle: _toggle,
-                      onAdd: () async {
-                        final em = await pickDiaryReaction(context, _accent);
-                        if (em != null && mounted) _toggle(em);
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                    Divider(height: 1, color: scheme.outlineVariant),
+                                fontSize: 11.5,
+                                color: scheme.onSurfaceVariant)),
+                    ],
+                  ),
+                  if (body.isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    Text(
-                        comments.isEmpty
-                            ? 'Comments'
-                            : 'Comments (${comments.length})',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13,
-                            color: scheme.onSurface)),
-                    const SizedBox(height: 8),
-                    if (comments.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 168),
+                      child: SingleChildScrollView(
+                        child: Text(body,
+                            style: TextStyle(
+                                fontFamily: diaryFontFamily(
+                                    (_e['font'] ?? '').toString()),
+                                fontSize: 14.5,
+                                height: 1.5,
+                                color: scheme.onSurface)),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  diaryReactionRow(
+                    scheme: scheme,
+                    accent: _accent,
+                    entry: _e,
+                    onToggle: _toggle,
+                    onAdd: () async {
+                      final em = await pickDiaryReaction(context, _accent);
+                      if (em != null && mounted) _toggle(em);
+                    },
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: scheme.outlineVariant),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 10, 18, 2),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                    comments.isEmpty
+                        ? 'Comments'
+                        : 'Comments (${comments.length})',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        color: scheme.onSurface)),
+              ),
+            ),
+            // Comments scroll INDEPENDENTLY, so the memory above stays visible
+            // however long the conversation grows.
+            Flexible(
+              child: comments.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 6, 18, 14),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
                         child: Text(
                             'No comments yet — start the conversation.',
                             style: TextStyle(
                                 fontSize: 12.5,
                                 color: scheme.onSurfaceVariant)),
-                      )
-                    else
-                      for (final cm in comments) _commentTile(scheme, cm),
-                  ],
-                ),
-              ),
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+                      itemCount: comments.length,
+                      itemBuilder: (ctx, i) =>
+                          _commentBubble(scheme, comments[i]),
+                    ),
             ),
             Divider(height: 1, color: scheme.outlineVariant),
             Padding(
@@ -3965,60 +4365,78 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
     );
   }
 
-  Widget _commentTile(ColorScheme scheme, Map<String, dynamic> cm) {
+  /// A comment as a circle-chat bubble: the sender's photo only (no name), mine
+  /// on the right (accent-tinted), the partner's on the left (surface), each
+  /// with the near-square tail corner — the same language as the Circle chats.
+  Widget _commentBubble(ColorScheme scheme, Map<String, dynamic> cm) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final mine = cm['mine'] == true;
     final author = (cm['author'] as Map?)?.cast<String, dynamic>();
-    final name = mine ? 'You' : (author?['username'] ?? 'Someone').toString();
     final body = (cm['body'] ?? '').toString();
     final created = DateTime.tryParse((cm['created_at'] ?? '').toString());
     final cid = (cm['id'] as num?)?.toInt();
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              diaryAuthorBadge(
-                name: name,
-                imageUrl: resolveAvatarUrl(
-                    author?['avatar_url']?.toString(), widget.apiBase),
-                radius: 11,
-              ),
-              const SizedBox(width: 7),
-              Text(name,
-                  style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                      color: scheme.onSurface)),
-              const Spacer(),
-              if (created != null)
-                Text(_diaryAgo(created),
-                    style: TextStyle(
-                        fontSize: 10.5, color: scheme.onSurfaceVariant)),
-              if (mine && cid != null)
-                InkWell(
-                  onTap: () => _deleteComment(cid),
-                  borderRadius: BorderRadius.circular(20),
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 6),
-                    child: Icon(Icons.close_rounded,
-                        size: 15, color: scheme.onSurfaceVariant),
-                  ),
-                ),
-            ],
+    final avatar = diaryAuthorBadge(
+      name: (author?['username'] ?? '?').toString(),
+      imageUrl:
+          resolveAvatarUrl(author?['avatar_url']?.toString(), widget.apiBase),
+      radius: 12,
+    );
+    final bubbleColor = mine
+        ? _accent.withValues(alpha: isDark ? 0.30 : 0.16)
+        : scheme.surfaceContainerHighest;
+    final bubble = Flexible(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 7),
+        decoration: BoxDecoration(
+          color: bubbleColor,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(16),
+            topRight: const Radius.circular(16),
+            bottomLeft: Radius.circular(mine ? 16 : 4),
+            bottomRight: Radius.circular(mine ? 4 : 16),
           ),
-          const SizedBox(height: 5),
-          Text(body,
-              style: TextStyle(
-                  fontSize: 13, height: 1.3, color: scheme.onSurface)),
-        ],
+          border: Border.all(
+              color: (mine ? _accent : scheme.outlineVariant)
+                  .withValues(alpha: mine ? 0.35 : 0.4)),
+        ),
+        child: Column(
+          crossAxisAlignment:
+              mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            Text(body,
+                style: TextStyle(
+                    fontSize: 13.5, height: 1.3, color: scheme.onSurface)),
+            const SizedBox(height: 3),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (created != null)
+                  Text(_diaryAgo(created),
+                      style: TextStyle(
+                          fontSize: 10, color: scheme.onSurfaceVariant)),
+                if (mine && cid != null) ...[
+                  const SizedBox(width: 6),
+                  InkWell(
+                    onTap: () => _deleteComment(cid),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Icon(Icons.close_rounded,
+                        size: 13, color: scheme.onSurfaceVariant),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
       ),
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisAlignment:
+          mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+      children: mine
+          ? [bubble, const SizedBox(width: 6), avatar]
+          : [avatar, const SizedBox(width: 6), bubble],
     );
   }
 }

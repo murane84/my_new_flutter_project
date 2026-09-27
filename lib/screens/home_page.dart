@@ -2859,6 +2859,87 @@ class HomePageState extends rp.ConsumerState<HomePage>
     );
   }
 
+  /// The DM header's trailing controls (Wallpaper · Playlist · Call) folded
+  /// into ONE connected 3D pill — the same segmented treatment as the Our Space
+  /// header cluster — instead of three loose icon buttons.
+  Widget _dmHeaderCluster(ColorScheme scheme) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final name = _contactDisplayName(_activeFriendPhone, _activeFriendName ?? '');
+    Widget seg(IconData icon, String tip, VoidCallback onTap,
+            {bool active = false}) =>
+        Tooltip(
+          message: tip,
+          child: InkResponse(
+            onTap: onTap,
+            radius: 22,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Icon(icon,
+                  size: 20,
+                  color: active ? scheme.primary : scheme.onSurfaceVariant),
+            ),
+          ),
+        );
+    Widget divider() => Container(
+        width: 1, height: 20, color: scheme.outlineVariant.withValues(alpha: 0.5));
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(13),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [scheme.surfaceContainerHigh, scheme.surfaceContainer]
+              : [Colors.white, scheme.surfaceContainerHighest],
+        ),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.30)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.36 : 0.10),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(13),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            seg(Icons.wallpaper_rounded, 'Wallpaper', () {
+              showChatWallpaperSheet(
+                context,
+                convKey: chatConvKey(
+                    friendId: int.tryParse(_activeFriendId ?? '') ?? 0),
+                title: name,
+              );
+            }),
+            divider(),
+            ValueListenableBuilder<bool>(
+              valueListenable: playlistDrawerBus.isOpen,
+              builder: (_, open, _) => seg(
+                Icons.queue_music_rounded,
+                open ? 'Hide playlist' : 'Playlist',
+                _openChatPlaylist,
+                active: open,
+              ),
+            ),
+            divider(),
+            seg(Icons.call_rounded, 'Call $name', () {
+              _showCallChoice(
+                friendId: int.tryParse(_activeFriendId ?? '') ?? -1,
+                name: _contactDisplayName(
+                    _activeFriendPhone, _activeFriendName ?? 'This user'),
+                avatar: _activeFriendAvatar,
+                phone: _activeFriendPhone,
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildChatHeader(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final textColor = scheme.onSurface;
@@ -3057,40 +3138,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
               ),
             ),
           ),
-          IconButton(
-            tooltip: 'Wallpaper',
-            icon: const Icon(Icons.wallpaper_rounded),
-            onPressed: () => showChatWallpaperSheet(
-              context,
-              convKey: chatConvKey(
-                  friendId: int.tryParse(_activeFriendId ?? '') ?? 0),
-              title: _contactDisplayName(
-                  _activeFriendPhone, _activeFriendName ?? ''),
-            ),
-          ),
-          // Quick playlist drawer toggle — pop the music library in from the
-          // right without leaving the conversation (or opening the music panel).
-          ValueListenableBuilder<bool>(
-            valueListenable: playlistDrawerBus.isOpen,
-            builder: (_, open, _) => IconButton(
-              tooltip: open ? 'Hide playlist' : 'Playlist',
-              icon: Icon(Icons.queue_music_rounded,
-                  color: open ? scheme.primary : null),
-              onPressed: _openChatPlaylist,
-            ),
-          ),
-          IconButton(
-            tooltip:
-                'Call ${_contactDisplayName(_activeFriendPhone, _activeFriendName ?? '')}',
-            icon: const Icon(Icons.call_rounded),
-            onPressed: () => _showCallChoice(
-              friendId: int.tryParse(_activeFriendId ?? '') ?? -1,
-              name: _contactDisplayName(
-                  _activeFriendPhone, _activeFriendName ?? 'This user'),
-              avatar: _activeFriendAvatar,
-              phone: _activeFriendPhone,
-            ),
-          ),
+          _dmHeaderCluster(scheme),
         ],
       );
     }

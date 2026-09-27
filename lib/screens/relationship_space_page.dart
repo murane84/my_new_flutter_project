@@ -1786,27 +1786,42 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           Icons.auto_awesome_rounded,
           'Song & milestones',
           onMenu: onMenu,
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _yourSongInner(scheme, song),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                      child: _detailStat(scheme, '🎧', '$days',
-                          days == 1 ? 'day in a song' : 'days in a song')),
-                  const SizedBox(width: 10),
-                  Expanded(
-                      child: _detailStat(scheme, '🔥', '$streak',
-                          streak == 1 ? 'day streak' : 'day streak')),
+          body: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  _accent.withValues(alpha: 0.10),
+                  scheme.surfaceContainerHighest.withValues(alpha: 0.35),
                 ],
               ),
-              if (hasHint) ...[
-                const SizedBox(height: 14),
-                _nextMilestoneHint(scheme),
+              border: Border.all(color: _accent.withValues(alpha: 0.18)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _yourSongInner(scheme, song),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                        child: _detailStat(scheme, '🎧', '$days',
+                            days == 1 ? 'day in a song' : 'days in a song')),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child: _detailStat(scheme, '🔥', '$streak',
+                            streak == 1 ? 'day streak' : 'day streak')),
+                  ],
+                ),
+                if (hasHint) ...[
+                  const SizedBox(height: 14),
+                  _nextMilestoneHint(scheme),
+                ],
               ],
-            ],
+            ),
           ),
         );
       default:
@@ -2854,27 +2869,35 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   Widget _detailStat(
       ColorScheme scheme, String emoji, String value, String label) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
+        color: scheme.surface.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(14),
+        border:
+            Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(emoji, style: const TextStyle(fontSize: 14)),
-              const SizedBox(width: 6),
-              Text(value,
-                  style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                      color: scheme.onSurface)),
-            ],
+          Container(
+            width: 34,
+            height: 34,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: _accent.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
+            ),
+            child: Text(emoji, style: const TextStyle(fontSize: 16)),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 8),
+          Text(value,
+              style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 20,
+                  height: 1.0,
+                  color: scheme.onSurface)),
+          const SizedBox(height: 3),
           Text(label,
+              textAlign: TextAlign.center,
               style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
         ],
       ),
@@ -3034,21 +3057,52 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final kind = (next['kind'] ?? '').toString();
     if (remaining <= 0 || label.isEmpty) return const SizedBox.shrink();
     final emoji = kind == 'streak' ? '🔥' : '💫';
-    final unit = kind == 'streak' ? 'day' : 'day';
-    return Padding(
-      padding: const EdgeInsets.only(top: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+    // Optional progress bar: parse the target (first number in the label) and
+    // show how far along the bond already is toward it.
+    final match = RegExp(r'\d+').firstMatch(label);
+    final target = match != null ? int.tryParse(match.group(0)!) : null;
+    double? progress;
+    if (target != null && target > 0 && remaining < target) {
+      progress = ((target - remaining) / target).clamp(0.0, 1.0);
+    }
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      decoration: BoxDecoration(
+        color: _accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _accent.withValues(alpha: 0.28)),
+      ),
+      child: Column(
         children: [
-          Icon(Icons.auto_awesome_rounded, size: 13, color: _accent),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              '$remaining more $unit${remaining == 1 ? '' : 's'} to $label $emoji',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.auto_awesome_rounded, size: 14, color: _accent),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  '$remaining more day${remaining == 1 ? '' : 's'} to $label $emoji',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurface),
+                ),
+              ),
+            ],
           ),
+          if (progress != null) ...[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 6,
+                backgroundColor: _accent.withValues(alpha: 0.15),
+                valueColor: AlwaysStoppedAnimation<Color>(_accent),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -3073,9 +3127,12 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Your song',
-                  style:
-                      TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+              Text('YOUR SONG',
+                  style: TextStyle(
+                      fontSize: 9.5,
+                      letterSpacing: 0.8,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurfaceVariant)),
               const SizedBox(height: 2),
               Text(
                 has

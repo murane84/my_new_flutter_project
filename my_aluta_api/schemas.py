@@ -83,6 +83,7 @@ class Message(BaseModel):
     reactions: Optional[str] = None
     edited: Optional[bool] = False
     is_deleted: Optional[bool] = False
+    purged: Optional[bool] = False
     pinned_until: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -107,6 +108,7 @@ class MessageWithSender(BaseModel):
     reactions: Optional[str] = None
     edited: Optional[bool] = False
     is_deleted: Optional[bool] = False
+    purged: Optional[bool] = False
     pinned_until: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -366,4 +368,4 @@ class BondRequestCreate(BaseModel):
 class MomentCreate(BaseModel):
     kind: str                       # dedication | voice | photo | song | note
     ref: Optional[str] = None       # media URL / track JSON / text — kind decides
-    caption: Optional[str] = None
+    caption: Optional[str] = None

@@ -639,19 +639,28 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       final id = m['id'].toString();
       if (map.containsKey(id)) {
         final ex = map[id]!;
+        // Status always follows the server.
         ex['delivered'] = m['delivered'];
         ex['is_read'] = m['is_read'];
-        ex['content'] = m['content'];
         ex['edited'] = m['edited'];
         ex['is_deleted'] = m['is_deleted'];
         ex['reactions'] = m['reactions'];
-        ex['message_type'] = m['message_type'];
-        ex['media_url'] = m['media_url'];
-        ex['media_name'] = m['media_name'];
-        ex['media_mime'] = m['media_mime'];
-        ex['media_size'] = m['media_size'];
-        ex['media_duration'] = m['media_duration'];
         ex['pinned_until'] = m['pinned_until'];
+        // Store-and-forward: once the server has PURGED its copy after delivery
+        // it sends an emptied tombstone (purged:true) — keep OUR local content
+        // and media, which are now the durable copy. Otherwise take the
+        // server's content/media as before (covers real edits + media).
+        if (m['purged'] == true) {
+          ex['purged'] = true;
+        } else {
+          ex['content'] = m['content'];
+          ex['message_type'] = m['message_type'];
+          ex['media_url'] = m['media_url'];
+          ex['media_name'] = m['media_name'];
+          ex['media_mime'] = m['media_mime'];
+          ex['media_size'] = m['media_size'];
+          ex['media_duration'] = m['media_duration'];
+        }
       } else {
         map[id] = m;
       }

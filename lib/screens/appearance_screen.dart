@@ -3,6 +3,12 @@ import 'package:provider/provider.dart';
 
 import 'theme_provider.dart';
 import '../utils/popup_shell.dart';
+import '../utils/app_config.dart';
+import '../utils/chat_background.dart';
+import '../services/wallpapers_service.dart';
+import '../widgets/wallpaper_gallery.dart';
+import 'api_service.dart';
+import 'package:file_picker/file_picker.dart';
 
 /// The personalization surface (build step 5): whole-app **theme** (System /
 /// Light / Dark) + a curated **accent** preset set. Dark stays the brand's
@@ -82,6 +88,16 @@ class AppearanceScreen extends StatelessWidget {
           Text(
             'The accent tints buttons and highlights across the app. Surfaces '
             'stay dark-and-neutral so the brand holds.',
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 28),
+          _sectionLabel(scheme, 'CHAT WALLPAPER'),
+          const SizedBox(height: 10),
+          const _ChatWallpaperSection(),
+          const SizedBox(height: 8),
+          Text(
+            'Sets the default wallpaper for every chat. You can still give any '
+            'single chat its own — open it and tap the ⋮ menu → Wallpaper.',
             style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),
           const SizedBox(height: 28),
@@ -166,4 +182,243 @@ class _Accent {
   final String name;
   final Color color;
   const _Accent(this.name, this.color);
+}
+
+
+/// Sets the all-chats default wallpaper (Appearance → Chat wallpaper). Per-chat
+/// overrides are set inside each chat; this is the fallback every chat follows
+/// until it gets one of its own.
+class _ChatWallpaperSection extends StatefulWidget {
+  const _ChatWallpaperSection();
+  @override
+  State<_ChatWallpaperSection> createState() => _ChatWallpaperSectionState();
+}
+
+class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
+  String _apiBase = '';
+  List<WallpaperPreset> _presets = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final b = await AppConfig.baseUrl;
+    final p = await WallpapersService.instance.load();
+    if (!mounted) return;
+    setState(() {
+      _apiBase = b;
+      _presets = p;
+    });
+  }
+
+  String _full(String rel) => rel.startsWith('http') ? rel : '$_apiBase$rel';
+
+  String _labelFor(ChatBg bg) {
+    switch (bg.mode) {
+      case 'motif':
+        return 'Motif pattern';
+      case 'photo':
+        return 'Photo wallpaper';
+      default:
+        return 'Default';
+    }
+  }
+
+  Future<void> _upload() async {
+    try {
+      final res = await FilePicker.pickFiles(type: FileType.image);
+      if (res == null || res.files.isEmpty) return;
+      final fl = res.files.single;
+      final bytes = await fl.readAsBytes();
+      if (bytes.isEmpty) return;
+      final ext = (fl.extension ?? 'jpg').toLowerCase();
+      final mime = ext == 'png'
+          ? 'image/png'
+          : ext == 'webp'
+              ? 'image/webp'
+              : ext == 'gif'
+                  ? 'image/gif'
+                  : 'image/jpeg';
+      final up = await ApiService()
+          .uploadMedia(bytes: bytes, filename: fl.name, mime: mime);
+      final rel = (up?['url'] ?? '').toString();
+      if (rel.isEmpty) return;
+      await setChatBackgroundAll('photo', url: _full(rel));
+    } catch (_) {}
+  }
+
+  void _openSheet() {
+    final scheme = Theme.of(context).colorScheme;
+    final current = chatBackgroundAll;
+    final selUrl = current.isPhoto ? current.url : null;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) {
+        void applyClose(String mode, {String? url, String? wideUrl}) {
+          setChatBackgroundAll(mode, url: url, wideUrl: wideUrl);
+          Navigator.pop(ctx);
+        }
+
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(18, 10, 18, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                        color: scheme.outlineVariant,
+                        borderRadius: BorderRadius.circular(2)),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text('Default chat wallpaper',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: scheme.onSurface)),
+                const SizedBox(height: 2),
+                Text('Applies to every chat without its own',
+                    style: TextStyle(
+                        fontSize: 12, color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 14),
+                Row(children: [
+                  Expanded(
+                      child: _quick(scheme, Icons.blur_on_rounded, 'Default',
+                          current.mode == 'default',
+                          () => applyClose('default'))),
+                  const SizedBox(width: 10),
+                  Expanded(
+                      child: _quick(scheme, Icons.auto_awesome_rounded,
+                          'Motif', current.mode == 'motif',
+                          () => applyClose('motif'))),
+                ]),
+                const SizedBox(height: 18),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('GALLERY',
+                      style: TextStyle(
+                          fontSize: 11,
+                          letterSpacing: 0.6,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurfaceVariant)),
+                ),
+                const SizedBox(height: 8),
+                WallpaperGalleryGrid(
+                  presets: _presets,
+                  apiBase: _apiBase,
+                  accent: scheme.primary,
+                  selectedFullUrl: selUrl,
+                  onPick: (p) => applyClose('photo',
+                      url: _full(p.url),
+                      wideUrl: (p.wideUrl != null && p.wideUrl!.isNotEmpty)
+                          ? _full(p.wideUrl!)
+                          : null),
+                ),
+                const SizedBox(height: 18),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    await _upload();
+                  },
+                  icon: const Icon(Icons.add_photo_alternate_rounded, size: 20),
+                  label: const Text('Upload a photo'),
+                  style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14))),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _quick(ColorScheme scheme, IconData icon, String label, bool selected,
+      VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+              color: selected ? scheme.primary : Colors.transparent, width: 2),
+        ),
+        child: Column(children: [
+          Icon(icon, color: selected ? scheme.primary : scheme.onSurfaceVariant),
+          const SizedBox(height: 6),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: scheme.onSurface)),
+        ]),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ValueListenableBuilder<int>(
+      valueListenable: chatBgRevision,
+      builder: (ctx, _, __) {
+        final bg = chatBackgroundAll;
+        return Material(
+          color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: _openSheet,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              child: Row(
+                children: [
+                  Icon(Icons.wallpaper_rounded,
+                      size: 22, color: scheme.primary),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Chat wallpaper',
+                            style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w700,
+                                color: scheme.onSurface)),
+                        const SizedBox(height: 2),
+                        Text('${_labelFor(bg)} · all chats',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: scheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right_rounded,
+                      size: 20, color: scheme.onSurfaceVariant),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }

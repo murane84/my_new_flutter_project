@@ -1325,6 +1325,7 @@ class ApiService {
     String? name,
     String? theme,
     bool? isPrimary,
+    String? backgroundUrl,
   }) async {
     try {
       final token = await _getToken();
@@ -1336,6 +1337,7 @@ class ApiService {
           'name': ?name,
           'theme': ?theme,
           'is_primary': ?isPrimary,
+          'background_url': ?backgroundUrl,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {

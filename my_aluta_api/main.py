@@ -28,6 +28,7 @@ from routers import stories as stories_router
 from routers import policy as policy_router
 from routers import spaces as spaces_router
 from routers import plan as plan_router
+from routers import wallpapers as wallpapers_router
 from websocket_routes import router as websocket_router
 import websocket_manager
 from sqlalchemy import text
@@ -79,6 +80,7 @@ app.include_router(policy_router.router)
 app.include_router(spaces_router.router)
 # Monetization entitlement: GET /plan + dev/trial toggle POST /plan/together.
 app.include_router(plan_router.router)
+app.include_router(wallpapers_router.router)
 app.include_router(websocket_router)
 
 

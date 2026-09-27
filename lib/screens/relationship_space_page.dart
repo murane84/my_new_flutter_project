@@ -1830,19 +1830,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           padding: const EdgeInsets.fromLTRB(2, 2, 2, 8),
           child: Row(
             children: [
-              if (onMenu != null) ...[
-                HeaderActionButton(
-                  icon: Icons.view_sidebar_rounded,
-                  tooltip: 'Sections',
-                  onPressed: onMenu,
-                ),
-                const SizedBox(width: 6),
-              ],
-              HeaderActionButton(
-                icon: Icons.arrow_back_rounded,
-                tooltip: 'Back',
-                onPressed: () => setState(() => _section = null),
-              ),
+              // The same connected nav pill the Diary page uses (Sections | Back)
+              // so every section header reads as one unit, not two loose chips.
+              _diaryNavCluster(scheme, onMenu),
               const SizedBox(width: 10),
               Icon(icon, color: _accent, size: 20),
               const SizedBox(width: 6),
@@ -2071,7 +2061,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
-  /// The diary header's single segmented nav control: on narrow screens it
+  /// The section header's single segmented nav control, shared by every Our
+  /// Space section (Diary, Pinned moments, Playlist, …): on narrow screens it
   /// holds [sections | back] as one connected pill; on wide screens (no drawer)
   /// it's just [back]. One unit reads calmer than two separate floating chips.
   Widget _diaryNavCluster(ColorScheme scheme, VoidCallback? onMenu) {

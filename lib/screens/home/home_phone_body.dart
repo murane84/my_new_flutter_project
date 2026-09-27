@@ -104,8 +104,10 @@ extension _HomePhoneBody on HomePageState {
     final scheme = Theme.of(context).colorScheme;
     return _panelDecor(
       context,
-      Column(
+      Stack(
         children: [
+          Column(
+            children: [
           // Grab handle + header. Swiping DOWN anywhere on this handle/header
           // area minimises the panel (in addition to the chevron button), and a
           // tap on the handle collapses it too.
@@ -159,16 +161,16 @@ extension _HomePhoneBody on HomePageState {
           ),
           const SizedBox(height: 10),
           Expanded(
-            child: Stack(
-              children: [
-                kIsWeb
-                    ? WebMusicPanel(textColor: scheme.onSurface)
-                    : MusicControls(
-                        key: _musicPanelKey, textColor: scheme.onSurface),
-                _playlistDrawerHost(context, music: true),
-              ],
-            ),
+            child: kIsWeb
+                ? WebMusicPanel(textColor: scheme.onSurface)
+                : MusicControls(
+                    key: _musicPanelKey, textColor: scheme.onSurface),
           ),
+            ],
+          ),
+          // The playlist takes over the whole sheet as a page (covers the
+          // "Now Playing" header); its own header + back arrow return here.
+          Positioned.fill(child: _playlistDrawerHost(context, music: true)),
         ],
       ),
       isMusicPanel: true,

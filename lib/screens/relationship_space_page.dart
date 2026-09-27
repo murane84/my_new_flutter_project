@@ -882,30 +882,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       // layout has real room on desktop/web/tablet. Narrow screens still get a
       // near-full-width card and the single-column stack.
       desktopMaxWidth: 940,
-      headerAction: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // ONE "Space settings" control — the old pencil (edit) and pin/unpin
-          // are merged here: name, theme, hero and unpin all live inside the
-          // settings sheet, so unpin is just one action among the space's
-          // settings rather than a top-level button of its own. The tune glyph
-          // reads as "adjust this space" (a hybrid of edit + manage).
-          HeaderActionButton(
-            tooltip: 'Space settings',
-            icon: Icons.tune_rounded,
-            onPressed: _editSpace,
-          ),
-          // The platform's main (⋮) menu, carried straight into Our Space so the
-          // user can reach Together, Groups, Friends, Devices, Profile, Sign out
-          // etc. from here — the same overflow menu the home header shows, built
-          // by HomePage (it owns those actions). Rendered exactly as on home (a
-          // plain kebab) so it reads as the SAME control, not a new one.
-          if (widget.mainMenuBuilder != null) ...[
-            const SizedBox(width: 4),
-            widget.mainMenuBuilder!(context),
-          ],
-        ],
-      ),
+      // The default close chip is suppressed; Minimize lives inside the grouped
+      // cluster below so the top-right reads as ONE connected control.
+      showClose: false,
+      headerAction: _headerCluster(scheme),
       // A section takes over the body as a full page BELOW this header (the
       // "Our Space" title + minimize stay visible); its own back arrow returns.
       // The two views cross-fade while the incoming one gently RISES and the
@@ -2027,6 +2007,70 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
+  /// The header's control cluster, folded into ONE connected pill
+  /// (Space settings · menu · minimize) — the same segmented treatment as the
+  /// section nav pill — so the top-right reads as a single unit, not three
+  /// scattered chips.
+  Widget _headerCluster(ColorScheme scheme) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    Widget seg(IconData icon, String tip, VoidCallback onTap) => Tooltip(
+          message: tip,
+          child: InkResponse(
+            onTap: onTap,
+            radius: 24,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+              child: Icon(icon, size: 20, color: _accent),
+            ),
+          ),
+        );
+    Widget divider() => Container(
+        width: 1, height: 22, color: _accent.withValues(alpha: 0.22));
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(13),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [scheme.surfaceContainerHigh, scheme.surfaceContainer]
+              : [Colors.white, scheme.surfaceContainerHighest],
+        ),
+        border: Border.all(color: _accent.withValues(alpha: 0.45)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.36 : 0.12),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(13),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            seg(Icons.tune_rounded, 'Space settings', _editSpace),
+            if (widget.mainMenuBuilder != null) ...[
+              divider(),
+              // The platform ⋮ menu, tinted to the accent so it belongs to the
+              // cluster rather than floating as a separate control.
+              IconTheme.merge(
+                data: IconThemeData(color: _accent, size: 20),
+                child: widget.mainMenuBuilder!(context),
+              ),
+            ],
+            divider(),
+            seg(Icons.close_fullscreen_rounded, 'Minimize', () {
+              FocusScope.of(context).unfocus();
+              Navigator.of(context).pop();
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// The diary header's single segmented nav control: on narrow screens it
   /// holds [sections | back] as one connected pill; on wide screens (no drawer)
   /// it's just [back]. One unit reads calmer than two separate floating chips.
@@ -2200,7 +2244,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                               color: _accent.withValues(alpha: 0.55))),
                       Text('— $signName',
                           style: TextStyle(
-                              fontFamily: diaryFontFamily('handwriting'),
+                              // Signed in the author's chosen hand; Classic
+                              // still flourishes in handwriting.
+                              fontFamily: font ?? diaryFontFamily('handwriting'),
                               fontSize: 20,
                               height: 1.15,
                               color: ink.withValues(alpha: 0.9))),
@@ -3859,7 +3905,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => _DiaryComposer(accent: _accent),
+      builder: (_) => _DiaryComposer(accent: _accent, myName: widget.myName),
     );
     if (res == null) return;
     final saved = await ApiService().addDiaryEntry(
@@ -3890,7 +3936,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => _DiaryComposer(accent: _accent, existing: e),
+      builder: (_) => _DiaryComposer(accent: _accent, existing: e, myName: widget.myName),
     );
     if (res == null) return;
     final saved = await ApiService().editDiaryEntry(
@@ -5112,7 +5158,8 @@ class _RuledPaperPainter extends CustomPainter {
 class _DiaryComposer extends StatefulWidget {
   final Color accent;
   final Map<String, dynamic>? existing; // non-null when editing
-  const _DiaryComposer({required this.accent, this.existing});
+  final String? myName; // for the live signature preview
+  const _DiaryComposer({required this.accent, this.existing, this.myName});
 
   @override
   State<_DiaryComposer> createState() => _DiaryComposerState();
@@ -5219,7 +5266,7 @@ class _DiaryComposerState extends State<_DiaryComposer> {
             // you will see it in. (Plans are joint, so they use the default.)
             if (!_planMode) ...[
               const SizedBox(height: 14),
-              Text('Your handwriting',
+              Text('Your handwriting & signature',
                   style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
@@ -5238,6 +5285,41 @@ class _DiaryComposerState extends State<_DiaryComposer> {
                       onSelected: (_) => setState(() => _font = f.$1),
                     ),
                 ],
+              ),
+              const SizedBox(height: 10),
+              // Live signature preview — makes it clear the chosen hand also
+              // styles how the entry is signed off.
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(14, 8, 16, 10),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('Your signature',
+                        style: TextStyle(
+                            fontSize: 10.5,
+                            color: scheme.onSurfaceVariant.withValues(alpha: 0.8))),
+                    Text('❦',
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: widget.accent.withValues(alpha: 0.6))),
+                    Text(
+                        '— ' +
+                            ((widget.myName ?? '').trim().isEmpty
+                                ? 'You'
+                                : widget.myName!.trim()),
+                        style: TextStyle(
+                            fontFamily: diaryFontFamily(_font) ??
+                                diaryFontFamily('handwriting'),
+                            fontSize: 20,
+                            height: 1.15,
+                            color: scheme.onSurface.withValues(alpha: 0.9))),
+                  ],
+                ),
               ),
             ],
             const SizedBox(height: 14),

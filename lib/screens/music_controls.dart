@@ -1559,6 +1559,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       // The host marks which surface it's on right before building this; on the
       // chat surface the app now-playing bar handles transport (skip the strip).
       hostIsChat: playlistDrawerBus.hostIsChatSurface,
+      // Music surface => full page (own header + back arrow). Chat => card drawer.
+      fullPage: !playlistDrawerBus.hostIsChatSurface,
     );
   }
 

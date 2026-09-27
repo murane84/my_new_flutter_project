@@ -2715,21 +2715,23 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final scheme = Theme.of(context).colorScheme;
     return _panelDecor(
       context,
-      Column(
+      Stack(
         children: [
-          _buildMusicHeader(context),
-          const SizedBox(height: 10),
-          Expanded(
-            child: Stack(
-              children: [
-                kIsWeb
+          Column(
+            children: [
+              _buildMusicHeader(context),
+              const SizedBox(height: 10),
+              Expanded(
+                child: kIsWeb
                     ? WebMusicPanel(textColor: scheme.onSurface)
                     : MusicControls(
                         key: _musicPanelKey, textColor: scheme.onSurface),
-                _playlistDrawerHost(context, music: true),
-              ],
-            ),
+              ),
+            ],
           ),
+          // The playlist takes over the whole panel as a page (covers the
+          // "Now Playing" header); its own header + back arrow return here.
+          Positioned.fill(child: _playlistDrawerHost(context, music: true)),
         ],
       ),
       isMusicPanel: true,
@@ -3338,6 +3340,28 @@ class HomePageState extends rp.ConsumerState<HomePage>
         playlistDrawerBus.hostIsChatSurface = !music;
         final scheme = Theme.of(context).colorScheme;
         final eased = Curves.easeOutCubic.transform(t);
+        // Music surface: the playlist is a full PAGE, not a drawer. It fills the
+        // whole panel (the Positioned.fill host already covers the "Now Playing"
+        // header), needs no scrim, and fades + rises in. The overlay's own
+        // header (back arrow + controls) becomes the page's top bar.
+        if (music) {
+          return IgnorePointer(
+            ignoring: t < 0.05,
+            child: Opacity(
+              opacity: eased,
+              child: FractionalTranslation(
+                translation: Offset(0, (1 - eased) * 0.04),
+                child: Material(
+                  color: scheme.surface,
+                  child: ValueListenableBuilder<int>(
+                    valueListenable: playlistDrawerBus.revision,
+                    builder: (c, _, _) => builder(c),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
         return LayoutBuilder(
           builder: (ctx, cons) {
             final isPhone = cons.maxWidth < 520;

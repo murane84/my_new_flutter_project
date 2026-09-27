@@ -60,6 +60,11 @@ class _PlaylistOverlay extends StatefulWidget {
   // avoid two players for one song. False on the music surface (keeps the strip).
   final bool hostIsChat;
 
+  // True on the music surface, where the playlist takes over the whole panel as
+  // a page (its own header replaces "Now Playing"; a back arrow returns). In a
+  // chat it stays false and the panel remains a right-side card drawer.
+  final bool fullPage;
+
   const _PlaylistOverlay({
     required this.playlist,
     required this.currentIndex,
@@ -90,6 +95,7 @@ class _PlaylistOverlay extends StatefulWidget {
     this.loading = false,
     this.drawer = false,
     this.hostIsChat = false,
+    this.fullPage = false,
   });
 
   @override
@@ -1189,7 +1195,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
 
   Widget _header(ColorScheme scheme) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+      padding: EdgeInsets.fromLTRB(widget.fullPage ? 6 : 14, 8, 6, 8),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest.withAlpha(120),
         border: Border(
@@ -1197,7 +1203,13 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       ),
       child: Row(
         children: [
-          Icon(Icons.queue_music_rounded, color: scheme.primary, size: 18),
+          // Full-page (music surface): a leading back arrow returns to Now
+          // Playing. Drawer/sheet: the queue glyph, with a collapse control on
+          // the far right instead.
+          if (widget.fullPage)
+            _backBtn(scheme)
+          else
+            Icon(Icons.queue_music_rounded, color: scheme.primary, size: 18),
           const SizedBox(width: 6),
           // Title + action icons share one Expanded group on the left; the
           // collapse chevron is the last child, so it stays pinned flush to the
@@ -1241,30 +1253,52 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
               ],
             ),
           ),
-          const SizedBox(width: 6),
-          GestureDetector(
-            onTap: widget.onClose,
-            child: Tooltip(
-              // In drawer mode this collapses the panel back to the right edge
-              // (a right chevron reads as "push it away"); the sheet just closes.
-              message: widget.drawer ? 'Collapse' : 'Close',
-              child: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: scheme.primary.withAlpha(28),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: scheme.primary.withAlpha(70)),
+          if (!widget.fullPage) ...[
+            const SizedBox(width: 6),
+            GestureDetector(
+              onTap: widget.onClose,
+              child: Tooltip(
+                // In drawer mode this collapses the panel back to the right edge
+                // (a right chevron reads as "push it away"); the sheet just
+                // closes.
+                message: widget.drawer ? 'Collapse' : 'Close',
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withAlpha(28),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: scheme.primary.withAlpha(70)),
+                  ),
+                  child: Icon(
+                      widget.drawer
+                          ? Icons.chevron_right_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      size: 22,
+                      color: scheme.primary),
                 ),
-                child: Icon(
-                    widget.drawer
-                        ? Icons.chevron_right_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    size: 22,
-                    color: scheme.primary),
               ),
             ),
-          ),
+          ],
         ],
+      ),
+    );
+  }
+
+  // A circular back arrow shown in full-page mode; returns to Now Playing.
+  Widget _backBtn(ColorScheme scheme) {
+    return GestureDetector(
+      onTap: widget.onClose,
+      child: Tooltip(
+        message: 'Back to Now Playing',
+        child: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: scheme.primary.withAlpha(28),
+            shape: BoxShape.circle,
+            border: Border.all(color: scheme.primary.withAlpha(70)),
+          ),
+          child: Icon(Icons.arrow_back_rounded, size: 20, color: scheme.primary),
+        ),
       ),
     );
   }

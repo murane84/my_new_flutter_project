@@ -3318,55 +3318,83 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final song = _songFromRef(m['ref']);
     final reactions = (m['reactions'] as List?) ?? const [];
     final reactedByMe = (m['my_reaction'] ?? '').toString().isNotEmpty;
+    final displayName = authorName.isEmpty ? _momentLabel(kind) : authorName;
 
     return GestureDetector(
       onLongPress: mine ? () => _confirmDeleteMoment(id) : null,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(14),
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(16),
+          color: scheme.surfaceContainerHighest.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: _accent.withValues(alpha: 0.16)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 14,
+              offset: const Offset(0, 5),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header: avatar · name over a kind·time subtitle · pin marker.
             Row(
               children: [
                 diaryAuthorBadge(
-                  name: authorName,
+                  name: displayName,
                   imageUrl: _full(author?['avatar_url']),
-                  radius: 13,
+                  radius: 16,
                 ),
-                const SizedBox(width: 8),
-                Icon(_momentIcon(kind), size: 14, color: _accent),
-                const SizedBox(width: 5),
-                Flexible(
-                  child: Text(
-                    authorName.isEmpty ? _momentLabel(kind) : authorName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12.5,
-                        color: scheme.onSurface),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13.5,
+                              color: scheme.onSurface)),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(_momentIcon(kind), size: 12, color: _accent),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              created != null
+                                  ? '${_momentLabel(kind)} · ${_timeAgo(created)}'
+                                  : _momentLabel(kind),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: scheme.onSurfaceVariant),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                const Spacer(),
-                if (created != null)
-                  Text(_timeAgo(created),
-                      style: TextStyle(
-                          fontSize: 11, color: scheme.onSurfaceVariant)),
+                const SizedBox(width: 8),
+                Icon(Icons.push_pin_rounded,
+                    size: 15, color: _accent.withValues(alpha: 0.55)),
               ],
             ),
             if (song != null) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: _accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   children: [
@@ -3402,20 +3430,33 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
               ),
             ],
             if (caption.isNotEmpty) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Text(caption,
                   style: TextStyle(
-                      fontSize: 13.5, height: 1.3, color: scheme.onSurface)),
+                      fontSize: 14.5, height: 1.4, color: scheme.onSurface)),
             ],
-            const SizedBox(height: 6),
+            const SizedBox(height: 12),
+            // Reaction chip — a clear affordance whether or not it has loves yet.
             Row(
               children: [
                 InkWell(
                   onTap: () => _reactMoment(id, '❤️'),
                   borderRadius: BorderRadius.circular(20),
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 140),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: reactedByMe
+                          ? _accent.withValues(alpha: 0.14)
+                          : scheme.surface.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: reactedByMe
+                            ? _accent.withValues(alpha: 0.5)
+                            : scheme.outlineVariant.withValues(alpha: 0.5),
+                      ),
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -3423,17 +3464,22 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                           reactedByMe
                               ? Icons.favorite_rounded
                               : Icons.favorite_border_rounded,
-                          size: 18,
+                          size: 16,
                           color:
                               reactedByMe ? _accent : scheme.onSurfaceVariant,
                         ),
-                        if (reactions.isNotEmpty) ...[
-                          const SizedBox(width: 5),
-                          Text('${reactions.length}',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: scheme.onSurfaceVariant)),
-                        ],
+                        const SizedBox(width: 6),
+                        Text(
+                          reactions.isNotEmpty
+                              ? '${reactions.length}'
+                              : 'Love this',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: reactedByMe
+                                  ? _accent
+                                  : scheme.onSurfaceVariant),
+                        ),
                       ],
                     ),
                   ),

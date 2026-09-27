@@ -240,6 +240,10 @@ class AppPopupShell extends StatelessWidget {
   // match with [HeaderActionButton]. Set false for a deliberately flat header.
   final bool raisedActions;
 
+  /// When false, the shell renders NO default close/minimize chip — the caller
+  /// supplies its own (e.g. folded into a grouped [headerAction] cluster).
+  final bool showClose;
+
   const AppPopupShell({
     super.key,
     required this.title,
@@ -252,6 +256,7 @@ class AppPopupShell extends StatelessWidget {
     this.fullScreen = false,
     this.backdrop,
     this.raisedActions = true,
+    this.showClose = true,
   });
 
   /// The shared header bar (icon + title + optional action + close/minimize).
@@ -284,24 +289,25 @@ class AppPopupShell extends StatelessWidget {
             ),
           ),
           ?headerAction,
-          if (raisedActions)
-            HeaderActionButton(
-              icon: closeIcon,
-              tooltip: closeTooltip,
-              onPressed: () {
-                FocusScope.of(context).unfocus();
-                Navigator.of(context).pop();
-              },
-            )
-          else
-            IconButton(
-              tooltip: closeTooltip,
-              icon: Icon(closeIcon),
-              onPressed: () {
-                FocusScope.of(context).unfocus();
-                Navigator.of(context).pop();
-              },
-            ),
+          if (showClose)
+            if (raisedActions)
+              HeaderActionButton(
+                icon: closeIcon,
+                tooltip: closeTooltip,
+                onPressed: () {
+                  FocusScope.of(context).unfocus();
+                  Navigator.of(context).pop();
+                },
+              )
+            else
+              IconButton(
+                tooltip: closeTooltip,
+                icon: Icon(closeIcon),
+                onPressed: () {
+                  FocusScope.of(context).unfocus();
+                  Navigator.of(context).pop();
+                },
+              ),
         ],
       ),
     );

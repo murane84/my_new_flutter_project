@@ -119,6 +119,18 @@ class PlayerTheme extends StatelessWidget {
       data: base.copyWith(
         colorScheme: scheme,
         scaffoldBackgroundColor: scheme.surface,
+        // The stage is permanently dark, but base.textTheme still carries the
+        // APP theme's ink — black in Light mode. Without recolouring it here,
+        // any un-coloured Text (e.g. the playlist header) and the search field's
+        // input/hint render black on the dark stage and vanish in Light mode.
+        // Re-ink all text + hints + icons to the dark-stage colours so they stay
+        // legible whichever app theme is active.
+        textTheme: base.textTheme
+            .apply(bodyColor: scheme.onSurface, displayColor: scheme.onSurface),
+        primaryTextTheme: base.primaryTextTheme
+            .apply(bodyColor: scheme.onSurface, displayColor: scheme.onSurface),
+        hintColor: scheme.onSurfaceVariant,
+        iconTheme: base.iconTheme.copyWith(color: scheme.onSurface),
         // Re-brand the baked-in button/input themes to the accent + dark stage.
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(

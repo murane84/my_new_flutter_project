@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show File;
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -18,6 +19,7 @@ import '../utils/toast_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/popup_shell.dart';
 import '../utils/net_image.dart';
+import '../services/media_store.dart';
 import '../utils/file_bytes.dart';
 import '../services/notif_service.dart'
     show syncDiaryReminders, cancelDiaryReminder, PlanReminder;
@@ -1030,39 +1032,64 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   /// a WIDER-than-tall area (desktop/tablet) a single portrait can't cover the
   /// width, so it scales to full height and TILES horizontally — no blank space.
   /// A soft scrim keeps the hero, tiles and text readable over any photo.
+  // Memoize the on-device lookup per background URL so rebuilds (resize,
+  // setState) reuse the same Future instead of re-hitting disk/network.
+  String? _bgFutureUrl;
+  Future<File?>? _bgFuture;
+  Future<File?> _bgFileFuture(String url, Map<String, String> headers) {
+    if (_bgFutureUrl != url || _bgFuture == null) {
+      _bgFutureUrl = url;
+      _bgFuture = MediaStore.instance.getFile(url, headers);
+    }
+    return _bgFuture!;
+  }
+
   Widget _photoBackdrop(ColorScheme scheme, String url) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final provider = authNetworkImageProvider(url, mediaAuthHeaders(url));
+    final headers = mediaAuthHeaders(url);
     final veil = isDark ? Colors.black : Colors.white;
     return LayoutBuilder(
       builder: (ctx, c) {
         final wide = c.maxWidth > c.maxHeight;
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            DecoratedBox(
-              decoration: BoxDecoration(
-                image: DecorationImage(
-                  image: provider,
-                  fit: wide ? BoxFit.fitHeight : BoxFit.cover,
-                  repeat: wide ? ImageRepeat.repeatX : ImageRepeat.noRepeat,
-                  onError: (Object e, StackTrace? st) {},
+        final fit = wide ? BoxFit.fitHeight : BoxFit.cover;
+        final repeat = wide ? ImageRepeat.repeatX : ImageRepeat.noRepeat;
+        return FutureBuilder<File?>(
+          // Prefer the on-device copy (survives offline / a desktop restart);
+          // fall back to the network image on the first, online view while it
+          // downloads + persists.
+          future: _bgFileFuture(url, headers),
+          builder: (ctx, snap) {
+            final ImageProvider provider = snap.data != null
+                ? FileImage(snap.data!)
+                : authNetworkImageProvider(url, headers);
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    image: DecorationImage(
+                      image: provider,
+                      fit: fit,
+                      repeat: repeat,
+                      onError: (Object e, StackTrace? st) {},
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    veil.withValues(alpha: isDark ? 0.46 : 0.58),
-                    veil.withValues(alpha: isDark ? 0.34 : 0.42),
-                  ],
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        veil.withValues(alpha: isDark ? 0.46 : 0.58),
+                        veil.withValues(alpha: isDark ? 0.34 : 0.42),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         );
       },
     );

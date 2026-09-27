@@ -487,8 +487,20 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   Future<void> _saveMessagesCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      // Only cache the latest 100 messages to keep storage small
-      final toCache = _messages.take(100).toList();
+      // Keep the FULL conversation on-device (append-only): merge the current
+      // window into whatever is already cached so the local copy never shrinks
+      // to a small window. With server-side purge of delivered messages, THIS
+      // is the durable copy — it must hold the history, not just the latest
+      // few. Bounded to the most recent 3000 per chat to cap storage.
+      List<Map<String, dynamic>> stored = const [];
+      final raw = prefs.getString(_cacheKey);
+      if (raw != null) {
+        try {
+          stored = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+        } catch (_) {}
+      }
+      final full = _merge(stored, _messages);
+      final toCache = full.length > 3000 ? full.take(3000).toList() : full;
       await prefs.setString(_cacheKey, jsonEncode(toCache));
     } catch (_) {}
   }

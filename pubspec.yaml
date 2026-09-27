@@ -123,6 +123,7 @@ dependencies:
   # Pure Dart, no native side — safe on every platform / SDK.
   flutter_linkify: ^6.0.0
   share_plus: ^13.1.0
+  cryptography: ^2.5.0   # pure-Dart AES-GCM + PBKDF2 for encrypted local backups
   cached_network_image: ^3.4.1
   # Pure-Dart image codec — used to compress chat images before upload (keeps
   # Postgres media storage + bandwidth down). Already present transitively.

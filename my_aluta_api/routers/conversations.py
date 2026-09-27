@@ -7,7 +7,7 @@ are WhatsApp-style via per-member pointers (see crud_conversations).
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 import crud
@@ -152,6 +152,22 @@ def get_call_state(
 
 # ── Messages ───────────────────────────────────────────────────────────────────
 
+@router.post("/{cid}/cached")
+def ack_conversation_cached(
+    cid: int,
+    up_to: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """A device POSTs here after it persists this conversation's history
+    locally; the server records the cached pointer and purges messages every
+    member now holds (store-and-forward)."""
+    _require_member(db, cid, current_user.id)
+    cc.mark_cached_up_to(db, cid, current_user.id, up_to)
+    cc.purge_cached_conversation(db, cid)
+    return {"ok": True}
+
+
 @router.get("/{cid}/messages", response_model=List[schemas.MessageWithSender])
 def get_messages(
     cid: int,
@@ -161,6 +177,9 @@ def get_messages(
     current_user: User = Depends(get_current_user),
 ):
     _require_member(db, cid, current_user.id)
+    # Store-and-forward: drop content of messages every member has cached
+    # (inert until the /cached acks arrive). Best-effort.
+    cc.purge_cached_conversation(db, cid)
     msgs = cc.get_messages(db, cid, skip, limit)
     # Fetching = delivered on this device; advance our delivered pointer and let
     # the other members' sent-message ticks catch up.

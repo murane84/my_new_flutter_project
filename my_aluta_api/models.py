@@ -177,6 +177,11 @@ class ConversationMember(Base):
     last_read_at = Column(DateTime(timezone=True), nullable=True)
     last_delivered_message_id = Column(Integer, nullable=True)
     last_delivered_at = Column(DateTime(timezone=True), nullable=True)
+    # Store-and-forward: highest message id this member's DEVICE has cached
+    # locally. The server purges a message's content only once EVERY member's
+    # cached pointer covers it, so nothing is dropped before the recipient
+    # provably holds its own copy.
+    last_cached_message_id = Column(Integer, nullable=True)
 
     conversation = relationship("Conversation", back_populates="members")
     user = relationship("User", foreign_keys=[user_id], passive_deletes=True)

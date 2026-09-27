@@ -135,6 +135,8 @@ extension _HomeMenu on HomePageState {
             }),
             _menuBtn(scheme, Icons.palette_outlined, 'Appearance',
                 () => showAppPopup(context, const AppearanceScreen())),
+            _menuBtn(scheme, Icons.lock_outline_rounded, 'Backup & restore',
+                () => showAppPopup(context, const BackupScreen())),
             _menuBtn(scheme, Icons.shield_outlined, 'Legal & About',
                 () => showLegalMenu(context)),
           ],

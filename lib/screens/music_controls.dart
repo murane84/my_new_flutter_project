@@ -1406,9 +1406,23 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   }
 
   Future<void> _pickAndroid() async {
-    await _scanIntoPlaylist();
-    if (!mounted || _playlist.isEmpty) return;
-    _openPlaylist();
+    // Rescan the device library, giving clear feedback either way — so tapping
+    // "+" never feels dead when there's nothing new to add.
+    final before = _playlist.toSet();
+    if (mounted) setState(() => _scanning = true);
+    try {
+      await _scanIntoPlaylist();
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+    if (!mounted) return;
+    final added = _playlist.where((p) => !before.contains(p)).length;
+    if (added > 0) {
+      _snack('Added $added new track${added == 1 ? '' : 's'}');
+    } else if (_playlist.isNotEmpty) {
+      _snack('No new music found — your library is up to date');
+    }
+    if (_playlist.isNotEmpty) _openPlaylist();
   }
 
   /// Loads the device's music library via MediaStore (fast, indexed), prompting

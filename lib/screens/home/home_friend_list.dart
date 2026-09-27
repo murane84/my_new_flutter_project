@@ -482,8 +482,9 @@ extension _HomeFriendListView on HomePageState {
         if (showDiv)
           Divider(
             height: 1,
-            indent: 68,
-            color: scheme.outlineVariant.withAlpha(70),
+            indent: 72,
+            endIndent: 8,
+            color: scheme.outlineVariant.withAlpha(40),
           ),
       ],
     );
@@ -1335,13 +1336,13 @@ extension _HomeFriendListView on HomePageState {
       child: InkWell(
       onTap: () => _isSharing ? _sendShareTo(friend: f) : openChat(f),
       onLongPress: _isSharing ? null : () => _showFriendQuickSheet(f, name),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(14),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 11),
         child: Row(
           children: [
             _storyRingAvatar(f, name, isOnline),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1461,9 +1462,9 @@ extension _HomeFriendListView on HomePageState {
 
     return InkWell(
       onTap: () => _isSharing ? _sendShareTo(group: g) : openGroupInPanel(g),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(14),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 11),
         child: Row(
           children: [
             CircleAvatar(

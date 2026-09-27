@@ -71,20 +71,19 @@ class _BackupScreenState extends State<BackupScreen> {
     }
     FilePickerResult? res;
     try {
-      res = await FilePicker.platform.pickFiles(withData: true);
+      res = await FilePicker.pickFiles();
     } catch (_) {
       _toast('Could not open the file picker', ToastType.error);
       return;
     }
     if (res == null || res.files.isEmpty) return;
     String content;
-    final bytes = res.files.single.bytes;
-    if (bytes != null) {
+    try {
+      final bytes = await res.files.single.readAsBytes();
       content = utf8.decode(bytes);
-    } else {
-      final p = res.files.single.path;
-      if (p == null) return;
-      content = await File(p).readAsString();
+    } catch (_) {
+      _toast('Could not read that file', ToastType.error);
+      return;
     }
     setState(() => _busy = true);
     try {

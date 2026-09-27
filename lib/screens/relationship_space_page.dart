@@ -5227,155 +5227,312 @@ class _DiaryComposerState extends State<_DiaryComposer> {
     });
   }
 
+  Widget _sectionLabel(ColorScheme scheme, String t) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(t.toUpperCase(),
+            style: TextStyle(
+                fontSize: 10.5,
+                letterSpacing: 0.8,
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurfaceVariant)),
+      );
+
+  Widget _modeSeg(ColorScheme scheme, String label, IconData icon,
+      bool selected, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          decoration: BoxDecoration(
+            color: selected ? widget.accent : Colors.transparent,
+            borderRadius: BorderRadius.circular(11),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                        color: widget.accent.withValues(alpha: 0.35),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3))
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon,
+                  size: 17,
+                  color: selected ? Colors.white : scheme.onSurfaceVariant),
+              const SizedBox(width: 7),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color:
+                          selected ? Colors.white : scheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _fontPill(ColorScheme scheme, (String, String) f) {
+    final selected = _font == f.$1;
+    return GestureDetector(
+      onTap: () => setState(() => _font = f.$1),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected
+              ? widget.accent.withValues(alpha: 0.14)
+              : scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(
+            color: selected
+                ? widget.accent
+                : scheme.outlineVariant.withValues(alpha: 0.5),
+            width: selected ? 1.6 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (selected) ...[
+              Icon(Icons.check_rounded, size: 15, color: widget.accent),
+              const SizedBox(width: 6),
+            ],
+            Text(f.$2,
+                style: TextStyle(
+                    fontFamily: diaryFontFamily(f.$1),
+                    fontSize: 14,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected ? widget.accent : scheme.onSurface)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _fieldDecoration(ColorScheme scheme, String hint) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle:
+          TextStyle(color: scheme.onSurfaceVariant.withValues(alpha: 0.7)),
+      filled: true,
+      fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      counterStyle: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide:
+            BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.35)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: widget.accent, width: 1.6),
+      ),
+    );
+  }
+
+  Widget _signaturePreview(ColorScheme scheme) {
+    final name =
+        (widget.myName ?? '').trim().isEmpty ? 'You' : widget.myName!.trim();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 12, 18, 14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            widget.accent.withValues(alpha: 0.08),
+            scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+          ],
+        ),
+        border: Border.all(color: widget.accent.withValues(alpha: 0.20)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.draw_rounded, size: 13, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Text('YOUR SIGNATURE',
+                  style: TextStyle(
+                      fontSize: 9.5,
+                      letterSpacing: 0.8,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurfaceVariant)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Flexible(
+                child: Text('— $name',
+                    textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontFamily: diaryFontFamily(_font) ??
+                            diaryFontFamily('handwriting'),
+                        fontSize: 22,
+                        height: 1.15,
+                        color: scheme.onSurface.withValues(alpha: 0.92))),
+              ),
+              const SizedBox(width: 8),
+              Text('❦',
+                  style: TextStyle(
+                      fontSize: 15,
+                      color: widget.accent.withValues(alpha: 0.75))),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     final editing = widget.existing != null;
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 18, 20, 18 + bottom),
+      padding: EdgeInsets.fromLTRB(20, 10, 20, 18 + bottom),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(editing ? 'Edit diary entry' : 'Write in our diary',
-                style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                    color: scheme.onSurface)),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                    color: scheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            Row(
               children: [
-                ChoiceChip(
-                  label: const Text('Memory'),
-                  selected: !_planMode,
-                  selectedColor: widget.accent.withValues(alpha: 0.22),
-                  onSelected: (_) => setState(() => _planMode = false),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: widget.accent.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Icon(Icons.menu_book_rounded,
+                      size: 20, color: widget.accent),
                 ),
-                ChoiceChip(
-                  label: const Text('Plan ahead'),
-                  selected: _planMode,
-                  selectedColor: widget.accent.withValues(alpha: 0.22),
-                  onSelected: (_) => setState(() => _planMode = true),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(editing ? 'Edit diary entry' : 'Write in our diary',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 17,
+                              color: scheme.onSurface)),
+                      Text(
+                          _planMode
+                              ? 'A plan to look forward to'
+                              : 'A moment worth keeping',
+                          style: TextStyle(
+                              fontSize: 12, color: scheme.onSurfaceVariant)),
+                    ],
+                  ),
                 ),
               ],
             ),
-            // A memory carries the author's own "hand" — pick a typeface both of
-            // you will see it in. (Plans are joint, so they use the default.)
-            if (!_planMode) ...[
-              const SizedBox(height: 14),
-              Text('Your handwriting & signature',
-                  style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onSurfaceVariant)),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
                 children: [
-                  for (final f in kDiaryFonts)
-                    ChoiceChip(
-                      label: Text(f.$2,
-                          style: TextStyle(fontFamily: diaryFontFamily(f.$1))),
-                      selected: _font == f.$1,
-                      selectedColor: widget.accent.withValues(alpha: 0.22),
-                      onSelected: (_) => setState(() => _font = f.$1),
-                    ),
+                  _modeSeg(scheme, 'Memory', Icons.auto_stories_rounded,
+                      !_planMode, () => setState(() => _planMode = false)),
+                  const SizedBox(width: 4),
+                  _modeSeg(scheme, 'Plan ahead', Icons.event_rounded, _planMode,
+                      () => setState(() => _planMode = true)),
                 ],
               ),
-              const SizedBox(height: 10),
-              // Live signature preview — makes it clear the chosen hand also
-              // styles how the entry is signed off.
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(14, 8, 16, 10),
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('Your signature',
-                        style: TextStyle(
-                            fontSize: 10.5,
-                            color: scheme.onSurfaceVariant.withValues(alpha: 0.8))),
-                    Text('❦',
-                        style: TextStyle(
-                            fontSize: 13,
-                            color: widget.accent.withValues(alpha: 0.6))),
-                    Text(
-                        '— ${(widget.myName ?? '').trim().isEmpty ? 'You' : widget.myName!.trim()}',
-                        style: TextStyle(
-                            fontFamily: diaryFontFamily(_font) ??
-                                diaryFontFamily('handwriting'),
-                            fontSize: 20,
-                            height: 1.15,
-                            color: scheme.onSurface.withValues(alpha: 0.9))),
-                  ],
-                ),
+            ),
+            if (!_planMode) ...[
+              const SizedBox(height: 18),
+              _sectionLabel(scheme, 'Your handwriting & signature'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [for (final f in kDiaryFonts) _fontPill(scheme, f)],
               ),
+              const SizedBox(height: 12),
+              _signaturePreview(scheme),
             ],
-            const SizedBox(height: 14),
+            const SizedBox(height: 18),
+            _sectionLabel(scheme, _planMode ? 'Title' : 'Title (optional)'),
             TextField(
               controller: _title,
               maxLength: 80,
-              // Type in the CHOSEN hand so the author sees the memory take that
-              // typeface live as they pick it (plans are joint → default font).
               style: TextStyle(
                   fontFamily: _planMode ? null : diaryFontFamily(_font),
                   fontWeight: FontWeight.w700),
-              decoration: InputDecoration(
-                hintText: _planMode
-                    ? 'What are you planning? (a title)'
-                    : 'Give this memory a title (optional)',
-                filled: true,
-                fillColor: scheme.surfaceContainerHighest,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide.none,
-                ),
-              ),
+              decoration: _fieldDecoration(
+                  scheme,
+                  _planMode
+                      ? 'What are you planning?'
+                      : 'Give this memory a title'),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
+            _sectionLabel(scheme, _planMode ? 'Details' : 'The story'),
             TextField(
               controller: _body,
-              maxLines: 4,
+              maxLines: 5,
               maxLength: 1000,
               style: TextStyle(
                   fontFamily: _planMode ? null : diaryFontFamily(_font),
                   height: 1.5),
-              decoration: InputDecoration(
-                hintText: _planMode
-                    ? 'The details — where, when, why it’ll be special…'
-                    : 'Tell the story of this moment…',
-                filled: true,
-                fillColor: scheme.surfaceContainerHighest,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide.none,
-                ),
-              ),
+              decoration: _fieldDecoration(
+                  scheme,
+                  _planMode
+                      ? 'Where, when, why it will be special…'
+                      : 'Tell the story of this moment…'),
             ),
             if (_planMode) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: 10),
               InkWell(
                 onTap: _pickDate,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
                 child: Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
                   decoration: BoxDecoration(
-                    color: scheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
+                    color:
+                        scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color: scheme.outlineVariant.withValues(alpha: 0.35)),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.event_rounded,
-                          color: widget.accent, size: 18),
+                      Icon(Icons.event_rounded, color: widget.accent, size: 19),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -5405,29 +5562,38 @@ class _DiaryComposerState extends State<_DiaryComposer> {
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Remind us'),
+                title: const Text('Remind us',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: Text(
                   _date == null
                       ? 'Pick a date to enable a reminder'
-                      : 'We’ll both get a nudge the morning of',
+                      : 'We will both get a nudge the morning of',
                   style:
                       TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                 ),
                 value: _pinned && _date != null,
-                onChanged: _date == null
-                    ? null
-                    : (v) => setState(() => _pinned = v),
+                onChanged:
+                    _date == null ? null : (v) => setState(() => _pinned = v),
               ),
             ],
-            const SizedBox(height: 6),
+            const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
-              child: FilledButton(
+              height: 52,
+              child: FilledButton.icon(
                 style: FilledButton.styleFrom(
-                    backgroundColor: widget.accent,
-                    foregroundColor: Colors.white),
+                  backgroundColor: widget.accent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
+                ),
                 onPressed: _save,
-                child: Text(editing ? 'Save changes' : 'Save to diary'),
+                icon: Icon(
+                    editing ? Icons.check_rounded : Icons.auto_stories_rounded,
+                    size: 20),
+                label: Text(editing ? 'Save changes' : 'Save to diary',
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w700)),
               ),
             ),
           ],

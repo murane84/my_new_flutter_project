@@ -4563,8 +4563,19 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                       Expanded(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: scheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(24),
+                            color: scheme.surface,
+                            borderRadius: BorderRadius.circular(26),
+                            border: Border.all(
+                                color: scheme.outlineVariant
+                                    .withValues(alpha: 0.5)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black
+                                    .withValues(alpha: isDark ? 0.28 : 0.06),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.end,
@@ -4616,18 +4627,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                       // Shift+Enter hint; on mobile it just
                                       // clutters the compact field, so there
                                       // we show a plain "Message" placeholder.
-                                      hintText: (defaultTargetPlatform ==
-                                                  TargetPlatform.windows ||
-                                              defaultTargetPlatform ==
-                                                  TargetPlatform.macOS ||
-                                              defaultTargetPlatform ==
-                                                  TargetPlatform.linux)
-                                          ? 'Message   (Shift+Enter for new line)'
-                                          : 'Message',
+                                      hintText: 'Message',
+                                      hintMaxLines: 1,
+                                      hintStyle: TextStyle(
+                                          color: scheme.onSurfaceVariant
+                                              .withValues(alpha: 0.7)),
                                       isDense: true,
                                       border: InputBorder.none,
                                       contentPadding: const EdgeInsets.symmetric(
-                                          vertical: 10),
+                                          vertical: 10, horizontal: 2),
                                     ),
                                   ),
                                 ),
@@ -4706,6 +4714,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                                 .withAlpha(isDark ? 90 : 64),
                                             width: 1,
                                           ),
+                                    boxShadow: hasText
+                                        ? [
+                                            BoxShadow(
+                                              color: scheme.primary
+                                                  .withValues(alpha: 0.4),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ]
+                                        : null,
                                   ),
                                   child: Icon(
                                     hasText

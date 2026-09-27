@@ -26,6 +26,9 @@ import 'gif_picker.dart';
 import '../services/call_service.dart';
 import '../services/contact_names.dart';
 import '../utils/net_image.dart';
+import '../utils/chat_background.dart';
+import '../utils/romantic_pattern.dart';
+import '../services/media_store.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'user_profile_sheet.dart';
@@ -462,6 +465,62 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         if (ok) ConnectionStatus.instance.set(true);
       });
     }
+  }
+
+  // ── Chat wallpaper (photo reused from Our Space, or the motif pattern) ────
+  String? _chatBgUrl;
+  Future<File?>? _chatBgFuture;
+  Future<File?> _chatBgFileFuture(String url, Map<String, String> headers) {
+    if (_chatBgUrl != url || _chatBgFuture == null) {
+      _chatBgUrl = url;
+      _chatBgFuture = MediaStore.instance.getFile(url, headers);
+    }
+    return _chatBgFuture!;
+  }
+
+  Widget _chatPhotoWallpaper(String url, bool isDark) {
+    final headers = mediaAuthHeaders(url);
+    final veil = isDark ? Colors.black : Colors.white;
+    return FutureBuilder<File?>(
+      future: _chatBgFileFuture(url, headers),
+      builder: (ctx, snap) {
+        final ImageProvider prov = snap.data != null
+            ? FileImage(snap.data!)
+            : authNetworkImageProvider(url, headers);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                image: DecorationImage(
+                  image: prov,
+                  fit: BoxFit.cover,
+                  onError: (Object e, StackTrace? st) {},
+                ),
+              ),
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: veil.withValues(alpha: isDark ? 0.55 : 0.62),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _chatMotifWallpaper(ColorScheme scheme, bool isDark) {
+    return DecoratedBox(
+      decoration: BoxDecoration(color: scheme.surface),
+      child: CustomPaint(
+        painter: RomanticPatternPainter(
+          color: (isDark ? Colors.white : scheme.primary)
+              .withValues(alpha: isDark ? 0.06 : 0.055),
+        ),
+        child: const SizedBox.expand(),
+      ),
+    );
   }
 
   // ── Message cache (offline persistence) ──────────────────────────────────
@@ -4814,8 +4873,19 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   children: [
                     // ── Chat wallpaper background ─────────────────────────
                     Positioned.fill(
-                      child: _ChatWallpaper(
-                          isDark: isDark, brand: scheme.primary),
+                      child: ValueListenableBuilder<ChatBg>(
+                        valueListenable: chatBackground,
+                        builder: (ctx, bg, _) {
+                          if (bg.isPhoto) {
+                            return _chatPhotoWallpaper(bg.url!, isDark);
+                          }
+                          if (bg.isMotif) {
+                            return _chatMotifWallpaper(scheme, isDark);
+                          }
+                          return _ChatWallpaper(
+                              isDark: isDark, brand: scheme.primary);
+                        },
+                      ),
                     ),
                     GestureDetector(
                       // Tapping the conversation drops the text-field focus so

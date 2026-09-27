@@ -103,6 +103,11 @@ class Message(Base):
     reactions = Column(Text, nullable=True)
     edited = Column(Boolean, default=False)      # set once content is edited
     is_deleted = Column(Boolean, default=False)  # tombstone: delete-for-everyone
+    # Store-and-forward purge: once a message is DELIVERED and past a short
+    # grace, the server drops its content + media bytes (the devices keep their
+    # local copy). This flag marks such a tombstone so the client keeps its own
+    # copy instead of treating the emptied server row as an edit/delete.
+    purged = Column(Boolean, default=False, nullable=False, server_default="false")
     # When set to a future time, this message is "pinned" in the conversation
     # until that moment; the client shows it in a banner and auto-hides it once
     # the time passes. NULL = not pinned.

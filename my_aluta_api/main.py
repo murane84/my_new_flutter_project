@@ -98,6 +98,7 @@ def ensure_media_schema():
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_mime VARCHAR",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_size INTEGER",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_duration INTEGER",
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS purged BOOLEAN DEFAULT FALSE",
         # Conversation features: reactions / edit marker / delete tombstone.
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS reactions TEXT",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited BOOLEAN DEFAULT FALSE",

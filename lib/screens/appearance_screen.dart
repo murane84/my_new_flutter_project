@@ -379,7 +379,7 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
     final scheme = Theme.of(context).colorScheme;
     return ValueListenableBuilder<int>(
       valueListenable: chatBgRevision,
-      builder: (ctx, _, __) {
+      builder: (ctx, _, _) {
         final bg = chatBackgroundAll;
         return Material(
           color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),

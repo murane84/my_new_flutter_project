@@ -5308,10 +5308,7 @@ class _DiaryComposerState extends State<_DiaryComposer> {
                             fontSize: 13,
                             color: widget.accent.withValues(alpha: 0.6))),
                     Text(
-                        '— ' +
-                            ((widget.myName ?? '').trim().isEmpty
-                                ? 'You'
-                                : widget.myName!.trim()),
+                        '— ${(widget.myName ?? '').trim().isEmpty ? 'You' : widget.myName!.trim()}',
                         style: TextStyle(
                             fontFamily: diaryFontFamily(_font) ??
                                 diaryFontFamily('handwriting'),

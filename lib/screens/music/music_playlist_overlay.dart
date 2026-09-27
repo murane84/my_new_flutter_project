@@ -1079,11 +1079,17 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: scheme.surface,
-        borderRadius:
-            widget.drawer ? BorderRadius.zero : BorderRadius.circular(20),
-        border: widget.drawer
-            ? null
-            : Border.all(color: scheme.primary.withAlpha(130)),
+        // Full page: round the corners so the header + footer sit inside the
+        // music panel's rounded frame instead of squaring off against it.
+        // Chat drawer: flush. Bottom sheet: its own rounded card.
+        borderRadius: widget.fullPage
+            ? BorderRadius.circular(18)
+            : (widget.drawer ? BorderRadius.zero : BorderRadius.circular(20)),
+        border: widget.fullPage
+            ? Border.all(color: scheme.primary.withAlpha(60))
+            : (widget.drawer
+                ? null
+                : Border.all(color: scheme.primary.withAlpha(130))),
         boxShadow: widget.drawer
             ? null
             : [

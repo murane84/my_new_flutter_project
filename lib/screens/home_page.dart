@@ -3377,7 +3377,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
               child: FractionalTranslation(
                 translation: Offset(0, (1 - eased) * 0.04),
                 child: Material(
-                  color: scheme.surface,
+                  // Transparent so only the overlay's own rounded card shows
+                  // (no square surface behind its rounded corners).
+                  color: Colors.transparent,
                   child: ValueListenableBuilder<int>(
                     valueListenable: playlistDrawerBus.revision,
                     builder: (c, _, _) => builder(c),

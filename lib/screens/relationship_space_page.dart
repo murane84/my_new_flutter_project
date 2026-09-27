@@ -970,20 +970,19 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // A dense, whisper-faint confetti of tiny hearts + music notes across
-          // the WHOLE page — plain grey at a hair of opacity so it never fights
-          // the content above it, just quietly fuels the romantic, music-y mood.
+          // DEFAULT theme: a dense, whisper-faint confetti of tiny hearts, music
+          // notes, cherry blossoms + sparkle-hearts across the WHOLE page. The
+          // motifs are plain shapes with no colour of their own — they INHERIT
+          // the Space's chosen colour (_accent) at a hair of opacity, so it just
+          // quietly fuels the romantic, music-y mood without fighting content.
           Positioned.fill(
             child: IgnorePointer(
               child: CustomPaint(
                 painter: _RomanticPatternPainter(
-                  color: (Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white
-                          : const Color(0xFF6B6B6B))
-                      .withValues(
-                          alpha: Theme.of(context).brightness == Brightness.dark
-                              ? 0.035
-                              : 0.045),
+                  color: _accent.withValues(
+                      alpha: Theme.of(context).brightness == Brightness.dark
+                          ? 0.06
+                          : 0.055),
                 ),
               ),
             ),
@@ -4802,12 +4801,63 @@ class _RomanticPatternPainter extends CustomPainter {
     c.restore();
   }
 
+  // A five-petal cherry blossom: one rounded petal, rotated 5× around centre,
+  // with a small core. All in the one inherited colour (the core a touch fainter
+  // via its own draw so it still reads monochrome).
+  void _blossom(Canvas c, Offset o, double s, double rot, Paint p, Paint core) {
+    c.save();
+    c.translate(o.dx, o.dy);
+    c.rotate(rot);
+    c.scale(s / 16.0);
+    final petal = Path()
+      ..moveTo(0, -3)
+      ..cubicTo(3.4, -3, 4.6, -6.5, 3.2, -8.6)
+      ..cubicTo(2.2, -10, 0.9, -9.6, 0, -8.2)
+      ..cubicTo(-0.9, -9.6, -2.2, -10, -3.2, -8.6)
+      ..cubicTo(-4.6, -6.5, -3.4, -3, 0, -3)
+      ..close();
+    for (int i = 0; i < 5; i++) {
+      c.save();
+      c.rotate(i * 2 * math.pi / 5);
+      c.drawPath(petal, p);
+      c.restore();
+    }
+    c.drawCircle(Offset.zero, 1.7, core);
+    c.restore();
+  }
+
+  // A heart with a little four-point sparkle at its upper-right — playful.
+  void _sparkHeart(Canvas c, Offset o, double s, double rot, Paint p) {
+    _heart(c, o, s, rot, p);
+    c.save();
+    c.translate(o.dx, o.dy);
+    c.rotate(rot);
+    c.scale(s / 16.0);
+    final spark = Path()
+      ..moveTo(7, -7)
+      ..lineTo(8, -9.4)
+      ..lineTo(9, -7)
+      ..lineTo(11.4, -6)
+      ..lineTo(9, -5)
+      ..lineTo(8, -2.6)
+      ..lineTo(7, -5)
+      ..lineTo(4.6, -6)
+      ..close();
+    c.drawPath(spark, p);
+    c.restore();
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
     final rnd = math.Random(_seed);
     final fill = Paint()
       ..color = color
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    // The blossom core: same hue, a shade softer, so it stays monochrome.
+    final core = Paint()
+      ..color = color.withValues(alpha: color.a * 0.55)
       ..style = PaintingStyle.fill
       ..isAntiAlias = true;
     final stroke = Paint()
@@ -4827,10 +4877,18 @@ class _RomanticPatternPainter extends CustomPainter {
         final o = Offset(gx * cell + jx, gy * cell + jy);
         final s = 9.0 + rnd.nextDouble() * 6.0; // 9–15px
         final rot = (rnd.nextDouble() - 0.5) * 0.9; // gentle tilt
-        if (rnd.nextBool()) {
+        // DEFAULT theme = the four blended: heart, music note, cherry blossom,
+        // sparkle-heart. Hearts weighted a little heavier so it still reads as
+        // a love space first, music + blossoms sprinkled through.
+        final pick = rnd.nextInt(10);
+        if (pick < 4) {
           _heart(canvas, o, s, rot, fill);
-        } else {
+        } else if (pick < 6) {
           _note(canvas, o, s, rot, fill, stroke);
+        } else if (pick < 8) {
+          _blossom(canvas, o, s * 1.05, rot, fill, core);
+        } else {
+          _sparkHeart(canvas, o, s, rot, fill);
         }
       }
     }

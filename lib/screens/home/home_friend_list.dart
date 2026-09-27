@@ -612,20 +612,33 @@ extension _HomeFriendListView on HomePageState {
             padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
+              // Glossy 3D gradient: a light sheen top-left, the accent through
+              // the middle, deep shade bottom-right — reads as a raised surface.
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  accent.withValues(alpha: 0.95),
-                  Color.lerp(accent, Colors.black, 0.42)!
-                      .withValues(alpha: 0.95),
+                  Color.lerp(accent, Colors.white, 0.18)!
+                      .withValues(alpha: 0.98),
+                  accent.withValues(alpha: 0.96),
+                  Color.lerp(accent, Colors.black, 0.52)!
+                      .withValues(alpha: 0.98),
                 ],
+                stops: const [0.0, 0.48, 1.0],
               ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
               boxShadow: [
+                // Coloured glow lifts the card off the page.
                 BoxShadow(
-                  color: accent.withValues(alpha: 0.32),
-                  blurRadius: 16,
-                  offset: const Offset(0, 5),
+                  color: accent.withValues(alpha: 0.42),
+                  blurRadius: 26,
+                  offset: const Offset(0, 12),
+                ),
+                // Tight dark contact shadow grounds it (the 3D feel).
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.22),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
                 ),
               ],
             ),
@@ -818,8 +831,20 @@ extension _HomeFriendListView on HomePageState {
   Widget _heroEnterButton(Color accent) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
         decoration: BoxDecoration(
-          color: Colors.white,
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.white, Color(0xFFEFEBF3)],
+          ),
           borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.20),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: Text(
           'Enter',
@@ -1584,6 +1609,18 @@ extension _HomeFriendListView on HomePageState {
           ],
         ),
         border: Border.all(color: scheme.primary.withAlpha(90)),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.primary.withValues(alpha: dark ? 0.20 : 0.14),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: dark ? 0.30 : 0.06),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1637,6 +1674,8 @@ extension _HomeFriendListView on HomePageState {
           icon: const Icon(Icons.play_arrow_rounded, size: 18),
           label: const Text('Start a room'),
           style: FilledButton.styleFrom(
+              elevation: 4,
+              shadowColor: scheme.primary.withValues(alpha: 0.5),
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
         ),

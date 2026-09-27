@@ -87,6 +87,16 @@ extension _HomeHub on HomePageState {
                       ? scheme.primary.withAlpha(130)
                       : scheme.outlineVariant.withAlpha(80),
                 ),
+                // The active pill lifts slightly with a soft accent glow.
+                boxShadow: active
+                    ? [
+                        BoxShadow(
+                          color: scheme.primary.withValues(alpha: 0.26),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : null,
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,

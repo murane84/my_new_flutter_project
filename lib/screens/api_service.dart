@@ -1881,6 +1881,26 @@ class ApiService {
     }
   }
 
+  /// Store-and-forward: tell the server this device has locally cached a
+  /// chat's history up to [upTo], so it may purge messages both devices hold.
+  /// Best-effort and silent.
+  Future<void> ackChatCached(
+      {int? friendId, int? conversationId, required int upTo}) async {
+    if (upTo <= 0) return;
+    try {
+      final token = await _getToken();
+      if (token == null) return;
+      final String? path = conversationId != null
+          ? '/conversations/$conversationId/cached?up_to=$upTo'
+          : (friendId != null ? '/messages/$friendId/cached?up_to=$upTo' : null);
+      if (path == null) return;
+      await http.post(
+        Uri.parse('${await _baseUrl}$path'),
+        headers: _authHeaders(token),
+      );
+    } catch (_) {}
+  }
+
   /// Who has read a given group message (for a 'seen by' sheet).
   Future<List<Map<String, dynamic>>> conversationSeenBy(
       int cid, int messageId) async {

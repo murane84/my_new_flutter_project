@@ -219,6 +219,69 @@ def mark_read_up_to(db: Session, conversation_id: int, user_id: int, up_to: int)
     return changed
 
 
+def mark_cached_up_to(db: Session, conversation_id: int, user_id: int, up_to: int) -> bool:
+    """Record that this member's device has locally cached every message with
+    id <= up_to (store-and-forward: lets the server safely drop its copy)."""
+    m = get_member(db, conversation_id, user_id)
+    if not m:
+        return False
+    if (m.last_cached_message_id or 0) < up_to:
+        m.last_cached_message_id = up_to
+        db.commit()
+        return True
+    return False
+
+
+def purge_cached_conversation(db: Session, conversation_id: int) -> int:
+    """Drop the content + media bytes of messages EVERY member has already
+    cached locally (min cached pointer covers them), keeping a lightweight
+    tombstone (purged=True). Nothing purges until all members hold it, so a
+    device never loses data it has not stored. Best-effort; returns the count."""
+    try:
+        members = (
+            db.query(ConversationMember.last_cached_message_id)
+            .filter(ConversationMember.conversation_id == conversation_id)
+            .all()
+        )
+        if not members:
+            return 0
+        low = min((r[0] or 0) for r in members)
+        if low <= 0:
+            return 0
+        rows = (
+            db.query(Message)
+            .filter(
+                Message.conversation_id == conversation_id,
+                Message.id <= low,
+                Message.purged.is_(False),
+                Message.is_deleted.is_(False),
+            )
+            .all()
+        )
+        if not rows:
+            return 0
+        from models import MediaAsset
+        for m in rows:
+            if m.media_url:
+                frag = m.media_url.rsplit("/", 1)[-1]
+                if frag:
+                    db.query(MediaAsset).filter(MediaAsset.id == frag).update(
+                        {MediaAsset.data: None}, synchronize_session=False
+                    )
+            m.content = None
+            m.media_url = None
+            m.media_name = None
+            m.media_mime = None
+            m.media_size = None
+            m.media_duration = None
+            m.purged = True
+        db.commit()
+        return len(rows)
+    except Exception:
+        db.rollback()
+        return 0
+
+
 def unread_count(db: Session, conversation_id: int, user_id: int) -> int:
     m = get_member(db, conversation_id, user_id)
     last = (m.last_read_message_id or 0) if m else 0

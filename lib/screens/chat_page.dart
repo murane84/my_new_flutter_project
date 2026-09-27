@@ -502,7 +502,27 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       final full = _merge(stored, _messages);
       final toCache = full.length > 3000 ? full.take(3000).toList() : full;
       await prefs.setString(_cacheKey, jsonEncode(toCache));
+      // We now durably hold this history locally → let the server purge its
+      // copy of what BOTH devices have cached (store-and-forward). Throttled.
+      _ackCachedToServer(toCache);
     } catch (_) {}
+  }
+
+  int _lastCachedAck = 0;
+  void _ackCachedToServer(List<Map<String, dynamic>> cached) {
+    int maxId = 0;
+    for (final m in cached) {
+      final v = m['id'];
+      final id = v is int ? v : int.tryParse('$v') ?? 0;
+      if (id > maxId) maxId = id;
+    }
+    if (maxId <= _lastCachedAck) return;
+    _lastCachedAck = maxId;
+    if (_isGroup) {
+      ApiService().ackChatCached(conversationId: _cid, upTo: maxId);
+    } else {
+      ApiService().ackChatCached(friendId: widget.friendId, upTo: maxId);
+    }
   }
 
   // ── Connectivity watcher (WhatsApp-style auto-reconnect) ──────────────────

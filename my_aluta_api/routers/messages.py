@@ -24,50 +24,23 @@ EDIT_WINDOW = timedelta(hours=1)
 # and cached it) and is older than this grace, the server drops its text + media
 # bytes, keeping only a lightweight tombstone (purged=True). Undelivered messages
 # are held until the TTL floor, then dropped. Each device keeps its own copy.
-PURGE_DELIVERED_AFTER = timedelta(hours=24)
-PURGE_UNDELIVERED_AFTER = timedelta(days=30)
-
-
-def _purge_dm_history(db: Session, a: int, b: int) -> None:
-    """Best-effort: purge the content/media of delivered (or long-undelivered)
-    DM messages between users a and b. Bounded to this pair; safe to call on a
-    history fetch. Devices retain the content locally (see the client cache)."""
-    try:
-        from models import MediaAsset
-        now = datetime.now(timezone.utc)
-        deliv_cut = now - PURGE_DELIVERED_AFTER
-        undeliv_cut = now - PURGE_UNDELIVERED_AFTER
-        rows = (
-            db.query(Message)
-            .filter(
-                Message.purged.is_(False),
-                Message.is_deleted.is_(False),
-                ((Message.sender_id == a) & (Message.receiver_id == b))
-                | ((Message.sender_id == b) & (Message.receiver_id == a)),
-                ((Message.delivered.is_(True)) & (Message.timestamp < deliv_cut))
-                | (Message.timestamp < undeliv_cut),
-            )
-            .all()
-        )
-        if not rows:
-            return
-        for m in rows:
-            if m.media_url:
-                frag = m.media_url.rsplit("/", 1)[-1]
-                if frag:
-                    db.query(MediaAsset).filter(MediaAsset.id == frag).update(
-                        {MediaAsset.data: None}, synchronize_session=False
-                    )
-            m.content = None
-            m.media_url = None
-            m.media_name = None
-            m.media_mime = None
-            m.media_size = None
-            m.media_duration = None
-            m.purged = True
-        db.commit()
-    except Exception:
-        db.rollback()
+# (Superseded) Store-and-forward purge is now ACK-based and lives in
+# crud_conversations.purge_cached_conversation — a message is dropped only once
+# EVERY member's device has cached it (see the /cached endpoints below).
+@router.post("/{peer_id}/cached")
+def ack_dm_cached(
+    peer_id: int,
+    up_to: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """A device POSTs here after it persists this DM's history locally; the
+    server records the cached pointer and purges what both devices now hold."""
+    conv = crud_conversations.get_or_create_dm_conversation(db, current_user.id, peer_id)
+    if conv:
+        crud_conversations.mark_cached_up_to(db, conv.id, current_user.id, up_to)
+        crud_conversations.purge_cached_conversation(db, conv.id)
+    return {"ok": True}
 
 
 # 🔒 General: User and friend helper routes
@@ -435,7 +408,9 @@ def get_chat_history(
 ):
     # Store-and-forward: drop server copies of delivered messages in this pair
     # (devices keep their own). Best-effort; never blocks the fetch.
-    _purge_dm_history(db, user1_id, user2_id)
+    _conv = crud_conversations.get_or_create_dm_conversation(db, user1_id, user2_id)
+    if _conv:
+        crud_conversations.purge_cached_conversation(db, _conv.id)
     if after:
         return crud.get_messages_after(db, user1_id, user2_id, after)
     else:

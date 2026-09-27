@@ -56,19 +56,18 @@ class _BackupScreenState extends State<BackupScreen> {
       final bytes = Uint8List.fromList(utf8.encode(content));
       final isDesktop = !kIsWeb &&
           (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
-      if (kIsWeb) {
-        // Browser: saveFile with bytes triggers a download.
-        await FilePicker.saveFile(fileName: name, bytes: bytes);
-        _toast('Backup downloaded — keep it safe', ToastType.success);
-      } else if (isDesktop) {
-        // Desktop: the OS share sheet is unreliable, so let the user pick where
-        // to save (a proper Save-As dialog) and write the file there.
-        final path = await FilePicker.saveFile(
+      if (kIsWeb || isDesktop) {
+        // Desktop/web: a proper Save-As dialog (the OS share sheet is
+        // unreliable on Windows). file_picker writes the bytes to the chosen
+        // location itself, so there's no manual file write here.
+        final saved = await FilePicker.saveFile(
           dialogTitle: 'Save your Aluta backup',
           fileName: name,
+          bytes: bytes,
         );
-        if (path != null) {
-          await File(path).writeAsString(content);
+        if (kIsWeb) {
+          _toast('Backup downloaded — keep it safe', ToastType.success);
+        } else if (saved != null) {
           _toast('Backup saved', ToastType.success);
         }
       } else {

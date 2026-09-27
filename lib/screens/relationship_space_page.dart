@@ -616,46 +616,124 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       return null;
     }
     final scheme = Theme.of(context).colorScheme;
+    final maxH = MediaQuery.of(context).size.height * 0.55;
     return showModalBottomSheet<String>(
       context: context,
-      backgroundColor: scheme.surface,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 10),
-            Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                    color: scheme.outlineVariant,
-                    borderRadius: BorderRadius.circular(2))),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-              child: Row(children: [
-                Text('Pick a song to play together',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        color: scheme.onSurface)),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: _accent.withValues(alpha: 0.22)),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.28),
+                blurRadius: 24,
+                offset: const Offset(0, 8)),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: scheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 12),
+              Row(children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _accent.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Icon(Icons.headphones_rounded,
+                      color: _accent, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Play together',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                              color: scheme.onSurface)),
+                      Text('Pick a track you\'ll both hear in sync',
+                          style: TextStyle(
+                              fontSize: 12, color: scheme.onSurfaceVariant)),
+                    ],
+                  ),
+                ),
               ]),
-            ),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: paths.length,
-                itemBuilder: (c, i) => ListTile(
-                  leading: Icon(Icons.music_note_rounded, color: _accent),
-                  title: Text(_songTitle(paths[i]),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  onTap: () => Navigator.pop(ctx, paths[i]),
+              const SizedBox(height: 10),
+              Flexible(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: maxH),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: paths.length,
+                    itemBuilder: (c, i) {
+                      final t = _songTitle(paths[i]);
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Material(
+                          color: scheme.surfaceContainerHighest
+                              .withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(14),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(14),
+                            onTap: () => Navigator.pop(ctx, paths[i]),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
+                              child: Row(children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: _accent.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(11),
+                                  ),
+                                  child: Icon(Icons.music_note_rounded,
+                                      color: _accent, size: 19),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(t,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: scheme.onSurface)),
+                                ),
+                                const SizedBox(width: 8),
+                                Icon(Icons.play_circle_fill_rounded,
+                                    color: _accent, size: 26),
+                              ]),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-          ],
+              const SizedBox(height: 6),
+            ],
+          ),
         ),
       ),
     );

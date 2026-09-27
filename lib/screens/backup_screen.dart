@@ -1,5 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -45,17 +48,39 @@ class _BackupScreenState extends State<BackupScreen> {
     setState(() => _busy = true);
     try {
       final content = await LocalBackupService.instance.createBackup(pass);
-      final dir = await getTemporaryDirectory();
       final ts = DateTime.now()
           .toIso8601String()
           .replaceAll(RegExp(r'[:.]'), '-')
           .substring(0, 19);
-      final f = File('${dir.path}/aluta-backup-$ts.alutabak');
-      await f.writeAsString(content);
-      await SharePlus.instance.share(
-        ShareParams(files: [XFile(f.path)], subject: 'Aluta backup'),
-      );
-      _toast('Backup ready — save it somewhere safe', ToastType.success);
+      final name = 'aluta-backup-$ts.alutabak';
+      final bytes = Uint8List.fromList(utf8.encode(content));
+      final isDesktop = !kIsWeb &&
+          (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+      if (kIsWeb) {
+        // Browser: saveFile with bytes triggers a download.
+        await FilePicker.saveFile(fileName: name, bytes: bytes);
+        _toast('Backup downloaded — keep it safe', ToastType.success);
+      } else if (isDesktop) {
+        // Desktop: the OS share sheet is unreliable, so let the user pick where
+        // to save (a proper Save-As dialog) and write the file there.
+        final path = await FilePicker.saveFile(
+          dialogTitle: 'Save your Aluta backup',
+          fileName: name,
+        );
+        if (path != null) {
+          await File(path).writeAsString(content);
+          _toast('Backup saved', ToastType.success);
+        }
+      } else {
+        // Mobile: write a temp file and open the native share sheet.
+        final dir = await getTemporaryDirectory();
+        final f = File('${dir.path}/$name');
+        await f.writeAsString(content);
+        await SharePlus.instance.share(
+          ShareParams(files: [XFile(f.path)], subject: 'Aluta backup'),
+        );
+        _toast('Backup ready — save it somewhere safe', ToastType.success);
+      }
     } catch (_) {
       _toast('Could not create the backup', ToastType.error);
     } finally {

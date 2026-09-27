@@ -121,7 +121,12 @@ Map<String, String> mediaAuthHeaders(String url) {
   final onOurBackend = !url.startsWith('http') || // relative → our own origin
       (base != null && base.isNotEmpty && url.startsWith(base));
   if (!onOurBackend) return const {};
-  if (url.contains('/attachments/') || url.contains('/media/')) {
+  // `/wallpapers/` are our own preset background assets (auth-required, but not
+  // per-user) — include them so gallery thumbnails and preset backgrounds carry
+  // the token and don't 401 into blank tiles.
+  if (url.contains('/attachments/') ||
+      url.contains('/media/') ||
+      url.contains('/wallpapers/')) {
     return {'Authorization': 'Bearer $t'};
   }
   return const {};

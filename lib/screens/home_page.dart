@@ -325,6 +325,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _loadUserData();
     _loadCachedFriends();    // show cached DM list instantly (no spinner flash)
     _loadCachedGroups();     // and the cached group chats, for offline Circle
+    _loadCachedSpaces();     // and the pinned Our Space hero(es), for offline
     _fetchFriends();          // then refresh from network
     _loadSpaces();            // pinned "Our Space" hero(es) — one-shot, no poll
     _loadBondRequests();      // pending "pin a bond" requests (banner + chip)
@@ -3524,12 +3525,36 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _loadPlan();
   }
 
+  static const _kSpacesCache = 'cached_spaces_v1';
+
+  /// Show the last-known pinned Spaces from disk so the Our Space hero is
+  /// present offline / instantly at cold start.
+  Future<void> _loadCachedSpaces() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kSpacesCache);
+      if (raw == null || !mounted) return;
+      final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+      if (_spaces.isEmpty) setState(() => _spaces = list);
+    } catch (_) {}
+  }
+
   /// Load my pinned Spaces (best-effort, fail-soft). Runs once on init and on
   /// pull-to-refresh only — never on a timer.
   Future<void> _loadSpaces() async {
     final spaces = await ApiService().listSpaces();
     if (!mounted) return;
+    // Offline (empty result while disconnected) must NOT wipe the pinned hero —
+    // keep showing the cached list; a real fetch replaces + re-caches it.
+    if (spaces.isEmpty && !ConnectionStatus.instance.isOnline) {
+      await _loadCachedSpaces();
+      return;
+    }
     setState(() => _spaces = spaces);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kSpacesCache, jsonEncode(spaces));
+    } catch (_) {}
   }
 
   /// Load pending bond requests (best-effort). Runs on init, on refresh, and

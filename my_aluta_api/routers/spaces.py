@@ -13,7 +13,7 @@ populate them. We deliberately do NOT stand up an always-on listen-logging
 pipeline before a live surface needs it.
 """
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from typing import Optional
@@ -23,7 +23,9 @@ from database import get_db
 from models import (
     User, RelationshipSpace, SpaceMember, PinnedMoment, MomentReaction,
     PlaylistTrack, BondRequest, DiaryEntry, DiaryReaction, DiaryComment,
+    MediaAsset,
 )
+import uuid as _uuid
 from datetime import date as _date
 import crud
 import schemas
@@ -117,6 +119,7 @@ def _space_brief(db: Session, space: RelationshipSpace,
         "owner_id": space.owner_id,
         "name": space.name,
         "theme": space.theme,
+        "background_url": space.background_url,
         "is_primary": bool(space.is_primary),
         "plan_tier": space.plan_tier,
         "close_since": space.created_at.isoformat() if space.created_at else None,
@@ -1624,3 +1627,63 @@ def current_user_plan(user: User) -> str:
     the User row. A dev/trial toggle (routers/plan.py) sets it today; a real
     billing webhook will set the same field later, so this hook never changes."""
     return (getattr(user, "plan_tier", None) or "free")
+
+
+# ── Custom photo background (per-user) ────────────────────────────────────────
+@router.post("/{space_id}/background")
+async def set_space_background(
+    space_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Set (or replace) the caller's custom photo background for their Our Space
+    view. Per-user: changes only the requester's own Space row. The image is
+    stored as a MediaAsset and background_url points at it."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty image")
+    if len(data) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image too large (max 12 MB)")
+    mime = file.content_type or "image/jpeg"
+    if not mime.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Not an image")
+    old = space.background_url
+    asset_id = _uuid.uuid4().hex
+    db.add(MediaAsset(
+        id=asset_id, data=data, mime=mime,
+        name=file.filename or asset_id, size=len(data),
+        uploader_id=current_user.id,
+    ))
+    space.background_url = f"/attachments/{asset_id}"
+    db.commit()
+    if old:
+        frag = old.rsplit("/", 1)[-1]
+        if frag:
+            db.query(MediaAsset).filter(MediaAsset.id == frag).update(
+                {MediaAsset.data: None}, synchronize_session=False)
+            db.commit()
+    db.refresh(space)
+    return _space_full(db, space, current_user)
+
+
+@router.delete("/{space_id}/background")
+def clear_space_background(
+    space_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Remove the caller's custom background → back to the default motif theme."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    old = space.background_url
+    space.background_url = None
+    db.commit()
+    if old:
+        frag = old.rsplit("/", 1)[-1]
+        if frag:
+            db.query(MediaAsset).filter(MediaAsset.id == frag).update(
+                {MediaAsset.data: None}, synchronize_session=False)
+            db.commit()
+    db.refresh(space)
+    return _space_full(db, space, current_user)

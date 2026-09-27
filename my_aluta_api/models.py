@@ -518,6 +518,10 @@ class RelationshipSpace(Base):
     # Preset theme key (e.g. 'coral'); reuses the Now-Playing palette vocabulary
     # rather than a raw colour — presets only, never a free-for-all.
     theme = Column(String, nullable=True)
+    # A user's optional custom PHOTO background for their Our Space view (a
+    # /attachments/<id> URL). Per-row (each partner customises their own view);
+    # None = the default motif theme. The device caches the image for offline.
+    background_url = Column(String, nullable=True)
     # The single hero card at the top of the friend list. Exactly one primary
     # per owner (enforced in the router on create / set-primary).
     is_primary = Column(Boolean, default=False, nullable=False)

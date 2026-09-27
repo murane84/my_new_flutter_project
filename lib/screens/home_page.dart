@@ -33,6 +33,7 @@ import 'music/song_identifier.dart' show showSongIdentifier;
 import 'profile_screen.dart';
 import '../utils/popup_shell.dart';
 import '../utils/brand_theme.dart';
+import '../widgets/chat_wallpaper_sheet.dart';
 import 'api_service.dart';
 import 'websocket_manager.dart';
 import 'live_session_screen.dart';
@@ -2887,6 +2888,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
                 case 'playlist':
                   _openChatPlaylist();
                   break;
+                case 'wallpaper':
+                  showChatWallpaperSheet(
+                    context,
+                    convKey: chatConvKey(
+                        conversationId: (g['id'] as num).toInt()),
+                    title: (g['title'] ?? 'Group').toString(),
+                  );
+                  break;
               }
             },
             itemBuilder: (ctx) => [
@@ -2908,6 +2917,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
                         ? 'Hide playlist'
                         : 'Playlist',
                     scheme),
+              ),
+              PopupMenuItem(
+                value: 'wallpaper',
+                child: _groupMenuRow(
+                    Icons.wallpaper_rounded, 'Wallpaper', scheme),
               ),
             ],
           ),
@@ -2986,6 +3000,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
                   ),
                 ],
               ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Wallpaper',
+            icon: const Icon(Icons.wallpaper_rounded),
+            onPressed: () => showChatWallpaperSheet(
+              context,
+              convKey: chatConvKey(
+                  friendId: int.tryParse(_activeFriendId ?? '') ?? 0),
+              title: _contactDisplayName(
+                  _activeFriendPhone, _activeFriendName ?? ''),
             ),
           ),
           // Quick playlist drawer toggle — pop the music library in from the

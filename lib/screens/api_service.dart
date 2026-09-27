@@ -2080,6 +2080,55 @@ class ApiService {
     }
   }
 
+  /// Upload a custom photo background for the caller's Our Space view. Returns
+  /// the updated space map (with the new background_url) or null on failure.
+  Future<Map<String, dynamic>?> uploadSpaceBackground(
+      int spaceId, Uint8List bytes,
+      {String filename = 'background.jpg', String mime = 'image/jpeg'}) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final req = http.MultipartRequest(
+          'POST', Uri.parse('${await _baseUrl}/spaces/$spaceId/background'))
+        ..headers['Authorization'] = 'Bearer $token'
+        ..files.add(http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: filename,
+          contentType: MediaType.parse(mime.isNotEmpty ? mime : 'image/jpeg'),
+        ));
+      final streamed = await req.send();
+      final resp = await http.Response.fromStream(streamed);
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      _logger.w('Space background upload failed: ${resp.statusCode}');
+    } catch (e) {
+      _logger.e('uploadSpaceBackground exception: $e');
+    }
+    return null;
+  }
+
+  /// Remove the caller's custom background (back to the default motif theme).
+  Future<Map<String, dynamic>?> clearSpaceBackground(int spaceId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final res = await http.delete(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/background'),
+        headers: _authHeaders(token),
+      );
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final data = jsonDecode(res.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+    } catch (e) {
+      _logger.e('clearSpaceBackground exception: $e');
+    }
+    return null;
+  }
+
   /// Tell the server that an ephemeral shared song (`/attachments/<id>`) is now
   /// cached on this device. The server purges its copy of the bytes and keeps
   /// only the reference row. Idempotent + best-effort — returns true on success.

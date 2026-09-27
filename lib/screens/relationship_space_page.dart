@@ -5,17 +5,19 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 
 import 'api_service.dart';
 import 'home_page.dart' show playbackBus, playlistNotifier;
 import 'live_session_screen.dart';
-import 'token_helper.dart' show getToken;
+import 'token_helper.dart' show getToken, mediaAuthHeaders;
 import '../services/now_playing_presence.dart';
 import '../utils/toast_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/popup_shell.dart';
+import '../utils/net_image.dart';
 import '../utils/file_bytes.dart';
 import '../services/notif_service.dart'
     show syncDiaryReminders, cancelDiaryReminder, PlanReminder;
@@ -793,6 +795,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         initialTheme: (_space['theme'] as String?) ?? 'coral',
         initialPrimary: _space['is_primary'] == true,
         spaceId: _id,
+        initialBackgroundUrl: _space['background_url'] as String?,
+        apiBase: widget.apiBase,
+        onSpaceUpdated: (m) {
+          if (mounted) setState(() => _space = m);
+        },
       ),
     );
     if (!mounted) return;
@@ -961,6 +968,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   /// colour top and bottom, plus two large soft glows drifting in from the
   /// corners — subtle atmosphere so the hero and tiles read as floating.
   Widget _pageBackdrop(ColorScheme scheme) {
+    // Custom PHOTO background overrides the default motif theme.
+    final bgUrl = (_space['background_url'] ?? '').toString().trim();
+    if (bgUrl.isNotEmpty) {
+      return _photoBackdrop(scheme, resolveAvatarUrl(bgUrl, widget.apiBase) ?? bgUrl);
+    }
     Widget glow(double size, double alpha) => Container(
           width: size,
           height: size,
@@ -1011,6 +1023,48 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           Positioned(bottom: -140, left: -110, child: glow(340, 0.09)),
         ],
       ),
+    );
+  }
+
+  /// A custom PHOTO background. On a portrait-ish area it fills with cover; on
+  /// a WIDER-than-tall area (desktop/tablet) a single portrait can't cover the
+  /// width, so it scales to full height and TILES horizontally — no blank space.
+  /// A soft scrim keeps the hero, tiles and text readable over any photo.
+  Widget _photoBackdrop(ColorScheme scheme, String url) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final provider = authNetworkImageProvider(url, mediaAuthHeaders(url));
+    final veil = isDark ? Colors.black : Colors.white;
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        final wide = c.maxWidth > c.maxHeight;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                image: DecorationImage(
+                  image: provider,
+                  fit: wide ? BoxFit.fitHeight : BoxFit.cover,
+                  repeat: wide ? ImageRepeat.repeatX : ImageRepeat.noRepeat,
+                  onError: (Object e, StackTrace? st) {},
+                ),
+              ),
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    veil.withValues(alpha: isDark ? 0.46 : 0.58),
+                    veil.withValues(alpha: isDark ? 0.34 : 0.42),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -4286,11 +4340,17 @@ class _EditSpaceSheet extends StatefulWidget {
   final String initialTheme;
   final bool initialPrimary;
   final int spaceId;
+  final String? initialBackgroundUrl;
+  final String apiBase;
+  final void Function(Map<String, dynamic>)? onSpaceUpdated;
   const _EditSpaceSheet({
     required this.initialName,
     required this.initialTheme,
     required this.initialPrimary,
     required this.spaceId,
+    this.initialBackgroundUrl,
+    required this.apiBase,
+    this.onSpaceUpdated,
   });
 
   @override
@@ -4302,7 +4362,94 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
       TextEditingController(text: widget.initialName);
   late String _theme = widget.initialTheme;
   late bool _primary = widget.initialPrimary;
+  late String? _bgUrl = widget.initialBackgroundUrl;
   bool _busy = false;
+  bool _bgBusy = false;
+
+  Future<void> _pickBackground() async {
+    FilePickerResult? res;
+    try {
+      res = await FilePicker.pickFiles(type: FileType.image);
+    } catch (_) {
+      return;
+    }
+    if (res == null || res.files.isEmpty) return;
+    final f = res.files.single;
+    final bytes = await f.readAsBytes();
+    if (bytes.isEmpty) return;
+    final name = f.name;
+    final ext = name.contains('.') ? name.split('.').last.toLowerCase() : 'jpg';
+    final mime = ext == 'png'
+        ? 'image/png'
+        : ext == 'webp'
+            ? 'image/webp'
+            : ext == 'gif'
+                ? 'image/gif'
+                : 'image/jpeg';
+    setState(() => _bgBusy = true);
+    final updated = await ApiService()
+        .uploadSpaceBackground(widget.spaceId, bytes, filename: name, mime: mime);
+    if (!mounted) return;
+    setState(() {
+      _bgBusy = false;
+      if (updated != null) _bgUrl = updated['background_url'] as String?;
+    });
+    if (updated != null) {
+      widget.onSpaceUpdated?.call(updated);
+    } else {
+      showToast(context, 'Could not set that background', type: ToastType.error);
+    }
+  }
+
+  Future<void> _removeBackground() async {
+    if ((_bgUrl ?? '').isEmpty) return;
+    setState(() => _bgBusy = true);
+    final updated = await ApiService().clearSpaceBackground(widget.spaceId);
+    if (!mounted) return;
+    setState(() {
+      _bgBusy = false;
+      if (updated != null) _bgUrl = updated['background_url'] as String?;
+    });
+    if (updated != null) widget.onSpaceUpdated?.call(updated);
+  }
+
+  Widget _bgOption(ColorScheme scheme,
+      {required bool selected,
+      required VoidCallback? onTap,
+      required Widget child,
+      required String label}) {
+    final accent = spaceThemeColor(_theme);
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              height: 66,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: selected ? accent : Colors.transparent,
+                  width: 2,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: child,
+            ),
+            const SizedBox(height: 6),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    color: selected ? accent : scheme.onSurfaceVariant)),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -4444,6 +4591,51 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
             runSpacing: 14,
             children: [
               for (final entry in kSpacePalette.entries) _swatch(entry),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              _label(scheme, 'BACKGROUND'),
+              if (_bgBusy) ...[
+                const SizedBox(width: 8),
+                const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2)),
+              ],
+            ],
+          ),
+          Row(
+            children: [
+              _bgOption(
+                scheme,
+                selected: (_bgUrl ?? '').isEmpty,
+                onTap: _bgBusy ? null : _removeBackground,
+                label: 'Default',
+                child: Icon(Icons.auto_awesome_rounded,
+                    color: (_bgUrl ?? '').isEmpty
+                        ? spaceThemeColor(_theme)
+                        : scheme.onSurfaceVariant),
+              ),
+              const SizedBox(width: 12),
+              _bgOption(
+                scheme,
+                selected: (_bgUrl ?? '').isNotEmpty,
+                onTap: _bgBusy ? null : _pickBackground,
+                label: 'Your photo',
+                child: (_bgUrl ?? '').isEmpty
+                    ? Icon(Icons.add_photo_alternate_outlined,
+                        color: scheme.onSurfaceVariant)
+                    : SizedBox.expand(
+                        child: authNetworkImage(
+                          url: resolveAvatarUrl(_bgUrl, widget.apiBase) ?? '',
+                          headers: mediaAuthHeaders(
+                              resolveAvatarUrl(_bgUrl, widget.apiBase) ?? ''),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+              ),
             ],
           ),
           const SizedBox(height: 20),

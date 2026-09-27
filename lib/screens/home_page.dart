@@ -52,6 +52,7 @@ import '../utils/net_image.dart';
 import 'token_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
+import '../services/biometric_service.dart';
 import '../services/call_service.dart';
 import '../services/group_call_service.dart';
 import '../state/group_call_state.dart' show groupCallProvider;
@@ -550,6 +551,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
   Future<void> _onSessionExpired() async {
     if (!SessionEvents.instance.expired.value) return;
     if (_handlingExpiry || !mounted) return;
+    // WhatsApp-style: a dropped connection is NOT an expired session. NEVER
+    // bounce to the phone-number screen while offline — a token we simply can't
+    // refresh right now (no internet) must not sign the user out. Keep them on
+    // their cached data behind the biometric lock; the reconnect path re-checks
+    // the real session the moment the network is back, and only a server that
+    // is actually reachable AND rejects the session sends them to login.
+    final conn = await Connectivity().checkConnectivity();
+    if (conn.every((r) => r == ConnectivityResult.none)) {
+      SessionEvents.instance.reset(); // let it fire again once truly online
+      return;
+    }
     _handlingExpiry = true;
     SessionEvents.instance.reset();
 
@@ -568,6 +580,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('access_token');
+      // Keep the launch gate consistent: a genuine, online expiry is a real
+      // sign-out, so the next cold start shows login (not a tokenless Home).
+      await prefs.setBool('isLoggedIn', false);
     } catch (_) {}
 
     if (!mounted) return;

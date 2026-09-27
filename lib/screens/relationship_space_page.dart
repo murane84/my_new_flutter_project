@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 
@@ -436,12 +437,31 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     return o.isNotEmpty ? (o.first['id'] as num?)?.toInt() : null;
   }
 
+  String get _fullCacheKey => 'space_full_${_id}_v1';
+
   Future<void> _load() async {
     final full = await ApiService().getSpace(_id);
     if (!mounted) return;
-    setState(() {
-      if (full != null) _space = full;
-    });
+    if (full != null) {
+      setState(() => _space = full);
+      // Persist the FULL space (diary, moments, playlist…) so it's readable
+      // offline — local-first: the device holds the data, the server relays it.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_fullCacheKey, jsonEncode(full));
+      } catch (_) {}
+    } else {
+      // Offline / fetch failed → fall back to the last-synced full copy so the
+      // diary and pinned moments still show instead of an empty page.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final raw = prefs.getString(_fullCacheKey);
+        if (raw != null && mounted) {
+          setState(() => _space =
+              (jsonDecode(raw) as Map).cast<String, dynamic>());
+        }
+      } catch (_) {}
+    }
     // Reconcile the device's pinned-plan reminders with the current diary.
     _syncReminders();
   }

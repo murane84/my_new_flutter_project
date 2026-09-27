@@ -323,7 +323,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
       if (mounted) setState(() {});
     });
     _loadUserData();
-    _loadCachedFriends();    // show cached list instantly (no spinner flash)
+    _loadCachedFriends();    // show cached DM list instantly (no spinner flash)
+    _loadCachedGroups();     // and the cached group chats, for offline Circle
     _fetchFriends();          // then refresh from network
     _loadSpaces();            // pinned "Our Space" hero(es) — one-shot, no poll
     _loadBondRequests();      // pending "pin a bond" requests (banner + chip)
@@ -1610,6 +1611,31 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // ── Friends — cache-first, refresh on network ────────────────────────────
 
   static const _kFriendsCache = 'cached_friends_v1';
+  static const _kGroupsCache = 'cached_groups_v1';
+
+  /// Load the last-known GROUP conversations from disk so the Circle's group
+  /// chats are present offline (DMs already cache via _loadCachedFriends; per-
+  /// chat messages cache in chat_page). Without this, a cold offline start
+  /// showed no groups until the network came back.
+  Future<void> _loadCachedGroups() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kGroupsCache);
+      if (raw == null || !mounted) return;
+      final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+      setState(() {
+        _groups = list;
+        _filteredGroups = _applyGroupQuery(list, _searchQuery);
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _saveGroupsCache(List<Map<String, dynamic>> groups) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kGroupsCache, jsonEncode(groups));
+    } catch (_) {}
+  }
 
   Future<void> _loadCachedFriends() async {
     try {
@@ -1707,12 +1733,15 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final groups = convs
           .where((c) => c['is_group'] == true)
           .toList();
+      // Persist so the group list survives offline / a cold restart.
+      await _saveGroupsCache(groups);
       setState(() {
         _groups = groups;
         _filteredGroups = _applyGroupQuery(groups, _searchQuery);
       });
     } catch (_) {
-      // Keep whatever groups we already have.
+      // Offline / fetch error — fall back to the cached list if we have none.
+      if (mounted && _groups.isEmpty) await _loadCachedGroups();
     } finally {
       appBusy.end();
     }

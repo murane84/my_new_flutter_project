@@ -20,6 +20,8 @@ import '../utils/avatar_widget.dart';
 import '../utils/popup_shell.dart';
 import '../utils/net_image.dart';
 import '../services/media_store.dart';
+import '../utils/romantic_pattern.dart';
+import '../utils/chat_background.dart';
 import '../utils/file_bytes.dart';
 import '../services/notif_service.dart'
     show syncDiaryReminders, cancelDiaryReminder, PlanReminder;
@@ -1012,7 +1014,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           Positioned.fill(
             child: IgnorePointer(
               child: CustomPaint(
-                painter: _RomanticPatternPainter(
+                painter: RomanticPatternPainter(
                   color: _accent.withValues(
                       alpha: Theme.of(context).brightness == Brightness.dark
                           ? 0.06
@@ -4440,6 +4442,98 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     if (updated != null) widget.onSpaceUpdated?.call(updated);
   }
 
+  String _chatBgLabel() {
+    switch (chatBackground.value.mode) {
+      case 'motif':
+        return 'Motif pattern (hearts & notes)';
+      case 'photo':
+        return 'Your Our Space photo';
+      default:
+        return 'Default';
+    }
+  }
+
+  void _openChatBgChooser() {
+    final scheme = Theme.of(context).colorScheme;
+    final fullPhoto = resolveAvatarUrl(_bgUrl, widget.apiBase);
+    final accent = spaceThemeColor(_theme);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        Widget opt(String mode, IconData icon, String title, String sub,
+            VoidCallback? onTap) {
+          final sel = chatBackground.value.mode == mode;
+          return ListTile(
+            leading: Icon(icon,
+                color: sel ? accent : scheme.onSurfaceVariant),
+            title: Text(title,
+                style: TextStyle(
+                    fontWeight: sel ? FontWeight.w700 : FontWeight.w500)),
+            subtitle:
+                Text(sub, style: const TextStyle(fontSize: 12)),
+            trailing:
+                sel ? Icon(Icons.check_rounded, color: accent) : null,
+            enabled: onTap != null,
+            onTap: onTap,
+          );
+        }
+
+        void choose(String mode, {String? url}) {
+          setChatBackground(mode, url: url);
+          Navigator.pop(ctx);
+          if (mounted) setState(() {});
+        }
+
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: scheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2)),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 2),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Chat background',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          color: scheme.onSurface)),
+                ),
+              ),
+              opt('default', Icons.blur_on_rounded, 'Default',
+                  'The built-in wallpaper', () => choose('default')),
+              opt('motif', Icons.auto_awesome_rounded, 'Motif pattern',
+                  'Hearts, notes & blossoms — faint', () => choose('motif')),
+              opt(
+                'photo',
+                Icons.photo_rounded,
+                'Your Our Space photo',
+                (fullPhoto == null || fullPhoto.isEmpty)
+                    ? 'Set an Our Space photo above first'
+                    : 'Reuse your Our Space background',
+                (fullPhoto == null || fullPhoto.isEmpty)
+                    ? null
+                    : () => choose('photo', url: fullPhoto),
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _bgOption(ColorScheme scheme,
       {required bool selected,
       required VoidCallback? onTap,
@@ -4664,6 +4758,45 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                       ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          Material(
+            color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: _openChatBgChooser,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.chat_bubble_outline_rounded,
+                        size: 20, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Chat background',
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: scheme.onSurface)),
+                          const SizedBox(height: 2),
+                          Text(_chatBgLabel(),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: scheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right_rounded,
+                        size: 20, color: scheme.onSurfaceVariant),
+                  ],
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 20),
           // Hero row, grouped on a soft surface. Already-hero shows a clear
@@ -4993,150 +5126,7 @@ class _DogEarPainter extends CustomPainter {
       old.isDark != isDark;
 }
 
-/// A dense scatter of tiny hearts + music notes tiled across the page, drawn in
-/// a single faint grey so it reads as barely-there texture — romantic, musical
-/// atmosphere that never competes with the content sitting above it.
-class _RomanticPatternPainter extends CustomPainter {
-  final Color color;
-  _RomanticPatternPainter({required this.color});
 
-  // Deterministic layout (fixed seed) so the confetti doesn't reshuffle every
-  // repaint — the pattern stays put as the page scrolls or rebuilds.
-  static const int _seed = 0xA1A;
-
-  void _heart(Canvas c, Offset o, double s, double rot, Paint p) {
-    c.save();
-    c.translate(o.dx, o.dy);
-    c.rotate(rot);
-    c.scale(s / 16.0);
-    // A small heart path centred on the origin (~16px design box).
-    final path = Path()
-      ..moveTo(0, 4)
-      ..cubicTo(-2, -1, -8, -1, -8, -5)
-      ..cubicTo(-8, -9, -3, -9, 0, -4.5)
-      ..cubicTo(3, -9, 8, -9, 8, -5)
-      ..cubicTo(8, -1, 2, -1, 0, 4)
-      ..close();
-    c.drawPath(path, p);
-    c.restore();
-  }
-
-  void _note(Canvas c, Offset o, double s, double rot, Paint p, Paint stroke) {
-    c.save();
-    c.translate(o.dx, o.dy);
-    c.rotate(rot);
-    c.scale(s / 16.0);
-    // Eighth note: a filled head, a stem, and a short flag.
-    c.drawOval(
-        Rect.fromCenter(center: const Offset(-3, 5), width: 6, height: 4.4), p);
-    final stem = Path()
-      ..moveTo(0, 5)
-      ..lineTo(0, -7);
-    c.drawPath(stem, stroke);
-    final flag = Path()
-      ..moveTo(0, -7)
-      ..quadraticBezierTo(5, -5.5, 4, -1);
-    c.drawPath(flag, stroke);
-    c.restore();
-  }
-
-  // A five-petal cherry blossom: one rounded petal, rotated 5× around centre,
-  // with a small core. All in the one inherited colour (the core a touch fainter
-  // via its own draw so it still reads monochrome).
-  void _blossom(Canvas c, Offset o, double s, double rot, Paint p, Paint core) {
-    c.save();
-    c.translate(o.dx, o.dy);
-    c.rotate(rot);
-    c.scale(s / 16.0);
-    final petal = Path()
-      ..moveTo(0, -3)
-      ..cubicTo(3.4, -3, 4.6, -6.5, 3.2, -8.6)
-      ..cubicTo(2.2, -10, 0.9, -9.6, 0, -8.2)
-      ..cubicTo(-0.9, -9.6, -2.2, -10, -3.2, -8.6)
-      ..cubicTo(-4.6, -6.5, -3.4, -3, 0, -3)
-      ..close();
-    for (int i = 0; i < 5; i++) {
-      c.save();
-      c.rotate(i * 2 * math.pi / 5);
-      c.drawPath(petal, p);
-      c.restore();
-    }
-    c.drawCircle(Offset.zero, 1.7, core);
-    c.restore();
-  }
-
-  // A heart with a little four-point sparkle at its upper-right — playful.
-  void _sparkHeart(Canvas c, Offset o, double s, double rot, Paint p) {
-    _heart(c, o, s, rot, p);
-    c.save();
-    c.translate(o.dx, o.dy);
-    c.rotate(rot);
-    c.scale(s / 16.0);
-    final spark = Path()
-      ..moveTo(7, -7)
-      ..lineTo(8, -9.4)
-      ..lineTo(9, -7)
-      ..lineTo(11.4, -6)
-      ..lineTo(9, -5)
-      ..lineTo(8, -2.6)
-      ..lineTo(7, -5)
-      ..lineTo(4.6, -6)
-      ..close();
-    c.drawPath(spark, p);
-    c.restore();
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.width <= 0 || size.height <= 0) return;
-    final rnd = math.Random(_seed);
-    final fill = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill
-      ..isAntiAlias = true;
-    // The blossom core: same hue, a shade softer, so it stays monochrome.
-    final core = Paint()
-      ..color = color.withValues(alpha: color.a * 0.55)
-      ..style = PaintingStyle.fill
-      ..isAntiAlias = true;
-    final stroke = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.1
-      ..strokeCap = StrokeCap.round
-      ..isAntiAlias = true;
-    // A tight jittered grid → dense, almost-touching, but never a rigid lattice.
-    const cell = 40.0;
-    final cols = (size.width / cell).ceil() + 1;
-    final rows = (size.height / cell).ceil() + 1;
-    for (int gy = 0; gy < rows; gy++) {
-      for (int gx = 0; gx < cols; gx++) {
-        final jx = (rnd.nextDouble() - 0.5) * cell * 0.9;
-        final jy = (rnd.nextDouble() - 0.5) * cell * 0.9;
-        final o = Offset(gx * cell + jx, gy * cell + jy);
-        final s = 9.0 + rnd.nextDouble() * 6.0; // 9–15px
-        final rot = (rnd.nextDouble() - 0.5) * 0.9; // gentle tilt
-        // DEFAULT theme = the four blended: heart, music note, cherry blossom,
-        // sparkle-heart. Hearts weighted a little heavier so it still reads as
-        // a love space first, music + blossoms sprinkled through.
-        final pick = rnd.nextInt(10);
-        if (pick < 4) {
-          _heart(canvas, o, s, rot, fill);
-        } else if (pick < 6) {
-          _note(canvas, o, s, rot, fill, stroke);
-        } else if (pick < 8) {
-          _blossom(canvas, o, s * 1.05, rot, fill, core);
-        } else {
-          _sparkHeart(canvas, o, s, rot, fill);
-        }
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _RomanticPatternPainter old) =>
-      old.color != color;
-}
 
 /// Faint horizontal rules + a soft left margin line, so a memory reads like a
 /// page from a lined notebook. Kept very low-contrast on purpose.

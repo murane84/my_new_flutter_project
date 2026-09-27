@@ -53,6 +53,7 @@ import '../utils/net_image.dart';
 import 'token_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
+import '../utils/chat_background.dart';
 import '../services/biometric_service.dart';
 import '../services/call_service.dart';
 import '../services/group_call_service.dart';
@@ -327,6 +328,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _loadCachedFriends();    // show cached DM list instantly (no spinner flash)
     _loadCachedGroups();     // and the cached group chats, for offline Circle
     _loadCachedSpaces();     // and the pinned Our Space hero(es), for offline
+    loadChatBackground();    // the chosen chat wallpaper (photo/motif/default)
     _fetchFriends();          // then refresh from network
     _loadSpaces();            // pinned "Our Space" hero(es) — one-shot, no poll
     _loadBondRequests();      // pending "pin a bond" requests (banner + chip)

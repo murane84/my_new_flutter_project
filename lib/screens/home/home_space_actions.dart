@@ -6,7 +6,29 @@ part of '../home_page.dart';
 // of these methods call setState directly, so the extension stays clear of
 // @protected members.
 
+// When the app's biometric quick-unlock is ON, opening a Space also asks for a
+// fingerprint / device-PIN so a bystander can't read the couple's private
+// diary or chat on an already-open phone. This remembers the last unlock so a
+// double-tap (or a quick hop back in) doesn't re-prompt within a short grace.
+DateTime? _gSpaceUnlockAt;
+
 extension _HomeSpaceActions on HomePageState {
+  /// Gate opening a Space behind the device lock (fingerprint / face / PIN /
+  /// Windows Hello) — but ONLY when the user has turned on biometric quick-
+  /// unlock, so people without it set up are never blocked. Returns true when
+  /// it's OK to open (unlocked, within grace, or the lock isn't enabled).
+  Future<bool> _spaceUnlockGate() async {
+    if (!await BiometricService.instance.isEnabled()) return true;
+    final now = DateTime.now();
+    if (_gSpaceUnlockAt != null &&
+        now.difference(_gSpaceUnlockAt!).inSeconds < 20) {
+      return true;
+    }
+    final ok =
+        await BiometricService.instance.authenticate('Unlock Our Space');
+    if (ok) _gSpaceUnlockAt = now;
+    return ok;
+  }
   /// Open the "Aluta Together" paywall, refreshing plan + spaces on return.
   Future<void> _openTogether() async {
     await showAppPopup(
@@ -34,6 +56,10 @@ extension _HomeSpaceActions on HomePageState {
   /// [origin] (a tap point on the bond hero/chip) makes the page genie out of
   /// and back into that exact spot; falls back to the last recorded space tap.
   Future<void> _openSpace(Map<String, dynamic> space, {Offset? origin}) async {
+    // Extra privacy: a fingerprint / PIN check before a Space opens (no-op
+    // unless the user enabled biometric quick-unlock). A failed/cancelled
+    // check simply doesn't open it.
+    if (!await _spaceUnlockGate()) return;
     final launchFrom = origin ?? _spaceOpenOrigin;
     // Remember which tile launched this so the minimize genie can re-read that
     // tile's LIVE position each frame — even if the friend list reorders or the

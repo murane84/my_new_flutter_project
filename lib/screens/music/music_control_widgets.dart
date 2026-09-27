@@ -103,94 +103,91 @@ class _SpeedPanel extends StatelessWidget {
     // Just the card now — the caller owns the tap-outside barrier, the
     // position (just above the speed button) and the genie scale, so this
     // widget is a clean leaf that scales/collapses into the button.
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        maxWidth: MediaQuery.of(context).size.width - 32,
-      ),
-      child: GestureDetector(
-        onTap: () {}, // absorb inner taps so they don't reach the barrier
-        child: Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: scheme.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: scheme.primary.withAlpha(130)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(70),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return GestureDetector(
+      onTap: () {}, // absorb inner taps so they don't reach the barrier
+      child: Container(
+        width: 224,
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: scheme.primary.withAlpha(110)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(90),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.speed_rounded,
-                        size: 16, color: scheme.primary),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Playback Speed',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                          color: scheme.onSurface),
-                    ),
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: onClose,
-                      child: Icon(Icons.close,
-                          size: 18,
-                          color: scheme.onSurfaceVariant),
-                    ),
-                  ],
+                Icon(Icons.speed_rounded, size: 16, color: scheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Playback speed',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        color: scheme.onSurface),
+                  ),
                 ),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _speeds.map((s) {
-                    final active = (s - currentSpeed).abs() < 0.01;
-                    return GestureDetector(
-                      onTap: () => onSelect(s),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 18, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: active
-                              ? scheme.primary
-                              : scheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: active
-                                ? scheme.primary
-                                : scheme.outlineVariant.withAlpha(80),
-                          ),
-                        ),
-                        child: Text(
-                          _speedLabel(s),
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: active
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                            color: active
-                                ? scheme.onPrimary
-                                : scheme.onSurface.withAlpha(170),
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
+                InkWell(
+                  onTap: onClose,
+                  borderRadius: BorderRadius.circular(20),
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: Icon(Icons.close_rounded,
+                        size: 18, color: scheme.onSurfaceVariant),
+                  ),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _speeds.map((s) {
+                final active = (s - currentSpeed).abs() < 0.01;
+                return GestureDetector(
+                  onTap: () => onSelect(s),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    width: 60,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: active
+                          ? scheme.primary
+                          : scheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: active
+                            ? scheme.primary
+                            : scheme.outlineVariant.withAlpha(90),
+                      ),
+                    ),
+                    child: Text(
+                      _speedLabel(s),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight:
+                            active ? FontWeight.w700 : FontWeight.w500,
+                        color: active ? scheme.onPrimary : scheme.onSurface,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
         ),
+      ),
     );
   }
 }

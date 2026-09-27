@@ -106,7 +106,7 @@ class _SpeedPanel extends StatelessWidget {
     return GestureDetector(
       onTap: () {}, // absorb inner taps so they don't reach the barrier
       child: Container(
-        width: 224,
+        width: 236,
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
         decoration: BoxDecoration(
           color: scheme.surface,
@@ -149,43 +149,55 @@ class _SpeedPanel extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _speeds.map((s) {
-                final active = (s - currentSpeed).abs() < 0.01;
-                return GestureDetector(
-                  onTap: () => onSelect(s),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 160),
-                    width: 60,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: active
-                          ? scheme.primary
-                          : scheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: active
-                            ? scheme.primary
-                            : scheme.outlineVariant.withAlpha(90),
+            // A tidy 3-column grid (two rows of three) so the panel fits its
+            // content with no empty gap.
+            for (int r = 0; r < _speeds.length; r += 3)
+              Padding(
+                padding: EdgeInsets.only(
+                    bottom: r + 3 < _speeds.length ? 8 : 0),
+                child: Row(
+                  children: [
+                    for (int c = 0; c < 3; c++) ...[
+                      if (c > 0) const SizedBox(width: 8),
+                      Expanded(
+                        child: (r + c) < _speeds.length
+                            ? _speedChip(scheme, _speeds[r + c])
+                            : const SizedBox.shrink(),
                       ),
-                    ),
-                    child: Text(
-                      _speedLabel(s),
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight:
-                            active ? FontWeight.w700 : FontWeight.w500,
-                        color: active ? scheme.onPrimary : scheme.onSurface,
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
+                    ],
+                  ],
+                ),
+              ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _speedChip(ColorScheme scheme, double s) {
+    final active = (s - currentSpeed).abs() < 0.01;
+    return GestureDetector(
+      onTap: () => onSelect(s),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: active ? scheme.primary : scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: active
+                ? scheme.primary
+                : scheme.outlineVariant.withAlpha(90),
+          ),
+        ),
+        child: Text(
+          _speedLabel(s),
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+            color: active ? scheme.onPrimary : scheme.onSurface,
+          ),
         ),
       ),
     );

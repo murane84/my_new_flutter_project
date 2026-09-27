@@ -725,10 +725,17 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       final on = _sort == mode;
       return ListTile(
         dense: true,
+        selected: on,
+        selectedTileColor: scheme.primary.withValues(alpha: 0.10),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14),
         leading: Icon(icon,
             color: on ? scheme.primary : scheme.onSurfaceVariant),
         title: Text(label,
-            style: TextStyle(color: on ? scheme.primary : null)),
+            style: TextStyle(
+                color: on ? scheme.primary : null,
+                fontWeight: on ? FontWeight.w700 : FontWeight.w500)),
         trailing: on
             ? Icon(Icons.check_rounded, color: scheme.primary)
             : null,
@@ -741,29 +748,61 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     }
     showModalBottomSheet(
       context: context,
-      backgroundColor: scheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 10),
-            const Text('Sort by',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 4),
-            tile(_PlSort.manual, Icons.reorder_rounded, 'Custom (added order)'),
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+        padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: scheme.primary.withAlpha(50)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(70),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: scheme.onSurfaceVariant.withAlpha(80),
+                    borderRadius: BorderRadius.circular(2)),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const SizedBox(width: 6),
+                  Icon(Icons.swap_vert_rounded,
+                      size: 18, color: scheme.primary),
+                  const SizedBox(width: 8),
+                  Text('Sort by',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          color: scheme.onSurface)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              tile(_PlSort.manual, Icons.reorder_rounded, 'Custom (added order)'),
             tile(_PlSort.az, Icons.sort_by_alpha_rounded, 'Title A → Z'),
             tile(_PlSort.za, Icons.sort_by_alpha_rounded, 'Title Z → A'),
             tile(_PlSort.fileName, Icons.text_snippet_rounded, 'File name'),
             tile(_PlSort.artist, Icons.person_rounded, 'Artist'),
             tile(_PlSort.recent, Icons.schedule_rounded, 'Recently added'),
             tile(_PlSort.duration, Icons.timer_outlined, 'Duration (shortest first)'),
-            tile(_PlSort.size, Icons.sd_storage_rounded, 'File size (largest first)'),
-            const SizedBox(height: 8),
-          ],
+              tile(_PlSort.size, Icons.sd_storage_rounded,
+                  'File size (largest first)'),
+              const SizedBox(height: 6),
+            ],
+          ),
         ),
       ),
     );
@@ -1471,12 +1510,19 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         {Widget? trailing}) {
       return ListTile(
         dense: true,
+        selected: active,
+        selectedTileColor: scheme.primary.withValues(alpha: 0.10),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14),
         leading:
             Icon(icon, color: active ? scheme.primary : scheme.onSurfaceVariant),
         title: Text(text,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: active ? scheme.primary : null)),
+            style: TextStyle(
+                color: active ? scheme.primary : null,
+                fontWeight: active ? FontWeight.w700 : FontWeight.w500)),
         trailing: trailing ??
             (active ? Icon(Icons.check_rounded, color: scheme.primary) : null),
         onTap: onTap,
@@ -1485,20 +1531,50 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: scheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 10),
-            const Text('Show',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 4),
-            Flexible(
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+        padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: scheme.primary.withAlpha(50)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(70),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: scheme.onSurfaceVariant.withAlpha(80),
+                    borderRadius: BorderRadius.circular(2)),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const SizedBox(width: 6),
+                  Icon(Icons.filter_list_rounded,
+                      size: 18, color: scheme.primary),
+                  const SizedBox(width: 8),
+                  Text('Show',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          color: scheme.onSurface)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Flexible(
               child: ListView(
                 shrinkWrap: true,
                 children: [
@@ -1576,14 +1652,16 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 widget.onPlayScope(displayedPaths, 0, false);
               }
             }),
-            _optionTile(scheme, Icons.shuffle_rounded, 'Shuffle $scopeWord', () {
-              Navigator.pop(ctx);
-              if (displayedPaths.isNotEmpty) {
-                widget.onPlayScope(displayedPaths, 0, true);
-              }
-            }),
-            const SizedBox(height: 8),
-          ],
+              _optionTile(scheme, Icons.shuffle_rounded, 'Shuffle $scopeWord',
+                  () {
+                Navigator.pop(ctx);
+                if (displayedPaths.isNotEmpty) {
+                  widget.onPlayScope(displayedPaths, 0, true);
+                }
+              }),
+              const SizedBox(height: 6),
+            ],
+          ),
         ),
       ),
     );

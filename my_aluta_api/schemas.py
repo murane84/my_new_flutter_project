@@ -357,6 +357,11 @@ class SpaceUpdate(BaseModel):
     name: Optional[str] = None
     theme: Optional[str] = None
     is_primary: Optional[bool] = None
+    # Set the Space background to a preset wallpaper ("/wallpapers/<id>") or
+    # clear it back to the default motif (""). Uploaded photo backgrounds still
+    # go through POST /{id}/background; this field only accepts presets or a
+    # clear, so a client can't point a Space at an arbitrary attachment URL.
+    background_url: Optional[str] = None
 
 
 class BondRequestCreate(BaseModel):

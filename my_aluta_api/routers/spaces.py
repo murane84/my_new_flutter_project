@@ -1021,6 +1021,20 @@ def update_space(
         space.name = payload.name or None
     if payload.theme is not None:
         space.theme = payload.theme or None
+    if payload.background_url is not None:
+        # Only a preset ("/wallpapers/<id>") or a clear ("") is allowed here.
+        # Uploaded photos go through POST /{id}/background; refusing arbitrary
+        # values stops a client aiming a Space at someone else's attachment.
+        bg = payload.background_url.strip()
+        if bg == "":
+            space.background_url = None
+        elif bg.startswith("/wallpapers/"):
+            space.background_url = bg
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="background_url must be a preset (/wallpapers/<id>) or empty",
+            )
     if payload.is_primary is True:
         # Exactly one hero: demote the others first.
         db.query(RelationshipSpace).filter(

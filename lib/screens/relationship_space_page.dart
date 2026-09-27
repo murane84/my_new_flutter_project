@@ -21,7 +21,8 @@ import '../utils/popup_shell.dart';
 import '../utils/net_image.dart';
 import '../services/media_store.dart';
 import '../utils/romantic_pattern.dart';
-import '../utils/chat_background.dart';
+import '../services/wallpapers_service.dart';
+import '../widgets/wallpaper_gallery.dart';
 import '../utils/file_bytes.dart';
 import '../services/notif_service.dart'
     show syncDiaryReminders, cancelDiaryReminder, PlanReminder;
@@ -4442,96 +4443,76 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     if (updated != null) widget.onSpaceUpdated?.call(updated);
   }
 
-  String _chatBgLabel() {
-    switch (chatBackground.value.mode) {
-      case 'motif':
-        return 'Motif pattern (hearts & notes)';
-      case 'photo':
-        return 'Your Our Space photo';
-      default:
-        return 'Default';
-    }
-  }
-
-  void _openChatBgChooser() {
+  Future<void> _openSpaceGallery() async {
+    final presets = await WallpapersService.instance.load();
+    if (!mounted) return;
     final scheme = Theme.of(context).colorScheme;
-    final fullPhoto = resolveAvatarUrl(_bgUrl, widget.apiBase);
     final accent = spaceThemeColor(_theme);
-    showModalBottomSheet(
+    final selFull = (_bgUrl ?? '').startsWith('/wallpapers/')
+        ? resolveAvatarUrl(_bgUrl, widget.apiBase)
+        : null;
+    await showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
-      builder: (ctx) {
-        Widget opt(String mode, IconData icon, String title, String sub,
-            VoidCallback? onTap) {
-          final sel = chatBackground.value.mode == mode;
-          return ListTile(
-            leading: Icon(icon,
-                color: sel ? accent : scheme.onSurfaceVariant),
-            title: Text(title,
-                style: TextStyle(
-                    fontWeight: sel ? FontWeight.w700 : FontWeight.w500)),
-            subtitle:
-                Text(sub, style: const TextStyle(fontSize: 12)),
-            trailing:
-                sel ? Icon(Icons.check_rounded, color: accent) : null,
-            enabled: onTap != null,
-            onTap: onTap,
-          );
-        }
-
-        void choose(String mode, {String? url}) {
-          setChatBackground(mode, url: url);
-          Navigator.pop(ctx);
-          if (mounted) setState(() {});
-        }
-
-        return SafeArea(
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 22),
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 10),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                    color: scheme.outlineVariant,
-                    borderRadius: BorderRadius.circular(2)),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 2),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Chat background',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
-                          color: scheme.onSurface)),
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: scheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2)),
                 ),
               ),
-              opt('default', Icons.blur_on_rounded, 'Default',
-                  'The built-in wallpaper', () => choose('default')),
-              opt('motif', Icons.auto_awesome_rounded, 'Motif pattern',
-                  'Hearts, notes & blossoms — faint', () => choose('motif')),
-              opt(
-                'photo',
-                Icons.photo_rounded,
-                'Your Our Space photo',
-                (fullPhoto == null || fullPhoto.isEmpty)
-                    ? 'Set an Our Space photo above first'
-                    : 'Reuse your Our Space background',
-                (fullPhoto == null || fullPhoto.isEmpty)
-                    ? null
-                    : () => choose('photo', url: fullPhoto),
+              const SizedBox(height: 14),
+              Text('Choose a wallpaper',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: scheme.onSurface)),
+              const SizedBox(height: 12),
+              WallpaperGalleryGrid(
+                presets: presets,
+                apiBase: widget.apiBase,
+                accent: accent,
+                selectedFullUrl: selFull,
+                onPick: (p) {
+                  Navigator.pop(ctx);
+                  _applyPreset(p.id);
+                },
               ),
-              const SizedBox(height: 10),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
+  }
+
+  Future<void> _applyPreset(String id) async {
+    setState(() => _bgBusy = true);
+    final updated = await ApiService()
+        .updateSpace(widget.spaceId, backgroundUrl: '/wallpapers/$id');
+    if (!mounted) return;
+    setState(() {
+      _bgBusy = false;
+      if (updated != null) _bgUrl = updated['background_url'] as String?;
+    });
+    if (updated != null) {
+      widget.onSpaceUpdated?.call(updated);
+    } else {
+      showToast(context, 'Could not set that wallpaper',
+          type: ToastType.error);
+    }
   }
 
   Widget _bgOption(ColorScheme scheme,
@@ -4742,61 +4723,35 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
               const SizedBox(width: 12),
               _bgOption(
                 scheme,
-                selected: (_bgUrl ?? '').isNotEmpty,
+                selected: (_bgUrl ?? '').startsWith('/wallpapers/'),
+                onTap: _bgBusy ? null : _openSpaceGallery,
+                label: 'Gallery',
+                child: (_bgUrl ?? '').startsWith('/wallpapers/')
+                    ? SizedBox.expand(
+                        child: WallpaperThumb(
+                            resolveAvatarUrl(_bgUrl, widget.apiBase) ?? ''))
+                    : Icon(Icons.collections_rounded,
+                        color: scheme.onSurfaceVariant),
+              ),
+              const SizedBox(width: 12),
+              _bgOption(
+                scheme,
+                selected: (_bgUrl ?? '').startsWith('/attachments/'),
                 onTap: _bgBusy ? null : _pickBackground,
                 label: 'Your photo',
-                child: (_bgUrl ?? '').isEmpty
-                    ? Icon(Icons.add_photo_alternate_outlined,
-                        color: scheme.onSurfaceVariant)
-                    : SizedBox.expand(
+                child: (_bgUrl ?? '').startsWith('/attachments/')
+                    ? SizedBox.expand(
                         child: authNetworkImage(
                           url: resolveAvatarUrl(_bgUrl, widget.apiBase) ?? '',
                           headers: mediaAuthHeaders(
                               resolveAvatarUrl(_bgUrl, widget.apiBase) ?? ''),
                           fit: BoxFit.cover,
                         ),
-                      ),
+                      )
+                    : Icon(Icons.add_photo_alternate_outlined,
+                        color: scheme.onSurfaceVariant),
               ),
             ],
-          ),
-          const SizedBox(height: 12),
-          Material(
-            color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: _openChatBgChooser,
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                child: Row(
-                  children: [
-                    Icon(Icons.chat_bubble_outline_rounded,
-                        size: 20, color: scheme.onSurfaceVariant),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Chat background',
-                              style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: scheme.onSurface)),
-                          const SizedBox(height: 2),
-                          Text(_chatBgLabel(),
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: scheme.onSurfaceVariant)),
-                        ],
-                      ),
-                    ),
-                    Icon(Icons.chevron_right_rounded,
-                        size: 20, color: scheme.onSurfaceVariant),
-                  ],
-                ),
-              ),
-            ),
           ),
           const SizedBox(height: 20),
           // Hero row, grouped on a soft surface. Already-hero shows a clear

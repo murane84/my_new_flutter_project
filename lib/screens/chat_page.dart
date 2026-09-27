@@ -29,6 +29,8 @@ import '../utils/net_image.dart';
 import '../utils/chat_background.dart';
 import '../utils/romantic_pattern.dart';
 import '../services/media_store.dart';
+import '../services/wallpapers_service.dart';
+import '../widgets/wallpaper_gallery.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'user_profile_sheet.dart';
@@ -176,6 +178,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   // True when this screen is showing a GROUP conversation (vs a 1:1 DM).
   bool get _isGroup => widget.isGroup && widget.conversationId != null;
   int get _cid => widget.conversationId ?? 0;
+
+  // Per-conversation wallpaper key: 'd<friendId>' for a DM, 'g<cid>' for a group.
+  String get _convKey => _isGroup
+      ? chatConvKey(conversationId: _cid)
+      : chatConvKey(friendId: widget.friendId);
 
   String? _myId;
   bool _isLoading = true;
@@ -478,33 +485,47 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     return _chatBgFuture!;
   }
 
-  Widget _chatPhotoWallpaper(String url, bool isDark) {
-    final headers = mediaAuthHeaders(url);
+  Widget _chatPhotoWallpaper(ChatBg bg, bool isDark) {
     final veil = isDark ? Colors.black : Colors.white;
-    return FutureBuilder<File?>(
-      future: _chatBgFileFuture(url, headers),
-      builder: (ctx, snap) {
-        final ImageProvider prov = snap.data != null
-            ? FileImage(snap.data!)
-            : authNetworkImageProvider(url, headers);
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            DecoratedBox(
-              decoration: BoxDecoration(
-                image: DecorationImage(
-                  image: prov,
-                  fit: BoxFit.cover,
-                  onError: (Object e, StackTrace? st) {},
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        // Wide screens (tablet/desktop): prefer a landscape variant when the
+        // wallpaper has one; otherwise tile the portrait by height so it fills
+        // the width without an empty band (same as Our Space).
+        final wide = c.maxWidth >= 600;
+        final useWide = wide && (bg.wideUrl ?? '').isNotEmpty;
+        final url = useWide ? bg.wideUrl! : (bg.url ?? '');
+        final headers = mediaAuthHeaders(url);
+        return FutureBuilder<File?>(
+          future: _chatBgFileFuture(url, headers),
+          builder: (ctx, snap) {
+            final ImageProvider prov = snap.data != null
+                ? FileImage(snap.data!)
+                : authNetworkImageProvider(url, headers);
+            final DecorationImage deco = (wide && !useWide)
+                ? DecorationImage(
+                    image: prov,
+                    fit: BoxFit.fitHeight,
+                    repeat: ImageRepeat.repeatX,
+                    onError: (Object e, StackTrace? st) {},
+                  )
+                : DecorationImage(
+                    image: prov,
+                    fit: BoxFit.cover,
+                    onError: (Object e, StackTrace? st) {},
+                  );
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                DecoratedBox(decoration: BoxDecoration(image: deco)),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: veil.withValues(alpha: isDark ? 0.55 : 0.62),
+                  ),
                 ),
-              ),
-            ),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: veil.withValues(alpha: isDark ? 0.55 : 0.62),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         );
       },
     );
@@ -522,6 +543,270 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       ),
     );
   }
+
+  // ── Chat wallpaper chooser ───────────────────────────────────────────────
+  Future<List<MapEntry<String, String>>> _reusableSpacePhotos() async {
+    // Photos the user already uploaded to one of their Our Spaces, offered for
+    // reuse as a chat wallpaper. Returns (spaceName, fullUrl) pairs.
+    final out = <MapEntry<String, String>>[];
+    try {
+      final p = await SharedPreferences.getInstance();
+      final raw = p.getString('cached_spaces_v1');
+      if (raw != null) {
+        final list = jsonDecode(raw);
+        if (list is List) {
+          final seen = <String>{};
+          for (final e in list) {
+            if (e is Map) {
+              final bg = (e['background_url'] ?? '').toString();
+              if (bg.startsWith('/attachments/') && seen.add(bg)) {
+                final name = (e['name'] ?? 'Our Space').toString();
+                out.add(MapEntry(
+                    name.isEmpty ? 'Our Space' : name, fullMediaUrl(bg)));
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return out;
+  }
+
+  Future<void> _openChatWallpaperSheet() async {
+    final presets = await WallpapersService.instance.load();
+    final reusable = await _reusableSpacePhotos();
+    if (!mounted) return;
+    final scheme = Theme.of(context).colorScheme;
+    final current = chatBackgroundFor(_convKey);
+    bool applyAll = false;
+
+    Future<void> pickAndUpload() async {
+      try {
+        final res = await FilePicker.pickFiles(type: FileType.image);
+        if (res == null || res.files.isEmpty) return;
+        final fl = res.files.single;
+        final bytes = await fl.readAsBytes();
+        if (bytes.isEmpty) return;
+        final ext = (fl.extension ?? 'jpg').toLowerCase();
+        if (mounted) showToast(context, 'Uploading wallpaper…');
+        final up = await ApiService().uploadMedia(
+            bytes: bytes, filename: fl.name, mime: _mimeForExt(ext));
+        final rel = (up?['url'] ?? '').toString();
+        if (rel.isEmpty) {
+          if (mounted) {
+            showToast(context, 'Upload failed', type: ToastType.error);
+          }
+          return;
+        }
+        final full = fullMediaUrl(rel);
+        if (applyAll) {
+          await setChatBackgroundAll('photo', url: full);
+        } else {
+          await setChatBackgroundFor(_convKey, 'photo', url: full);
+        }
+      } catch (_) {
+        if (mounted) {
+          showToast(context, 'Could not set wallpaper', type: ToastType.error);
+        }
+      }
+    }
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx, setSheet) {
+          void applyAndClose(String mode, {String? url, String? wideUrl}) {
+            if (applyAll) {
+              setChatBackgroundAll(mode, url: url, wideUrl: wideUrl);
+            } else {
+              setChatBackgroundFor(_convKey, mode, url: url, wideUrl: wideUrl);
+            }
+            Navigator.pop(ctx);
+          }
+
+          final selUrl = current.isPhoto ? current.url : null;
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(18, 10, 18, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                          color: scheme.outlineVariant,
+                          borderRadius: BorderRadius.circular(2)),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text('Chat wallpaper',
+                      style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: scheme.onSurface)),
+                  const SizedBox(height: 2),
+                  Text(_isGroup ? widget.groupTitle : widget.friendName,
+                      style: TextStyle(
+                          fontSize: 12.5, color: scheme.onSurfaceVariant)),
+                  const SizedBox(height: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest
+                            .withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(14)),
+                    child: SwitchListTile(
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 14),
+                      value: applyAll,
+                      onChanged: (v) => setSheet(() => applyAll = v),
+                      title: const Text('Apply to all chats',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600)),
+                      subtitle: Text(
+                          applyAll
+                              ? 'One wallpaper for every DM and group'
+                              : 'This chat only',
+                          style: const TextStyle(fontSize: 11.5)),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(children: [
+                    Expanded(
+                        child: _wpQuick(scheme, Icons.blur_on_rounded,
+                            'Default', current.mode == 'default',
+                            () => applyAndClose('default'))),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child: _wpQuick(scheme, Icons.auto_awesome_rounded,
+                            'Motif', current.mode == 'motif',
+                            () => applyAndClose('motif'))),
+                  ]),
+                  const SizedBox(height: 18),
+                  _wpLabel(scheme, 'Gallery'),
+                  const SizedBox(height: 8),
+                  WallpaperGalleryGrid(
+                    presets: presets,
+                    apiBase: _apiBase,
+                    accent: scheme.primary,
+                    selectedFullUrl: selUrl,
+                    onPick: (p) => applyAndClose('photo',
+                        url: fullMediaUrl(p.url),
+                        wideUrl: (p.wideUrl != null && p.wideUrl!.isNotEmpty)
+                            ? fullMediaUrl(p.wideUrl!)
+                            : null),
+                  ),
+                  if (reusable.isNotEmpty) ...[
+                    const SizedBox(height: 18),
+                    _wpLabel(scheme, 'From your Our Space'),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 96,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: reusable.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 10),
+                        itemBuilder: (c, i) {
+                          final e = reusable[i];
+                          final sel = selUrl == e.value;
+                          return GestureDetector(
+                            onTap: () => applyAndClose('photo', url: e.value),
+                            child: Column(children: [
+                              Container(
+                                width: 58,
+                                height: 72,
+                                clipBehavior: Clip.antiAlias,
+                                decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                        color: sel
+                                            ? scheme.primary
+                                            : scheme.outlineVariant,
+                                        width: sel ? 2.5 : 1)),
+                                child: WallpaperThumb(e.value),
+                              ),
+                              const SizedBox(height: 4),
+                              SizedBox(
+                                  width: 60,
+                                  child: Text(e.key,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          color: scheme.onSurfaceVariant))),
+                            ]),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 18),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      await pickAndUpload();
+                    },
+                    icon: const Icon(Icons.add_photo_alternate_rounded,
+                        size: 20),
+                    label: const Text('Upload a photo'),
+                    style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14))),
+                  ),
+                ],
+              ),
+            ),
+          );
+        });
+      },
+    );
+  }
+
+  Widget _wpQuick(ColorScheme scheme, IconData icon, String label,
+      bool selected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+              color: selected ? scheme.primary : Colors.transparent,
+              width: 2),
+        ),
+        child: Column(children: [
+          Icon(icon, color: selected ? scheme.primary : scheme.onSurfaceVariant),
+          const SizedBox(height: 6),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: scheme.onSurface)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _wpLabel(ColorScheme scheme, String t) => Align(
+        alignment: Alignment.centerLeft,
+        child: Text(t.toUpperCase(),
+            style: TextStyle(
+                fontSize: 11,
+                letterSpacing: 0.6,
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurfaceVariant)),
+      );
 
   // ── Message cache (offline persistence) ──────────────────────────────────
 
@@ -4873,11 +5158,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   children: [
                     // ── Chat wallpaper background ─────────────────────────
                     Positioned.fill(
-                      child: ValueListenableBuilder<ChatBg>(
-                        valueListenable: chatBackground,
-                        builder: (ctx, bg, _) {
+                      child: ValueListenableBuilder<int>(
+                        valueListenable: chatBgRevision,
+                        builder: (ctx, _, __) {
+                          final bg = chatBackgroundFor(_convKey);
                           if (bg.isPhoto) {
-                            return _chatPhotoWallpaper(bg.url!, isDark);
+                            return _chatPhotoWallpaper(bg, isDark);
                           }
                           if (bg.isMotif) {
                             return _chatMotifWallpaper(scheme, isDark);
@@ -5064,20 +5350,39 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             ),
           ],
         ),
-        actions: _isGroup
-            ? const []
-            : [
-                IconButton(
-                  tooltip: 'Call ${widget.friendName}',
-                  icon: const Icon(Icons.call_rounded),
-                  onPressed: _showCallChoice,
+        actions: [
+          if (!_isGroup)
+            IconButton(
+              tooltip: 'Call ${widget.friendName}',
+              icon: const Icon(Icons.call_rounded),
+              onPressed: _showCallChoice,
+            ),
+          if (!_isGroup)
+            IconButton(
+              tooltip: 'Listen together',
+              icon: const Icon(Icons.headphones_rounded),
+              onPressed: _startListenTogether,
+            ),
+          PopupMenuButton<String>(
+            tooltip: 'More',
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: (v) {
+              if (v == 'wallpaper') _openChatWallpaperSheet();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem<String>(
+                value: 'wallpaper',
+                child: Row(
+                  children: [
+                    Icon(Icons.wallpaper_rounded, size: 20),
+                    SizedBox(width: 12),
+                    Text('Wallpaper'),
+                  ],
                 ),
-                IconButton(
-                  tooltip: 'Listen together',
-                  icon: const Icon(Icons.headphones_rounded),
-                  onPressed: _startListenTogether,
-                ),
-              ],
+              ),
+            ],
+          ),
+        ],
       ),
       body: body,
     );

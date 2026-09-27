@@ -51,7 +51,7 @@ const String _kLegacyUrl = 'chat_bg_url_v1';
 ChatBg _all = ChatBg.defaults;
 Map<String, ChatBg> _overrides = {};
 
-/// Stable per-conversation key. DM → 'd<friendId>', group → 'g<conversationId>'.
+/// Stable per-conversation key. DM -> `d<friendId>`, group -> `g<conversationId>`.
 String chatConvKey({int? friendId, int? conversationId}) {
   if (conversationId != null) return 'g$conversationId';
   if (friendId != null) return 'd$friendId';

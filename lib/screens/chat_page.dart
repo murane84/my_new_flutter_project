@@ -712,7 +712,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: reusable.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 10),
+                        separatorBuilder: (_, _) => const SizedBox(width: 10),
                         itemBuilder: (c, i) {
                           final e = reusable[i];
                           final sel = selUrl == e.value;
@@ -5160,7 +5160,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     Positioned.fill(
                       child: ValueListenableBuilder<int>(
                         valueListenable: chatBgRevision,
-                        builder: (ctx, _, __) {
+                        builder: (ctx, _, _) {
                           final bg = chatBackgroundFor(_convKey);
                           if (bg.isPhoto) {
                             return _chatPhotoWallpaper(bg, isDark);

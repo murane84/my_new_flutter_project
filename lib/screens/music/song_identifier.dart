@@ -9,6 +9,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../api_service.dart';
 import '../../services/audio_capture.dart';
 import '../../utils/toast_helper.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:file_picker/file_picker.dart';
 
 /// Shazam-style "what's this song?" flow. The user first picks a SOURCE:
 ///  - "From this phone" — captures the device's own audio output (what another
@@ -156,6 +158,41 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
   }
 
   // ── Device ("from this phone") ──────────────────────────────────────────
+  bool get _isDesktop =>
+      !kIsWeb &&
+      (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+
+  /// Desktop path for "from this device": pick an audio file and identify it —
+  /// internal-audio capture isn't available off Android, so this is the working
+  /// equivalent rather than a dead, mislabelled button.
+  Future<void> _startFilePick() async {
+    try {
+      final res = await FilePicker.pickFiles(type: FileType.audio);
+      if (res == null || res.files.isEmpty) return;
+      final fl = res.files.single;
+      final bytes = await fl.readAsBytes();
+      if (bytes.isEmpty) return;
+      if (!mounted) return;
+      setState(() {
+        _phase = _Phase.identifying;
+        _result = null;
+      });
+      final ext = (fl.extension ?? 'mp3').toLowerCase();
+      final mime = ext == 'wav'
+          ? 'audio/wav'
+          : (ext == 'm4a' || ext == 'aac')
+              ? 'audio/aac'
+              : ext == 'ogg'
+                  ? 'audio/ogg'
+                  : ext == 'flac'
+                      ? 'audio/flac'
+                      : 'audio/mpeg';
+      await _identifyBytes(bytes, fl.name, mime);
+    } catch (_) {
+      if (mounted) setState(() => _phase = _Phase.error);
+    }
+  }
+
   Future<void> _startDevice() async {
     setState(() {
       _phase = _Phase.capturing;
@@ -333,16 +370,26 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
         Text('Where is the music playing?',
             style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
         const SizedBox(height: 18),
-        _sourceTile(
-          scheme,
-          icon: Icons.smartphone_rounded,
-          title: 'From this phone',
-          subtitle: _deviceSupported
-              ? 'Recognise audio playing on this device (another app, or Aluta).'
-              : 'Needs Android 10 or newer.',
-          enabled: _deviceSupported,
-          onTap: _deviceSupported ? _startDevice : null,
-        ),
+        if (_isDesktop)
+          _sourceTile(
+            scheme,
+            icon: Icons.audio_file_rounded,
+            title: 'From a file',
+            subtitle: 'Pick an audio file on this computer to identify.',
+            enabled: true,
+            onTap: _startFilePick,
+          )
+        else
+          _sourceTile(
+            scheme,
+            icon: Icons.smartphone_rounded,
+            title: 'From this phone',
+            subtitle: _deviceSupported
+                ? 'Recognise audio playing on this device (another app, or Aluta).'
+                : 'Needs Android 10 or newer.',
+            enabled: _deviceSupported,
+            onTap: _deviceSupported ? _startDevice : null,
+          ),
         const SizedBox(height: 10),
         _sourceTile(
           scheme,
@@ -376,11 +423,21 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(15),
           decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: scheme.outlineVariant.withAlpha(120)),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                scheme.surfaceContainerHighest,
+                scheme.surfaceContainerHigh,
+              ],
+            ),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+                color: enabled
+                    ? scheme.primary.withAlpha(55)
+                    : scheme.outlineVariant.withAlpha(110)),
           ),
           child: Row(
             children: [

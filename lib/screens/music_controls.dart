@@ -1926,12 +1926,15 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     return LayoutBuilder(builder: (context, box) {
       final isNarrow = box.maxWidth < 220;
 
-      return SingleChildScrollView(
-        padding:
-            EdgeInsets.fromLTRB(16, 14, 16, isNarrow ? 10 : 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+      return Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding:
+                  EdgeInsets.fromLTRB(16, 14, 16, isNarrow ? 6 : 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
 
             // ── Disc + track info card ────────────────────────────────
             Container(
@@ -2496,8 +2499,18 @@ class _MusicControlsState extends ConsumerState<MusicControls>
               ],
             ),
 
-          ],
-        ),
+                ],
+              ),
+            ),
+          ),
+          // Cute base motif — a soft equalizer that gently dances while a
+          // track plays and rests as faint bars when paused, giving the
+          // panel's base a finished, musical feel instead of empty space.
+          Padding(
+            padding: EdgeInsets.only(bottom: isNarrow ? 8 : 14, top: 2),
+            child: _MiniEqualizer(active: isPlaying, color: accent),
+          ),
+        ],
       );
     });
   }

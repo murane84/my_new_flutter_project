@@ -865,14 +865,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   Future<void> _editSpace() async {
     // The settings sheet returns 'saved' (name/theme/hero changed), 'unpin'
     // (the user chose Unpin from inside settings), or null (dismissed).
-    final result = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _EditSpaceSheet(
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => _EditSpaceSheet(
         initialName: deriveSpaceName(_space, widget.myUserId),
         initialTheme: (_space['theme'] as String?) ?? 'coral',
         initialPrimary: _space['is_primary'] == true,
@@ -882,6 +877,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         onSpaceUpdated: (m) {
           if (mounted) setState(() => _space = m);
         },
+      ),
       ),
     );
     if (!mounted) return;
@@ -4663,56 +4659,24 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
   Future<void> _openSpaceGallery() async {
     final presets = await WallpapersService.instance.load();
     if (!mounted) return;
-    final scheme = Theme.of(context).colorScheme;
     final accent = spaceThemeColor(_theme);
     final selFull = (_bgUrl ?? '').startsWith('/wallpapers/')
         ? resolveAvatarUrl(_bgUrl, widget.apiBase)
         : null;
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: scheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(18, 12, 18, 22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                      color: scheme.outlineVariant,
-                      borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text('Choose a wallpaper',
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: scheme.onSurface)),
-              const SizedBox(height: 12),
-              WallpaperGalleryGrid(
-                presets: presets,
-                apiBase: widget.apiBase,
-                accent: accent,
-                selectedFullUrl: selFull,
-                onPick: (p) {
-                  Navigator.pop(ctx);
-                  _applyPreset(p.id);
-                },
-              ),
-            ],
-          ),
+    // Full-screen sub-page: the header stays put while the grid scrolls, and
+    // tapping a wallpaper pops straight back to Settings with the pick.
+    final pickedId = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => _WallpaperPickerPage(
+          presets: presets,
+          apiBase: widget.apiBase,
+          accent: accent,
+          selectedFullUrl: selFull,
         ),
       ),
     );
+    if (!mounted || pickedId == null) return;
+    await _applyPreset(pickedId);
   }
 
   Future<void> _applyPreset(String id) async {
@@ -4735,37 +4699,84 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
   Widget _bgOption(ColorScheme scheme,
       {required bool selected,
       required VoidCallback? onTap,
-      required Widget child,
+      required IconData icon,
+      Widget? thumbnail,
       required String label}) {
     final accent = spaceThemeColor(_theme);
     return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Column(
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              height: 66,
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: selected ? accent : Colors.transparent,
-                  width: 2,
+      child: Column(
+        children: [
+          AspectRatio(
+            aspectRatio: 1.12,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: onTap,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: selected
+                          ? accent
+                          : scheme.outlineVariant.withValues(alpha: 0.7),
+                      width: selected ? 2.5 : 1.2,
+                    ),
+                    boxShadow: selected
+                        ? [
+                            BoxShadow(
+                              color: accent.withValues(alpha: 0.22),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (thumbnail != null)
+                        thumbnail
+                      else
+                        Center(
+                          child: Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: accent.withValues(alpha: 0.14),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(icon, size: 21, color: accent),
+                          ),
+                        ),
+                      if (selected)
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                                color: accent, shape: BoxShape.circle),
+                            child: const Icon(Icons.check_rounded,
+                                size: 13, color: Colors.white),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-              alignment: Alignment.center,
-              child: child,
             ),
-            const SizedBox(height: 6),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                    color: selected ? accent : scheme.onSurfaceVariant)),
-          ],
-        ),
+          ),
+          const SizedBox(height: 8),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                  color: selected ? accent : scheme.onSurface)),
+        ],
       ),
     );
   }
@@ -4846,44 +4857,38 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     // The settings preview the CHOSEN theme live: the picked swatch, the Save
     // button and the Hero switch all adopt this colour as you tap around.
     final accent = spaceThemeColor(_theme);
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 10, 20, 16 + bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Grab handle.
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      appBar: AppBar(
+        backgroundColor: scheme.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: scheme.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
+                color: accent.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(12),
               ),
+              child: Icon(Icons.tune_rounded, size: 18, color: accent),
             ),
-          ),
-          // Header with a themed icon chip.
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(Icons.tune_rounded, size: 18, color: accent),
-              ),
-              const SizedBox(width: 10),
-              Text('Space settings',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 17,
-                      color: scheme.onSurface)),
-            ],
-          ),
-          const SizedBox(height: 20),
+            const SizedBox(width: 10),
+            Text('Settings',
+                style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                    color: scheme.onSurface)),
+          ],
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(20, 8, 20, 20 + bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           _label(scheme, 'NAME'),
           TextField(
             controller: _c,
@@ -4926,16 +4931,14 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
             ],
           ),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _bgOption(
                 scheme,
                 selected: (_bgUrl ?? '').isEmpty,
                 onTap: _bgBusy ? null : _removeBackground,
                 label: 'Default',
-                child: Icon(Icons.auto_awesome_rounded,
-                    color: (_bgUrl ?? '').isEmpty
-                        ? spaceThemeColor(_theme)
-                        : scheme.onSurfaceVariant),
+                icon: Icons.auto_awesome_rounded,
               ),
               const SizedBox(width: 12),
               _bgOption(
@@ -4943,12 +4946,11 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                 selected: (_bgUrl ?? '').startsWith('/wallpapers/'),
                 onTap: _bgBusy ? null : _openSpaceGallery,
                 label: 'Gallery',
-                child: (_bgUrl ?? '').startsWith('/wallpapers/')
-                    ? SizedBox.expand(
-                        child: WallpaperThumb(
-                            resolveAvatarUrl(_bgUrl, widget.apiBase) ?? ''))
-                    : Icon(Icons.collections_rounded,
-                        color: scheme.onSurfaceVariant),
+                icon: Icons.collections_rounded,
+                thumbnail: (_bgUrl ?? '').startsWith('/wallpapers/')
+                    ? WallpaperThumb(
+                        resolveAvatarUrl(_bgUrl, widget.apiBase) ?? '')
+                    : null,
               ),
               const SizedBox(width: 12),
               _bgOption(
@@ -4956,17 +4958,15 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                 selected: (_bgUrl ?? '').startsWith('/attachments/'),
                 onTap: _bgBusy ? null : _pickBackground,
                 label: 'Your photo',
-                child: (_bgUrl ?? '').startsWith('/attachments/')
-                    ? SizedBox.expand(
-                        child: authNetworkImage(
-                          url: resolveAvatarUrl(_bgUrl, widget.apiBase) ?? '',
-                          headers: mediaAuthHeaders(
-                              resolveAvatarUrl(_bgUrl, widget.apiBase) ?? ''),
-                          fit: BoxFit.cover,
-                        ),
+                icon: Icons.add_photo_alternate_outlined,
+                thumbnail: (_bgUrl ?? '').startsWith('/attachments/')
+                    ? authNetworkImage(
+                        url: resolveAvatarUrl(_bgUrl, widget.apiBase) ?? '',
+                        headers: mediaAuthHeaders(
+                            resolveAvatarUrl(_bgUrl, widget.apiBase) ?? ''),
+                        fit: BoxFit.cover,
                       )
-                    : Icon(Icons.add_photo_alternate_outlined,
-                        color: scheme.onSurfaceVariant),
+                    : null,
               ),
             ],
           ),
@@ -5103,6 +5103,53 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
             ),
           ),
         ],
+        ),
+      ),
+    );
+  }
+}
+
+
+/// Full-screen wallpaper picker (a sub-page of Space Settings). The header
+/// stays pinned while the grid scrolls, a back arrow returns to Settings, and
+/// tapping a wallpaper pops back with the chosen id so Settings can apply it.
+class _WallpaperPickerPage extends StatelessWidget {
+  final List<WallpaperPreset> presets;
+  final String apiBase;
+  final Color accent;
+  final String? selectedFullUrl;
+  const _WallpaperPickerPage({
+    required this.presets,
+    required this.apiBase,
+    required this.accent,
+    this.selectedFullUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      appBar: AppBar(
+        backgroundColor: scheme.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        titleSpacing: 0,
+        title: Text('Choose a wallpaper',
+            style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
+                color: scheme.onSurface)),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+        child: WallpaperGalleryGrid(
+          presets: presets,
+          apiBase: apiBase,
+          accent: accent,
+          selectedFullUrl: selectedFullUrl,
+          onPick: (pp) => Navigator.pop(context, pp.id),
+        ),
       ),
     );
   }

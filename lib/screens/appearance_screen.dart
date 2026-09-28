@@ -278,16 +278,13 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
           Navigator.pop(ctx);
         }
 
-        final maxH = MediaQuery.of(ctx).size.height * 0.74;
+        final maxH = MediaQuery.of(ctx).size.height * 0.82;
         return SafeArea(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: maxH),
-            child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(18, 10, 18, 22),
+          child: SizedBox(
+            height: maxH,
             child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const SizedBox(height: 10),
                 Center(
                   child: Container(
                     width: 40,
@@ -298,64 +295,91 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
                   ),
                 ),
                 const SizedBox(height: 14),
-                Text('Default chat wallpaper',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: scheme.onSurface)),
-                const SizedBox(height: 2),
-                Text('Applies to every chat without its own',
-                    style: TextStyle(
-                        fontSize: 12, color: scheme.onSurfaceVariant)),
-                const SizedBox(height: 14),
-                Row(children: [
-                  Expanded(
-                      child: _quick(scheme, Icons.blur_on_rounded, 'Default',
-                          current.mode == 'default',
-                          () => applyClose('default'))),
-                  const SizedBox(width: 10),
-                  Expanded(
-                      child: _quick(scheme, Icons.auto_awesome_rounded,
-                          'Motif', current.mode == 'motif',
-                          () => applyClose('motif'))),
-                ]),
-                const SizedBox(height: 14),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('GALLERY',
-                      style: TextStyle(
-                          fontSize: 11,
-                          letterSpacing: 0.6,
-                          fontWeight: FontWeight.w700,
-                          color: scheme.onSurfaceVariant)),
-                ),
-                const SizedBox(height: 8),
-                WallpaperGalleryGrid(
-                  presets: _presets,
-                  apiBase: _apiBase,
-                  accent: scheme.primary,
-                  selectedFullUrl: selUrl,
-                  onPick: (p) => applyClose('photo',
-                      url: _full(p.url),
-                      wideUrl: (p.wideUrl != null && p.wideUrl!.isNotEmpty)
-                          ? _full(p.wideUrl!)
-                          : null),
+                // Pinned header.
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Default chat wallpaper',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: scheme.onSurface)),
+                      const SizedBox(height: 2),
+                      Text('Applies to every chat without its own',
+                          style: TextStyle(
+                              fontSize: 12, color: scheme.onSurfaceVariant)),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 14),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    Navigator.pop(ctx);
-                    await _upload();
-                  },
-                  icon: const Icon(Icons.add_photo_alternate_rounded, size: 20),
-                  label: const Text('Upload a photo'),
-                  style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14))),
+                // Scrolls independently between the pinned header and footer.
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(children: [
+                          Expanded(
+                              child: _quick(scheme, Icons.blur_on_rounded,
+                                  'Default', current.mode == 'default',
+                                  () => applyClose('default'))),
+                          const SizedBox(width: 10),
+                          Expanded(
+                              child: _quick(scheme, Icons.auto_awesome_rounded,
+                                  'Motif', current.mode == 'motif',
+                                  () => applyClose('motif'))),
+                        ]),
+                        const SizedBox(height: 16),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('GALLERY',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  letterSpacing: 0.6,
+                                  fontWeight: FontWeight.w700,
+                                  color: scheme.onSurfaceVariant)),
+                        ),
+                        const SizedBox(height: 8),
+                        WallpaperGalleryGrid(
+                          presets: _presets,
+                          apiBase: _apiBase,
+                          accent: scheme.primary,
+                          selectedFullUrl: selUrl,
+                          onPick: (p) => applyClose('photo',
+                              url: _full(p.url),
+                              wideUrl:
+                                  (p.wideUrl != null && p.wideUrl!.isNotEmpty)
+                                      ? _full(p.wideUrl!)
+                                      : null),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Pinned footer — always reachable, whatever the scroll.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        await _upload();
+                      },
+                      icon: const Icon(Icons.add_photo_alternate_rounded,
+                          size: 20),
+                      label: const Text('Upload a photo'),
+                      style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14))),
+                    ),
+                  ),
                 ),
               ],
-            ),
             ),
           ),
         );

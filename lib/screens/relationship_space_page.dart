@@ -4606,6 +4606,17 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
   late String _theme = widget.initialTheme;
   late bool _primary = widget.initialPrimary;
   late String? _bgUrl = widget.initialBackgroundUrl;
+  // Remember the last wallpaper and the last device photo separately, so each
+  // background tile keeps its own preview and the user can flip between them
+  // without the other tile going blank.
+  late String? _lastGalleryUrl =
+      (widget.initialBackgroundUrl ?? '').startsWith('/wallpapers/')
+          ? widget.initialBackgroundUrl
+          : null;
+  late String? _lastPhotoUrl =
+      (widget.initialBackgroundUrl ?? '').startsWith('/attachments/')
+          ? widget.initialBackgroundUrl
+          : null;
   bool _busy = false;
   bool _bgBusy = false;
 
@@ -4635,7 +4646,10 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     if (!mounted) return;
     setState(() {
       _bgBusy = false;
-      if (updated != null) _bgUrl = updated['background_url'] as String?;
+      if (updated != null) {
+        _bgUrl = updated['background_url'] as String?;
+        if ((_bgUrl ?? '').startsWith('/attachments/')) _lastPhotoUrl = _bgUrl;
+      }
     });
     if (updated != null) {
       widget.onSpaceUpdated?.call(updated);
@@ -4686,7 +4700,10 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     if (!mounted) return;
     setState(() {
       _bgBusy = false;
-      if (updated != null) _bgUrl = updated['background_url'] as String?;
+      if (updated != null) {
+        _bgUrl = updated['background_url'] as String?;
+        if ((_bgUrl ?? '').startsWith('/wallpapers/')) _lastGalleryUrl = _bgUrl;
+      }
     });
     if (updated != null) {
       widget.onSpaceUpdated?.call(updated);
@@ -4696,18 +4713,30 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     }
   }
 
+  /// Instantly re-apply the last-used gallery wallpaper (a preset — allowed by
+  /// the server without a re-upload). Falls back to opening the picker.
+  Future<void> _reapplyGallery() async {
+    final url = _lastGalleryUrl;
+    if (url == null || !url.startsWith('/wallpapers/')) {
+      await _openSpaceGallery();
+      return;
+    }
+    await _applyPreset(url.split('/').last);
+  }
+
   Widget _bgOption(ColorScheme scheme,
       {required bool selected,
       required VoidCallback? onTap,
       required IconData icon,
       Widget? thumbnail,
+      bool dim = false,
       required String label}) {
     final accent = spaceThemeColor(_theme);
     return Expanded(
       child: Column(
         children: [
-          AspectRatio(
-            aspectRatio: 1.12,
+          SizedBox(
+            height: 92,
             child: Material(
               color: Colors.transparent,
               child: InkWell(
@@ -4752,6 +4781,22 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                             child: Icon(icon, size: 21, color: accent),
                           ),
                         ),
+                      // Inactive preview: soften it and show the type icon, so
+                      // it clearly invites a tap to switch back / change.
+                      if (thumbnail != null && dim) ...[
+                        Container(color: Colors.black.withValues(alpha: 0.28)),
+                        Center(
+                          child: Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.35),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(icon, size: 18, color: Colors.white),
+                          ),
+                        ),
+                      ],
                       if (selected)
                         Positioned(
                           top: 6,
@@ -4885,7 +4930,10 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(20, 8, 20, 20 + bottom),
-        child: Column(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -4944,13 +4992,25 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
               _bgOption(
                 scheme,
                 selected: (_bgUrl ?? '').startsWith('/wallpapers/'),
-                onTap: _bgBusy ? null : _openSpaceGallery,
+                // Tap re-applies the last wallpaper instantly; tap again while
+                // active (or when none is remembered yet) opens the picker.
+                onTap: _bgBusy
+                    ? null
+                    : () {
+                        if ((_bgUrl ?? '').startsWith('/wallpapers/') ||
+                            _lastGalleryUrl == null) {
+                          _openSpaceGallery();
+                        } else {
+                          _reapplyGallery();
+                        }
+                      },
                 label: 'Gallery',
                 icon: Icons.collections_rounded,
-                thumbnail: (_bgUrl ?? '').startsWith('/wallpapers/')
+                thumbnail: (_lastGalleryUrl ?? '').isNotEmpty
                     ? WallpaperThumb(
-                        resolveAvatarUrl(_bgUrl, widget.apiBase) ?? '')
+                        resolveAvatarUrl(_lastGalleryUrl, widget.apiBase) ?? '')
                     : null,
+                dim: !(_bgUrl ?? '').startsWith('/wallpapers/'),
               ),
               const SizedBox(width: 12),
               _bgOption(
@@ -4959,14 +5019,17 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                 onTap: _bgBusy ? null : _pickBackground,
                 label: 'Your photo',
                 icon: Icons.add_photo_alternate_outlined,
-                thumbnail: (_bgUrl ?? '').startsWith('/attachments/')
+                thumbnail: (_lastPhotoUrl ?? '').isNotEmpty
                     ? authNetworkImage(
-                        url: resolveAvatarUrl(_bgUrl, widget.apiBase) ?? '',
+                        url: resolveAvatarUrl(_lastPhotoUrl, widget.apiBase) ??
+                            '',
                         headers: mediaAuthHeaders(
-                            resolveAvatarUrl(_bgUrl, widget.apiBase) ?? ''),
+                            resolveAvatarUrl(_lastPhotoUrl, widget.apiBase) ??
+                                ''),
                         fit: BoxFit.cover,
                       )
                     : null,
+                dim: !(_bgUrl ?? '').startsWith('/attachments/'),
               ),
             ],
           ),
@@ -5103,6 +5166,8 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
             ),
           ),
         ],
+        ),
+          ),
         ),
       ),
     );

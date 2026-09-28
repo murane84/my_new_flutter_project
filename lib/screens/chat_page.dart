@@ -539,9 +539,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               fit: StackFit.expand,
               children: [
                 DecoratedBox(decoration: BoxDecoration(image: deco)),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: veil.withValues(alpha: isDark ? 0.55 : 0.62),
+                ValueListenableBuilder<double>(
+                  valueListenable: wallpaperClarity,
+                  builder: (_, _, _) => DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: veil.withValues(
+                          alpha: wallpaperVeilAlpha(isDark ? 0.55 : 0.62)),
+                    ),
                   ),
                 ),
               ],

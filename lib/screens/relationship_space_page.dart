@@ -17,6 +17,7 @@ import '../services/now_playing_presence.dart';
 import '../utils/toast_helper.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/popup_shell.dart';
+import '../utils/chat_background.dart';
 import '../utils/net_image.dart';
 import '../services/media_store.dart';
 import '../utils/romantic_pattern.dart';
@@ -1131,15 +1132,20 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                     ),
                   ),
                 ),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        veil.withValues(alpha: isDark ? 0.46 : 0.58),
-                        veil.withValues(alpha: isDark ? 0.34 : 0.42),
-                      ],
+                ValueListenableBuilder<double>(
+                  valueListenable: wallpaperClarity,
+                  builder: (_, _, _) => DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          veil.withValues(
+                              alpha: wallpaperVeilAlpha(isDark ? 0.46 : 0.58)),
+                          veil.withValues(
+                              alpha: wallpaperVeilAlpha(isDark ? 0.34 : 0.42)),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1402,15 +1408,34 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   /// A quiet "thinking of you" pill — the lightest touch across the bond, kept
   /// as its own one-tap action (it has no details to open).
   Widget _quickPill(ColorScheme scheme) {
+    // Opaque + bordered so it stands clear over any wallpaper (never dissolves).
+    final fill =
+        Color.alphaBlend(_accent.withValues(alpha: 0.16), scheme.surface);
     return Center(
-      child: Material(
-        color: _accent.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(24),
-        child: InkWell(
-          onTap: _nudging ? null : _nudge,
+      child: Container(
+        decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Material(
+          color: fill,
+          borderRadius: BorderRadius.circular(24),
+          child: InkWell(
+            onTap: _nudging ? null : _nudge,
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                    color: _accent.withValues(alpha: 0.45), width: 1.2),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1429,6 +1454,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                         fontWeight: FontWeight.w700,
                         fontSize: 13.5)),
               ],
+            ),
             ),
           ),
         ),

@@ -113,6 +113,39 @@ class AppearanceScreen extends StatelessWidget {
             style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),
           const SizedBox(height: 28),
+          _sectionLabel(scheme, 'WALLPAPER CLARITY'),
+          const SizedBox(height: 6),
+          ValueListenableBuilder<double>(
+            valueListenable: wallpaperClarity,
+            builder: (_, v, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Text('Faint',
+                        style: TextStyle(
+                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                    Expanded(
+                      child: Slider(
+                        value: v,
+                        onChanged: (nv) => setWallpaperClarity(nv),
+                      ),
+                    ),
+                    Text('Clear',
+                        style: TextStyle(
+                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                  ],
+                ),
+                Text(
+                  'How strongly chat & Space wallpapers show through. Slide '
+                  'toward Clear for a vivid picture, or Faint for a subtle '
+                  'backdrop. Buttons and cards always stay sharp on top.',
+                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 28),
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(

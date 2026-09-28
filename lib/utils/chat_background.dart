@@ -38,6 +38,33 @@ class ChatBg {
 /// because each conversation may now carry its own wallpaper.
 final ValueNotifier<int> chatBgRevision = ValueNotifier<int>(0);
 
+/// How strongly a photo wallpaper shows through the readability veil, 0..1.
+/// 0.5 is the balanced default ("foggish"), 1.0 shows the picture nearly clear,
+/// and 0.0 fades it far back. Backgrounds listen to this so a change repaints
+/// live. Persisted so the choice survives restarts.
+final ValueNotifier<double> wallpaperClarity = ValueNotifier<double>(0.5);
+const String _kClarity = 'wallpaper_clarity_v1';
+
+/// The veil opacity to paint over a wallpaper, derived from [wallpaperClarity]
+/// and a per-surface [base] (its opacity at the default 0.5 clarity). Higher
+/// clarity thins the veil (clearer picture); lower clarity thickens it (fainter
+/// picture). Clamped so text never becomes unreadable or the veil fully opaque.
+double wallpaperVeilAlpha(double base) {
+  final c = wallpaperClarity.value.clamp(0.0, 1.0);
+  final factor = 1.0 + (0.5 - c) * 1.7;
+  return (base * factor).clamp(0.04, 0.92);
+}
+
+/// Persist + broadcast a new wallpaper clarity (0..1).
+Future<void> setWallpaperClarity(double v) async {
+  v = v.clamp(0.0, 1.0);
+  wallpaperClarity.value = v;
+  try {
+    final p = await SharedPreferences.getInstance();
+    await p.setDouble(_kClarity, v);
+  } catch (_) {}
+}
+
 /// Legacy single notifier, kept mirroring the all-chats default so any old
 /// reference keeps working. New code calls [chatBackgroundFor].
 final ValueNotifier<ChatBg> chatBackground =
@@ -93,6 +120,8 @@ Future<void> loadChatBackground() async {
       });
     }
     chatBackground.value = _all;
+    wallpaperClarity.value =
+        (p.getDouble(_kClarity) ?? 0.5).clamp(0.0, 1.0).toDouble();
     chatBgRevision.value++;
   } catch (_) {}
 }

@@ -2895,13 +2895,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
   Widget _panelDecor(BuildContext context, Widget child,
       {bool isMusicPanel = false, EdgeInsetsGeometry? padding}) {
     final theme = Theme.of(context);
-    // The music panel ("Now Playing") is always a dark immersive stage —
-    // independent of the app's Light/Dark mode — so cover art, the vinyl and the
-    // glow pop (see PlayerTheme, which also tints the controls with the accent).
-    // Chat panels keep their normal themed surface.
-    final bgColor = isMusicPanel
-        ? const Color(0xFF141011)   // fixed near-black music stage
-        : theme.colorScheme.surface;
+    // Both the music panel and the chat panels now follow the app's Light/Dark
+    // theme (the music stage no longer forces a fixed near-black), so toggling
+    // the theme recolours the player just like the chat area. PlayerTheme still
+    // tints the controls with the chosen accent.
+    final bgColor = theme.colorScheme.surface;
 
     return Container(
       decoration: BoxDecoration(

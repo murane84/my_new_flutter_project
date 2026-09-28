@@ -85,59 +85,36 @@ class PlayerTheme extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent = context.watch<ThemeProvider>().accent;
     final custom = accent.toARGB32() != ThemeProvider.defaultAccent.toARGB32();
+    final base = Theme.of(context);
+    final baseScheme = base.colorScheme;
+    final isDark = base.brightness == Brightness.dark;
 
-    // Harmonised dark primary family from the accent; the default red keeps the
-    // app's punchy dark-mode red so nothing shifts for un-personalized users.
-    final seed =
-        ColorScheme.fromSeed(seedColor: accent, brightness: Brightness.dark);
-    // Use the EXACT accent (not Material's muted seed tone) so a vivid pick
-    // stays vivid on the dark stage, matching the rest of the app.
-    final primary = custom ? accent : const Color(0xFFFF5A5F);
+    // Follow the app's Light/Dark theme (surfaces + text come straight from the
+    // base scheme, like the chat area) and only re-brand the accent family with
+    // the EXACT chosen colour so a vivid pick stays vivid.
+    final primary = custom ? accent : baseScheme.primary;
     final onPrimary = custom
         ? (ThemeData.estimateBrightnessForColor(accent) == Brightness.dark
             ? Colors.white
             : Colors.black)
-        : const Color(0xFF3A0007);
+        : baseScheme.onPrimary;
 
-    final scheme = seed.copyWith(
+    final scheme = baseScheme.copyWith(
       primary: primary,
       onPrimary: onPrimary,
-      primaryContainer:
-          custom ? seed.primaryContainer : const Color(0xFF8E1420),
-      onPrimaryContainer:
-          custom ? seed.onPrimaryContainer : const Color(0xFFFFDAD7),
-      // Fixed near-black brand surfaces — the stage stays dark for every accent
-      // (these match the app's dark-mode surfaces for visual continuity).
-      surface: const Color(0xFF141011),
-      onSurface: const Color(0xFFF1E4E4),
-      surfaceContainerLowest: const Color(0xFF0E0B0C),
-      surfaceContainerLow: const Color(0xFF1B1617),
-      surfaceContainer: const Color(0xFF201A1B),
-      surfaceContainerHigh: const Color(0xFF2B2324),
-      surfaceContainerHighest: const Color(0xFF362C2E),
-      onSurfaceVariant: const Color(0xFFD6C4C5),
-      outline: const Color(0xFF9E8E8F),
-      outlineVariant: const Color(0xFF4E4344),
+      // An opaque accent-tinted container that adapts to the active surface.
+      primaryContainer: custom
+          ? Color.alphaBlend(
+              accent.withValues(alpha: isDark ? 0.30 : 0.16), baseScheme.surface)
+          : baseScheme.primaryContainer,
+      onPrimaryContainer: custom ? baseScheme.onSurface : baseScheme.onPrimaryContainer,
     );
 
-    final base = Theme.of(context);
     return Theme(
       data: base.copyWith(
         colorScheme: scheme,
-        scaffoldBackgroundColor: scheme.surface,
-        // The stage is permanently dark, but base.textTheme still carries the
-        // APP theme's ink — black in Light mode. Without recolouring it here,
-        // any un-coloured Text (e.g. the playlist header) and the search field's
-        // input/hint render black on the dark stage and vanish in Light mode.
-        // Re-ink all text + hints + icons to the dark-stage colours so they stay
-        // legible whichever app theme is active.
-        textTheme: base.textTheme
-            .apply(bodyColor: scheme.onSurface, displayColor: scheme.onSurface),
-        primaryTextTheme: base.primaryTextTheme
-            .apply(bodyColor: scheme.onSurface, displayColor: scheme.onSurface),
-        hintColor: scheme.onSurfaceVariant,
-        iconTheme: base.iconTheme.copyWith(color: scheme.onSurface),
-        // Re-brand the baked-in button/input themes to the accent + dark stage.
+        // Re-brand only the baked-in button/input accent; surfaces, text and
+        // icons now inherit the active app theme.
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             backgroundColor: primary,

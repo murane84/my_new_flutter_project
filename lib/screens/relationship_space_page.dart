@@ -37,12 +37,38 @@ import '../services/notif_service.dart'
 
 // ── theme presets (curated, never a raw colour wheel) ────────────────────────
 const Map<String, Color> kSpacePalette = {
+  // NOTE: keys are stored on the Space row, so existing keys must never change.
+  // New colours are added by appending fresh keys only.
+  'red': Color(0xFFD90429),
   'coral': Color(0xFFFF5A5F),
-  'violet': Color(0xFF8E7CFF),
-  'ocean': Color(0xFF37B0E6),
-  'ember': Color(0xFFFF8A3D),
-  'forest': Color(0xFF39B54A),
+  'sunset': Color(0xFFFB7185),
   'rose': Color(0xFFFF4D8D),
+  'magenta': Color(0xFFEC4899),
+  'fuchsia': Color(0xFFD946EF),
+  'orchid': Color(0xFFA855F7),
+  'violet': Color(0xFF8E7CFF),
+  'grape': Color(0xFF9333EA),
+  'indigo': Color(0xFF6366F1),
+  'cobalt': Color(0xFF2563EB),
+  'ocean': Color(0xFF37B0E6),
+  'sky': Color(0xFF38BDF8),
+  'cyan': Color(0xFF06B6D4),
+  'teal': Color(0xFF1FB6A6),
+  'emerald': Color(0xFF10B981),
+  'forest': Color(0xFF39B54A),
+  'lime': Color(0xFF84CC16),
+  'gold': Color(0xFFEAB308),
+  'amber': Color(0xFFF59E0B),
+  'ember': Color(0xFFFF8A3D),
+  'slate': Color(0xFF64748B),
+  'neon_pink': Color(0xFFFF2E88),
+  'neon_purple': Color(0xFFB026FF),
+  'neon_blue': Color(0xFF2D7DFF),
+  'neon_cyan': Color(0xFF17E9E0),
+  'neon_green': Color(0xFF2BE86B),
+  'neon_lime': Color(0xFFC6FF00),
+  'neon_yellow': Color(0xFFFFE500),
+  'neon_orange': Color(0xFFFF7A00),
 };
 
 Color spaceThemeColor(String? key) => kSpacePalette[key] ?? const Color(0xFFFF5A5F);

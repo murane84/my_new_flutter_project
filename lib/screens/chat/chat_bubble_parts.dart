@@ -161,12 +161,64 @@ class _ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? Theme.of(context).colorScheme.onSurface;
-    return ListTile(
-      leading: Icon(icon, color: c, size: 22),
-      title: Text(label, style: TextStyle(color: c)),
-      dense: true,
+    final scheme = Theme.of(context).colorScheme;
+    final c = color ?? scheme.onSurface;
+    return InkWell(
       onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+        child: Row(
+          children: [
+            Icon(icon, color: c, size: 22),
+            const SizedBox(width: 18),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: c,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A single emoji reaction in the floating reaction pill. It gives a quick
+/// press "pop" (scale down then release) so tapping a reaction feels tactile.
+class _ReactionButton extends StatefulWidget {
+  final String emoji;
+  final VoidCallback onTap;
+  const _ReactionButton({required this.emoji, required this.onTap});
+
+  @override
+  State<_ReactionButton> createState() => _ReactionButtonState();
+}
+
+class _ReactionButtonState extends State<_ReactionButton> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _down = true),
+      onTapUp: (_) => setState(() => _down = false),
+      onTapCancel: () => setState(() => _down = false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _down ? 0.72 : 1.0,
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOut,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Text(widget.emoji, style: const TextStyle(fontSize: 30)),
+        ),
+      ),
     );
   }
 }

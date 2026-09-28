@@ -118,7 +118,7 @@ class _AttachSheetState extends State<AttachSheet> {
       constraints: BoxConstraints(maxHeight: media.size.height * 0.82),
       decoration: BoxDecoration(
         color: scheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+        borderRadius: BorderRadius.circular(26),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(
@@ -136,7 +136,6 @@ class _AttachSheetState extends State<AttachSheet> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _grabHandle(scheme),
                 _title(scheme),
                 _optionsGrid(scheme),
                 if (widget.isMobile) _recentSection(scheme),
@@ -149,21 +148,9 @@ class _AttachSheetState extends State<AttachSheet> {
     );
   }
 
-  Widget _grabHandle(ColorScheme scheme) {
-    return Container(
-      margin: const EdgeInsets.only(top: 10, bottom: 4),
-      width: 42,
-      height: 4,
-      decoration: BoxDecoration(
-        color: scheme.onSurfaceVariant.withAlpha(70),
-        borderRadius: BorderRadius.circular(3),
-      ),
-    );
-  }
-
   Widget _title(ColorScheme scheme) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 4),
+      padding: const EdgeInsets.fromLTRB(24, 18, 24, 4),
       child: Align(
         alignment: Alignment.centerLeft,
         child: Text(

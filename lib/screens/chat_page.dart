@@ -1666,21 +1666,48 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       fn();
     }
 
-    showModalBottomSheet(
+    // Appears from the chat screen itself (a scale + fade pop), rather than
+    // sliding up from the footer as a bottom sheet.
+    showGeneralDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => AttachSheet(
-        isMobile: _isMobile,
-        onGallery: () => act(() => _pickImage(ImageSource.gallery)),
-        onCamera: () => act(() => _pickImage(ImageSource.camera)),
-        onLocation: () => act(_shareLocation),
-        onContact: () => act(_shareContact),
-        onDocument: () => act(_pickDocument),
-        onListenTogether: () => act(_startListenTogether),
-        onPickPhoto: (bytes, name) =>
-            act(() => _previewAndSendImage(bytes, name, 'image/jpeg')),
-      ),
+      barrierDismissible: true,
+      barrierLabel: 'Attach',
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      transitionDuration: const Duration(milliseconds: 210),
+      pageBuilder: (ctx, a1, a2) {
+        final media = MediaQuery.of(ctx);
+        return Center(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+                16, media.padding.top + 24, 16, media.padding.bottom + 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: AttachSheet(
+                isMobile: _isMobile,
+                onGallery: () => act(() => _pickImage(ImageSource.gallery)),
+                onCamera: () => act(() => _pickImage(ImageSource.camera)),
+                onLocation: () => act(_shareLocation),
+                onContact: () => act(_shareContact),
+                onDocument: () => act(_pickDocument),
+                onListenTogether: () => act(_startListenTogether),
+                onPickPhoto: (bytes, name) =>
+                    act(() => _previewAndSendImage(bytes, name, 'image/jpeg')),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (ctx, anim, sec, child) {
+        final curved =
+            CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
+        return FadeTransition(
+          opacity: anim,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.92, end: 1.0).animate(curved),
+            child: child,
+          ),
+        );
+      },
     );
   }
 
@@ -2983,47 +3010,28 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final isMe = msg['sender_id'].toString() == _myId;
     final content = msg['content'] as String? ?? '';
     final scheme = Theme.of(context).colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final media = MediaQuery.of(context);
 
-    showModalBottomSheet(
+    const reactions = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+    final softShadow = <BoxShadow>[
+      BoxShadow(
+        color: Colors.black.withValues(alpha: isDark ? 0.55 : 0.20),
+        blurRadius: 30,
+        offset: const Offset(0, 14),
+      ),
+    ];
+
+    showGeneralDialog(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        margin: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 10),
-                width: 36,
-                height: 3,
-                decoration: BoxDecoration(
-                  color: scheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              // Quick emoji reactions
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: ['👍', '❤️', '😂', '😮', '😢', '🙏'].map((e) {
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _addReaction(msg, e);
-                      },
-                      child: Text(e, style: const TextStyle(fontSize: 28)),
-                    );
-                  }).toList(),
-                ),
-              ),
-              const Divider(height: 1),
+      barrierDismissible: true,
+      barrierLabel: 'Message actions',
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      transitionDuration: const Duration(milliseconds: 210),
+      pageBuilder: (ctx, a1, a2) {
+        // Built here so the action closures can pop THIS popup route.
+        final actions = <Widget>[
               _ActionTile(
                 icon: Icons.reply_rounded,
                 label: 'Reply',
@@ -3119,11 +3127,77 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   },
                 ),
               ],
-              const SizedBox(height: 8),
-            ],
+              const SizedBox(height: 6),
+        ];
+
+        return Center(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+                18, media.padding.top + 24, 18, media.padding.bottom + 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Floating reaction pill — sits apart from the action card,
+                  // the way modern messengers present quick reactions.
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: scheme.surface,
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: softShadow,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        for (final e in reactions)
+                          _ReactionButton(
+                            emoji: e,
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              _addReaction(msg, e);
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // Action card
+                  Flexible(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: scheme.surface,
+                        borderRadius: BorderRadius.circular(22),
+                        boxShadow: softShadow,
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: actions,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
+      transitionBuilder: (ctx, anim, sec, child) {
+        final curved =
+            CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
+        return FadeTransition(
+          opacity: anim,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.92, end: 1.0).animate(curved),
+            child: child,
+          ),
+        );
+      },
     );
   }
 

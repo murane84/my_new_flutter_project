@@ -173,16 +173,24 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
           const SizedBox(height: 18),
           _sectionLabel(scheme, 'CHAT & STATUS'),
           const SizedBox(height: 10),
-          const IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(child: _ChatWallpaperSection()),
-                SizedBox(width: 12),
-                Expanded(child: _StatusMediaSection()),
-              ],
-            ),
-          ),
+          isWide
+              ? const IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: _ChatWallpaperSection()),
+                      SizedBox(width: 12),
+                      Expanded(child: _StatusMediaSection()),
+                    ],
+                  ),
+                )
+              : const Column(
+                  children: [
+                    _ChatWallpaperSection(),
+                    SizedBox(height: 10),
+                    _StatusMediaSection(),
+                  ],
+                ),
           if (_showGuide) ...[
             const SizedBox(height: 8),
             Text(
@@ -626,30 +634,37 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
               borderRadius: BorderRadius.circular(18),
               onTap: _openSheet,
               child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        _accentIconChip(scheme, Icons.wallpaper_rounded),
-                        const Spacer(),
-                        Icon(Icons.chevron_right_rounded,
-                            size: 20, color: scheme.onSurfaceVariant),
-                      ],
+                    _accentIconChip(scheme, Icons.wallpaper_rounded),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Chat wallpaper',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: scheme.onSurface)),
+                          const SizedBox(height: 2),
+                          Text('${_labelFor(bg)} · all chats',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: scheme.onSurfaceVariant)),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 12),
-                  Text('Chat wallpaper',
-                      style: TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w700,
-                          color: scheme.onSurface)),
-                  const SizedBox(height: 2),
-                    Text('${_labelFor(bg)} · all chats',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 12, color: scheme.onSurfaceVariant)),
+                    const SizedBox(width: 8),
+                    Icon(Icons.chevron_right_rounded,
+                        size: 20, color: scheme.onSurfaceVariant),
                   ],
                 ),
               ),
@@ -713,43 +728,48 @@ class _StatusMediaSectionState extends State<_StatusMediaSection> {
     return DecoratedBox(
       decoration: _raisedCardDecoration(scheme, isDark),
       child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        child: Row(
           children: [
-            Row(
-              children: [
-                _accentIconChip(scheme, Icons.wifi_rounded),
-                const Spacer(),
-                SizedBox(
-                  height: 24,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Switch(
-                      value: _videosOnWifi,
-                      onChanged: _loaded ? _set : null,
-                    ),
-                  ),
-                ),
-              ],
+            _accentIconChip(scheme, Icons.wifi_rounded),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Status videos',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface)),
+                  const SizedBox(height: 2),
+                  Text(
+                      !_loaded
+                          ? 'Loading…'
+                          : (_videosOnWifi
+                              ? 'Pre-load on Wi-Fi'
+                              : 'Off · load on open'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 12, color: scheme.onSurfaceVariant)),
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
-            Text('Status videos',
-                style: TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w700,
-                    color: scheme.onSurface)),
-            const SizedBox(height: 2),
-            Text(
-                !_loaded
-                    ? 'Loading…'
-                    : (_videosOnWifi
-                        ? 'Pre-load on Wi-Fi'
-                        : 'Off · load on open'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style:
-                    TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+            const SizedBox(width: 8),
+            SizedBox(
+              height: 24,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Switch(
+                  value: _videosOnWifi,
+                  onChanged: _loaded ? _set : null,
+                ),
+              ),
+            ),
           ],
         ),
       ),

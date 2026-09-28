@@ -3300,15 +3300,20 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       padding: const EdgeInsets.only(bottom: 14),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        // Opaque tinted fill so the now-playing tile never washes out over a
+        // wallpaper (same treatment as the 'Thinking of you' pill).
         decoration: BoxDecoration(
+          color: Color.alphaBlend(
+              _accent.withValues(alpha: 0.16), scheme.surface),
           borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            colors: [
-              _accent.withValues(alpha: 0.20),
-              _accent.withValues(alpha: 0.08),
-            ],
-          ),
           border: Border.all(color: _accent.withValues(alpha: 0.35)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.10),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Row(
           children: [

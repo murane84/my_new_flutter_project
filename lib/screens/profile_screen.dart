@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import '../services/wallpapers_service.dart';
+import '../widgets/wallpaper_gallery.dart';
 import '../utils/net_image.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:phone_numbers_parser/phone_numbers_parser.dart';
@@ -182,7 +183,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               leading:
                   Icon(Icons.photo_library_rounded, color: scheme.primary),
               title: const Text('Choose from gallery'),
-              subtitle: const Text('Pick from your photos'),
+              subtitle: const Text('Pick a saved Aluta picture'),
               onTap: () => Navigator.pop(ctx, 'gallery'),
             ),
             ListTile(
@@ -205,19 +206,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  /// The "gallery" now means Aluta's own saved wallpaper pictures — a signed-in
+  /// user can adopt one as their profile photo. Set as a preset url, it renders
+  /// at full clarity (avatars never carry the wallpaper veil), so the clarity
+  /// slider does not touch the profile picture.
   Future<void> _pickFromGallery() async {
-    try {
-      final x = await ImagePicker().pickImage(
-          source: ImageSource.gallery, imageQuality: 78, maxWidth: 800);
-      if (x == null) return;
-      final bytes = await x.readAsBytes();
-      await _uploadAvatarBytes(bytes, x.name, 'image/jpeg');
-    } catch (_) {
-      if (mounted) {
-        setState(() => _uploadingAvatar = false);
-        showToast(context, 'Could not pick photo', type: ToastType.error);
-      }
-    }
+    final base = await AppConfig.baseUrl;
+    final presets = await WallpapersService.instance.load();
+    if (!mounted) return;
+    final scheme = Theme.of(context).colorScheme;
+    final sel = _avatarUrl.startsWith('/wallpapers/')
+        ? (_avatarUrl.startsWith('http') ? _avatarUrl : '$base$_avatarUrl')
+        : null;
+    final picked = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: scheme.surface,
+          appBar: AppBar(
+            backgroundColor: scheme.surface,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            titleSpacing: 0,
+            title: Text('Choose a picture',
+                style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                    color: scheme.onSurface)),
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+            child: WallpaperGalleryGrid(
+              presets: presets,
+              apiBase: base,
+              accent: scheme.primary,
+              selectedFullUrl: sel,
+              onPick: (pp) => Navigator.pop(context, pp.url),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (!mounted || picked == null) return;
+    setState(() => _avatarUrl = picked);
   }
 
   Future<void> _pickFromFiles() async {

@@ -430,7 +430,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       title: 'Profile',
       icon: Icons.person_rounded,
       desktopMaxWidth: 780,
-      fullScreen: true,
+      edgeToEdge: true,
       builder: (context, isWide) => _body(context, isWide),
     );
   }

@@ -123,6 +123,8 @@ class _LegalHubState extends State<_LegalHub> {
     final isWide = media.size.width >= 640;
     // Clear the Aluta app header (status bar + toolbar) so it stays in view.
     final topInset = media.padding.top + _kAppHeaderHeight;
+    // Leave the bottom footer / now-playing bar in view (never cover it).
+    final bottomInset = media.padding.bottom + 72;
     final doc = _kLegalDocs[_index];
 
     return PopScope(
@@ -133,7 +135,7 @@ class _LegalHubState extends State<_LegalHub> {
         setState(() => _index = _history.removeLast());
       },
       child: Padding(
-      padding: EdgeInsets.only(top: topInset),
+      padding: EdgeInsets.only(top: topInset, bottom: bottomInset),
       child: Material(
         type: MaterialType.transparency,
         child: Container(
@@ -141,12 +143,9 @@ class _LegalHubState extends State<_LegalHub> {
           height: double.infinity,
           decoration: BoxDecoration(
             color: scheme.surface,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(24)),
             border: Border(
               top: BorderSide(color: scheme.primary.withAlpha(120), width: 1),
-              left: BorderSide(color: scheme.primary.withAlpha(60), width: 1),
-              right: BorderSide(color: scheme.primary.withAlpha(60), width: 1),
+              bottom: BorderSide(color: scheme.primary.withAlpha(60), width: 1),
             ),
             boxShadow: [
               BoxShadow(
@@ -159,16 +158,6 @@ class _LegalHubState extends State<_LegalHub> {
           clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
-              // Grab handle — a small cue that this page can be dismissed.
-              Container(
-                margin: const EdgeInsets.only(top: 8, bottom: 2),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: scheme.onSurfaceVariant.withAlpha(70),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
               // Header row — current doc's icon + title + close.
               Container(
                 padding: const EdgeInsets.fromLTRB(16, 8, 10, 8),

@@ -230,6 +230,10 @@ class AppPopupShell extends StatelessWidget {
   // chrome) instead of floating as a card — for an immersive, focused surface.
   // The minimize control + the minimize-down animation still bring it back.
   final bool fullScreen;
+  // When true the page is a full-WIDTH panel with SQUARE corners that sits
+  // BELOW the Aluta app header and ABOVE the bottom footer / now-playing bar —
+  // so both stay in view (the footer is never covered, unlike [fullScreen]).
+  final bool edgeToEdge;
   // An optional decorative layer painted BEHIND the full-screen content (edge to
   // edge, even when the content itself is centre-constrained on wide screens),
   // to give the page atmosphere/depth instead of a flat fill.
@@ -254,6 +258,7 @@ class AppPopupShell extends StatelessWidget {
     this.closeIcon = Icons.close_rounded,
     this.closeTooltip = 'Close',
     this.fullScreen = false,
+    this.edgeToEdge = false,
     this.backdrop,
     this.raisedActions = true,
     this.showClose = true,
@@ -319,6 +324,47 @@ class AppPopupShell extends StatelessWidget {
     final media = MediaQuery.of(context);
     final isWide = media.size.width >= 720;
 
+    if (edgeToEdge) {
+      // Sit BETWEEN the app header and the footer: full width, square corners,
+      // no side gutters — a clean page that never hides the now-playing bar.
+      final topInset = media.padding.top + kToolbarHeight;
+      final bottomInset = media.padding.bottom + 72;
+      final body = builder(context, isWide);
+      return Padding(
+        padding: EdgeInsets.only(top: topInset, bottom: bottomInset),
+        child: Material(
+          type: MaterialType.transparency,
+          child: Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              border: Border(
+                top: BorderSide(
+                    color: scheme.primary.withAlpha(120), width: 1),
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                _header(context, scheme),
+                Expanded(
+                  child: isWide
+                      ? Center(
+                          child: ConstrainedBox(
+                            constraints:
+                                BoxConstraints(maxWidth: desktopMaxWidth),
+                            child: body,
+                          ),
+                        )
+                      : body,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     if (fullScreen) {
       // Fill the whole screen. The header sits below the status bar; the body
       // gets the rest. On wide screens the CONTENT is centred to a comfortable

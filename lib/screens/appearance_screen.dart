@@ -40,6 +40,7 @@ class AppearanceScreen extends StatelessWidget {
     return AppPopupShell(
       title: 'Appearance',
       icon: Icons.palette_outlined,
+      edgeToEdge: true,
       builder: (context, isWide) => ListView(
         shrinkWrap: true,
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),

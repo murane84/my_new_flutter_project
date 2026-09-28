@@ -4690,6 +4690,10 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
       ),
     );
     if (!mounted || pickedId == null) return;
+    if (pickedId == '__upload__') {
+      await _pickBackground();
+      return;
+    }
     await _applyPreset(pickedId);
   }
 
@@ -5214,6 +5218,25 @@ class _WallpaperPickerPage extends StatelessWidget {
           accent: accent,
           selectedFullUrl: selectedFullUrl,
           onPick: (pp) => Navigator.pop(context, pp.id),
+        ),
+      ),
+      // Pinned footer: pick a photo from the device instead of a preset.
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(18, 6, 18, 12),
+        child: SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => Navigator.pop(context, '__upload__'),
+            icon: const Icon(Icons.add_photo_alternate_rounded, size: 20),
+            label: const Text('Upload a photo'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: accent,
+              side: BorderSide(color: accent.withValues(alpha: 0.6)),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
         ),
       ),
     );

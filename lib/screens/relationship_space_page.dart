@@ -473,26 +473,24 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   String get _fullCacheKey => 'space_full_${_id}_v1';
 
   Future<void> _load() async {
+    // Cache-first: paint the last full copy (diary, moments, playlist…)
+    // instantly so the page never opens empty or waits on the server, then
+    // refresh in the background. Local-first: the device holds the data.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_fullCacheKey);
+      if (raw != null && mounted) {
+        final cached = (jsonDecode(raw) as Map).cast<String, dynamic>();
+        setState(() => _space = {..._space, ...cached});
+      }
+    } catch (_) {}
     final full = await ApiService().getSpace(_id);
     if (!mounted) return;
     if (full != null) {
       setState(() => _space = full);
-      // Persist the FULL space (diary, moments, playlist…) so it's readable
-      // offline — local-first: the device holds the data, the server relays it.
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_fullCacheKey, jsonEncode(full));
-      } catch (_) {}
-    } else {
-      // Offline / fetch failed → fall back to the last-synced full copy so the
-      // diary and pinned moments still show instead of an empty page.
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final raw = prefs.getString(_fullCacheKey);
-        if (raw != null && mounted) {
-          setState(() => _space =
-              (jsonDecode(raw) as Map).cast<String, dynamic>());
-        }
       } catch (_) {}
     }
     // Reconcile the device's pinned-plan reminders with the current diary.

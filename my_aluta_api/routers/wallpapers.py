@@ -55,6 +55,21 @@ _CATALOGUE = [
     ("w18", "Under the Moon"),
     ("w19", "Hearts Swing"),
     ("w20", "Mommy & Me"),
+    ("w21", "Blue & Coral"),
+    ("w22", "Autumn Pebbles"),
+    ("w23", "Rainforest Glass"),
+    ("w24", "Midnight Bloom"),
+    ("w25", "Amber Horizon"),
+    ("w26", "Silver Arc"),
+    ("w27", "Gilded Frame"),
+    ("w28", "Tennis"),
+    ("w29", "Twin Moons"),
+    ("w30", "Spotlight"),
+    ("w31", "Neon Border"),
+    ("w32", "Red Nebula"),
+    ("w33", "Glow Fern"),
+    ("w34", "Deep Blue"),
+    ("w35", "Aurora Grain"),
 ]
 
 _IDS = {wid for wid, _ in _CATALOGUE}

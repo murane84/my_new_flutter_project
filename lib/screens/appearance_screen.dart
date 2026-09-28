@@ -16,8 +16,40 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// default identity; personalization layers on top with presets only — never a
 /// raw colour wheel — so it can't fragment the brand. Per-Space colour is set
 /// inside each Our Space, not here.
-class AppearanceScreen extends StatelessWidget {
+class AppearanceScreen extends StatefulWidget {
   const AppearanceScreen({super.key});
+
+  @override
+  State<AppearanceScreen> createState() => _AppearanceScreenState();
+}
+
+class _AppearanceScreenState extends State<AppearanceScreen> {
+  // Guide (helper text) is OFF by default — the page stays compact. The user
+  // flips it on from the header when they want the explanations back.
+  static const String _kGuide = 'appearance_show_guide_v1';
+  bool _showGuide = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadGuide();
+  }
+
+  Future<void> _loadGuide() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() => _showGuide = p.getBool(_kGuide) ?? false);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleGuide() async {
+    setState(() => _showGuide = !_showGuide);
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setBool(_kGuide, _showGuide);
+    } catch (_) {}
+  }
 
   // Curated app-accent presets. Aluta red is the default (keeps the exact
   // hand-tuned palette); the rest re-tint the primary family only.
@@ -41,27 +73,41 @@ class AppearanceScreen extends StatelessWidget {
       title: 'Appearance',
       icon: Icons.palette_outlined,
       edgeToEdge: true,
+      headerAction: Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: HeaderActionButton(
+          icon: _showGuide
+              ? Icons.help_rounded
+              : Icons.help_outline_rounded,
+          tooltip: _showGuide ? 'Hide tips' : 'Show tips',
+          onPressed: _toggleGuide,
+        ),
+      ),
       builder: (context, isWide) => ListView(
         shrinkWrap: true,
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
         children: [
           _sectionLabel(scheme, 'APP THEME'),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           SegmentedButton<ThemeMode>(
+            style: SegmentedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            ),
             segments: const [
               ButtonSegment(
                 value: ThemeMode.system,
-                icon: Icon(Icons.brightness_auto_rounded),
+                icon: Icon(Icons.brightness_auto_rounded, size: 18),
                 label: Text('System'),
               ),
               ButtonSegment(
                 value: ThemeMode.light,
-                icon: Icon(Icons.light_mode_rounded),
+                icon: Icon(Icons.light_mode_rounded, size: 18),
                 label: Text('Light'),
               ),
               ButtonSegment(
                 value: ThemeMode.dark,
-                icon: Icon(Icons.dark_mode_rounded),
+                icon: Icon(Icons.dark_mode_rounded, size: 18),
                 label: Text('Dark'),
               ),
             ],
@@ -69,30 +115,33 @@ class AppearanceScreen extends StatelessWidget {
             showSelectedIcon: false,
             onSelectionChanged: (s) => theme.setThemeMode(s.first),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Dark is Aluta’s signature look — cover art and the glow pop '
-            'against it. System follows your device.',
-            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 28),
+          if (_showGuide) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Dark is Aluta\u2019s signature look — cover art and the glow pop '
+              'against it. System follows your device.',
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            ),
+          ],
+          const SizedBox(height: 18),
           _sectionLabel(scheme, 'ACCENT'),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Wrap(
-            spacing: 16,
-            runSpacing: 16,
+            spacing: 12,
+            runSpacing: 12,
             children: [
-              for (final a in _accents)
-                _swatch(context, theme, scheme, a),
+              for (final a in _accents) _swatch(context, theme, scheme, a),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            'The accent tints buttons and highlights across the app. Surfaces '
-            'stay dark-and-neutral so the brand holds.',
-            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 28),
+          if (_showGuide) ...[
+            const SizedBox(height: 8),
+            Text(
+              'The accent tints buttons and highlights across the app. Surfaces '
+              'stay dark-and-neutral so the brand holds.',
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            ),
+          ],
+          const SizedBox(height: 18),
           _sectionLabel(scheme, 'CHAT & STATUS'),
           const SizedBox(height: 10),
           const IntrinsicHeight(
@@ -105,16 +154,18 @@ class AppearanceScreen extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Wallpaper sets the backdrop for every chat — override any single '
-            'chat from its ⋮ menu → Wallpaper. Status videos pre-load quietly '
-            'on Wi-Fi so they open instantly.',
-            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 28),
+          if (_showGuide) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Wallpaper sets the backdrop for every chat — override any single '
+              'chat from its \u22ee menu → Wallpaper. Status videos pre-load '
+              'quietly on Wi-Fi so they open instantly.',
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            ),
+          ],
+          const SizedBox(height: 18),
           _sectionLabel(scheme, 'WALLPAPER CLARITY'),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           ValueListenableBuilder<double>(
             valueListenable: wallpaperClarity,
             builder: (_, v, _) => Column(
@@ -136,37 +187,41 @@ class AppearanceScreen extends StatelessWidget {
                             fontSize: 11.5, color: scheme.onSurfaceVariant)),
                   ],
                 ),
-                Text(
-                  'How strongly chat & Space wallpapers show through. Slide '
-                  'toward Clear for a vivid picture, or Faint for a subtle '
-                  'backdrop. Buttons and cards always stay sharp on top.',
-                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 28),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.favorite_rounded, color: scheme.primary, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Want a colour just for one bond? Open an Our Space and tap '
-                    'edit to give it its own theme.',
+                if (_showGuide)
+                  Text(
+                    'How strongly chat & Space wallpapers show through. Slide '
+                    'toward Clear for a vivid picture, or Faint for a subtle '
+                    'backdrop. Buttons and cards always stay sharp on top.',
                     style: TextStyle(
-                        fontSize: 12.5, color: scheme.onSurface),
+                        fontSize: 12, color: scheme.onSurfaceVariant),
                   ),
-                ),
               ],
             ),
           ),
+          if (_showGuide) ...[
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.favorite_rounded,
+                      color: scheme.primary, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Want a colour just for one bond? Open an Our Space and '
+                      'tap edit to give it its own theme.',
+                      style: TextStyle(fontSize: 12.5, color: scheme.onSurface),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -190,12 +245,12 @@ class AppearanceScreen extends StatelessWidget {
     return GestureDetector(
       onTap: () => theme.setAccent(a.color),
       child: SizedBox(
-        width: 62,
+        width: 52,
         child: Column(
           children: [
             Container(
-              width: 48,
-              height: 48,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: a.color,
                 shape: BoxShape.circle,
@@ -205,16 +260,16 @@ class AppearanceScreen extends StatelessWidget {
                 ),
               ),
               child: selected
-                  ? const Icon(Icons.check, color: Colors.white, size: 22)
+                  ? const Icon(Icons.check, color: Colors.white, size: 18)
                   : null,
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 5),
             Text(
               a.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant),
+              style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant),
             ),
           ],
         ),

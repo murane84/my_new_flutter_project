@@ -335,8 +335,15 @@ class MyApp extends StatelessWidget {
           seedColor: const Color(0xFFD90429),
           brightness: Brightness.light,
         ).copyWith(
-          primary: lightP?.primary ?? const Color(0xFFD90429),
-          onPrimary: lightP?.onPrimary ?? Colors.white,
+          // Use the EXACT chosen accent (like Our Space) so a vivid pick stays
+          // vivid, instead of Material's tone-mapped (muted) seed primary.
+          primary: customAccent ? accent : const Color(0xFFD90429),
+          onPrimary: customAccent
+              ? (ThemeData.estimateBrightnessForColor(accent) ==
+                      Brightness.dark
+                  ? Colors.white
+                  : Colors.black)
+              : Colors.white,
           primaryContainer: lightP?.primaryContainer ?? const Color(0xFFFFDAD7),
           onPrimaryContainer:
               lightP?.onPrimaryContainer ?? const Color(0xFF40000A),
@@ -362,8 +369,14 @@ class MyApp extends StatelessWidget {
           seedColor: const Color(0xFFD90429),
           brightness: Brightness.dark,
         ).copyWith(
-          primary: darkP?.primary ?? const Color(0xFFFF5A5F),
-          onPrimary: darkP?.onPrimary ?? const Color(0xFF3A0007),
+          // Exact accent here too — a neon stays neon on the dark surface.
+          primary: customAccent ? accent : const Color(0xFFFF5A5F),
+          onPrimary: customAccent
+              ? (ThemeData.estimateBrightnessForColor(accent) ==
+                      Brightness.dark
+                  ? Colors.white
+                  : Colors.black)
+              : const Color(0xFF3A0007),
           primaryContainer: darkP?.primaryContainer ?? const Color(0xFF8E1420),
           onPrimaryContainer:
               darkP?.onPrimaryContainer ?? const Color(0xFFFFDAD7),

@@ -23,14 +23,152 @@ class _CtrlBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final enabled = onTap != null;
     return Tooltip(
       message: tooltip,
       child: GestureDetector(
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 1),
+          padding: const EdgeInsets.all(9),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            // A soft, top-lit accent-tinted disc so the bare transport icons
+            // read as raised 3D chips (and never wash out in light mode),
+            // matching the shuffle/repeat chips. Disabled = flat & faint.
+            gradient: enabled
+                ? LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color.alphaBlend(
+                        scheme.primary
+                            .withValues(alpha: isDark ? 0.13 : 0.09),
+                        scheme.surface,
+                      ),
+                      Color.alphaBlend(
+                        scheme.primary
+                            .withValues(alpha: isDark ? 0.22 : 0.16),
+                        scheme.surfaceContainerHighest,
+                      ),
+                    ],
+                  )
+                : null,
+            color: enabled
+                ? null
+                : scheme.surfaceContainerHighest.withValues(alpha: 0.30),
+            border: Border.all(
+              color: enabled
+                  ? scheme.primary.withValues(alpha: isDark ? 0.30 : 0.22)
+                  : scheme.outlineVariant.withValues(alpha: 0.30),
+              width: 1,
+            ),
+            boxShadow: enabled
+                ? [
+                    BoxShadow(
+                      color: scheme.primary
+                          .withValues(alpha: isDark ? 0.20 : 0.13),
+                      blurRadius: 7,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : null,
+          ),
           child: Icon(icon, size: size, color: color),
         ),
+      ),
+    );
+  }
+}
+
+/// A soft equalizer that gently "dances" while a track plays and rests as a
+/// row of faint bars when paused — used to give the player panel's base a
+/// finished, musical feel instead of empty space. Self-contained (owns its
+/// ticker) so it never touches the main player state.
+class _MiniEqualizer extends StatefulWidget {
+  final bool active;
+  final Color color;
+  const _MiniEqualizer({required this.active, required this.color});
+
+  @override
+  State<_MiniEqualizer> createState() => _MiniEqualizerState();
+}
+
+class _MiniEqualizerState extends State<_MiniEqualizer>
+    with SingleTickerProviderStateMixin {
+  static const int _n = 9;
+  late final AnimationController _c;
+  // A staggered phase per bar (0..1) so they don't pulse in unison.
+  static const List<double> _phase = [
+    0.00, 0.62, 0.24, 0.86, 0.40, 0.10, 0.72, 0.34, 0.52,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 950));
+    if (widget.active) _c.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MiniEqualizer old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !_c.isAnimating) {
+      _c.repeat();
+    } else if (!widget.active && _c.isAnimating) {
+      _c.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  // Triangle wave 0..1 (no dart:math needed).
+  double _wave(double x) {
+    x = x - x.floorToDouble();
+    return x < 0.5 ? x * 2 : (1 - x) * 2;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 30,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) {
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              for (int i = 0; i < _n; i++) ...[
+                _bar(i),
+                if (i < _n - 1) const SizedBox(width: 4),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _bar(int i) {
+    final level = widget.active
+        ? 0.30 + 0.70 * _wave(_c.value + _phase[i])
+        : 0.22;
+    final h = 6.0 + level * 18.0;
+    return Container(
+      width: 4,
+      height: h,
+      decoration: BoxDecoration(
+        color: widget.color
+            .withValues(alpha: widget.active ? 0.55 : 0.28),
+        borderRadius: BorderRadius.circular(3),
       ),
     );
   }

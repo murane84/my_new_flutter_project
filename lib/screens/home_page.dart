@@ -2899,11 +2899,29 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // theme (the music stage no longer forces a fixed near-black), so toggling
     // the theme recolours the player just like the chat area. PlayerTheme still
     // tints the controls with the chosen accent.
-    final bgColor = theme.colorScheme.surface;
+    final scheme = theme.colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final bgColor = scheme.surface;
+
+    // In LIGHT mode the music panel's white layer takes on a faint breath of
+    // the chosen accent (a soft diagonal wash) so it feels themed instead of
+    // plain white. Dark mode keeps its usual near-black stage, and the chat
+    // panels are left untouched.
+    final Gradient? musicWash = (isMusicPanel && !isDark)
+        ? LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.alphaBlend(scheme.primary.withAlpha(24), scheme.surface),
+              Color.alphaBlend(scheme.primary.withAlpha(12), scheme.surface),
+            ],
+          )
+        : null;
 
     return Container(
       decoration: BoxDecoration(
-        color: bgColor,
+        color: musicWash == null ? bgColor : null,
+        gradient: musicWash,
         // Rounded on ALL FOUR corners so the panel reads as one floating card —
         // the bottom corners emerge from the footer just like the top corners
         // emerge from the header (both sit on the same surfaceContainerHighest

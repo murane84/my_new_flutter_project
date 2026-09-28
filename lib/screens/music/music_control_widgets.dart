@@ -54,28 +54,70 @@ class _CtrlChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
     return Tooltip(
       message: tooltip,
       child: GestureDetector(
         onTap: onTap,
-        child: Container(
-          width: 42,
-          height: 42,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          width: 44,
+          height: 44,
           decoration: BoxDecoration(
-            color: active
-                ? activeColor.withAlpha(25)
-                : scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(12),
+            // A raised, gently top-lit chip — accent-glowing when active, a
+            // subtle surface gradient when idle, so the controls feel alive
+            // instead of flat grey (especially in light mode).
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: active
+                  ? [
+                      activeColor.withValues(alpha: 0.30),
+                      activeColor.withValues(alpha: 0.15),
+                    ]
+                  : [
+                      // Idle chips carry a faint wash of the app accent so the
+                      // control cluster feels themed and alive instead of a
+                      // flat grey box — most visible in light mode.
+                      Color.alphaBlend(
+                        scheme.primary
+                            .withValues(alpha: isDark ? 0.10 : 0.07),
+                        scheme.surface,
+                      ),
+                      Color.alphaBlend(
+                        scheme.primary
+                            .withValues(alpha: isDark ? 0.18 : 0.13),
+                        scheme.surfaceContainerHighest,
+                      ),
+                    ],
+            ),
+            borderRadius: BorderRadius.circular(13),
             border: Border.all(
               color: active
-                  ? activeColor.withAlpha(120)
-                  : scheme.outlineVariant.withAlpha(60),
+                  ? activeColor.withValues(alpha: 0.85)
+                  : scheme.primary.withValues(alpha: isDark ? 0.32 : 0.24),
+              width: active ? 1.6 : 1,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: active
+                    ? activeColor.withValues(alpha: 0.32)
+                    : scheme.primary
+                        .withValues(alpha: isDark ? 0.22 : 0.14),
+                blurRadius: active ? 12 : 7,
+                offset: Offset(0, active ? 4 : 3),
+              ),
+            ],
           ),
           child: Icon(
             icon,
             size: 20,
-            color: active ? activeColor : scheme.onSurface.withAlpha(130),
+            color: active
+                ? activeColor
+                : Color.alphaBlend(
+                    scheme.primary.withValues(alpha: 0.35),
+                    scheme.onSurface.withValues(alpha: 0.78),
+                  ),
           ),
         ),
       ),

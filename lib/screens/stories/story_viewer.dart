@@ -418,19 +418,37 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   Widget _textContent(StoryItem item) {
     final ink = _inkFor(item.background);
+    final text = item.caption ?? '';
+    final n = text.trim().length;
+    // Auto-fit to match the composer: short = big & bold, long = smaller.
+    final fontSize = n <= 24
+        ? 36.0
+        : n <= 60
+            ? 30.0
+            : n <= 140
+                ? 24.0
+                : 19.0;
+    final onDark = ink == Colors.white;
     return Container(
       decoration: _bgDecoration(
           item.background, const [Color(0xFF5B2C83), Color(0xFF1D1040)]),
       alignment: Alignment.center,
       padding: const EdgeInsets.all(28),
       child: Text(
-        item.caption ?? '',
+        text,
         textAlign: TextAlign.center,
         style: TextStyle(
           color: ink,
-          fontSize: 26,
-          fontWeight: FontWeight.w600,
-          height: 1.3,
+          fontSize: fontSize,
+          fontWeight: FontWeight.w700,
+          height: 1.25,
+          shadows: [
+            Shadow(
+              color:
+                  (onDark ? Colors.black : Colors.white).withValues(alpha: 0.26),
+              blurRadius: 12,
+            ),
+          ],
         ),
       ),
     );

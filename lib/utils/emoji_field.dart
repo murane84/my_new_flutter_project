@@ -16,7 +16,12 @@ Future<void> showEmojiPickerSheet(
     ),
     builder: (_) => SafeArea(
       top: false,
-      child: SizedBox(
+      // Centre + cap the width so the grid stays compact on wide/desktop
+      // windows (a full-width sheet scattered the 8 columns far apart).
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: SizedBox(
         height: 320,
         // EmojiPicker inserts the tapped emoji into the controller (at the
         // cursor) itself when `textEditingController` is set — so onEmojiSelected
@@ -56,6 +61,8 @@ Future<void> showEmojiPickerSheet(
               hintText: 'Search emoji',
             ),
           ),
+        ),
+      ),
         ),
       ),
     ),

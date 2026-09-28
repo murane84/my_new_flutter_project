@@ -79,12 +79,17 @@ class WallpaperGalleryGrid extends StatelessWidget {
         ),
       );
     }
-    return GridView.builder(
+    // Responsive columns: ~4 on a phone, but many more compact tiles on a wide
+    // tablet/desktop so the grid doesn't blow up into oversized images that
+    // force endless scrolling. Aim for a ~150px target tile width.
+    return LayoutBuilder(builder: (ctx, c) {
+      final cols = (c.maxWidth ~/ 150).clamp(4, 10).toInt();
+      return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: EdgeInsets.zero,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: cols,
         mainAxisSpacing: 8,
         crossAxisSpacing: 8,
         childAspectRatio: 0.62,
@@ -146,5 +151,6 @@ class WallpaperGalleryGrid extends StatelessWidget {
         );
       },
     );
+    });
   }
 }

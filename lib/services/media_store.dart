@@ -32,11 +32,35 @@ class MediaStore {
     }
   }
 
-  /// The attachment id (last path segment) for a URL, used as the file name.
+  /// A stable, collision-free cache-file name for [url].
+  ///
+  /// Keying on the last path segment alone is unsafe: many CDNs (notably
+  /// GIPHY) serve EVERY item under the same file name ("giphy.gif"), with the
+  /// unique id earlier in the path — so that scheme collapses every GIF /
+  /// sticker onto one cache file and the first one ever cached is then shown
+  /// for all of them. Instead we hash the FULL query-stripped URL (a stable,
+  /// cross-run FNV-1a hash) and keep the original extension for readability.
   String _idFor(String url) {
     final u = url.split('?').first;
     final segs = u.split('/').where((x) => x.isNotEmpty).toList();
-    return segs.isNotEmpty ? segs.last : url.hashCode.toRadixString(16);
+    final last = segs.isNotEmpty ? segs.last : '';
+    final dot = last.lastIndexOf('.');
+    final ext =
+        (dot > 0 && dot < last.length - 1) ? last.substring(dot) : '';
+    final h = _stableHash(u).toRadixString(16).padLeft(8, '0');
+    return 'm_$h$ext';
+  }
+
+  /// Deterministic 32-bit FNV-1a hash — stable across app runs (unlike
+  /// String.hashCode, which Dart does not guarantee to be), so the disk cache
+  /// keeps hitting after a restart.
+  int _stableHash(String s) {
+    int h = 0x811c9dc5;
+    for (final u in s.codeUnits) {
+      h = (h ^ u) & 0xFFFFFFFF;
+      h = (h * 0x01000193) & 0xFFFFFFFF;
+    }
+    return h;
   }
 
   Future<File?> _fileFor(String url) async {

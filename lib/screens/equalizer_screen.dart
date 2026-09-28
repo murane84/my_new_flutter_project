@@ -172,24 +172,24 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
                   opacity: _enabled ? 1 : 0.7,
                   child: ListView(
                     shrinkWrap: true,
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
                     children: [
                       _sectionTitle('Recommended presets'),
-                      const SizedBox(height: 10),
-                      _presetGrid(scheme),
-                      const SizedBox(height: 24),
-                      _sectionTitle('Manual adjustment'),
                       const SizedBox(height: 8),
+                      _presetGrid(scheme),
+                      const SizedBox(height: 14),
+                      _sectionTitle('Manual adjustment'),
+                      const SizedBox(height: 6),
                       _bandSliders(scheme),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 14),
                       _sectionTitle('Enhance sound'),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Text(
                         'Put in earphones before adjusting sound effects',
                         style: TextStyle(
-                            fontSize: 12, color: scheme.onSurfaceVariant),
+                            fontSize: 11.5, color: scheme.onSurfaceVariant),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 10),
                       _enhanceRow(scheme),
                     ],
                   ),
@@ -227,12 +227,12 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
 
   Widget _sectionTitle(String t) => Text(
         t,
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
       );
 
   Widget _presetGrid(ColorScheme scheme) {
     final names = ['Custom', ..._presets.keys];
-    const spacing = 10.0;
+    const spacing = 8.0;
     // Size each chip from the ACTUAL available width so a whole number of
     // columns fills the row edge-to-edge — no more fixed 104px chips leaving a
     // gutter on the right. 3 columns on phones, 4 on wider screens/tablets.
@@ -251,7 +251,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
                 width: chipW,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                padding: const EdgeInsets.symmetric(vertical: 9),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   gradient: active
@@ -284,7 +284,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
 
   Widget _bandSliders(ColorScheme scheme) {
     return SizedBox(
-      height: 230,
+      height: 168,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: List.generate(_bands.length, (i) {

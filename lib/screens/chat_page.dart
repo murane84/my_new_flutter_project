@@ -2244,13 +2244,20 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     // viewer is a swipeable gallery, not a single photo. Opening any image lets
     // the user page left/right through all of them, pinch-zoom each, and save.
     final images = <String>[];
+    final imgMsgs = <Map<String, dynamic>?>[];
     for (final m in _messages) {
       if ((m['message_type'] as String?) == 'image') {
         final rel = (m['media_url'] as String?) ?? '';
-        if (rel.isNotEmpty) images.add(fullMediaUrl(rel));
+        if (rel.isNotEmpty) {
+          images.add(fullMediaUrl(rel));
+          imgMsgs.add(m);
+        }
       }
     }
-    if (!images.contains(tappedUrl)) images.insert(0, tappedUrl);
+    if (!images.contains(tappedUrl)) {
+      images.insert(0, tappedUrl);
+      imgMsgs.insert(0, null);
+    }
     var initial = images.indexOf(tappedUrl);
     if (initial < 0) initial = 0;
     // Resolve each image to its on-device copy (cache-first) so the viewer and
@@ -2320,6 +2327,146 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             ),
           ),
         );
+
+    // WhatsApp-style top bar: who sent this photo (avatar · name · time) on the
+    // left, save + close on the right — with the app accent ringing the avatar
+    // for a touch of Aluta identity.
+    final accent = Theme.of(context).colorScheme.primary;
+    String senderNameFor(int i) {
+      final m = (i >= 0 && i < imgMsgs.length) ? imgMsgs[i] : null;
+      if (m == null) return '';
+      final mine = m['sender_id']?.toString() == _myId;
+      if (mine) return _myName.isNotEmpty ? _myName : 'You';
+      if (_isGroup) {
+        final sm = (m['sender'] as Map?) ?? const {};
+        return (sm['username'] ?? 'Member').toString();
+      }
+      return widget.friendName;
+    }
+    String senderAvatarFor(int i) {
+      final m = (i >= 0 && i < imgMsgs.length) ? imgMsgs[i] : null;
+      if (m == null) return '';
+      final mine = m['sender_id']?.toString() == _myId;
+      if (mine) return _myAvatar ?? '';
+      if (_isGroup) {
+        final sm = (m['sender'] as Map?) ?? const {};
+        return (sm['avatar_url'] ?? '').toString();
+      }
+      return _friendAvatar;
+    }
+    String sentTimeFor(int i) {
+      final m = (i >= 0 && i < imgMsgs.length) ? imgMsgs[i] : null;
+      final iso = m?['timestamp']?.toString();
+      final t = iso != null ? DateTime.tryParse(iso) : null;
+      if (t == null) return '';
+      final local = t.toLocal();
+      final now = DateTime.now();
+      final today = local.year == now.year &&
+          local.month == now.month &&
+          local.day == now.day;
+      final y = now.subtract(const Duration(days: 1));
+      final yday =
+          local.year == y.year && local.month == y.month && local.day == y.day;
+      final hm = DateFormat('HH:mm').format(local);
+      if (today) return 'Today at $hm';
+      if (yday) return 'Yesterday at $hm';
+      return DateFormat('MMM d, HH:mm').format(local);
+    }
+    Widget topBar(BuildContext bctx) {
+      final name = senderNameFor(current);
+      final avRel = senderAvatarFor(current);
+      final av = avRel.isEmpty
+          ? ''
+          : (avRel.startsWith('http') ? avRel : fullMediaUrl(avRel));
+      return Positioned(
+        top: 0,
+        left: 0,
+        right: 0,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.black.withAlpha(175), Colors.black.withAlpha(0)],
+            ),
+          ),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 6, 6, 14),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(1.6),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: accent, width: 1.6),
+                    ),
+                    child: CircleAvatar(
+                      radius: 17,
+                      backgroundColor: Colors.white24,
+                      backgroundImage: av.isNotEmpty
+                          ? authNetworkImageProvider(
+                              av, mediaAuthHeaders(av), cacheSize: 96)
+                          : null,
+                      child: av.isEmpty
+                          ? Text(
+                              name.isNotEmpty ? name[0].toUpperCase() : '?',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold))
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          name.isEmpty ? 'Photo' : name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14.5),
+                        ),
+                        Text(
+                          sentTimeFor(current),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: Colors.white.withAlpha(180),
+                              fontSize: 11.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Save',
+                    onPressed: () {
+                      final m = (current >= 0 && current < imgMsgs.length)
+                          ? imgMsgs[current]
+                          : null;
+                      if (m != null) _saveMediaToDevice(m);
+                    },
+                    icon: const Icon(Icons.download_rounded,
+                        color: Colors.white),
+                  ),
+                  IconButton(
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.pop(bctx),
+                    icon: const Icon(Icons.close_rounded, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     Navigator.of(context)
         .push(PageRouteBuilder(
@@ -2396,6 +2543,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
+                    // WhatsApp-style top bar (sender · time · save · close).
+                    topBar(ctx),
                     // < > paging arrows (mouse-friendly) on desktop / web.
                     if (onDesktopOrWeb && images.length > 1) ...[
                       Positioned(
@@ -2459,7 +2608,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                 color: Colors.black.withAlpha(115),
                                 borderRadius: BorderRadius.circular(20),
                               ),
-                              child: Text('${current + 1} / ${images.length}',
+                              child: Text('${current + 1} of ${images.length}',
                                   style: const TextStyle(
                                       color: Colors.white, fontSize: 13)),
                             ),
@@ -2506,7 +2655,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                       borderRadius: BorderRadius.circular(7),
                                       border: Border.all(
                                         color: selected
-                                            ? const Color(0xFF34D058)
+                                            ? accent
                                             : Colors.white24,
                                         width: selected ? 2.5 : 1,
                                       ),

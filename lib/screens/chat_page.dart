@@ -2450,7 +2450,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                       final m = (current >= 0 && current < imgMsgs.length)
                           ? imgMsgs[current]
                           : null;
-                      if (m != null) _saveMediaToDevice(m);
+                      if (m != null) {
+                        _saveMediaToDevice(m);
+                      } else {
+                        _saveImage(images[current]);
+                      }
                     },
                     icon: const Icon(Icons.download_rounded,
                         color: Colors.white),
@@ -2566,33 +2570,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         ),
                       ),
                     ],
-                    // Close.
-                    Positioned(
-                      top: 40,
-                      right: 12,
-                      child: IconButton(
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.black.withAlpha(115),
-                        ),
-                        icon: const Icon(Icons.close_rounded,
-                            color: Colors.white),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ),
-                    // Save the image currently on screen.
-                    Positioned(
-                      top: 40,
-                      left: 12,
-                      child: IconButton(
-                        tooltip: 'Save image',
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.black.withAlpha(115),
-                        ),
-                        icon: const Icon(Icons.download_rounded,
-                            color: Colors.white),
-                        onPressed: () => _saveImage(images[current]),
-                      ),
-                    ),
+                    // (Save + Close now live in the top bar above.)
                     // Position counter (only when there's more than one image).
                     if (images.length > 1)
                       Positioned(

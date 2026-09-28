@@ -530,26 +530,52 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
 
   Widget _quick(ColorScheme scheme, IconData icon, String label, bool selected,
       VoidCallback onTap) {
+    final isDark = scheme.brightness == Brightness.dark;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
         decoration: BoxDecoration(
-          color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(14),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [scheme.surface, scheme.surfaceContainerHighest],
+          ),
           border: Border.all(
-              color: selected ? scheme.primary : Colors.transparent, width: 2),
+              color: selected
+                  ? scheme.primary
+                  : scheme.outlineVariant.withValues(alpha: 0.4),
+              width: selected ? 2 : 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.07),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
+            BoxShadow(
+              color: Colors.white.withValues(alpha: isDark ? 0.04 : 0.6),
+              blurRadius: 1,
+              spreadRadius: -1,
+              offset: const Offset(0, -1),
+            ),
+          ],
         ),
-        child: Column(children: [
-          Icon(icon, color: selected ? scheme.primary : scheme.onSurfaceVariant),
-          const SizedBox(height: 6),
-          Text(label,
-              style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: scheme.onSurface)),
-        ]),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon,
+                size: 18,
+                color: selected ? scheme.primary : scheme.onSurfaceVariant),
+            const SizedBox(width: 8),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    color: selected ? scheme.primary : scheme.onSurface)),
+          ],
+        ),
       ),
     );
   }

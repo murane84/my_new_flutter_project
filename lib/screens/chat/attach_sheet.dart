@@ -3,11 +3,13 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 
-/// The chat "attach" bottom sheet — a friendly grid of share options with a
-/// swipe-up quick-access strip of the phone's most recent photos beneath it
-/// (Android/iOS only). Keeps Aluta's own look (rounded cards, brand accents)
-/// rather than copying WhatsApp: the grid stays visible and the sheet drags up
-/// to reveal more photos, so sending a recent shot is one tap.
+/// The chat "attach" bottom sheet — a compact, content-hugging sheet with a
+/// vibrant grid of share options and, on Android/iOS, a horizontally-scrolling
+/// strip of the phone's most recent photos so sending a recent shot is one tap.
+///
+/// It keeps Aluta's own energetic look (gradient icon chips, brand accents)
+/// and sizes itself to its content, so it never leaves a big empty void when
+/// there are no recent photos to show.
 ///
 /// All actions are callbacks the chat page wires to its existing senders, so
 /// this widget stays presentation-only (no networking, no message model).
@@ -75,8 +77,7 @@ class _AttachSheetState extends State<AttachSheet> {
         if (mounted) setState(() => _loadingPhotos = false);
         return;
       }
-      final recent =
-          await albums.first.getAssetListPaged(page: 0, size: 60);
+      final recent = await albums.first.getAssetListPaged(page: 0, size: 40);
       if (mounted) {
         setState(() {
           _recent = recent;
@@ -110,114 +111,165 @@ class _AttachSheetState extends State<AttachSheet> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    // A short sheet by default (grid + a peek of photos); drag up for the full
-    // recent-photos grid. On desktop/web there are no device photos, so keep it
-    // compact.
-    final hasStrip = widget.isMobile && (_recent.isNotEmpty || _loadingPhotos);
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: hasStrip ? 0.56 : 0.34,
-      minChildSize: 0.30,
-      maxChildSize: 0.92,
-      builder: (context, controller) {
-        return Container(
-          decoration: BoxDecoration(
-            color: scheme.surface,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(22)),
+    final media = MediaQuery.of(context);
+    // Content-hugging sheet: it grows to fit the grid (+ the photo strip on
+    // mobile) and no more, so there is never an empty white void beneath it.
+    return Container(
+      constraints: BoxConstraints(maxHeight: media.size.height * 0.82),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(
+                alpha: scheme.brightness == Brightness.dark ? 0.40 : 0.12),
+            blurRadius: 24,
+            offset: const Offset(0, -6),
           ),
-          child: CustomScrollView(
-            controller: controller,
-            slivers: [
-              SliverToBoxAdapter(child: _header(scheme)),
-              SliverToBoxAdapter(child: _optionsGrid(scheme)),
-              if (widget.isMobile) ...[
-                SliverToBoxAdapter(child: _stripHeader(scheme)),
-                _photoSliver(scheme),
-                const SliverToBoxAdapter(child: SizedBox(height: 12)),
-              ] else
-                const SliverToBoxAdapter(child: SizedBox(height: 8)),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _header(ColorScheme scheme) {
-    return Column(
-      children: [
-        Container(
-          margin: const EdgeInsets.only(top: 10, bottom: 6),
-          width: 40,
-          height: 4,
-          decoration: BoxDecoration(
-            color: scheme.onSurfaceVariant.withAlpha(80),
-            borderRadius: BorderRadius.circular(2),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _grabHandle(scheme),
+                _title(scheme),
+                _optionsGrid(scheme),
+                if (widget.isMobile) _recentSection(scheme),
+                const SizedBox(height: 10),
+              ],
+            ),
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _optionsGrid(ColorScheme scheme) {
-    final tiles = <Widget>[
-      _tile(scheme, Icons.photo_library_rounded, 'Gallery',
-          const Color(0xFF7C4DFF), widget.onGallery),
-      _tile(scheme, Icons.photo_camera_rounded, 'Camera',
-          const Color(0xFFEC407A), widget.onCamera),
-      _tile(scheme, Icons.location_on_rounded, 'Location',
-          const Color(0xFF26A69A), widget.onLocation),
-      _tile(scheme, Icons.person_rounded, 'Contact',
-          const Color(0xFF42A5F5), widget.onContact),
-      _tile(scheme, Icons.insert_drive_file_rounded, 'Document',
-          const Color(0xFF3D5AFE), widget.onDocument),
-      _tile(scheme, Icons.headphones_rounded, 'Listen together',
-          scheme.primary, widget.onListenTogether),
-    ];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
-      child: GridView.count(
-        crossAxisCount: 4,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        mainAxisSpacing: 6,
-        crossAxisSpacing: 4,
-        childAspectRatio: 0.82,
-        children: tiles,
       ),
     );
   }
 
-  Widget _tile(ColorScheme scheme, IconData icon, String label, Color color,
-      VoidCallback onTap) {
+  Widget _grabHandle(ColorScheme scheme) {
+    return Container(
+      margin: const EdgeInsets.only(top: 10, bottom: 4),
+      width: 42,
+      height: 4,
+      decoration: BoxDecoration(
+        color: scheme.onSurfaceVariant.withAlpha(70),
+        borderRadius: BorderRadius.circular(3),
+      ),
+    );
+  }
+
+  Widget _title(ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 4),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          'Share',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+            color: scheme.onSurface,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _optionsGrid(ColorScheme scheme) {
+    final options = <_Opt>[
+      _Opt(Icons.photo_library_rounded, 'Gallery', const Color(0xFF7C4DFF),
+          widget.onGallery),
+      _Opt(Icons.photo_camera_rounded, 'Camera', const Color(0xFFEC407A),
+          widget.onCamera),
+      _Opt(Icons.location_on_rounded, 'Location', const Color(0xFF26A69A),
+          widget.onLocation),
+      _Opt(Icons.person_rounded, 'Contact', const Color(0xFF42A5F5),
+          widget.onContact),
+      _Opt(Icons.insert_drive_file_rounded, 'Document', const Color(0xFF3D5AFE),
+          widget.onDocument),
+      _Opt(Icons.headphones_rounded, 'Listen together', scheme.primary,
+          widget.onListenTogether),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 6),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          // Keep tiles compact at any width: target ~86px cells, 4-per-row on a
+          // phone, more columns on wide screens. The aspect ratio is derived
+          // from the real content height so cells never grow tall and leave
+          // gaps between the rows.
+          const target = 86.0;
+          const contentH = 82.0;
+          final cols = (c.maxWidth / target).floor().clamp(4, 8);
+          final cellW = c.maxWidth / cols;
+          final aspect = cellW / contentH;
+          return GridView.count(
+            crossAxisCount: cols,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 4,
+            crossAxisSpacing: 0,
+            childAspectRatio: aspect,
+            children: [for (final o in options) _tile(scheme, o)],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _tile(ColorScheme scheme, _Opt o) {
     return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      onTap: o.onTap,
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 54,
-            height: 54,
+            width: 52,
+            height: 52,
             decoration: BoxDecoration(
-              color: color.withAlpha(30),
               shape: BoxShape.circle,
+              // Glossy, top-lit gradient fill + a soft colored glow gives each
+              // action a lively, tactile feel instead of a flat pale disc.
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color.lerp(o.color, Colors.white, 0.26)!,
+                  o.color,
+                  Color.lerp(o.color, Colors.black, 0.10)!,
+                ],
+                stops: const [0.0, 0.55, 1.0],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: o.color.withValues(alpha: 0.38),
+                  blurRadius: 12,
+                  offset: const Offset(0, 5),
+                ),
+              ],
             ),
-            child: Icon(icon, color: color, size: 26),
+            child: Icon(o.icon, color: Colors.white, size: 25),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 7),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2),
             child: Text(
-              label,
+              o.label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 11.5,
-                color: scheme.onSurfaceVariant,
-                fontWeight: FontWeight.w500,
+                height: 1.0,
+                color: scheme.onSurface.withAlpha(210),
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -226,85 +278,77 @@ class _AttachSheetState extends State<AttachSheet> {
     );
   }
 
-  Widget _stripHeader(ColorScheme scheme) {
+  // ── Recent photos strip (mobile) ─────────────────────────────────────────
+  Widget _recentSection(ColorScheme scheme) {
+    if (_photoDenied) return _allowChip(scheme);
+    if (_loadingPhotos) {
+      return Column(
+        children: [
+          _stripHeader(scheme, showAction: false),
+          _shimmerStrip(scheme),
+        ],
+      );
+    }
+    if (_recent.isEmpty) return const SizedBox.shrink();
+    return Column(
+      children: [
+        _stripHeader(scheme, showAction: true),
+        _photoStrip(scheme),
+      ],
+    );
+  }
+
+  Widget _stripHeader(ColorScheme scheme, {required bool showAction}) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 2, 18, 6),
+      padding: const EdgeInsets.fromLTRB(22, 8, 14, 8),
       child: Row(
         children: [
-          Icon(Icons.image_rounded,
-              size: 15, color: scheme.onSurfaceVariant),
-          const SizedBox(width: 6),
+          Icon(Icons.image_rounded, size: 16, color: scheme.primary),
+          const SizedBox(width: 7),
           Text(
-            'Recent photos',
+            'Recent',
             style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              color: scheme.onSurfaceVariant,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: scheme.onSurface.withAlpha(210),
             ),
           ),
           const Spacer(),
-          if (_recent.isNotEmpty)
-            Text(
-              'Swipe up for more',
-              style: TextStyle(
-                  fontSize: 11, color: scheme.onSurfaceVariant.withAlpha(160)),
+          if (showAction)
+            TextButton(
+              onPressed: widget.onGallery,
+              style: TextButton.styleFrom(
+                foregroundColor: scheme.primary,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Gallery',
+                      style: TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  SizedBox(width: 2),
+                  Icon(Icons.chevron_right_rounded, size: 18),
+                ],
+              ),
             ),
         ],
       ),
     );
   }
 
-  Widget _photoSliver(ColorScheme scheme) {
-    if (_loadingPhotos) {
-      return const SliverToBoxAdapter(
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 26),
-          child: Center(
-              child: SizedBox(
-            width: 26,
-            height: 26,
-            child: CircularProgressIndicator(strokeWidth: 2.4),
-          )),
-        ),
-      );
-    }
-    if (_photoDenied) {
-      return SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Allow photo access to quickly send recent pictures.',
-                  style: TextStyle(
-                      fontSize: 12.5, color: scheme.onSurfaceVariant),
-                ),
-              ),
-              TextButton(
-                onPressed: () => PhotoManager.openSetting(),
-                child: const Text('Allow'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    if (_recent.isEmpty) {
-      return const SliverToBoxAdapter(child: SizedBox.shrink());
-    }
-    return SliverPadding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 4,
-          mainAxisSpacing: 4,
-          crossAxisSpacing: 4,
-        ),
-        delegate: SliverChildBuilderDelegate(
-          (context, i) => _photoThumb(scheme, _recent[i]),
-          childCount: _recent.length,
-        ),
+  Widget _photoStrip(ColorScheme scheme) {
+    return SizedBox(
+      height: 96,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: _recent.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, i) => _photoThumb(scheme, _recent[i]),
       ),
     );
   }
@@ -313,18 +357,95 @@ class _AttachSheetState extends State<AttachSheet> {
     return GestureDetector(
       onTap: () => _sendAsset(asset),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: FutureBuilder<Uint8List?>(
-          future: asset.thumbnailDataWithSize(const ThumbnailSize.square(220)),
-          builder: (context, snap) {
-            final data = snap.data;
-            if (data == null) {
-              return Container(color: scheme.surfaceContainerHighest);
-            }
-            return Image.memory(data, fit: BoxFit.cover);
-          },
+        borderRadius: BorderRadius.circular(14),
+        child: SizedBox(
+          width: 96,
+          height: 96,
+          child: FutureBuilder<Uint8List?>(
+            future:
+                asset.thumbnailDataWithSize(const ThumbnailSize.square(240)),
+            builder: (context, snap) {
+              final data = snap.data;
+              if (data == null) {
+                return Container(color: scheme.surfaceContainerHighest);
+              }
+              return Image.memory(data, fit: BoxFit.cover);
+            },
+          ),
         ),
       ),
     );
   }
+
+  Widget _shimmerStrip(ColorScheme scheme) {
+    return SizedBox(
+      height: 96,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: 5,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (_, _) => Container(
+          width: 96,
+          height: 96,
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _allowChip(ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 6, 18, 10),
+      child: Material(
+        color: scheme.primary.withAlpha(22),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => PhotoManager.openSetting(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Icon(Icons.photo_library_rounded,
+                    size: 20, color: scheme.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Allow photo access to quickly send recent pictures',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      height: 1.25,
+                      color: scheme.onSurface.withAlpha(200),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Allow',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Opt {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  const _Opt(this.icon, this.label, this.color, this.onTap);
 }

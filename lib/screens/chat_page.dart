@@ -29,6 +29,7 @@ import '../utils/net_image.dart';
 import '../utils/chat_background.dart';
 import '../utils/romantic_pattern.dart';
 import '../services/media_store.dart';
+import 'package:photo_manager/photo_manager.dart';
 import '../widgets/chat_wallpaper_sheet.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
@@ -623,19 +624,52 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   int _lastCachedAck = 0;
-  void _ackCachedToServer(List<Map<String, dynamic>> cached) {
-    int maxId = 0;
-    for (final m in cached) {
-      final v = m['id'];
-      final id = v is int ? v : int.tryParse('$v') ?? 0;
-      if (id > maxId) maxId = id;
+
+  int _msgId(Map<String, dynamic> m) {
+    final v = m['id'];
+    return v is int ? v : int.tryParse('$v') ?? 0;
+  }
+
+  /// Tell the server how far we've DURABLY cached — which lets it purge those
+  /// messages' media. Crucially, we do NOT ack past a photo whose bytes we
+  /// don't yet hold on this device: we first try to persist each image locally
+  /// (while the server still has it), and STOP the pointer at any recent image
+  /// we couldn't save, so the server keeps holding it until we actually have
+  /// it. A single old/unavailable item can't freeze the pointer (7-day grace).
+  Future<void> _ackCachedToServer(List<Map<String, dynamic>> cached) async {
+    final now = DateTime.now();
+    final sorted = [...cached]..sort((a, b) => _msgId(a).compareTo(_msgId(b)));
+    int safe = 0;
+    for (final m in sorted) {
+      final id = _msgId(m);
+      if (id <= 0) continue;
+      if (!kIsWeb && (m['message_type'] as String?) == 'image') {
+        final rel = (m['media_url'] as String?) ?? '';
+        if (rel.isNotEmpty) {
+          final url = fullMediaUrl(rel);
+          File? f;
+          try {
+            f = await MediaStore.instance.cached(url);
+            f ??= await MediaStore.instance.getFile(url, mediaAuthHeaders(url));
+          } catch (_) {}
+          if (f == null) {
+            // No local copy yet. If the photo is recent the server still holds
+            // it → stop here so it isn't purged before we've saved it. If it's
+            // old it's likely already handled/purged → let the pointer move on.
+            final ts = DateTime.tryParse((m['timestamp'] as String?) ?? '');
+            final recent = ts != null && now.difference(ts).inDays < 7;
+            if (recent) break;
+          }
+        }
+      }
+      safe = id;
     }
-    if (maxId <= _lastCachedAck) return;
-    _lastCachedAck = maxId;
+    if (safe <= _lastCachedAck) return;
+    _lastCachedAck = safe;
     if (_isGroup) {
-      ApiService().ackChatCached(conversationId: _cid, upTo: maxId);
+      ApiService().ackChatCached(conversationId: _cid, upTo: safe);
     } else {
-      ApiService().ackChatCached(friendId: widget.friendId, upTo: maxId);
+      ApiService().ackChatCached(friendId: widget.friendId, upTo: safe);
     }
   }
 
@@ -2788,26 +2822,40 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   Future<void> _saveImage(String url) async {
     try {
       if (mounted) showToast(context, 'Downloading…');
-      final res = await appBusy
-          .run(() => http.get(Uri.parse(url), headers: mediaAuthHeaders(url)));
-      if (res.statusCode != 200) {
-        if (mounted) showToast(context, 'Download failed', type: ToastType.error);
+      List<int>? bytes;
+      // Prefer the on-device copy (survives the server purge).
+      if (!kIsWeb) {
+        try {
+          final f = await MediaStore.instance.getFile(url, mediaAuthHeaders(url));
+          if (f != null) bytes = await f.readAsBytes();
+        } catch (_) {}
+      }
+      if (bytes == null || bytes.isEmpty) {
+        final res = await appBusy.run(
+            () => http.get(Uri.parse(url), headers: mediaAuthHeaders(url)));
+        if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
+          bytes = res.bodyBytes;
+        }
+      }
+      if (bytes == null || bytes.isEmpty) {
+        if (mounted) {
+          showToast(context, 'Photo is no longer available',
+              type: ToastType.error);
+        }
         return;
       }
-      // Derive a sensible filename + extension from the URL.
       var name = Uri.parse(url).pathSegments.isNotEmpty
           ? Uri.parse(url).pathSegments.last
           : '';
       if (name.isEmpty || !name.contains('.')) {
         name = 'aluta_image_${DateTime.now().millisecondsSinceEpoch}.jpg';
       }
-      // Real "Save As…" dialog (same flow as other media) so desktop opens a
-      // proper save-path picker instead of the OS share sheet, which errors on
-      // Windows ("Try that again"). On mobile, _saveBytesToDevice falls back to
-      // the share/save sheet automatically.
-      await _saveBytesToDevice(res.bodyBytes, name);
+      // Phone → gallery; desktop → a proper Save As… dialog.
+      await _saveBytesToDevice(bytes, name, image: true);
     } catch (_) {
-      if (mounted) showToast(context, 'Could not save image', type: ToastType.error);
+      if (mounted) {
+        showToast(context, 'Could not save image', type: ToastType.error);
+      }
     }
   }
 
@@ -2866,7 +2914,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       final fallback =
           'aluta_${type}_${DateTime.now().millisecondsSinceEpoch}$ext';
       await _saveBytesToDevice(
-          bytes, (name == null || name.isEmpty) ? fallback : name);
+          bytes, (name == null || name.isEmpty) ? fallback : name,
+          image: type == 'image');
     } catch (_) {
       if (mounted) {
         showToast(context, 'Could not save', type: ToastType.error);
@@ -2879,8 +2928,27 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   /// location picker on mobile, and — because `bytes` is passed — writes the
   /// file itself, returning the chosen path (null if the user cancels). If the
   /// platform doesn't support the dialog, we fall back to the share/save sheet.
-  Future<void> _saveBytesToDevice(List<int> bytes, String fname) async {
+  Future<void> _saveBytesToDevice(List<int> bytes, String fname,
+      {bool image = false}) async {
     final data = Uint8List.fromList(bytes);
+    // On a phone, drop images straight into the photo gallery (easy to find,
+    // like WhatsApp) instead of a file-save dialog.
+    if (image && _isMobile) {
+      try {
+        final perm = await PhotoManager.requestPermissionExtend();
+        if (perm.hasAccess) {
+          final asset =
+              await PhotoManager.editor.saveImage(data, filename: fname);
+          if (asset != null) {
+            if (mounted) {
+              showToast(context, 'Saved to gallery',
+                  type: ToastType.success);
+            }
+            return;
+          }
+        }
+      } catch (_) {/* fall through to the generic saver */}
+    }
     try {
       final saved = await FilePicker.saveFile(
         dialogTitle: 'Save to device',

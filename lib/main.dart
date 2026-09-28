@@ -12,6 +12,7 @@ import 'services/share_inbox.dart';
 import 'utils/brand_theme.dart';
 import 'screens/theme_provider.dart';
 import 'screens/home_page.dart';
+import 'screens/preload_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/auth_page.dart';
@@ -408,6 +409,8 @@ class MyApp extends StatelessWidget {
                 return _fade(const AuthPage());
               case LockScreen.routeName:
                 return _fade(const LockScreen());
+              case PreloadScreen.routeName:
+                return _fade(const PreloadScreen());
               case HomePage.routeName:
                 return _fade(const HomePage());
               case FriendsListScreen.routeName:
@@ -503,7 +506,7 @@ class SplashScreenState extends State<SplashScreen> {
       context,
       bioLocked
           ? LockScreen.routeName
-          : (isLoggedIn ? HomePage.routeName : AuthPage.routeName),
+          : (isLoggedIn ? PreloadScreen.routeName : AuthPage.routeName),
     );
   }
 

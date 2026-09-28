@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/biometric_service.dart';
-import 'home_page.dart';
+import 'preload_screen.dart';
 import 'auth_page.dart';
 
 /// Shown on launch when the user is signed in AND has quick-unlock enabled.
@@ -35,7 +35,7 @@ class _LockScreenState extends State<LockScreen> {
     final ok = await BiometricService.instance.authenticate('Unlock Aluta');
     if (!mounted) return;
     if (ok) {
-      Navigator.pushReplacementNamed(context, HomePage.routeName);
+      Navigator.pushReplacementNamed(context, PreloadScreen.routeName);
     } else {
       setState(() {
         _authenticating = false;

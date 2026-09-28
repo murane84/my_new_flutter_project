@@ -288,6 +288,58 @@ class _Accent {
 /// Sets the all-chats default wallpaper (Appearance → Chat wallpaper). Per-chat
 /// overrides are set inside each chat; this is the fallback every chat follows
 /// until it gets one of its own.
+// Shared raised-card look, matching the Our Space dashboard feature tiles: a
+// gently top-lit surface gradient, a hairline rim and a layered drop shadow, so
+// the Appearance cards read as the same 3D surfaces.
+BoxDecoration _raisedCardDecoration(ColorScheme scheme, bool isDark) =>
+    BoxDecoration(
+      borderRadius: BorderRadius.circular(18),
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [scheme.surface, scheme.surfaceContainerHighest],
+      ),
+      border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.35)),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
+          blurRadius: 12,
+          offset: const Offset(0, 6),
+        ),
+        BoxShadow(
+          color: Colors.white.withValues(alpha: isDark ? 0.04 : 0.7),
+          blurRadius: 1,
+          spreadRadius: -1,
+          offset: const Offset(0, -1),
+        ),
+      ],
+    );
+
+// A 3D accent icon chip — same treatment as the dashboard tiles' icons.
+Widget _accentIconChip(ColorScheme scheme, IconData icon) => Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            scheme.primary.withValues(alpha: 0.24),
+            scheme.primary.withValues(alpha: 0.12),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.primary.withValues(alpha: 0.22),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Icon(icon, color: scheme.primary, size: 20),
+    );
+
 class _ChatWallpaperSection extends StatefulWidget {
   const _ChatWallpaperSection();
   @override
@@ -509,39 +561,42 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
       valueListenable: chatBgRevision,
       builder: (ctx, _, _) {
         final bg = chatBackgroundAll;
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
         return Material(
-          color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(14),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: _openSheet,
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.wallpaper_rounded,
-                          size: 22, color: scheme.primary),
-                      const Spacer(),
-                      Icon(Icons.chevron_right_rounded,
-                          size: 20, color: scheme.onSurfaceVariant),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+          child: Ink(
+            decoration: _raisedCardDecoration(scheme, isDark),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: _openSheet,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        _accentIconChip(scheme, Icons.wallpaper_rounded),
+                        const Spacer(),
+                        Icon(Icons.chevron_right_rounded,
+                            size: 20, color: scheme.onSurfaceVariant),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
                   Text('Chat wallpaper',
                       style: TextStyle(
                           fontSize: 14.5,
                           fontWeight: FontWeight.w700,
                           color: scheme.onSurface)),
                   const SizedBox(height: 2),
-                  Text('${_labelFor(bg)} · all chats',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 12, color: scheme.onSurfaceVariant)),
-                ],
+                    Text('${_labelFor(bg)} · all chats',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant)),
+                  ],
+                ),
               ),
             ),
           ),
@@ -599,9 +654,9 @@ class _StatusMediaSectionState extends State<_StatusMediaSection> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
-      borderRadius: BorderRadius.circular(14),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return DecoratedBox(
+      decoration: _raisedCardDecoration(scheme, isDark),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -609,7 +664,7 @@ class _StatusMediaSectionState extends State<_StatusMediaSection> {
           children: [
             Row(
               children: [
-                Icon(Icons.wifi_rounded, size: 22, color: scheme.primary),
+                _accentIconChip(scheme, Icons.wifi_rounded),
                 const Spacer(),
                 SizedBox(
                   height: 24,

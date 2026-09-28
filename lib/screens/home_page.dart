@@ -329,6 +329,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _loadCachedFriends();    // show cached DM list instantly (no spinner flash)
     _loadCachedGroups();     // and the cached group chats, for offline Circle
     _loadCachedSpaces();     // and the pinned Our Space hero(es), for offline
+    _loadCachedStories();    // status & stories, for offline (24h-filtered)
     loadChatBackground();    // the chosen chat wallpaper (photo/motif/default)
     _fetchFriends();          // then refresh from network
     _loadSpaces();            // pinned "Our Space" hero(es) — one-shot, no poll
@@ -2070,10 +2071,63 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   /// Fetch the active stories feed (mine + friends) that drives the tray AND
   /// the friend-list avatar rings. Silent on failure.
+  static const _kStoriesCache = 'cached_stories_v1';
+
+  /// Drop expired stories (past 24h) so a cached feed clears on time; keep my
+  /// own group even when empty so the "Your story" tile still shows.
+  List<StoryGroup> _activeStoryGroups(List<StoryGroup> groups) {
+    final now = DateTime.now();
+    final out = <StoryGroup>[];
+    for (final g in groups) {
+      final live = g.stories.where((s) {
+        final exp = s.expiresAt ?? s.createdAt?.add(const Duration(hours: 24));
+        return exp == null || exp.isAfter(now);
+      }).toList();
+      if (live.isEmpty && !g.isMe) continue;
+      out.add(StoryGroup(
+        authorId: g.authorId,
+        username: g.username,
+        avatarUrl: g.avatarUrl,
+        phone: g.phone,
+        isMe: g.isMe,
+        hasUnseen: g.hasUnseen,
+        stories: live,
+      ));
+    }
+    return out;
+  }
+
+  Future<void> _loadCachedStories() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final rawStr = prefs.getString(_kStoriesCache);
+      if (rawStr == null || !mounted) return;
+      final list = (jsonDecode(rawStr) as List)
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+      final groups =
+          _activeStoryGroups(list.map(StoryGroup.fromJson).toList());
+      if (!mounted) return;
+      setState(() => _storyGroups = groups);
+    } catch (_) {}
+  }
+
   Future<void> _fetchStories() async {
-    final raw = await ApiService().fetchStoriesFeed();
-    if (!mounted) return;
-    setState(() => _storyGroups = raw.map(StoryGroup.fromJson).toList());
+    try {
+      final raw = await ApiService().fetchStoriesFeed();
+      if (!mounted) return;
+      // Persist the feed for offline; the 24h filter is applied on read so a
+      // cached status still clears on time even with no connection.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_kStoriesCache, jsonEncode(raw));
+      } catch (_) {}
+      setState(() =>
+          _storyGroups = _activeStoryGroups(raw.map(StoryGroup.fromJson).toList()));
+    } catch (_) {
+      // Offline / fetch error — keep whatever the cache already loaded.
+    }
   }
 
   /// Manual add-friend — works everywhere, including desktop/web with no

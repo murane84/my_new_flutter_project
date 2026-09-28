@@ -62,6 +62,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     AppConfig.baseUrl.then((b) {
       if (mounted) setState(() => _apiBase = b);
     });
+    _loadCached();
     _load();
     _loadBio();
     _load2fa();
@@ -129,19 +130,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _newPw.text.isNotEmpty ||
       _confirmPw.text.isNotEmpty;
 
+  static const String _kEmail = 'profile_email_v1';
+  static const String _kUsername = 'profile_username_v1';
+  static const String _kPhone = 'profile_phone_v1';
+  static const String _kAvatar = 'profile_avatar_v1';
+
+  /// Paint the last-known profile from the device instantly, so opening the
+  /// page never waits on the server. [_load] then refreshes in the background.
+  Future<void> _loadCached() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final email = p.getString(_kEmail);
+      final uname = p.getString(_kUsername);
+      if (email == null && uname == null) return; // nothing cached yet
+      if (!mounted) return;
+      setState(() {
+        _email = email ?? _email;
+        _origUsername = uname ?? _origUsername;
+        _origPhone = p.getString(_kPhone) ?? _origPhone;
+        _origAvatar = p.getString(_kAvatar) ?? _origAvatar;
+        _avatarUrl = _origAvatar;
+        if (_username.text.isEmpty) _username.text = _origUsername;
+        if (_phone.text.isEmpty) _phone.text = _origPhone;
+        _loading = false; // show the cached profile immediately
+      });
+    } catch (_) {}
+  }
+
   Future<void> _load() async {
     final data = await ApiService().getUserData();
     if (!mounted) return;
+    // Offline / failed fetch → keep whatever the cache already painted.
+    final hasData = (data['username'] ?? data['email']) != null;
+    if (!hasData) {
+      if (_loading) setState(() => _loading = false);
+      return;
+    }
+    // Only refresh a field the user hasn't started editing (cache paint may
+    // have filled it), so a slow network can't clobber an in-progress edit.
+    final unameUntouched = _username.text == _origUsername;
+    final phoneUntouched = _phone.text == _origPhone;
     setState(() {
-      _email = data['email']?.toString() ?? '';
+      _email = data['email']?.toString() ?? _email;
       _origUsername = data['username']?.toString() ?? '';
       _origPhone = data['phone']?.toString() ?? '';
       _origAvatar = data['avatar_url']?.toString() ?? '';
       _avatarUrl = _origAvatar;
-      _username.text = _origUsername;
-      _phone.text = _origPhone;
+      if (unameUntouched) _username.text = _origUsername;
+      if (phoneUntouched) _phone.text = _origPhone;
       _loading = false;
     });
+    // Persist for an instant paint next time (no server round-trip on open).
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString(_kEmail, _email);
+      await p.setString(_kUsername, _origUsername);
+      await p.setString(_kPhone, _origPhone);
+      await p.setString(_kAvatar, _origAvatar);
+    } catch (_) {}
   }
 
   /// Let the user pick a profile photo from the phone gallery OR browse their
@@ -345,16 +391,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _saving = false);
 
     if (res['success'] == true) {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('username', _username.text.trim());
-      } catch (_) {}
       _currentPw.clear();
       _newPw.clear();
       _confirmPw.clear();
       _origUsername = _username.text.trim();
       _origPhone = _phone.text.trim();
       _origAvatar = _avatarUrl;
+      // Keep the local profile cache fresh so the next open paints the new
+      // values instantly (no server round-trip).
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('username', _origUsername);
+        await prefs.setString(_kEmail, _email);
+        await prefs.setString(_kUsername, _origUsername);
+        await prefs.setString(_kPhone, _origPhone);
+        await prefs.setString(_kAvatar, _origAvatar);
+      } catch (_) {}
       if (!mounted) return;
       showToast(context, 'Profile updated', type: ToastType.success);
       Navigator.pop(context, true);

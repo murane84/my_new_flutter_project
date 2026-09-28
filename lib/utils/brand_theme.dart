@@ -90,8 +90,14 @@ class PlayerTheme extends StatelessWidget {
     // app's punchy dark-mode red so nothing shifts for un-personalized users.
     final seed =
         ColorScheme.fromSeed(seedColor: accent, brightness: Brightness.dark);
-    final primary = custom ? seed.primary : const Color(0xFFFF5A5F);
-    final onPrimary = custom ? seed.onPrimary : const Color(0xFF3A0007);
+    // Use the EXACT accent (not Material's muted seed tone) so a vivid pick
+    // stays vivid on the dark stage, matching the rest of the app.
+    final primary = custom ? accent : const Color(0xFFFF5A5F);
+    final onPrimary = custom
+        ? (ThemeData.estimateBrightnessForColor(accent) == Brightness.dark
+            ? Colors.white
+            : Colors.black)
+        : const Color(0xFF3A0007);
 
     final scheme = seed.copyWith(
       primary: primary,

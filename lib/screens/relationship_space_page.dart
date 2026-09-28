@@ -1446,7 +1446,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: _accent),
                       )
-                    : const Text('💭', style: TextStyle(fontSize: 15)),
+                    : Icon(Icons.chat_bubble_rounded,
+                        size: 16, color: _accent),
                 const SizedBox(width: 8),
                 Text('Thinking of you',
                     style: TextStyle(

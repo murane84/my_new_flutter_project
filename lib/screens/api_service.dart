@@ -783,7 +783,7 @@ class ApiService {
     final response = await http.get(
       Uri.parse('${await _baseUrl}/users/friends/unread_counts'),
       headers: _authHeaders(token),
-    );
+    ).timeout(const Duration(seconds: 15));
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final body = jsonDecode(response.body);
@@ -1122,7 +1122,7 @@ class ApiService {
       final resp = await http.get(
         Uri.parse('${await _baseUrl}/spaces'),
         headers: _authHeaders(token),
-      );
+      ).timeout(const Duration(seconds: 15));
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final data = jsonDecode(resp.body);
         if (data is Map && data['spaces'] is List) {
@@ -1754,7 +1754,7 @@ class ApiService {
       final resp = await http.get(
         Uri.parse('${await _baseUrl}/conversations'),
         headers: _authHeaders(token),
-      );
+      ).timeout(const Duration(seconds: 15));
       if (resp.statusCode == 200) {
         final body = jsonDecode(resp.body);
         if (body is List) return body.whereType<Map<String, dynamic>>().toList();
@@ -2407,7 +2407,7 @@ class ApiService {
       final resp = await http.get(
         Uri.parse('${await _baseUrl}/stories/feed'),
         headers: _authHeaders(token),
-      );
+      ).timeout(const Duration(seconds: 15));
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final data = jsonDecode(resp.body);
         if (data is Map && data['groups'] is List) {

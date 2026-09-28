@@ -255,6 +255,10 @@ def purge_cached_conversation(db: Session, conversation_id: int) -> int:
                 Message.id <= low,
                 Message.purged.is_(False),
                 Message.is_deleted.is_(False),
+                # Photos are never purged: the server keeps them so the user
+                # can always (re)download the picture, even long after both
+                # sides have cached it locally. Only text/other media is swept.
+                Message.message_type != "image",
             )
             .all()
         )

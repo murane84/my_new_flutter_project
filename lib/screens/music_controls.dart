@@ -2311,16 +2311,41 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                       decoration: BoxDecoration(
                         // While the popup is open it sits over this spot, so the
                         // button box/icon fade out — the user sees one icon only.
+                        gradient: (_showVolume || _muted)
+                            ? null
+                            : LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Color.alphaBlend(
+                                    scheme.primary.withAlpha(
+                                        scheme.brightness == Brightness.dark
+                                            ? 26
+                                            : 18),
+                                    scheme.surface,
+                                  ),
+                                  Color.alphaBlend(
+                                    scheme.primary.withAlpha(
+                                        scheme.brightness == Brightness.dark
+                                            ? 46
+                                            : 33),
+                                    scheme.surfaceContainerHighest,
+                                  ),
+                                ],
+                              ),
                         color: _showVolume
                             ? Colors.transparent
-                            : (_muted
-                                ? scheme.error.withAlpha(28)
-                                : scheme.surfaceContainerHighest),
+                            : (_muted ? scheme.error.withAlpha(28) : null),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: _showVolume
                               ? Colors.transparent
-                              : scheme.outlineVariant.withAlpha(80),
+                              : (_muted
+                                  ? scheme.error.withAlpha(90)
+                                  : scheme.primary.withAlpha(
+                                      scheme.brightness == Brightness.dark
+                                          ? 80
+                                          : 60)),
                         ),
                       ),
                       child: Icon(
@@ -2334,7 +2359,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                             ? Colors.transparent
                             : (_muted
                                 ? scheme.error
-                                : onSurface.withAlpha(180)),
+                                : Color.alphaBlend(
+                                    scheme.primary.withAlpha(70),
+                                    onSurface.withAlpha(190),
+                                  )),
                       ),
                     ),
                   ),
@@ -2393,14 +2421,37 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                     padding: const EdgeInsets.symmetric(
                         horizontal: 11, vertical: 7),
                     decoration: BoxDecoration(
-                      color: _showSpeedPanel
-                          ? accent.withAlpha(30)
-                          : scheme.surfaceContainerHighest,
+                      gradient: _showSpeedPanel
+                          ? null
+                          : LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Color.alphaBlend(
+                                  scheme.primary.withAlpha(
+                                      scheme.brightness == Brightness.dark
+                                          ? 26
+                                          : 18),
+                                  scheme.surface,
+                                ),
+                                Color.alphaBlend(
+                                  scheme.primary.withAlpha(
+                                      scheme.brightness == Brightness.dark
+                                          ? 46
+                                          : 33),
+                                  scheme.surfaceContainerHighest,
+                                ),
+                              ],
+                            ),
+                      color: _showSpeedPanel ? accent.withAlpha(30) : null,
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(
                         color: _showSpeedPanel
                             ? accent
-                            : scheme.outlineVariant.withAlpha(80),
+                            : scheme.primary.withAlpha(
+                                scheme.brightness == Brightness.dark
+                                    ? 80
+                                    : 60),
                       ),
                     ),
                     child: Row(
@@ -2410,7 +2461,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                             size: 14,
                             color: _showSpeedPanel
                                 ? accent
-                                : onSurface.withAlpha(160)),
+                                : Color.alphaBlend(
+                                    scheme.primary.withAlpha(80),
+                                    onSurface.withAlpha(175),
+                                  )),
                         const SizedBox(width: 4),
                         Text(
                           _speedLabel(_speed),
@@ -2419,7 +2473,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                             fontWeight: FontWeight.w600,
                             color: _showSpeedPanel
                                 ? accent
-                                : onSurface.withAlpha(170),
+                                : Color.alphaBlend(
+                                    scheme.primary.withAlpha(80),
+                                    onSurface.withAlpha(185),
+                                  ),
                           ),
                         ),
                         const SizedBox(width: 3),
@@ -2471,20 +2528,59 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: active
-                      ? color.withAlpha(38)
-                      : scheme.surfaceContainerHighest,
+                  gradient: active
+                      ? null
+                      : LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          // Idle library tiles pick up the same faint accent
+                          // wash as the transport chips so the whole panel
+                          // reads as one energetic, themed surface.
+                          colors: [
+                            Color.alphaBlend(
+                              scheme.primary.withAlpha(
+                                  scheme.brightness == Brightness.dark
+                                      ? 26
+                                      : 18),
+                              scheme.surface,
+                            ),
+                            Color.alphaBlend(
+                              scheme.primary.withAlpha(
+                                  scheme.brightness == Brightness.dark
+                                      ? 46
+                                      : 33),
+                              scheme.surfaceContainerHighest,
+                            ),
+                          ],
+                        ),
+                  color: active ? color.withAlpha(38) : null,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
                     color: active
                         ? color.withAlpha(150)
-                        : scheme.outlineVariant.withAlpha(70),
+                        : scheme.primary.withAlpha(
+                            scheme.brightness == Brightness.dark ? 80 : 60),
                   ),
+                  boxShadow: active
+                      ? null
+                      : [
+                          BoxShadow(
+                            color: scheme.primary.withAlpha(
+                                scheme.brightness == Brightness.dark ? 46 : 30),
+                            blurRadius: 7,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
                 ),
                 child: Icon(
                   icon,
                   size: 21,
-                  color: active ? color : onSurface.withAlpha(190),
+                  color: active
+                      ? color
+                      : Color.alphaBlend(
+                          scheme.primary.withAlpha(80),
+                          onSurface.withAlpha(200),
+                        ),
                 ),
               ),
               if (badge != null)

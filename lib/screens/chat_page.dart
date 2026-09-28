@@ -2165,6 +2165,33 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
   }
 
+  // One persisted-file future per image URL (memoised so rebuilds don't
+  // re-download or flicker). Persisting the moment a bubble renders is what
+  // lets images survive the server's store-and-forward purge.
+  final Map<String, Future<File?>> _imgFileCache = {};
+  Future<File?> _imgFile(String url) =>
+      _imgFileCache.putIfAbsent(
+          url, () => MediaStore.instance.getFile(url, mediaAuthHeaders(url)));
+
+  Widget _imgLoader() => Container(
+        width: 200,
+        height: 150,
+        color: Colors.black.withAlpha(20),
+        child: const Center(
+          child: SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+      );
+
+  Widget _imgBroken() => Container(
+        width: 180,
+        height: 120,
+        color: Colors.black.withAlpha(20),
+        child: const Icon(Icons.broken_image_rounded),
+      );
+
   Widget _imageBubble(String url) {
     // Decode the thumbnail at ~bubble-size × pixel ratio instead of the photo's
     // full resolution. A full-res decode is ~48MB each; dozens of them in a
@@ -2172,6 +2199,33 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     // tap-to-open viewer. Cap the multiplier so huge-DPR devices stay bounded.
     final dpr = MediaQuery.of(context).devicePixelRatio.clamp(1.0, 3.0);
     final thumbW = (240 * dpr).round();
+    final headers = mediaAuthHeaders(url);
+    Widget net() => authNetworkImage(
+          url: url,
+          headers: headers,
+          fit: BoxFit.cover,
+          cacheWidth: thumbW,
+          placeholder: (_) => _imgLoader(),
+          error: (_) => _imgBroken(),
+        );
+    // Cache-first: render the on-device copy so the photo stays visible after
+    // the server purges its bytes. Web has no local FS → straight network.
+    final Widget img = kIsWeb
+        ? net()
+        : FutureBuilder<File?>(
+            future: _imgFile(url),
+            builder: (ctx, snap) {
+              if (snap.connectionState == ConnectionState.waiting) return net();
+              final f = snap.data;
+              if (f != null) {
+                return Image.file(f,
+                    fit: BoxFit.cover,
+                    cacheWidth: thumbW,
+                    errorBuilder: (_, _, _) => _imgBroken());
+              }
+              return net();
+            },
+          );
     return GestureDetector(
       onTap: () => _openImageViewer(url),
       child: ClipRRect(
@@ -2179,35 +2233,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         child: ConstrainedBox(
           constraints: const BoxConstraints(
               maxWidth: 240, maxHeight: 300, minWidth: 120, minHeight: 80),
-          child: authNetworkImage(
-            url: url,
-            headers: mediaAuthHeaders(url),
-            fit: BoxFit.cover,
-            cacheWidth: thumbW,
-            placeholder: (_) => Container(
-              width: 200,
-              height: 150,
-              color: Colors.black.withAlpha(20),
-              child: const Center(
-                child: SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2)),
-              ),
-            ),
-            error: (_) => Container(
-              width: 180,
-              height: 120,
-              color: Colors.black.withAlpha(20),
-              child: const Icon(Icons.broken_image_rounded),
-            ),
-          ),
+          child: img,
         ),
       ),
     );
   }
 
-  void _openImageViewer(String tappedUrl) {
+  Future<void> _openImageViewer(String tappedUrl) async {
     // Gather EVERY image shared in this thread (chronological order) so the
     // viewer is a swipeable gallery, not a single photo. Opening any image lets
     // the user page left/right through all of them, pinch-zoom each, and save.
@@ -2221,6 +2253,24 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     if (!images.contains(tappedUrl)) images.insert(0, tappedUrl);
     var initial = images.indexOf(tappedUrl);
     if (initial < 0) initial = 0;
+    // Resolve each image to its on-device copy (cache-first) so the viewer and
+    // download keep working after the server purges the bytes. The tapped image
+    // is fetched if still missing; others use whatever is already cached.
+    final providers = <ImageProvider>[];
+    for (final u in images) {
+      File? f;
+      if (!kIsWeb) {
+        try {
+          f = (u == tappedUrl)
+              ? await MediaStore.instance.getFile(u, mediaAuthHeaders(u))
+              : await MediaStore.instance.cached(u);
+        } catch (_) {}
+      }
+      providers.add(f != null
+          ? FileImage(f)
+          : authNetworkImageProvider(u, mediaAuthHeaders(u)));
+    }
+    if (!mounted) return;
     final controller = PageController(initialPage: initial);
     // Thumbnail filmstrip (desktop/web): its own scroll controller so we can
     // keep the active thumbnail centred as the user pages through.
@@ -2338,8 +2388,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                           ),
                         ),
                         builder: (ctx2, i) => PhotoViewGalleryPageOptions(
-                          imageProvider: authNetworkImageProvider(
-                              images[i], mediaAuthHeaders(images[i])),
+                          imageProvider: providers[i],
                           minScale: PhotoViewComputedScale.contained,
                           maxScale: PhotoViewComputedScale.covered * 3,
                           initialScale: PhotoViewComputedScale.contained,
@@ -2464,11 +2513,17 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                     ),
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(5),
-                                      child: authNetworkImage(
-                                        url: images[i],
-                                        headers: mediaAuthHeaders(images[i]),
+                                      child: Image(
+                                        image: ResizeImage(providers[i],
+                                            width: 140),
                                         fit: BoxFit.cover,
-                                        cacheWidth: 140,
+                                        errorBuilder: (_, _, _) =>
+                                            const ColoredBox(
+                                          color: Color(0x22000000),
+                                          child: Icon(
+                                              Icons.broken_image_rounded,
+                                              size: 18),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -2650,13 +2705,24 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             await SongCache.cachedPath(id, filename: name, mime: mime);
         if (cached != null) bytes = await File(cached).readAsBytes();
       }
-      // Otherwise pull from the server while it still has the bytes.
+      // Prefer the locally-persisted copy (images/files survive the server's
+      // store-and-forward purge on device), then fall back to the server while
+      // it still holds the bytes.
       if (bytes == null || bytes.isEmpty) {
         final url = fullMediaUrl(rel);
-        final res = await appBusy
-            .run(() => http.get(Uri.parse(url), headers: mediaAuthHeaders(url)));
-        if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
-          bytes = res.bodyBytes;
+        if (!kIsWeb && id == null) {
+          try {
+            final f =
+                await MediaStore.instance.getFile(url, mediaAuthHeaders(url));
+            if (f != null) bytes = await f.readAsBytes();
+          } catch (_) {}
+        }
+        if (bytes == null || bytes.isEmpty) {
+          final res = await appBusy.run(
+              () => http.get(Uri.parse(url), headers: mediaAuthHeaders(url)));
+          if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
+            bytes = res.bodyBytes;
+          }
         }
       }
       if (bytes == null || bytes.isEmpty) {

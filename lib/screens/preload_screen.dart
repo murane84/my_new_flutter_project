@@ -186,7 +186,7 @@ class _PreloadScreenState extends State<PreloadScreen> {
                   child: Image.asset(
                     'assets/images/logo.png',
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
+                    errorBuilder: (_, _, _) => Container(
                       color: scheme.surfaceContainerHighest,
                       child: Icon(Icons.favorite_rounded,
                           color: scheme.primary, size: 40),

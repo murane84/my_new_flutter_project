@@ -2937,15 +2937,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       try {
         final perm = await PhotoManager.requestPermissionExtend();
         if (perm.hasAccess) {
-          final asset =
-              await PhotoManager.editor.saveImage(data, filename: fname);
-          if (asset != null) {
-            if (mounted) {
-              showToast(context, 'Saved to gallery',
-                  type: ToastType.success);
-            }
-            return;
+          // saveImage returns a non-null AssetEntity on success and throws
+          // otherwise, so reaching here means the save landed in the gallery.
+          await PhotoManager.editor.saveImage(data, filename: fname);
+          if (mounted) {
+            showToast(context, 'Saved to gallery', type: ToastType.success);
           }
+          return;
         }
       } catch (_) {/* fall through to the generic saver */}
     }

@@ -679,12 +679,6 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                 color: ink, fontWeight: FontWeight.w700, fontSize: 18)),
         actions: [
           IconButton(
-            tooltip: 'Background colour',
-            icon: const Icon(Icons.palette_rounded),
-            onPressed: () =>
-                setState(() => _bg = (_bg + 1) % _palettes.length),
-          ),
-          IconButton(
             tooltip: 'Add a GIF / sticker',
             icon: const Icon(Icons.gif_box_outlined),
             onPressed: _pickSticker,
@@ -739,11 +733,39 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                                       Positioned(
                                         top: -8,
                                         right: -8,
-                                        child: IconButton(
-                                          icon: const Icon(Icons.cancel,
-                                              color: Colors.white),
-                                          onPressed: () => setState(
+                                        // A dark scrim badge with a white
+                                        // glyph so "remove" is visible over any
+                                        // sticker (a white icon vanished on a
+                                        // white sticker before).
+                                        child: GestureDetector(
+                                          onTap: () => setState(
                                               () => _stickerUrl = null),
+                                          child: Container(
+                                            width: 26,
+                                            height: 26,
+                                            alignment: Alignment.center,
+                                            decoration: BoxDecoration(
+                                              color: Colors.black
+                                                  .withValues(alpha: 0.60),
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color: Colors.white
+                                                    .withValues(alpha: 0.85),
+                                                width: 1.5,
+                                              ),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black
+                                                      .withValues(alpha: 0.30),
+                                                  blurRadius: 4,
+                                                ),
+                                              ],
+                                            ),
+                                            child: const Icon(
+                                                Icons.close_rounded,
+                                                color: Colors.white,
+                                                size: 16),
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -797,6 +819,9 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                   ),
                   ),
                 ),
+                // Visible background picker — tap a swatch to recolour (was a
+                // blind cycle button before), matching the other composers.
+                _bgStrip(ink),
                 // Inline emoji panel: the caption stays visible above and
                 // updates live as emojis are tapped (no covering modal).
                 if (_showEmoji)
@@ -807,6 +832,58 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _bgStrip(Color ink) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: SizedBox(
+        height: 44,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: _palettes.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 10),
+          itemBuilder: (_, i) {
+            final pair = _palettes[i];
+            final selected = i == _bg;
+            return GestureDetector(
+              onTap: () => setState(() => _bg = i),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                width: selected ? 38 : 30,
+                height: selected ? 38 : 30,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: pair,
+                  ),
+                  border: Border.all(
+                    color: selected ? ink : ink.withValues(alpha: 0.35),
+                    width: selected ? 3 : 1.5,
+                  ),
+                  boxShadow: selected
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: selected
+                    ? Icon(Icons.check_rounded, size: 16, color: _ink(pair))
+                    : null,
+              ),
+            );
+          },
         ),
       ),
     );

@@ -1628,6 +1628,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final raw = prefs.getString(_kGroupsCache);
       if (raw == null || !mounted) return;
       final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+      await _hydratePreviewsFromCache(list, group: true);
+      if (!mounted) return;
       setState(() {
         _groups = list;
         _filteredGroups = _applyGroupQuery(list, _searchQuery);
@@ -1648,6 +1650,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final raw = prefs.getString(_kFriendsCache);
       if (raw == null || !mounted) return;
       final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+      await _hydratePreviewsFromCache(list, group: false);
+      if (!mounted) return;
       setState(() {
         _allFriends = list;
         _filteredFriends = list;
@@ -1662,6 +1666,106 @@ class HomePageState extends rp.ConsumerState<HomePage>
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_kFriendsCache, jsonEncode(friends));
+    } catch (_) {}
+  }
+
+  /// Keep a good last-message preview when a fetch returns an EMPTY one — e.g.
+  /// the last message was purged server-side after both devices cached it
+  /// (store-and-forward). Without this, a background refresh blanks the preview
+  /// under a friend's / group's name even though the message still lives in the
+  /// local chat cache.
+  void _preservePreviews(List<Map<String, dynamic>> fresh,
+      List<Map<String, dynamic>> prev) {
+    if (prev.isEmpty) return;
+    final byId = {for (final p in prev) p['id'].toString(): p};
+    for (final f in fresh) {
+      final lm = (f['last_message'] ?? '').toString().trim();
+      if (lm.isNotEmpty) continue;
+      final p = byId[f['id'].toString()];
+      if (p == null) continue;
+      final plm = (p['last_message'] ?? '').toString().trim();
+      if (plm.isEmpty) continue;
+      f['last_message'] = p['last_message'];
+      if ((f['last_timestamp'] ?? '').toString().trim().isEmpty) {
+        f['last_timestamp'] = p['last_timestamp'];
+      }
+    }
+  }
+
+  /// A friend-list preview string for a cached chat message.
+  String _previewFromCachedMessage(Map<String, dynamic> m) {
+    final type = (m['message_type'] ?? 'text').toString();
+    switch (type) {
+      case 'image':
+        return '📷 Photo';
+      case 'audio':
+        return '🎤 Voice';
+      case 'video':
+        return '🎬 Video';
+      case 'gif':
+        return 'GIF';
+      case 'file':
+        return '📎 File';
+      case 'location':
+        return '📍 Location';
+      case 'contact':
+        return '👤 Contact';
+      default:
+        return (m['content'] ?? '').toString().trim();
+    }
+  }
+
+  /// Make the DURABLE LOCAL chat cache the primary source of each row's
+  /// last-message preview. The server copy is only used when it carries a
+  /// strictly NEWER message (a fresh message to a chat that isn't open, which
+  /// the local cache hasn't seen yet) — so previews survive server purge and
+  /// offline, yet still update live. Mutates [items] in place.
+  Future<void> _hydratePreviewsFromCache(
+      List<Map<String, dynamic>> items, {required bool group}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final myId = prefs.getString('my_user_id');
+      if (myId == null) return;
+      for (final f in items) {
+        final id = f['id'];
+        final key =
+            group ? 'chat_cache_${myId}_g$id' : 'chat_cache_${myId}_$id';
+        final raw = prefs.getString(key);
+        if (raw == null) continue;
+        dynamic list;
+        try {
+          list = jsonDecode(raw);
+        } catch (_) {
+          continue;
+        }
+        if (list is! List || list.isEmpty) continue;
+        // Newest non-purged cached message for this chat.
+        Map? m;
+        for (int i = list.length - 1; i >= 0; i--) {
+          final x = list[i];
+          if (x is Map && x['purged'] != true) {
+            m = x;
+            break;
+          }
+        }
+        if (m == null) continue;
+        final localPrev =
+            _previewFromCachedMessage(Map<String, dynamic>.from(m));
+        if (localPrev.trim().isEmpty) continue;
+        final localTs =
+            DateTime.tryParse((m['timestamp'] ?? m['created_at'] ?? '').toString());
+        final serverPrev = (f['last_message'] ?? '').toString().trim();
+        final serverTs =
+            DateTime.tryParse((f['last_timestamp'] ?? '').toString());
+        // Prefer local unless the server clearly has a newer message.
+        final serverIsNewer = serverPrev.isNotEmpty &&
+            serverTs != null &&
+            (localTs == null || serverTs.isAfter(localTs));
+        if (serverIsNewer) continue;
+        f['last_message'] = localPrev;
+        final ts = (m['timestamp'] ?? m['created_at'] ?? '').toString();
+        if (ts.isNotEmpty) f['last_timestamp'] = ts;
+      }
     } catch (_) {}
   }
 
@@ -1681,6 +1785,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
           }
         }
       }
+      // Don't let a purge-blanked server preview erase a good local one, and
+      // rebuild any still-empty preview from the durable local chat cache.
+      _preservePreviews(friends, _allFriends);
+      await _hydratePreviewsFromCache(friends, group: false);
       // Save fresh data to cache
       await _saveFriendsCache(friends);
       setState(() {
@@ -1738,6 +1846,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final groups = convs
           .where((c) => c['is_group'] == true)
           .toList();
+      _preservePreviews(groups, _groups);
+      await _hydratePreviewsFromCache(groups, group: true);
       // Persist so the group list survives offline / a cold restart.
       await _saveGroupsCache(groups);
       setState(() {

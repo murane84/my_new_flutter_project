@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'user_profile_page.dart';
 import 'user.dart';
 import 'api_service.dart';
@@ -26,6 +28,7 @@ class FriendsListScreenState extends State<FriendsListScreen> {
   @override
   void initState() {
     super.initState();
+    _loadCachedFriends();
     _initialize();
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       _loadFriends(quiet: true);
@@ -46,6 +49,26 @@ class FriendsListScreenState extends State<FriendsListScreen> {
     await _loadFriends();
   }
 
+  static const String _kMsgFriends = 'cached_msgfriends_v1';
+
+  /// Paint the last-known Messages list from the device instantly, so the page
+  /// never opens on a spinner; [_loadFriends] then refreshes from the server.
+  Future<void> _loadCachedFriends() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kMsgFriends);
+      if (raw == null || !mounted) return;
+      final list = (jsonDecode(raw) as List)
+          .map((e) => User.fromMap((e as Map).cast<String, dynamic>()))
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _friends = list;
+        _isLoading = false;
+      });
+    } catch (_) {}
+  }
+
   Future<void> _loadFriends({bool quiet = false}) async {
     try {
       final token = await getToken();
@@ -57,6 +80,12 @@ class FriendsListScreenState extends State<FriendsListScreen> {
         _friends = users;
         _isLoading = false;
       });
+      // Persist for an instant paint next open.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+            _kMsgFriends, jsonEncode(users.map((u) => u.toMap()).toList()));
+      } catch (_) {}
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }

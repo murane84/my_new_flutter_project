@@ -32,7 +32,7 @@ router = APIRouter(prefix="/stories", tags=["Stories"])
 # A story lives for 24 hours from posting.
 STORY_TTL = timedelta(hours=24)
 
-VALID_KINDS = {"photo", "video", "music", "text"}
+VALID_KINDS = {"photo", "video", "music", "text", "sticker"}
 
 
 def _now() -> datetime:

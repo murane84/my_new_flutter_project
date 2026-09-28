@@ -833,53 +833,88 @@ class _TextStoryPage extends StatefulWidget {
 }
 
 class _TextStoryPageState extends State<_TextStoryPage> {
-  // A rich, vibrant palette — deep tones AND bright / neon options — so a text
-  // status can pop. The typed text picks a contrasting ink per colour (see
-  // [_inkFor]), so the words stay readable on every background regardless of
-  // the app's light/dark theme.
-  static const List<Color> _colors = [
-    Color(0xFF5B2C83), // deep purple (default)
-    Color(0xFF7C4DFF), // vivid purple
-    Color(0xFF3A2CA0), // indigo
-    Color(0xFF1E88E5), // blue
-    Color(0xFF00B0FF), // bright sky
-    Color(0xFF00E5FF), // neon cyan
-    Color(0xFF11998E), // teal
-    Color(0xFF00C853), // green
-    Color(0xFF76FF03), // neon lime
-    Color(0xFFC6FF00), // neon chartreuse
-    Color(0xFFFFEA00), // neon yellow
-    Color(0xFFFFC400), // amber
-    Color(0xFFFF9100), // orange
-    Color(0xFFEE5522), // deep orange
-    Color(0xFFED213A), // red
-    Color(0xFFFF1744), // neon red
-    Color(0xFFFF4081), // neon pink
-    Color(0xFFF50057), // magenta
-    Color(0xFFE040FB), // neon orchid
-    Color(0xFFD500F9), // neon violet
-    Color(0xFF0F2027), // near-black teal
-    Color(0xFF232526), // charcoal
-    Color(0xFF1A1A2E), // midnight
-    Color(0xFF263238), // blue-grey
+  // Each background is a solid ([one]) or a gradient ([a, b]). Premium
+  // gradients first, then bright / neon solids — richer than a flat WhatsApp
+  // text status. Gradients persist as "hexA,hexB" (the viewer renders them).
+  static const List<List<Color>> _bgs = [
+    [Color(0xFF5B2C83)], // purple (default)
+    [Color(0xFF7C4DFF), Color(0xFF00E5FF)], // purple to cyan
+    [Color(0xFFFF1744), Color(0xFFFF9100)], // sunset
+    [Color(0xFFF50057), Color(0xFFFF4081)], // magenta to pink
+    [Color(0xFF11998E), Color(0xFF38EF7D)], // teal to mint
+    [Color(0xFF1E88E5), Color(0xFF00E5FF)], // blue to cyan
+    [Color(0xFFFFEA00), Color(0xFFFF9100)], // neon yellow to orange
+    [Color(0xFFD500F9), Color(0xFF7C4DFF)], // violet to purple
+    [Color(0xFFEE0979), Color(0xFFFF6A00)], // pink to orange
+    [Color(0xFF00C853), Color(0xFF76FF03)], // green to lime
+    [Color(0xFF141E30), Color(0xFF243B55)], // deep navy
+    [Color(0xFF76FF03)], // neon lime
+    [Color(0xFFFFEA00)], // neon yellow
+    [Color(0xFF00E5FF)], // neon cyan
+    [Color(0xFFFF4081)], // neon pink
+    [Color(0xFFE040FB)], // neon orchid
+    [Color(0xFFFF1744)], // neon red
+    [Color(0xFF00C853)], // green
+    [Color(0xFF1E88E5)], // blue
+    [Color(0xFFFF9100)], // orange
+    [Color(0xFF0F2027)], // near-black
+    [Color(0xFF232526)], // charcoal
+    [Color(0xFF1A1A2E)], // midnight
   ];
-
-  /// Contrast ink for [c]: dark text on bright / neon colours, white on deep
-  /// ones — so the status text is readable no matter the background.
-  static Color _inkFor(Color c) =>
-      c.computeLuminance() > 0.55 ? const Color(0xFF141414) : Colors.white;
 
   final TextEditingController _text = TextEditingController();
   int _bg = 0;
   bool _posting = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Live-resize the text as it grows/shrinks.
+    _text.addListener(_onChanged);
+  }
+
+  void _onChanged() => setState(() {});
+
+  @override
   void dispose() {
+    _text.removeListener(_onChanged);
     _text.dispose();
     super.dispose();
   }
 
   String _hex(Color c) => '#${c.toARGB32().toRadixString(16).padLeft(8, '0')}';
+
+  String _bgValue() {
+    final cs = _bgs[_bg];
+    return cs.length >= 2 ? '${_hex(cs[0])},${_hex(cs[1])}' : _hex(cs[0]);
+  }
+
+  // Average-luminance contrast ink — matches the viewer, so what you compose is
+  // exactly what viewers see, on every background regardless of app theme.
+  Color _inkFor(List<Color> cs) {
+    final l = cs.map((c) => c.computeLuminance()).reduce((a, b) => a + b) /
+        cs.length;
+    return l > 0.55 ? const Color(0xFF15171C) : Colors.white;
+  }
+
+  // Auto-fit: short statuses are big & bold, long ones shrink to stay on-screen.
+  double _fontFor(String s) {
+    final n = s.trim().length;
+    if (n <= 24) return 36;
+    if (n <= 60) return 30;
+    if (n <= 140) return 24;
+    return 19;
+  }
+
+  BoxDecoration _decoration(List<Color> cs) => cs.length >= 2
+      ? BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: cs,
+          ),
+        )
+      : BoxDecoration(color: cs[0]);
 
   Future<void> _post() async {
     final text = _text.text.trim();
@@ -891,7 +926,7 @@ class _TextStoryPageState extends State<_TextStoryPage> {
     final created = await ApiService().createStory(
       kind: 'text',
       caption: text,
-      background: _hex(_colors[_bg]),
+      background: _bgValue(),
     );
     if (!mounted) return;
     setState(() => _posting = false);
@@ -914,55 +949,99 @@ class _TextStoryPageState extends State<_TextStoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final bg = _colors[_bg];
-    final ink = _inkFor(bg);
-    return Scaffold(
-      backgroundColor: bg,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: ink,
-        title: const Text('Text status'),
-        actions: [
-          IconButton(
-            tooltip: 'Background colour',
-            icon: const Icon(Icons.palette_rounded),
-            onPressed: () =>
-                setState(() => _bg = (_bg + 1) % _colors.length),
-          ),
-          IconButton(
-            tooltip: 'GIF / Sticker',
-            icon: const Icon(Icons.gif_box_rounded),
-            onPressed: _addSticker,
-          ),
-          IconButton(
-            tooltip: 'Add emoji',
-            icon: const Icon(Icons.emoji_emotions_outlined),
-            onPressed: () => showEmojiPickerSheet(context, _text),
-          ),
-        ],
+    final cs = _bgs[_bg];
+    final ink = _inkFor(cs);
+    final onDark = ink == Colors.white;
+    final fontSize = _fontFor(_text.text);
+    final shadow = <Shadow>[
+      Shadow(
+        color: (onDark ? Colors.black : Colors.white).withValues(alpha: 0.26),
+        blurRadius: 12,
       ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Center(
-            child: TextField(
-              controller: _text,
-              autofocus: true,
-              textAlign: TextAlign.center,
-              maxLines: null,
-              cursorColor: ink,
-              style: TextStyle(
-                  color: ink,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w600),
-              decoration: InputDecoration(
-                hintText: 'Type a status',
-                hintStyle:
-                    TextStyle(color: ink.withValues(alpha: 0.5), fontSize: 24),
-                border: InputBorder.none,
+    ];
+    return Scaffold(
+      body: Container(
+        decoration: _decoration(cs),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 4, 6, 0),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      color: ink,
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    Text('Text status',
+                        style: TextStyle(
+                            color: ink,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700)),
+                    const Spacer(),
+                    IconButton(
+                      tooltip: 'Surprise background',
+                      icon: const Icon(Icons.auto_awesome_rounded),
+                      color: ink,
+                      onPressed: () => setState(() =>
+                          _bg = (_bg + 1 + (_text.text.length % 3)) %
+                              _bgs.length),
+                    ),
+                    IconButton(
+                      tooltip: 'GIF / Sticker',
+                      icon: const Icon(Icons.gif_box_rounded),
+                      color: ink,
+                      onPressed: _addSticker,
+                    ),
+                    IconButton(
+                      tooltip: 'Add emoji',
+                      icon: const Icon(Icons.emoji_emotions_outlined),
+                      color: ink,
+                      onPressed: () => showEmojiPickerSheet(context, _text),
+                    ),
+                  ],
+                ),
               ),
-            ),
+              // Composer — centred, auto-sizing
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
+                  child: Center(
+                    child: SingleChildScrollView(
+                      child: TextField(
+                        controller: _text,
+                        autofocus: true,
+                        textAlign: TextAlign.center,
+                        maxLines: null,
+                        cursorColor: ink,
+                        style: TextStyle(
+                          color: ink,
+                          fontSize: fontSize,
+                          fontWeight: FontWeight.w700,
+                          height: 1.25,
+                          shadows: shadow,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Type a status',
+                          hintStyle: TextStyle(
+                            color: ink.withValues(alpha: 0.5),
+                            fontSize: fontSize,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          border: InputBorder.none,
+                          isCollapsed: true,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // Tappable colour / gradient strip
+              _swatchStrip(ink),
+              const SizedBox(height: 10),
+            ],
           ),
         ),
       ),
@@ -975,6 +1054,57 @@ class _TextStoryPageState extends State<_TextStoryPage> {
                 child: CircularProgressIndicator(
                     strokeWidth: 2, color: Colors.white))
             : const Icon(Icons.send_rounded),
+      ),
+    );
+  }
+
+  Widget _swatchStrip(Color ink) {
+    return SizedBox(
+      height: 48,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: _bgs.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
+        itemBuilder: (_, i) {
+          final cs = _bgs[i];
+          final selected = i == _bg;
+          return GestureDetector(
+            onTap: () => setState(() => _bg = i),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              width: selected ? 40 : 32,
+              height: selected ? 40 : 32,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: cs.length >= 2
+                    ? LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: cs)
+                    : null,
+                color: cs.length >= 2 ? null : cs[0],
+                border: Border.all(
+                  color: selected ? ink : ink.withValues(alpha: 0.35),
+                  width: selected ? 3 : 1.5,
+                ),
+                boxShadow: selected
+                    ? [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: selected
+                  ? Icon(Icons.check_rounded, size: 18, color: _inkFor(cs))
+                  : null,
+            ),
+          );
+        },
       ),
     );
   }

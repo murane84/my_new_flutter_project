@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import '../utils/net_image.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:phone_numbers_parser/phone_numbers_parser.dart';
@@ -142,27 +143,118 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
-  Future<void> _pickAvatar() async {
+  /// Let the user pick a profile photo from the phone gallery OR browse their
+  /// device storage (files) — the same two-way choice the wallpaper picker
+  /// offers, so the flow feels consistent across the app.
+  Future<void> _chooseAvatarSource() async {
+    final scheme = Theme.of(context).colorScheme;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 8, bottom: 4),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: scheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Change photo',
+                    style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: scheme.onSurface)),
+              ),
+            ),
+            ListTile(
+              leading:
+                  Icon(Icons.photo_library_rounded, color: scheme.primary),
+              title: const Text('Choose from gallery'),
+              subtitle: const Text('Pick from your photos'),
+              onTap: () => Navigator.pop(ctx, 'gallery'),
+            ),
+            ListTile(
+              leading: Icon(Icons.add_photo_alternate_rounded,
+                  color: scheme.primary),
+              title: const Text('Upload a photo'),
+              subtitle: const Text('Browse your device storage'),
+              onTap: () => Navigator.pop(ctx, 'files'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'gallery') {
+      await _pickFromGallery();
+    } else {
+      await _pickFromFiles();
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
     try {
       final x = await ImagePicker().pickImage(
           source: ImageSource.gallery, imageQuality: 78, maxWidth: 800);
       if (x == null) return;
       final bytes = await x.readAsBytes();
-      setState(() => _uploadingAvatar = true);
-      final res = await ApiService()
-          .uploadMedia(bytes: bytes, filename: x.name, mime: 'image/jpeg');
-      if (!mounted) return;
-      setState(() => _uploadingAvatar = false);
-      if (res != null && res['url'] != null) {
-        setState(() => _avatarUrl = res['url'].toString());
-      } else {
-        showToast(context, 'Could not upload photo', type: ToastType.error);
-      }
+      await _uploadAvatarBytes(bytes, x.name, 'image/jpeg');
     } catch (_) {
       if (mounted) {
         setState(() => _uploadingAvatar = false);
         showToast(context, 'Could not pick photo', type: ToastType.error);
       }
+    }
+  }
+
+  Future<void> _pickFromFiles() async {
+    try {
+      final res = await FilePicker.pickFiles(type: FileType.image);
+      if (res == null || res.files.isEmpty) return;
+      final f = res.files.single;
+      final bytes = await f.readAsBytes();
+      if (bytes.isEmpty) return;
+      final ext = (f.extension ?? 'jpg').toLowerCase();
+      final mime = ext == 'png'
+          ? 'image/png'
+          : ext == 'webp'
+              ? 'image/webp'
+              : ext == 'gif'
+                  ? 'image/gif'
+                  : 'image/jpeg';
+      await _uploadAvatarBytes(bytes, f.name, mime);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _uploadingAvatar = false);
+        showToast(context, 'Could not pick photo', type: ToastType.error);
+      }
+    }
+  }
+
+  Future<void> _uploadAvatarBytes(
+      List<int> bytes, String filename, String mime) async {
+    setState(() => _uploadingAvatar = true);
+    final res = await ApiService()
+        .uploadMedia(bytes: bytes, filename: filename, mime: mime);
+    if (!mounted) return;
+    setState(() => _uploadingAvatar = false);
+    if (res != null && res['url'] != null) {
+      setState(() => _avatarUrl = res['url'].toString());
+    } else {
+      showToast(context, 'Could not upload photo', type: ToastType.error);
     }
   }
 
@@ -338,6 +430,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       title: 'Profile',
       icon: Icons.person_rounded,
       desktopMaxWidth: 780,
+      fullScreen: true,
       builder: (context, isWide) => _body(context, isWide),
     );
   }
@@ -514,7 +607,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           GestureDetector(
-            onTap: _uploadingAvatar ? null : _pickAvatar,
+            onTap: _uploadingAvatar ? null : _chooseAvatarSource,
             child: Stack(
               clipBehavior: Clip.none,
               children: [

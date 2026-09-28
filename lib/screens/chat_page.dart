@@ -375,15 +375,32 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   // ── Init ──────────────────────────────────────────────────────────────────
 
   Future<void> _initChat() async {
-    final token = await getToken();
-    if (token == null) return;
-    final user = await ApiService().getCurrentUser(token);
-    _myId = user['id']?.toString();
-    _myName = (user['username'] ?? '').toString();
-    _myAvatar = (user['avatar_url'] as String?)?.trim();
+    // OFFLINE-FIRST: recover my user id and the cached messages WITHOUT touching
+    // the network, so a chat opened offline shows instantly and never spins
+    // forever. The user id is the crux — it's part of the cache key, so without
+    // a locally-cached copy an offline open would look under the wrong key and
+    // find nothing.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _myId ??= prefs.getString('my_user_id');
+    } catch (_) {}
+    await _loadCachedMessages(); // show cached messages instantly (clears loader)
+    if (mounted && _isLoading) setState(() => _isLoading = false);
 
-    await _loadCachedMessages(); // show cached messages instantly
-    await _loadMessages();        // then fetch fresh from network
+    // Best-effort refresh from the network. On success this also re-caches the
+    // user id (see ApiService.getUserData); offline it simply no-ops.
+    final token = await getToken();
+    if (token != null) {
+      final user = await ApiService().getCurrentUser(token);
+      final freshId = user['id']?.toString();
+      if (freshId != null && freshId.isNotEmpty) _myId = freshId;
+      final un = (user['username'] ?? '').toString();
+      if (un.isNotEmpty) _myName = un;
+      final av = (user['avatar_url'] as String?)?.trim();
+      if (av != null && av.isNotEmpty) _myAvatar = av;
+    }
+
+    await _loadMessages();        // fetch fresh from network (best-effort)
     _maybeInitialJump();          // opened from a notification → jump to it
     _checkOnlineStatus();
     _startPolling();
@@ -404,7 +421,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   Future<void> _loadMessages() async {
     final uid = int.tryParse(_myId ?? '');
-    if (uid == null) return;
+    if (uid == null) {
+      // No id yet (offline before ever loading online) — don't sit on a
+      // spinner; show whatever the cache has (possibly empty) instead.
+      if (mounted && _isLoading) setState(() => _isLoading = false);
+      return;
+    }
 
     try {
       final msgs = await appBusy.run(() => _isGroup

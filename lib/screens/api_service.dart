@@ -4,6 +4,7 @@ import 'package:http_parser/http_parser.dart' show MediaType;
 import 'package:logger/logger.dart';
 import 'package:flutter/foundation.dart';
 import 'token_helper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'user.dart';
 import '../utils/app_config.dart';
 import '../utils/session_events.dart';
@@ -651,7 +652,7 @@ class ApiService {
       var response = await http.get(
         Uri.parse('${await _baseUrl}/users/me'),
         headers: _authHeaders(activeToken),
-      );
+      ).timeout(const Duration(seconds: 12));
 
       // Access token expired? Silently refresh and retry once.
       if (response.statusCode == 401 || response.statusCode == 403) {
@@ -669,7 +670,18 @@ class ApiService {
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = jsonDecode(response.body);
-        if (data is Map<String, dynamic>) return data;
+        if (data is Map<String, dynamic>) {
+          // Cache identity locally so offline code (e.g. chat cache keys) has a
+          // stable user id without needing the network.
+          try {
+            final p = await SharedPreferences.getInstance();
+            final uid = data['id'];
+            if (uid != null) await p.setString('my_user_id', uid.toString());
+            final un = data['username'];
+            if (un != null) await p.setString('username', un.toString());
+          } catch (_) {}
+          return data;
+        }
         throw Exception('Invalid user data format');
       } else if (response.statusCode == 401 || response.statusCode == 403) {
         if (refreshWasRejected) SessionEvents.instance.markExpired();

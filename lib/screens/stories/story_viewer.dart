@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../services/contact_names.dart';
+import 'dart:io';
 import '../../utils/net_image.dart';
+import '../../services/media_store.dart';
 import '../api_service.dart';
 import '../token_helper.dart' show mediaAuthHeaders;
 import 'story_models.dart';
@@ -126,7 +128,18 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         uri = Uri.parse(url);
         hdrs = headers;
       }
-      final ctrl = VideoPlayerController.networkUrl(uri, httpHeaders: hdrs);
+      // Cache-first: play the on-device copy when the status was pre-downloaded
+      // (photos always; videos on Wi-Fi per the user's setting) — instant and
+      // offline. Otherwise stream from the network.
+      File? cachedVid;
+      if (!kIsWeb) {
+        try {
+          cachedVid = await MediaStore.instance.cached(url);
+        } catch (_) {}
+      }
+      final ctrl = cachedVid != null
+          ? VideoPlayerController.file(cachedVid)
+          : VideoPlayerController.networkUrl(uri, httpHeaders: hdrs);
       _video = ctrl;
       try {
         await ctrl.initialize();
@@ -327,14 +340,27 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         child: CircularProgressIndicator(color: Colors.white),
       );
     }
-    // Photo
+    // Photo — cache-first: show the on-device copy (from prefetch or a prior
+    // view) instantly and offline; otherwise fetch (and cache) from the network.
     if (item.mediaUrl != null) {
       final url = _absUrl(item.mediaUrl!);
+      final headers = mediaAuthHeaders(url);
+      if (kIsWeb) {
+        return Center(
+          child:
+              authNetworkImage(url: url, headers: headers, fit: BoxFit.contain),
+        );
+      }
       return Center(
-        child: authNetworkImage(
-          url: url,
-          headers: mediaAuthHeaders(url),
-          fit: BoxFit.contain,
+        child: FutureBuilder<File?>(
+          future: MediaStore.instance.getFile(url, headers),
+          builder: (ctx, snap) {
+            if (snap.data != null) {
+              return Image.file(snap.data!, fit: BoxFit.contain);
+            }
+            return authNetworkImage(
+                url: url, headers: headers, fit: BoxFit.contain);
+          },
         ),
       );
     }

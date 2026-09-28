@@ -52,6 +52,7 @@ import '../services/metadata_overrides.dart';
 import '../services/app_busy.dart';
 import '../utils/net_image.dart';
 import 'token_helper.dart';
+import '../services/media_store.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
 import '../utils/chat_background.dart';
@@ -2110,6 +2111,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           _activeStoryGroups(list.map(StoryGroup.fromJson).toList());
       if (!mounted) return;
       setState(() => _storyGroups = groups);
+      _prefetchStories(groups);
     } catch (_) {}
   }
 
@@ -2123,11 +2125,43 @@ class HomePageState extends rp.ConsumerState<HomePage>
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_kStoriesCache, jsonEncode(raw));
       } catch (_) {}
-      setState(() =>
-          _storyGroups = _activeStoryGroups(raw.map(StoryGroup.fromJson).toList()));
+      final groups = _activeStoryGroups(raw.map(StoryGroup.fromJson).toList());
+      setState(() => _storyGroups = groups);
+      _prefetchStories(groups);
     } catch (_) {
       // Offline / fetch error — keep whatever the cache already loaded.
     }
+  }
+
+  /// Hybrid status pre-download: cache PHOTOS eagerly (small, instant + offline)
+  /// and VIDEOS only on Wi-Fi when the user allows it — so viewing a status is
+  /// instant and works offline without burning mobile data on unopened videos.
+  void _prefetchStories(List<StoryGroup> groups) async {
+    if (kIsWeb) return;
+    try {
+      final conn = await Connectivity().checkConnectivity();
+      final onWifi = conn.contains(ConnectivityResult.wifi);
+      final hasNet = conn.any((r) => r != ConnectivityResult.none);
+      if (!hasNet) return;
+      final prefs = await SharedPreferences.getInstance();
+      final videoOnWifi = prefs.getBool('status_dl_videos_wifi') ?? true;
+      int budget = 24; // cap downloads per pass
+      for (final g in groups) {
+        if (g.isMe) continue;
+        for (final st in g.stories) {
+          if (budget <= 0) return;
+          final rel = st.mediaUrl;
+          if (rel == null || rel.trim().isEmpty) continue;
+          final url = rel.startsWith('http') ? rel : '$_apiBase$rel';
+          final isVideo = st.kind == 'video';
+          // Videos: only when enabled AND on Wi-Fi. Photos: any connection.
+          if (isVideo && (!videoOnWifi || !onWifi)) continue;
+          if (await MediaStore.instance.cached(url) != null) continue;
+          budget--;
+          MediaStore.instance.getFile(url, mediaAuthHeaders(url)).ignore();
+        }
+      }
+    } catch (_) {}
   }
 
   /// Manual add-friend — works everywhere, including desktop/web with no

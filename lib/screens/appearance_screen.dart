@@ -9,6 +9,7 @@ import '../services/wallpapers_service.dart';
 import '../widgets/wallpaper_gallery.dart';
 import 'api_service.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// The personalization surface (build step 5): whole-app **theme** (System /
 /// Light / Dark) + a curated **accent** preset set. Dark stays the brand's
@@ -91,13 +92,23 @@ class AppearanceScreen extends StatelessWidget {
             style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),
           const SizedBox(height: 28),
-          _sectionLabel(scheme, 'CHAT WALLPAPER'),
+          _sectionLabel(scheme, 'CHAT & STATUS'),
           const SizedBox(height: 10),
-          const _ChatWallpaperSection(),
+          const IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: _ChatWallpaperSection()),
+                SizedBox(width: 12),
+                Expanded(child: _StatusMediaSection()),
+              ],
+            ),
+          ),
           const SizedBox(height: 8),
           Text(
-            'Sets the default wallpaper for every chat. You can still give any '
-            'single chat its own — open it and tap the ⋮ menu → Wallpaper.',
+            'Wallpaper sets the backdrop for every chat — override any single '
+            'chat from its ⋮ menu → Wallpaper. Status videos pre-load quietly '
+            'on Wi-Fi so they open instantly.',
             style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),
           const SizedBox(height: 28),
@@ -267,8 +278,11 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
           Navigator.pop(ctx);
         }
 
+        final maxH = MediaQuery.of(ctx).size.height * 0.74;
         return SafeArea(
-          child: SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxH),
+            child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(18, 10, 18, 22),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -305,7 +319,7 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
                           'Motif', current.mode == 'motif',
                           () => applyClose('motif'))),
                 ]),
-                const SizedBox(height: 18),
+                const SizedBox(height: 14),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text('GALLERY',
@@ -327,7 +341,7 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
                           ? _full(p.wideUrl!)
                           : null),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 14),
                 OutlinedButton.icon(
                   onPressed: () async {
                     Navigator.pop(ctx);
@@ -336,11 +350,12 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
                   icon: const Icon(Icons.add_photo_alternate_rounded, size: 20),
                   label: const Text('Upload a photo'),
                   style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14))),
                 ),
               ],
+            ),
             ),
           ),
         );
@@ -354,7 +369,7 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(14),
@@ -388,37 +403,133 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
             borderRadius: BorderRadius.circular(14),
             onTap: _openSheet,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              child: Row(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.wallpaper_rounded,
-                      size: 22, color: scheme.primary),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Chat wallpaper',
-                            style: TextStyle(
-                                fontSize: 14.5,
-                                fontWeight: FontWeight.w700,
-                                color: scheme.onSurface)),
-                        const SizedBox(height: 2),
-                        Text('${_labelFor(bg)} · all chats',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: scheme.onSurfaceVariant)),
-                      ],
-                    ),
+                  Row(
+                    children: [
+                      Icon(Icons.wallpaper_rounded,
+                          size: 22, color: scheme.primary),
+                      const Spacer(),
+                      Icon(Icons.chevron_right_rounded,
+                          size: 20, color: scheme.onSurfaceVariant),
+                    ],
                   ),
-                  Icon(Icons.chevron_right_rounded,
-                      size: 20, color: scheme.onSurfaceVariant),
+                  const SizedBox(height: 12),
+                  Text('Chat wallpaper',
+                      style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface)),
+                  const SizedBox(height: 2),
+                  Text('${_labelFor(bg)} · all chats',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 12, color: scheme.onSurfaceVariant)),
                 ],
               ),
             ),
           ),
         );
       },
+    );
+  }
+}
+
+
+/// STATUS MEDIA — lets the data-conscious user decide whether status *videos*
+/// pre-download in the background. Photos and text always prefetch (they are
+/// tiny); videos are the only heavy item, so they ride behind this switch and
+/// only ever pull on Wi-Fi. Default ON so the common case (Wi-Fi at home) feels
+/// instant, but one tap turns it off for anyone watching their bundle.
+class _StatusMediaSection extends StatefulWidget {
+  const _StatusMediaSection();
+
+  @override
+  State<_StatusMediaSection> createState() => _StatusMediaSectionState();
+}
+
+class _StatusMediaSectionState extends State<_StatusMediaSection> {
+  static const _kKey = 'status_dl_videos_wifi';
+  bool _videosOnWifi = true;
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() {
+        _videosOnWifi = prefs.getBool(_kKey) ?? true;
+        _loaded = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loaded = true);
+    }
+  }
+
+  Future<void> _set(bool v) async {
+    setState(() => _videosOnWifi = v);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_kKey, v);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.wifi_rounded, size: 22, color: scheme.primary),
+                const Spacer(),
+                SizedBox(
+                  height: 24,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Switch(
+                      value: _videosOnWifi,
+                      onChanged: _loaded ? _set : null,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text('Status videos',
+                style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onSurface)),
+            const SizedBox(height: 2),
+            Text(
+                !_loaded
+                    ? 'Loading…'
+                    : (_videosOnWifi
+                        ? 'Pre-load on Wi-Fi'
+                        : 'Off · load on open'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+          ],
+        ),
+      ),
     );
   }
 }

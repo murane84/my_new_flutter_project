@@ -306,6 +306,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   Widget _content(StoryItem item) {
     if (item.isText) return _textContent(item);
+    if (item.isSticker) return _stickerContent(item);
     if (item.isMusic) return _musicContent(item);
     if (item.isVideo) {
       final v = _video;
@@ -432,6 +433,52 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           height: 1.3,
         ),
       ),
+    );
+  }
+
+  /// A GIF / sticker status: the animated art fills the screen over the
+  /// chosen colour background, with an optional caption beneath it.
+  Widget _stickerContent(StoryItem item) {
+    final art = item.musicArtUrl;
+    final hasArt = art != null && art.startsWith('http');
+    final ink = _inkFor(item.background);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        DecoratedBox(
+          decoration: _bgDecoration(
+              item.background, const [Color(0xFF2B2140), Color(0xFF120A20)]),
+        ),
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 260,
+                height: 260,
+                child: hasArt
+                    ? Image.network(art, fit: BoxFit.contain)
+                    : Icon(Icons.gif_box_rounded, color: ink, size: 96),
+              ),
+              if ((item.caption ?? '').isNotEmpty) ...[
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    item.caption!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: ink,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 

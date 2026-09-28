@@ -6,7 +6,7 @@ library;
 class StoryItem {
   final String id;
   final int authorId;
-  final String kind; // "photo" | "video" | "music"
+  final String kind; // "photo" | "video" | "music" | "text" | "sticker"
   final String? mediaUrl; // relative, e.g. /stories/media/<asset_id>
   final String? mediaMime;
   final String? caption;
@@ -40,6 +40,7 @@ class StoryItem {
   bool get isMusic => kind == 'music';
   bool get isPhoto => kind == 'photo';
   bool get isText => kind == 'text';
+  bool get isSticker => kind == 'sticker';
 
   static DateTime? _dt(dynamic v) =>
       v == null ? null : DateTime.tryParse(v.toString())?.toLocal();

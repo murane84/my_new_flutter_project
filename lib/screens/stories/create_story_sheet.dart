@@ -66,6 +66,8 @@ Future<void> showCreateStorySheet(
                   'Share what you\'re listening to', highlight: true),
               tile(Icons.text_fields_rounded, 'Text', 'text',
                   'A colourful text status'),
+              tile(Icons.gif_box_rounded, 'GIF / Sticker', 'sticker',
+                  'Share an animated GIF or sticker'),
               tile(Icons.photo_library_rounded, 'Photo', 'gallery',
                   'Pick a picture from your gallery'),
               tile(Icons.photo_camera_rounded, 'Camera', 'camera',
@@ -114,6 +116,11 @@ Future<void> showCreateStorySheet(
     return;
   }
 
+  if (choice == 'sticker') {
+    await pickAndPostSticker(context, onPosted: onPosted);
+    return;
+  }
+
   final picker = ImagePicker();
   XFile? file;
   try {
@@ -147,6 +154,45 @@ Future<void> showCreateStorySheet(
       ),
     ),
   );
+}
+
+/// Open the GIF / sticker picker and post the chosen one as a standalone
+/// "sticker" status — a non-superseding story that animates in the viewer
+/// (unlike a "music" story, which is a singleton). Returns true when posted.
+Future<bool> pickAndPostSticker(
+  BuildContext context, {
+  required VoidCallback onPosted,
+}) async {
+  final url = await showModalBottomSheet<String>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Theme.of(context).colorScheme.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+    ),
+    builder: (ctx) => SafeArea(
+      child: SizedBox(
+        height: MediaQuery.of(ctx).size.height * 0.6,
+        child: GifPicker(
+          onSelected: (gif) => Navigator.pop(ctx, gif.fullUrl),
+        ),
+      ),
+    ),
+  );
+  if (url == null || url.isEmpty || !context.mounted) return false;
+  final created = await ApiService().createStory(
+    kind: 'sticker',
+    musicArtUrl: url,
+    background: '#1A1A2E',
+  );
+  if (!context.mounted) return false;
+  if (created == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not post sticker')));
+    return false;
+  }
+  onPosted();
+  return true;
 }
 
 String _mimeFor(XFile file, String kind) {
@@ -787,16 +833,41 @@ class _TextStoryPage extends StatefulWidget {
 }
 
 class _TextStoryPageState extends State<_TextStoryPage> {
+  // A rich, vibrant palette — deep tones AND bright / neon options — so a text
+  // status can pop. The typed text picks a contrasting ink per colour (see
+  // [_inkFor]), so the words stay readable on every background regardless of
+  // the app's light/dark theme.
   static const List<Color> _colors = [
-    Color(0xFF5B2C83),
-    Color(0xFF0F2027),
-    Color(0xFFEE5522),
-    Color(0xFF11998E),
-    Color(0xFF3A2CA0),
-    Color(0xFFED213A),
-    Color(0xFF232526),
-    Color(0xFF1E88E5),
+    Color(0xFF5B2C83), // deep purple (default)
+    Color(0xFF7C4DFF), // vivid purple
+    Color(0xFF3A2CA0), // indigo
+    Color(0xFF1E88E5), // blue
+    Color(0xFF00B0FF), // bright sky
+    Color(0xFF00E5FF), // neon cyan
+    Color(0xFF11998E), // teal
+    Color(0xFF00C853), // green
+    Color(0xFF76FF03), // neon lime
+    Color(0xFFC6FF00), // neon chartreuse
+    Color(0xFFFFEA00), // neon yellow
+    Color(0xFFFFC400), // amber
+    Color(0xFFFF9100), // orange
+    Color(0xFFEE5522), // deep orange
+    Color(0xFFED213A), // red
+    Color(0xFFFF1744), // neon red
+    Color(0xFFFF4081), // neon pink
+    Color(0xFFF50057), // magenta
+    Color(0xFFE040FB), // neon orchid
+    Color(0xFFD500F9), // neon violet
+    Color(0xFF0F2027), // near-black teal
+    Color(0xFF232526), // charcoal
+    Color(0xFF1A1A2E), // midnight
+    Color(0xFF263238), // blue-grey
   ];
+
+  /// Contrast ink for [c]: dark text on bright / neon colours, white on deep
+  /// ones — so the status text is readable no matter the background.
+  static Color _inkFor(Color c) =>
+      c.computeLuminance() > 0.55 ? const Color(0xFF141414) : Colors.white;
 
   final TextEditingController _text = TextEditingController();
   int _bg = 0;
@@ -836,14 +907,21 @@ class _TextStoryPageState extends State<_TextStoryPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  Future<void> _addSticker() async {
+    final ok = await pickAndPostSticker(context, onPosted: widget.onPosted);
+    if (ok && mounted) Navigator.pop(context);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bg = _colors[_bg];
+    final ink = _inkFor(bg);
     return Scaffold(
-      backgroundColor: _colors[_bg],
+      backgroundColor: bg,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        foregroundColor: Colors.white,
+        foregroundColor: ink,
         title: const Text('Text status'),
         actions: [
           IconButton(
@@ -851,6 +929,11 @@ class _TextStoryPageState extends State<_TextStoryPage> {
             icon: const Icon(Icons.palette_rounded),
             onPressed: () =>
                 setState(() => _bg = (_bg + 1) % _colors.length),
+          ),
+          IconButton(
+            tooltip: 'GIF / Sticker',
+            icon: const Icon(Icons.gif_box_rounded),
+            onPressed: _addSticker,
           ),
           IconButton(
             tooltip: 'Add emoji',
@@ -868,14 +951,15 @@ class _TextStoryPageState extends State<_TextStoryPage> {
               autofocus: true,
               textAlign: TextAlign.center,
               maxLines: null,
-              cursorColor: Colors.white,
-              style: const TextStyle(
-                  color: Colors.white,
+              cursorColor: ink,
+              style: TextStyle(
+                  color: ink,
                   fontSize: 26,
                   fontWeight: FontWeight.w600),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'Type a status',
-                hintStyle: TextStyle(color: Colors.white54, fontSize: 24),
+                hintStyle:
+                    TextStyle(color: ink.withValues(alpha: 0.5), fontSize: 24),
                 border: InputBorder.none,
               ),
             ),

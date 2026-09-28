@@ -55,13 +55,42 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   // hand-tuned palette); the rest re-tint the primary family only.
   static const List<_Accent> _accents = [
     _Accent('Aluta red', ThemeProvider.defaultAccent),
+    // Warm reds & pinks
     _Accent('Coral', Color(0xFFFF5A5F)),
+    _Accent('Sunset', Color(0xFFFB7185)),
     _Accent('Rose', Color(0xFFFF4D8D)),
+    _Accent('Magenta', Color(0xFFEC4899)),
+    _Accent('Fuchsia', Color(0xFFD946EF)),
+    // Purples
+    _Accent('Orchid', Color(0xFFA855F7)),
     _Accent('Violet', Color(0xFF8E7CFF)),
+    _Accent('Grape', Color(0xFF9333EA)),
+    _Accent('Indigo', Color(0xFF6366F1)),
+    // Blues & cyans
+    _Accent('Cobalt', Color(0xFF2563EB)),
     _Accent('Ocean', Color(0xFF37B0E6)),
+    _Accent('Sky', Color(0xFF38BDF8)),
+    _Accent('Cyan', Color(0xFF06B6D4)),
     _Accent('Teal', Color(0xFF1FB6A6)),
+    // Greens
+    _Accent('Emerald', Color(0xFF10B981)),
     _Accent('Forest', Color(0xFF39B54A)),
+    _Accent('Lime', Color(0xFF84CC16)),
+    // Yellows & oranges
+    _Accent('Gold', Color(0xFFEAB308)),
+    _Accent('Amber', Color(0xFFF59E0B)),
     _Accent('Ember', Color(0xFFFF8A3D)),
+    // Neutral
+    _Accent('Slate', Color(0xFF64748B)),
+    // Neon mixers
+    _Accent('Neon pink', Color(0xFFFF2E88)),
+    _Accent('Neon purple', Color(0xFFB026FF)),
+    _Accent('Neon blue', Color(0xFF2D7DFF)),
+    _Accent('Neon cyan', Color(0xFF17E9E0)),
+    _Accent('Neon green', Color(0xFF2BE86B)),
+    _Accent('Neon lime', Color(0xFFC6FF00)),
+    _Accent('Neon yellow', Color(0xFFFFE500)),
+    _Accent('Neon orange', Color(0xFFFF7A00)),
   ];
 
   @override

@@ -160,13 +160,13 @@ Future<void> showChatWallpaperSheet(
             );
 
         final selUrl = current.isPhoto ? current.url : null;
+        final maxH = MediaQuery.of(ctx).size.height * 0.85;
         return SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(18, 10, 18, 20),
+          child: SizedBox(
+            height: maxH,
             child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const SizedBox(height: 10),
                 Center(
                   child: Container(
                     width: 40,
@@ -177,118 +177,152 @@ Future<void> showChatWallpaperSheet(
                   ),
                 ),
                 const SizedBox(height: 14),
-                Text('Chat wallpaper',
-                    style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: scheme.onSurface)),
-                const SizedBox(height: 2),
-                Text(title,
-                    style: TextStyle(
-                        fontSize: 12.5, color: scheme.onSurfaceVariant)),
-                const SizedBox(height: 12),
-                Container(
-                  decoration: BoxDecoration(
-                      color: scheme.surfaceContainerHighest
-                          .withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(14)),
-                  child: SwitchListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14),
-                    value: applyAll,
-                    onChanged: (v) => setSheet(() => applyAll = v),
-                    title: const Text('Apply to all chats',
-                        style:
-                            TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                    subtitle: Text(
-                        applyAll
-                            ? 'One wallpaper for every DM and group'
-                            : 'This chat only',
-                        style: const TextStyle(fontSize: 11.5)),
+                // Pinned header: title + who + the all-chats switch.
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('Chat wallpaper',
+                          style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: scheme.onSurface)),
+                      const SizedBox(height: 2),
+                      Text(title,
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              color: scheme.onSurfaceVariant)),
+                      const SizedBox(height: 12),
+                      Container(
+                        decoration: BoxDecoration(
+                            color: scheme.surfaceContainerHighest
+                                .withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(14)),
+                        child: SwitchListTile(
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 14),
+                          value: applyAll,
+                          onChanged: (v) => setSheet(() => applyAll = v),
+                          title: const Text('Apply to all chats',
+                              style: TextStyle(
+                                  fontSize: 14, fontWeight: FontWeight.w600)),
+                          subtitle: Text(
+                              applyAll
+                                  ? 'One wallpaper for every DM and group'
+                                  : 'This chat only',
+                              style: const TextStyle(fontSize: 11.5)),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 14),
-                Row(children: [
-                  Expanded(
-                      child: quick(Icons.blur_on_rounded, 'Default',
-                          current.mode == 'default',
-                          () => applyAndClose('default'))),
-                  const SizedBox(width: 10),
-                  Expanded(
-                      child: quick(Icons.auto_awesome_rounded, 'Motif',
-                          current.mode == 'motif',
-                          () => applyAndClose('motif'))),
-                ]),
-                const SizedBox(height: 18),
-                label('Gallery'),
-                const SizedBox(height: 8),
-                WallpaperGalleryGrid(
-                  presets: presets,
-                  apiBase: base,
-                  accent: scheme.primary,
-                  selectedFullUrl: selUrl,
-                  onPick: (p) => applyAndClose('photo',
-                      url: full(p.url),
-                      wideUrl: (p.wideUrl != null && p.wideUrl!.isNotEmpty)
-                          ? full(p.wideUrl!)
-                          : null),
-                ),
-                if (reusable.isNotEmpty) ...[
-                  const SizedBox(height: 18),
-                  label('From your Our Space'),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 96,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: reusable.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 10),
-                      itemBuilder: (c, i) {
-                        final e = reusable[i];
-                        final sel = selUrl == e.value;
-                        return GestureDetector(
-                          onTap: () => applyAndClose('photo', url: e.value),
-                          child: Column(children: [
-                            Container(
-                              width: 58,
-                              height: 72,
-                              clipBehavior: Clip.antiAlias,
-                              decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                      color: sel
-                                          ? scheme.primary
-                                          : scheme.outlineVariant,
-                                      width: sel ? 2.5 : 1)),
-                              child: WallpaperThumb(e.value),
+                // Scrolls independently between the pinned header and footer.
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(children: [
+                          Expanded(
+                              child: quick(Icons.blur_on_rounded, 'Default',
+                                  current.mode == 'default',
+                                  () => applyAndClose('default'))),
+                          const SizedBox(width: 10),
+                          Expanded(
+                              child: quick(Icons.auto_awesome_rounded, 'Motif',
+                                  current.mode == 'motif',
+                                  () => applyAndClose('motif'))),
+                        ]),
+                        const SizedBox(height: 18),
+                        label('Gallery'),
+                        const SizedBox(height: 8),
+                        WallpaperGalleryGrid(
+                          presets: presets,
+                          apiBase: base,
+                          accent: scheme.primary,
+                          selectedFullUrl: selUrl,
+                          onPick: (p) => applyAndClose('photo',
+                              url: full(p.url),
+                              wideUrl:
+                                  (p.wideUrl != null && p.wideUrl!.isNotEmpty)
+                                      ? full(p.wideUrl!)
+                                      : null),
+                        ),
+                        if (reusable.isNotEmpty) ...[
+                          const SizedBox(height: 18),
+                          label('From your Our Space'),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 96,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: reusable.length,
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(width: 10),
+                              itemBuilder: (c, i) {
+                                final e = reusable[i];
+                                final sel = selUrl == e.value;
+                                return GestureDetector(
+                                  onTap: () =>
+                                      applyAndClose('photo', url: e.value),
+                                  child: Column(children: [
+                                    Container(
+                                      width: 58,
+                                      height: 72,
+                                      clipBehavior: Clip.antiAlias,
+                                      decoration: BoxDecoration(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          border: Border.all(
+                                              color: sel
+                                                  ? scheme.primary
+                                                  : scheme.outlineVariant,
+                                              width: sel ? 2.5 : 1)),
+                                      child: WallpaperThumb(e.value),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    SizedBox(
+                                        width: 60,
+                                        child: Text(e.key,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                                fontSize: 10,
+                                                color:
+                                                    scheme.onSurfaceVariant))),
+                                  ]),
+                                );
+                              },
                             ),
-                            const SizedBox(height: 4),
-                            SizedBox(
-                                width: 60,
-                                child: Text(e.key,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                        fontSize: 10,
-                                        color: scheme.onSurfaceVariant))),
-                          ]),
-                        );
-                      },
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                ],
-                const SizedBox(height: 18),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    Navigator.pop(ctx);
-                    await pickAndUpload();
-                  },
-                  icon: const Icon(Icons.add_photo_alternate_rounded, size: 20),
-                  label: const Text('Upload a photo'),
-                  style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14))),
+                ),
+                // Pinned footer: always-visible upload action.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        await pickAndUpload();
+                      },
+                      icon: const Icon(Icons.add_photo_alternate_rounded,
+                          size: 20),
+                      label: const Text('Upload a photo'),
+                      style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14))),
+                    ),
+                  ),
                 ),
               ],
             ),

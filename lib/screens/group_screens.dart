@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import '../utils/net_image.dart';
 
@@ -37,6 +40,19 @@ class _GroupsScreenState extends State<GroupsScreen> {
   }
 
   Future<void> _load() async {
+    // Cache-first: paint the last-known groups instantly (shared with the home
+    // list's cache) so the page never opens on a spinner, then refresh.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('cached_groups_v1');
+      if (raw != null && mounted) {
+        final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+        setState(() {
+          _groups = list;
+          _loading = false;
+        });
+      }
+    } catch (_) {}
     final all = await ApiService().listConversations();
     if (!mounted) return;
     setState(() {

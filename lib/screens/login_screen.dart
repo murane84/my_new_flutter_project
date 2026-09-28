@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:provider/provider.dart';
@@ -30,6 +33,10 @@ class LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _bioLoginAvailable = false;
+  // A fresh sign-in must reach the server; surface it plainly when there's no
+  // connection instead of letting the login fail with a cryptic error.
+  bool _online = true;
+  StreamSubscription<List<ConnectivityResult>>? _connSub;
 
   @override
   void initState() {
@@ -42,10 +49,26 @@ class LoginPageState extends State<LoginPage> {
       }
     });
     _checkBioLogin();
+    _watchConnectivity();
+  }
+
+  Future<void> _watchConnectivity() async {
+    try {
+      final r = await Connectivity().checkConnectivity();
+      if (mounted) {
+        setState(() => _online = r.any((x) => x != ConnectivityResult.none));
+      }
+    } catch (_) {}
+    _connSub = Connectivity().onConnectivityChanged.listen((r) {
+      if (mounted) {
+        setState(() => _online = r.any((x) => x != ConnectivityResult.none));
+      }
+    });
   }
 
   @override
   void dispose() {
+    _connSub?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -53,6 +76,11 @@ class LoginPageState extends State<LoginPage> {
 
   Future<void> _performLogin() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!_online) {
+      showErrorSnackBar(
+          context, "You're offline — connect to the internet to sign in.");
+      return;
+    }
     setState(() => _isLoading = true);
 
     final result = await ApiService().login(
@@ -481,6 +509,42 @@ class LoginPageState extends State<LoginPage> {
                                 ),
                                 const SizedBox(height: 14),
 
+                                // Offline notice — a fresh sign-in needs the
+                                // server, so say so plainly.
+                                if (!_online)
+                                  Container(
+                                    margin:
+                                        const EdgeInsets.only(bottom: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.withValues(
+                                          alpha: 0.14),
+                                      borderRadius:
+                                          BorderRadius.circular(12),
+                                      border: Border.all(
+                                          color: Colors.orange
+                                              .withValues(alpha: 0.5)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.wifi_off_rounded,
+                                            size: 18, color: Colors.orange),
+                                        const SizedBox(width: 8),
+                                        Flexible(
+                                          child: Text(
+                                            "You're offline — connect to "
+                                            "sign in.",
+                                            style: TextStyle(
+                                                fontSize: 12.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: onColor),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 // Sign In button — pill width, centred
                                 Center(
                                   child: SizedBox(

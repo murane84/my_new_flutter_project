@@ -432,14 +432,37 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
   bool get _isAdmin => (_conv?['my_role']?.toString() ?? '') == 'admin';
   List _members() => (_conv?['members'] as List?) ?? const [];
 
+  String get _infoCacheKey =>
+      'cached_group_info_${widget.conversationId}_v1';
+
   Future<void> _load() async {
+    // Cache-first: paint the last-known group info (name, members, roles)
+    // instantly so the page never opens on a spinner, then refresh.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_infoCacheKey);
+      if (raw != null && mounted) {
+        setState(() {
+          _conv = (jsonDecode(raw) as Map).cast<String, dynamic>();
+          _loading = false;
+        });
+      }
+    } catch (_) {}
     _myUid ??= (await ApiService().getUserData())['id'] as int?;
     final c = await ApiService().getConversation(widget.conversationId);
     if (!mounted) return;
-    setState(() {
-      _conv = c;
-      _loading = false;
-    });
+    if (c != null) {
+      setState(() {
+        _conv = c;
+        _loading = false;
+      });
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_infoCacheKey, jsonEncode(c));
+      } catch (_) {}
+    } else if (_loading) {
+      setState(() => _loading = false);
+    }
   }
 
   String? _fullAvatar() {

@@ -44,6 +44,7 @@ enum _Phase {
   notConfigured,
   denied,
   captureFailed, // device capture cancelled / blocked / empty
+  serviceDown, // recognition provider errored (bad token / quota / down)
 }
 
 class _SongIdentifierSheet extends StatefulWidget {
@@ -247,6 +248,8 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
         setState(() => _phase = _Phase.error);
       } else if (res['error'] == 'not_configured') {
         setState(() => _phase = _Phase.notConfigured);
+      } else if (res['error'] == 'service_error') {
+        setState(() => _phase = _Phase.serviceDown);
       } else if (res['matched'] == true) {
         setState(() {
           _result = res;
@@ -354,6 +357,14 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
           Icons.music_off_rounded,
           'Couldn\'t capture this phone',
           'Make sure a song is actually playing, then choose "Entire screen" (not a single app) and allow recording — grant the microphone permission if it asks. Some apps (Spotify, Netflix and other protected players) block capture; for those, use "Around me" instead.',
+          retry: true,
+        );
+      case _Phase.serviceDown:
+        return _message(
+          scheme,
+          Icons.cloud_off_rounded,
+          'Song service unavailable',
+          'The recognition service didn\'t respond — it may be over its daily limit or temporarily down. Please try again in a bit.',
           retry: true,
         );
       case _Phase.error:

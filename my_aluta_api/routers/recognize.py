@@ -52,8 +52,16 @@ def _artwork_from(result: dict) -> str | None:
     return None
 
 
-def _audd_lookup(contents: bytes, filename: str | None, content_type: str | None) -> dict | None:
-    """Return a normalised match dict, or None on no-match / error."""
+def _audd_lookup(
+    contents: bytes, filename: str | None, content_type: str | None
+) -> tuple[str, dict | str | None]:
+    """Query AudD and classify the outcome so callers can tell a genuine
+    no-match apart from a provider problem:
+      ("match",   {..})   — a song was recognised
+      ("nomatch", None)   — AudD ran fine but found nothing in its catalogue
+      ("error",   reason) — bad/expired token, quota exceeded, timeout, or the
+                            service being down (reason is a short diagnostic)
+    """
     try:
         resp = requests.post(
             AUDD_API_URL,
@@ -61,18 +69,31 @@ def _audd_lookup(contents: bytes, filename: str | None, content_type: str | None
             files={"file": (filename or "clip.m4a", contents, content_type or "audio/mp4")},
             timeout=25,
         )
+    except Exception as e:  # network / timeout → service unreachable
+        print(f"[recognize] AudD request failed: {e.__class__.__name__}: {e}")
+        return ("error", f"unreachable ({e.__class__.__name__})")
+    try:
         payload = resp.json()
     except Exception:
-        return None
-    if payload.get("status") != "success":
-        print(f"[recognize] AudD non-success: {payload.get('error') or payload}")
-        return None
+        print(f"[recognize] AudD non-JSON response: HTTP {resp.status_code}")
+        return ("error", f"http {resp.status_code}")
+    status = payload.get("status")
+    if status == "error":
+        err = payload.get("error") or {}
+        code = err.get("error_code")
+        msg = err.get("error_message") or str(err)
+        # 900 = missing/invalid token, 901 = out of requests/limit reached, etc.
+        print(f"[recognize] AudD error {code}: {msg}")
+        return ("error", f"audd {code}: {msg}")
+    if status != "success":
+        print(f"[recognize] AudD unexpected status: {payload}")
+        return ("error", f"unexpected status {status}")
     result = payload.get("result")
     if not result:
-        return None
+        return ("nomatch", None)
     apple = result.get("apple_music") or {}
     spotify = result.get("spotify") or {}
-    return {
+    return ("match", {
         "matched": True,
         "source": "audd",
         "title": result.get("title"),
@@ -84,7 +105,7 @@ def _audd_lookup(contents: bytes, filename: str | None, content_type: str | None
         "artwork": _artwork_from(result),
         "spotify_url": (spotify.get("external_urls") or {}).get("spotify"),
         "apple_url": apple.get("url"),
-    }
+    })
 
 
 # ── AcoustID (free fallback) ─────────────────────────────────────────────────
@@ -186,15 +207,24 @@ async def recognize(
     if len(contents) > _MAX_BYTES:
         raise HTTPException(status_code=413, detail="Clip too large")
 
+    audd_error: str | None = None
+
     # 1) AudD (best for noisy mic clips).
     if AUDD_API_TOKEN:
-        match = _audd_lookup(contents, file.filename, file.content_type)
-        if match:
-            return match
+        kind, data = _audd_lookup(contents, file.filename, file.content_type)
+        if kind == "match":
+            return data
+        if kind == "error":
+            audd_error = data if isinstance(data, str) else "error"
 
     # 2) AcoustID (free fallback; best for cleaner audio).
     match = _acoustid_lookup(contents)
     if match:
         return match
 
+    # Nothing matched. If AudD actually errored (bad/expired token, quota
+    # exhausted, timeout, service down) surface that distinctly so the app can
+    # say "service unavailable" instead of a misleading "No match found".
+    if audd_error is not None:
+        return {"matched": False, "error": "service_error", "detail": audd_error}
     return {"matched": False}

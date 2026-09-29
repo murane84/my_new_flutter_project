@@ -16,6 +16,7 @@ neither is configured the endpoint returns 503 and the client shows a friendly
 """
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 
@@ -110,11 +111,13 @@ def _audd_lookup(
 
 # ── AcoustID (free fallback) ─────────────────────────────────────────────────
 
-def _acoustid_lookup(contents: bytes) -> dict | None:
+def _acoustid_lookup(contents: bytes) -> tuple[str, dict | str | None]:
     """Fingerprint the clip with fpcalc and look it up on AcoustID. Returns a
-    normalised match dict (title/artist/album), or None."""
+    discriminated result like _audd_lookup:
+      ("match", {..}) | ("nomatch", None) | ("error", reason) | ("skip", None)
+    ("skip" = not configured, so AcoustID was not really attempted.)"""
     if not ACOUSTID_API_KEY:
-        return None
+        return ("skip", None)
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".m4a") as f:
@@ -127,15 +130,15 @@ def _acoustid_lookup(contents: bytes) -> dict | None:
             )
         except FileNotFoundError:
             print("[recognize] fpcalc not installed — AcoustID fallback unavailable")
-            return None
+            return ("error", "fpcalc_missing")
         if proc.returncode != 0:
             print(f"[recognize] fpcalc failed: {proc.stderr.strip()[:200]}")
-            return None
+            return ("error", "fpcalc_failed")
         fp = json.loads(proc.stdout or "{}")
         fingerprint = fp.get("fingerprint")
         duration = int(fp.get("duration") or 0)
         if not fingerprint or duration <= 0:
-            return None
+            return ("error", "no_fingerprint")
         resp = requests.post(
             ACOUSTID_API_URL,
             data={
@@ -149,7 +152,7 @@ def _acoustid_lookup(contents: bytes) -> dict | None:
         data = resp.json()
         if data.get("status") != "ok":
             print(f"[recognize] AcoustID error: {data.get('error') or data}")
-            return None
+            return ("error", "acoustid_api")
         for r in data.get("results") or []:
             for rec in r.get("recordings") or []:
                 title = rec.get("title")
@@ -163,7 +166,7 @@ def _acoustid_lookup(contents: bytes) -> dict | None:
                 rgs = rec.get("releasegroups") or []
                 if rgs and isinstance(rgs[0], dict):
                     album = rgs[0].get("title")
-                return {
+                return ("match", {
                     "matched": True,
                     "source": "acoustid",
                     "title": title,
@@ -175,11 +178,11 @@ def _acoustid_lookup(contents: bytes) -> dict | None:
                     "artwork": None,
                     "spotify_url": None,
                     "apple_url": None,
-                }
-        return None
+                })
+        return ("nomatch", None)
     except Exception as e:
         print(f"[recognize] AcoustID exception: {e}")
-        return None
+        return ("error", "exception")
     finally:
         if tmp_path:
             try:
@@ -218,13 +221,66 @@ async def recognize(
             audd_error = data if isinstance(data, str) else "error"
 
     # 2) AcoustID (free fallback; best for cleaner audio).
-    match = _acoustid_lookup(contents)
-    if match:
-        return match
+    ac_kind, ac_data = _acoustid_lookup(contents)
+    if ac_kind == "match":
+        return ac_data
 
-    # Nothing matched. If AudD actually errored (bad/expired token, quota
-    # exhausted, timeout, service down) surface that distinctly so the app can
-    # say "service unavailable" instead of a misleading "No match found".
-    if audd_error is not None:
-        return {"matched": False, "error": "service_error", "detail": audd_error}
+    # Decide the final "not found" answer:
+    #  • if AcoustID actually looked and found nothing -> a GENUINE no-match
+    #    (even while AudD is out of quota), so don't cry "service down".
+    #  • only report a service error when no provider could perform a lookup
+    #    (AudD errored AND AcoustID errored or isn't usable).
+    if ac_kind == "nomatch":
+        return {"matched": False}
+    provider_error = audd_error or (
+        ac_data if (ac_kind == "error" and isinstance(ac_data, str)) else None
+    )
+    if provider_error is not None:
+        return {"matched": False, "error": "service_error", "detail": provider_error}
     return {"matched": False}
+
+
+
+@router.get("/health")
+def recognize_health():
+    """Quick self-check for the recognition pipeline. Exposes NO secret values —
+    only whether each provider is configured and whether the AcoustID binaries
+    are actually present & runnable on the host. Hit it in a browser:
+    GET /recognize/health .
+    """
+    def _binary(name: str) -> dict:
+        path = shutil.which(name)
+        info: dict = {"found": path is not None}
+        if path:
+            info["path"] = path
+            try:
+                ver = subprocess.run(
+                    [name, "-version"], capture_output=True, text=True, timeout=8
+                )
+                out = (ver.stdout or ver.stderr or "").strip().splitlines()
+                info["version"] = out[0][:120] if out else ""
+            except Exception as e:  # noqa: BLE001
+                info["version_error"] = e.__class__.__name__
+        return info
+
+    fpcalc = _binary("fpcalc")
+    ffmpeg = _binary("ffmpeg")
+    acoustid_ready = bool(ACOUSTID_API_KEY) and fpcalc["found"] and ffmpeg["found"]
+    return {
+        "audd_configured": bool(AUDD_API_TOKEN),
+        "acoustid_key_set": bool(ACOUSTID_API_KEY),
+        "fpcalc": fpcalc,
+        "ffmpeg": ffmpeg,
+        # True only when AcoustID can actually run end-to-end (key + both bins).
+        "acoustid_ready": acoustid_ready,
+        # What the pipeline will do for a request right now.
+        "note": (
+            "AudD primary; AcoustID fallback ready"
+            if AUDD_API_TOKEN and acoustid_ready
+            else "AcoustID only"
+            if acoustid_ready
+            else "AudD only"
+            if AUDD_API_TOKEN
+            else "NOT CONFIGURED"
+        ),
+    }

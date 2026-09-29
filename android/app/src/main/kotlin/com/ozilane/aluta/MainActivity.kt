@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
@@ -275,7 +276,19 @@ class MainActivity : AudioServiceFragmentActivity() {
         try {
             val mpm =
                 getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            startActivityForResult(mpm.createScreenCaptureIntent(), reqCapture)
+            // On Android 14+ the consent dialog defaults to "Share one app",
+            // which scopes AUDIO capture to a single app — so unless the user
+            // picks the exact app that's playing, we capture silence. Requesting
+            // the default display up front makes the picker default to "Entire
+            // screen", and playback capture then covers ALL device audio.
+            val intent = if (Build.VERSION.SDK_INT >= 34) {
+                mpm.createScreenCaptureIntent(
+                    MediaProjectionConfig.createConfigForDefaultDisplay()
+                )
+            } else {
+                mpm.createScreenCaptureIntent()
+            }
+            startActivityForResult(intent, reqCapture)
         } catch (e: Exception) {
             captureResult = null
             result.success(null)

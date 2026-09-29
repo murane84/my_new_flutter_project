@@ -194,6 +194,19 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
   }
 
   Future<void> _startDevice() async {
+    // Playback capture (AudioPlaybackCapture + AudioRecord) needs the
+    // RECORD_AUDIO runtime permission just like the mic path — without it the
+    // native recorder captures pure silence and the WAV comes back empty, which
+    // looked like "Couldn't capture this phone" even while audio was playing.
+    try {
+      if (!await _recorder.hasPermission()) {
+        if (mounted) setState(() => _phase = _Phase.denied);
+        return;
+      }
+    } catch (_) {
+      if (mounted) setState(() => _phase = _Phase.denied);
+      return;
+    }
     setState(() {
       _phase = _Phase.capturing;
       _result = null;
@@ -340,7 +353,7 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
           scheme,
           Icons.music_off_rounded,
           'Couldn\'t capture this phone',
-          'Make sure something is actually playing, then allow "Start capturing" when asked. Some apps (Spotify, Netflix and other protected players) block capture — for those, use "Around me" instead.',
+          'Make sure a song is actually playing, then choose "Entire screen" (not a single app) and allow recording — grant the microphone permission if it asks. Some apps (Spotify, Netflix and other protected players) block capture; for those, use "Around me" instead.',
           retry: true,
         );
       case _Phase.error:

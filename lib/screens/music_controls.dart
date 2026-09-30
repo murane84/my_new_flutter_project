@@ -2195,25 +2195,21 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                     style: TextStyle(
                         color: onSurface.withAlpha(150), fontSize: 11)),
                 Expanded(
-                  child: SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 4,
-                      thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 7),
-                      overlayShape: const RoundSliderOverlayShape(
-                          overlayRadius: 16),
-                      activeTrackColor: accent,
-                      inactiveTrackColor: accent.withAlpha(50),
-                      thumbColor: accent,
-                      overlayColor: accent.withAlpha(35),
-                    ),
-                    child: Slider(
-                      value: sliderVal,
-                      max: sliderMax,
-                      onChanged: controlsOn
-                          ? (v) => _transportSeek(
-                              Duration(milliseconds: v.toInt()))
-                          : null,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    // A waveform that IS the seek control: drag/tap to scrub,
+                    // bars fill with the accent up to the play head, with a
+                    // time bubble following the finger.
+                    child: _WaveformSeekBar(
+                      fraction: sliderMax > 0 ? sliderVal / sliderMax : 0.0,
+                      accent: accent,
+                      inactive: accent.withAlpha(48),
+                      enabled: controlsOn,
+                      seed: _trackName.hashCode ^ _currentIndex,
+                      onSeek: (f) => _transportSeek(
+                          Duration(milliseconds: (f * sliderMax).round())),
+                      labelFor: (f) =>
+                          _fmt(Duration(milliseconds: (f * sliderMax).round())),
                     ),
                   ),
                 ),

@@ -26,6 +26,7 @@ import '../utils/toast_helper.dart';
 import 'equalizer_screen.dart';
 import '../utils/popup_shell.dart';
 import 'package:on_audio_query/on_audio_query.dart';
+import '../services/song_library.dart';
 import '../services/audio_handler.dart';
 import '../services/metadata_overrides.dart';
 import '../utils/marquee_text.dart';
@@ -929,7 +930,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   Future<void> _ensureUriMap() async {
     if (!_isMobile || _uriMapBuilt) return;
     try {
-      final songs = await _audioQuery.querySongs();
+      final songs = await SongLibrary.songs();
       for (final s in songs) {
         final d = s.data;
         final u = s.uri;
@@ -1409,8 +1410,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   Future<void> _fetchMetadata(String path) async {
     try {
-      final q = OnAudioQuery();
-      final songs = await q.querySongs();
+      final songs = await SongLibrary.songs();
       final m = songs
           .cast<SongModel?>()
           .firstWhere((s) => s?.data == path, orElse: () => null);

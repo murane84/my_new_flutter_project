@@ -241,7 +241,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     final ids = <String, int>{};
     try {
       if (Platform.isAndroid || Platform.isIOS) {
-        final songs = await OnAudioQuery().querySongs();
+        final songs = await SongLibrary.songs();
         for (final s in songs) {
           final p = s.data;
           if (p.isEmpty) continue;
@@ -259,11 +259,15 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         }
       }
     } catch (_) {/* desktop / no permission — fall back to file stats */}
+    // Read sizes off disk ASYNCHRONOUSLY (await exists/length) so this never
+    // blocks the UI thread — a synchronous existsSync/lengthSync loop over a big
+    // library (WhatsApp audio & other non-MediaStore files) was long enough to
+    // trip Android's "isn't responding" (ANR).
     for (final p in widget.playlist) {
       if (!size.containsKey(p)) {
         try {
           final f = File(p);
-          if (f.existsSync()) size[p] = f.lengthSync();
+          if (await f.exists()) size[p] = await f.length();
         } catch (_) {/* unreadable path */}
       }
     }

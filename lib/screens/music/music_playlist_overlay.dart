@@ -278,19 +278,65 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   /// Row leading: the now-playing indicator, the song's embedded cover art when
   /// we can pull it, or a music-note icon — never the raw track number.
   Widget _leadingArt(String path, bool isNow, ColorScheme scheme) {
+    final isDark = scheme.brightness == Brightness.dark;
     if (isNow) {
-      return CircleAvatar(
-        radius: 15,
-        backgroundColor: scheme.primary,
+      // Glowing accent disc for the playing track.
+      return Container(
+        width: 30,
+        height: 30,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.lerp(scheme.primary, Colors.white, 0.24)!,
+              scheme.primary,
+            ],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: scheme.primary.withValues(alpha: 0.45),
+              blurRadius: 10,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
         child:
             Icon(Icons.equalizer_rounded, size: 15, color: scheme.onPrimary),
       );
     }
-    final fallback = CircleAvatar(
-      radius: 15,
-      backgroundColor: scheme.surfaceContainerHighest,
+    // Inactive tracks get a faint accent-tinted disc (not flat grey) so the
+    // list reads as one themed surface.
+    final fallback = Container(
+      width: 30,
+      height: 30,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.alphaBlend(
+                scheme.primary.withValues(alpha: isDark ? 0.16 : 0.10),
+                scheme.surface),
+            Color.alphaBlend(
+                scheme.primary.withValues(alpha: isDark ? 0.26 : 0.18),
+                scheme.surfaceContainerHighest),
+          ],
+        ),
+        border: Border.all(
+          color: scheme.primary.withValues(alpha: isDark ? 0.28 : 0.18),
+          width: 1,
+        ),
+      ),
       child: Icon(Icons.music_note_rounded,
-          size: 16, color: scheme.onSurfaceVariant),
+          size: 16,
+          color: Color.alphaBlend(
+              scheme.primary.withValues(alpha: 0.5),
+              scheme.onSurfaceVariant)),
     );
     final id = _songId[path];
     // Embedded art is only queryable from the device MediaStore (Android/iOS).
@@ -305,6 +351,58 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           artworkWidth: 30,
           artworkHeight: 30,
           artworkFit: BoxFit.cover,
+          keepOldArtwork: true,
+          nullArtworkWidget: fallback,
+        ),
+      ),
+    );
+  }
+
+  /// A larger rounded-square cover for the mini-player: embedded art on mobile,
+  /// a themed tinted placeholder elsewhere (e.g. desktop).
+  Widget _miniArt(String path, ColorScheme scheme) {
+    final isDark = scheme.brightness == Brightness.dark;
+    final fallback = Container(
+      width: 40,
+      height: 40,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.alphaBlend(
+                scheme.primary.withValues(alpha: isDark ? 0.22 : 0.14),
+                scheme.surface),
+            Color.alphaBlend(
+                scheme.primary.withValues(alpha: isDark ? 0.34 : 0.22),
+                scheme.surfaceContainerHighest),
+          ],
+        ),
+        border: Border.all(
+            color: scheme.primary.withValues(alpha: isDark ? 0.30 : 0.20)),
+      ),
+      child: Icon(Icons.music_note_rounded,
+          size: 20,
+          color: Color.alphaBlend(
+              scheme.primary.withValues(alpha: 0.55),
+              scheme.onSurfaceVariant)),
+    );
+    final id = _songId[path];
+    if (id == null || !(Platform.isAndroid || Platform.isIOS)) return fallback;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        width: 40,
+        height: 40,
+        child: QueryArtworkWidget(
+          id: id,
+          type: ArtworkType.AUDIO,
+          artworkWidth: 40,
+          artworkHeight: 40,
+          artworkFit: BoxFit.cover,
+          artworkBorder: BorderRadius.circular(10),
           keepOldArtwork: true,
           nullArtworkWidget: fallback,
         ),
@@ -1872,6 +1970,10 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           const SizedBox(height: 2),
           Row(
             children: [
+              if (_curPath() != null) ...[
+                _miniArt(_curPath()!, scheme),
+                const SizedBox(width: 10),
+              ],
               Expanded(
                 child: Text(
                   widget.currentTitle,
@@ -1908,7 +2010,16 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                   final playing = snap.data?.playing ?? false;
                   return Container(
                     decoration: BoxDecoration(
-                        color: scheme.primary, shape: BoxShape.circle),
+                      color: scheme.primary,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: scheme.primary.withValues(alpha: 0.40),
+                          blurRadius: 9,
+                          spreadRadius: 0.5,
+                        ),
+                      ],
+                    ),
                     child: IconButton(
                       icon: Icon(
                           playing

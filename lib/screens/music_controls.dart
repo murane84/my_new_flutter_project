@@ -48,14 +48,34 @@ String _speedLabel(double s) => s == 1.0 ? '1x' : '${s}x';
 /// "Two of us- Downloaded from clipzag.com" → "Two of us".
 String _cleanTrackName(String raw) {
   var n = raw;
+  // Ringtone / caller-tune promo spam common on East-African music files, e.g.
+  // "… sms skiza 7301521 to 811" — drop everything from that phrase onward.
+  n = n.replaceAll(RegExp(r'\bsms\s*skiza\b.*', caseSensitive: false), ' ');
+  n = n.replaceAll(RegExp(r'\bskiza\b.*', caseSensitive: false), ' ');
+  // Downloader tags, e.g. "… Downloaded from clipzag.com".
   n = n.replaceAll(
       RegExp(r'[-_(\[ ]*downloaded\s*from[^)\]]*', caseSensitive: false), ' ');
   n = n.replaceAll(
       RegExp(r'\b(clipzag|y2mate|ytmp3|mp3juice|tubidy|savefrom|snaptube)\S*',
           caseSensitive: false),
       ' ');
+  // Bare website / domain noise (e.g. "mdundo.com", "www.something.net").
+  n = n.replaceAll(
+      RegExp(r'\b(www\.)?\S+\.(com|net|co|info|xyz|me|tz)\b',
+          caseSensitive: false),
+      ' ');
+  // Video/audio tags: "(Official Lyrics Video)", "[Official Music Video]",
+  // "(Audio)", "[HD]", "(4K)", "(Visualizer)", "(Dir by …)" …
+  n = n.replaceAll(
+      RegExp(r'[\(\[][^\)\]]*\b(official|lyric|lyrics|video|audio|visuali[sz]er|hd|4k|mv|dir(ected)?\s*by)\b[^\)\]]*[\)\]]?',
+          caseSensitive: false),
+      ' ');
+  // Empty leftover groups "()" / "[]".
+  n = n.replaceAll(RegExp(r'\(\s*\)|\[\s*\]'), ' ');
   n = n.replaceAll(RegExp(r'\s+'), ' ').trim();
-  n = n.replaceAll(RegExp(r'^[\s\-_]+|[\s\-_]+$'), '').trim();
+  // Strip stray leading/trailing separators and unbalanced brackets / pipes
+  // (kills the leftover "Goon Flavour )" style closer).
+  n = n.replaceAll(RegExp(r'^[\s\-_|)\]\(\[]+|[\s\-_|)\]\(\[]+$'), '').trim();
   return n.isEmpty ? raw.trim() : n;
 }
 

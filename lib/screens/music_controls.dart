@@ -942,6 +942,370 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     }
   }
 
+  // ── Full-screen "Now Playing" ───────────────────────────────────────────────
+
+  void _openFullPlayer() {
+    final hasTrack = _currentIndex >= 0 && _playlist.isNotEmpty;
+    if (!hasTrack && !_liveActive) return;
+    Navigator.of(context, rootNavigator: true).push(
+      PageRouteBuilder(
+        opaque: true,
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 240),
+        pageBuilder: (ctx, a, b) => _fullPlayerBody(),
+        transitionsBuilder: (ctx, anim, sec, child) => FadeTransition(
+          opacity: anim,
+          child: SlideTransition(
+            position: Tween<Offset>(
+                    begin: const Offset(0, 0.05), end: Offset.zero)
+                .animate(
+                    CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _fullArt(Color accent, ColorScheme scheme) {
+    final fallback = DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.lerp(accent, Colors.white, 0.30)!,
+            accent,
+            Color.lerp(accent, Colors.black, 0.20)!,
+          ],
+        ),
+      ),
+      child: Center(
+        child: Icon(Icons.music_note_rounded,
+            color: Colors.white.withValues(alpha: 0.92), size: 92),
+      ),
+    );
+    if (_currentArtId == null || !_isMobile) return fallback;
+    return QueryArtworkWidget(
+      id: _currentArtId!,
+      type: ArtworkType.AUDIO,
+      artworkWidth: 360,
+      artworkHeight: 360,
+      artworkFit: BoxFit.cover,
+      keepOldArtwork: true,
+      nullArtworkWidget: fallback,
+    );
+  }
+
+  Widget _fullPlayerBody() {
+    return Consumer(builder: (context, ref, _) {
+      final scheme = Theme.of(context).colorScheme;
+      final accent = scheme.primary;
+      final isDark = scheme.brightness == Brightness.dark;
+      final np = ref.watch(nowPlayingProvider);
+      final live = _liveActive;
+      final hasTrack = _currentIndex >= 0 && _playlist.isNotEmpty;
+      final title = np.track.isNotEmpty ? np.track : _trackName;
+      final artist = np.artist;
+
+      return StatefulBuilder(builder: (context, setFull) {
+        final isFav = hasTrack && _favorites.contains(_playlist[_currentIndex]);
+        return Scaffold(
+          backgroundColor: scheme.surface,
+          body: Stack(
+            children: [
+              // Accent wash backdrop.
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color.alphaBlend(
+                            accent.withValues(alpha: isDark ? 0.24 : 0.16),
+                            scheme.surface),
+                        scheme.surface,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 6, 22, 14),
+                  child: Column(
+                    children: [
+                      // Top bar.
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                            iconSize: 30,
+                            color: scheme.onSurface,
+                            tooltip: 'Minimise',
+                            onPressed: () => Navigator.of(context).maybePop(),
+                          ),
+                          const Spacer(),
+                          Text('NOW PLAYING',
+                              style: TextStyle(
+                                  color: scheme.onSurfaceVariant,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1.6)),
+                          const Spacer(),
+                          IconButton(
+                            icon: Icon(
+                                isFav
+                                    ? Icons.favorite
+                                    : Icons.favorite_border,
+                                color: isFav
+                                    ? Colors.pinkAccent
+                                    : scheme.onSurface),
+                            tooltip: isFav ? 'Unlike' : 'Like',
+                            onPressed: hasTrack
+                                ? () {
+                                    _toggleFavorite(_playlist[_currentIndex]);
+                                    setFull(() {});
+                                  }
+                                : null,
+                          ),
+                        ],
+                      ),
+                      // Big art.
+                      Expanded(
+                        flex: 5,
+                        child: Center(
+                          child: LayoutBuilder(builder: (c, cc) {
+                            final side = (cc.maxWidth < cc.maxHeight
+                                    ? cc.maxWidth
+                                    : cc.maxHeight)
+                                .clamp(0.0, 360.0)
+                                .toDouble();
+                            return Container(
+                              width: side,
+                              height: side,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(26),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color:
+                                        accent.withValues(alpha: 0.35),
+                                    blurRadius: 44,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(26),
+                                child: _fullArt(accent, scheme),
+                              ),
+                            );
+                          }),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      // Title + artist.
+                      MarqueeText(
+                        text: title,
+                        height: 28,
+                        style: TextStyle(
+                          color: scheme.onSurface,
+                          fontSize: 21,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      if (artist.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        MarqueeText(
+                          text: artist,
+                          height: 20,
+                          style: TextStyle(
+                            color: scheme.onSurfaceVariant,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 18),
+                      // Waveform + times (live via the position stream).
+                      StreamBuilder<Duration>(
+                        stream: _player.positionStream,
+                        builder: (ctx, snap) {
+                          final pos = live
+                              ? (_live?.player.position ?? Duration.zero)
+                              : (snap.data ?? _player.position);
+                          final dur = live
+                              ? (_live?.player.duration ?? Duration.zero)
+                              : (_player.duration ?? Duration.zero);
+                          final maxMs = dur.inMilliseconds > 0
+                              ? dur.inMilliseconds.toDouble()
+                              : 1.0;
+                          final frac =
+                              (pos.inMilliseconds / maxMs).clamp(0.0, 1.0);
+                          return Column(
+                            children: [
+                              _WaveformSeekBar(
+                                fraction: frac,
+                                accent: accent,
+                                inactive: accent.withAlpha(48),
+                                enabled: true,
+                                seed: _trackName.hashCode ^ _currentIndex,
+                                onSeek: (f) => _transportSeek(Duration(
+                                    milliseconds: (f * maxMs).round())),
+                                labelFor: (f) => _fmt(Duration(
+                                    milliseconds: (f * maxMs).round())),
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(_fmt(pos),
+                                      style: TextStyle(
+                                          color: scheme.onSurfaceVariant,
+                                          fontSize: 12)),
+                                  Text(_fmt(dur),
+                                      style: TextStyle(
+                                          color: scheme.onSurfaceVariant,
+                                          fontSize: 12)),
+                                ],
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      // Primary transport.
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _CtrlChip(
+                            icon: Icons.shuffle_rounded,
+                            active: _effShuffle,
+                            activeColor: Colors.green,
+                            onTap: () {
+                              _toggleShuffle();
+                              setFull(() {});
+                            },
+                            tooltip: 'Shuffle',
+                          ),
+                          _CtrlBtn(
+                            icon: Icons.skip_previous_rounded,
+                            size: 34,
+                            color: scheme.onSurface,
+                            onTap: _transportPrev,
+                            tooltip: 'Previous',
+                          ),
+                          StreamBuilder<PlayerState>(
+                            stream: _player.playerStateStream,
+                            builder: (ctx, snap) {
+                              final playing = live
+                                  ? (_live?.player.playing ?? false)
+                                  : (snap.data?.playing ?? _player.playing);
+                              return GestureDetector(
+                                onTap: _transportPlayPause,
+                                child: Container(
+                                  width: 76,
+                                  height: 76,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        Color.lerp(
+                                            accent, Colors.white, 0.22)!,
+                                        accent,
+                                      ],
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color:
+                                            accent.withValues(alpha: 0.5),
+                                        blurRadius: 22,
+                                        spreadRadius: 2,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Icon(
+                                      playing
+                                          ? Icons.pause_rounded
+                                          : Icons.play_arrow_rounded,
+                                      size: 40,
+                                      color: Colors.white),
+                                ),
+                              );
+                            },
+                          ),
+                          _CtrlBtn(
+                            icon: Icons.skip_next_rounded,
+                            size: 34,
+                            color: scheme.onSurface,
+                            onTap: _transportNext,
+                            tooltip: 'Next',
+                          ),
+                          _CtrlChip(
+                            icon: _effRepeatMode == 'one'
+                                ? Icons.repeat_one_rounded
+                                : Icons.repeat_rounded,
+                            active: _effRepeatMode != 'off',
+                            activeColor: accent,
+                            onTap: () {
+                              _cycleRepeat();
+                              setFull(() {});
+                            },
+                            tooltip: 'Repeat',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      // Secondary actions.
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.replay_10_rounded),
+                            color: scheme.onSurfaceVariant,
+                            tooltip: 'Back 10s',
+                            onPressed: () => _transportSeekBy(-10),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.lyrics_rounded),
+                            color: scheme.onSurfaceVariant,
+                            tooltip: 'Lyrics',
+                            onPressed: _openLyrics,
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.queue_music_rounded),
+                            color: scheme.onSurfaceVariant,
+                            tooltip: 'Queue',
+                            onPressed: _openOrScanPlaylist,
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.graphic_eq_rounded),
+                            color: scheme.onSurfaceVariant,
+                            tooltip: 'Equalizer',
+                            onPressed: _openEqualizer,
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.forward_10_rounded),
+                            color: scheme.onSurfaceVariant,
+                            tooltip: 'Forward 10s',
+                            onPressed: () => _transportSeekBy(10),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      });
+    });
+  }
+
   /// Set the player source (content URI on mobile, path elsewhere) and start
   /// playback. Returns null on success, or an error string on failure ('format'
   /// for an unreadable/unsupported source, else the engine's message).
@@ -2041,6 +2405,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                   // swipe up to open the queue.
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
+                    // Tap the art to open the immersive full-screen player.
+                    onTap: (hasTrack || live) ? _openFullPlayer : null,
                     onDoubleTap: (!live && hasTrack)
                         ? () => _toggleFavorite(_playlist[_currentIndex])
                         : null,

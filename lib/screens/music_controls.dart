@@ -112,6 +112,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   AndroidLoudnessEnhancer? _loudness;
 
   List<String> _playlist = [];
+  // Android scoped storage can't reliably open many media by raw file PATH
+  // (WhatsApp audio, downloads, etc.) — playback then fails with a bogus
+  // "check file format". So we play through each song's MediaStore CONTENT URI
+  // instead, resolved here (raw path -> content:// uri) from a one-off scan.
+  final Map<String, String> _uriByPath = {};
+  bool _uriMapBuilt = false;
   // MediaStore query (fast, indexed device-library access).
   final OnAudioQuery _audioQuery = OnAudioQuery();
 
@@ -917,6 +923,54 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   // ── Playback ───────────────────────────────────────────────────────────────
 
+  /// Build (once) the raw-path -> content-URI map from the device library, so
+  /// playback can use MediaStore URIs instead of unreadable raw paths. The first
+  /// device query was already primed at launch (PreloadScreen), so this is fast.
+  Future<void> _ensureUriMap() async {
+    if (!_isMobile || _uriMapBuilt) return;
+    try {
+      final songs = await _audioQuery.querySongs();
+      for (final s in songs) {
+        final d = s.data;
+        final u = s.uri;
+        if (d.isNotEmpty && u != null && u.isNotEmpty) _uriByPath[d] = u;
+      }
+      _uriMapBuilt = true;
+    } catch (_) {
+      // Leave _uriMapBuilt false so a later play retries; _play falls back to
+      // setFilePath meanwhile.
+    }
+  }
+
+  /// Set the player source (content URI on mobile, path elsewhere) and start
+  /// playback. Returns null on success, or an error string on failure ('format'
+  /// for an unreadable/unsupported source, else the engine's message).
+  Future<String?> _openSource(String path) async {
+    try {
+      if (_isMobile) {
+        if (!_uriMapBuilt || !_uriByPath.containsKey(path)) {
+          await _ensureUriMap();
+        }
+        final uri = _uriByPath[path];
+        if (uri != null && uri.isNotEmpty) {
+          await _player.setUrl(uri);
+        } else {
+          await _player.setFilePath(path);
+        }
+      } else {
+        await _player.setFilePath(path);
+      }
+      await _player.setVolume(_muted ? 0 : _volume);
+      await _player.setSpeed(_speed);
+      await _player.play();
+      return null;
+    } on PlayerException catch (e) {
+      return e.message ?? 'format';
+    } catch (_) {
+      return 'format';
+    }
+  }
+
   Future<void> _play(int index) async {
     if (index < 0 || index >= _playlist.length) return;
     final path = _playlist[index];
@@ -937,26 +991,25 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         track: initTitle, artist: initArtist, playing: true);
     _syncFavoriteAmbient();
 
-    try {
-      // setFilePath implicitly stops previous — no need for explicit stop()
-      await _player.setFilePath(path);
-      await _player.setVolume(_muted ? 0 : _volume);
-      await _player.setSpeed(_speed);
-      await _player.play();
-    } on PlayerException catch (e) {
+    // The VERY FIRST play after a cold start often fails because the audio
+    // engine / background service hasn't finished coming up yet — the exact
+    // transient the user worked around by closing and reopening the app. So try
+    // once, and on failure wait a beat and retry (re-resolving the URI) before
+    // surfacing any error. That makes first-launch playback "just work".
+    var err = await _openSource(path);
+    if (err != null && mounted) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      _uriMapBuilt = false; // force a fresh URI resolve on the retry
+      err = await _openSource(path);
+    }
+    if (err != null) {
       _switching = false;
       if (_pruneIfMissing(path)) {
         if (mounted) _snack('Track no longer on device — removed');
       } else if (mounted) {
-        _snack('Cannot play: ${e.message}');
-      }
-      return;
-    } catch (_) {
-      _switching = false;
-      if (_pruneIfMissing(path)) {
-        if (mounted) _snack('Track no longer on device — removed');
-      } else if (mounted) {
-        _snack('Playback error — check file format');
+        _snack(err == 'format'
+            ? 'Playback error — check file format'
+            : 'Cannot play: $err');
       }
       return;
     }

@@ -2037,8 +2037,29 @@ class _MusicControlsState extends ConsumerState<MusicControls>
               ),
               child: Row(
                 children: [
-                  // Spinning disc
-                  AnimatedBuilder(
+                  // Spinning disc — swipe ←/→ to skip, double-tap to like,
+                  // swipe up to open the queue.
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onDoubleTap: (!live && hasTrack)
+                        ? () => _toggleFavorite(_playlist[_currentIndex])
+                        : null,
+                    onHorizontalDragEnd: controlsOn
+                        ? (d) {
+                            final v = d.primaryVelocity ?? 0;
+                            if (v < -120) {
+                              _transportNext();
+                            } else if (v > 120) {
+                              _transportPrev();
+                            }
+                          }
+                        : null,
+                    onVerticalDragEnd: (d) {
+                      if ((d.primaryVelocity ?? 0) < -200) {
+                        _openOrScanPlaylist();
+                      }
+                    },
+                    child: AnimatedBuilder(
                     animation: _discCtrl,
                     builder: (ctx, child) => Transform.rotate(
                       angle: _discCtrl.value * 2 * pi,
@@ -2074,6 +2095,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                             )
                           : _discArt(isNarrow),
                     ),
+                  ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(

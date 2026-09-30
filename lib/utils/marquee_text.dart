@@ -12,12 +12,17 @@ class MarqueeText extends StatelessWidget {
     required this.style,
     this.height = 20,
     this.velocity = 26,
+    this.startAfter = const Duration(seconds: 2),
   });
 
   final String text;
   final TextStyle style;
   final double height;
   final double velocity;
+  /// Show the START of the text for this long before scrolling begins, so a
+  /// freshly-loaded title reads from its beginning instead of appearing
+  /// mid-scroll (clipped) at rest.
+  final Duration startAfter;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +45,7 @@ class MarqueeText extends StatelessWidget {
             style: style,
             blankSpace: 46,
             velocity: velocity,
+            startAfter: startAfter,
             pauseAfterRound: const Duration(seconds: 2),
             fadingEdgeStartFraction: 0.06,
             fadingEdgeEndFraction: 0.12,

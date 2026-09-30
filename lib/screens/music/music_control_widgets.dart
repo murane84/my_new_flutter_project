@@ -383,3 +383,186 @@ class _SpeedPanel extends StatelessWidget {
     );
   }
 }
+
+// ─── Waveform seek bar ────────────────────────────────────────────────────────
+
+/// A SoundCloud-style waveform that doubles as the seek control: static bars
+/// (a stable per-track pattern) fill with the accent up to the play position
+/// and are faint beyond it; drag or tap anywhere to scrub, with a small time
+/// bubble following the finger.
+class _WaveformSeekBar extends StatefulWidget {
+  final double fraction; // 0..1 played
+  final Color accent;
+  final Color inactive;
+  final bool enabled;
+  final int seed; // stable bar pattern per track
+  final ValueChanged<double> onSeek;
+  final String Function(double fraction) labelFor;
+
+  const _WaveformSeekBar({
+    required this.fraction,
+    required this.accent,
+    required this.inactive,
+    required this.enabled,
+    required this.seed,
+    required this.onSeek,
+    required this.labelFor,
+  });
+
+  @override
+  State<_WaveformSeekBar> createState() => _WaveformSeekBarState();
+}
+
+class _WaveformSeekBarState extends State<_WaveformSeekBar> {
+  static const int _bars = 44;
+  double? _dragFrac; // non-null while scrubbing
+  late List<double> _heights;
+
+  @override
+  void initState() {
+    super.initState();
+    _heights = _gen(widget.seed);
+  }
+
+  @override
+  void didUpdateWidget(covariant _WaveformSeekBar old) {
+    super.didUpdateWidget(old);
+    if (old.seed != widget.seed) _heights = _gen(widget.seed);
+  }
+
+  // Deterministic pseudo-random bar heights (0.25..1.0) for a stable look.
+  List<double> _gen(int seed) {
+    var x = (seed & 0x7fffffff) | 1;
+    final out = <double>[];
+    for (var i = 0; i < _bars; i++) {
+      x = (x * 1103515245 + 12345) & 0x7fffffff;
+      out.add(0.26 + (x % 1000) / 1000.0 * 0.74);
+    }
+    return out;
+  }
+
+  void _setFromDx(double dx, double w) {
+    if (w <= 0) return;
+    setState(() => _dragFrac = (dx / w).clamp(0.0, 1.0));
+  }
+
+  void _commit() {
+    final f = _dragFrac;
+    if (f != null) widget.onSeek(f);
+    setState(() => _dragFrac = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final frac = (_dragFrac ?? widget.fraction).clamp(0.0, 1.0);
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        final w = c.maxWidth;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: widget.enabled ? (d) => _setFromDx(d.localPosition.dx, w) : null,
+          onTapUp: widget.enabled ? (_) => _commit() : null,
+          onTapCancel: widget.enabled ? () => setState(() => _dragFrac = null) : null,
+          onHorizontalDragStart:
+              widget.enabled ? (d) => _setFromDx(d.localPosition.dx, w) : null,
+          onHorizontalDragUpdate:
+              widget.enabled ? (d) => _setFromDx(d.localPosition.dx, w) : null,
+          onHorizontalDragEnd: widget.enabled ? (_) => _commit() : null,
+          child: SizedBox(
+            height: 34,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _WavePainter(
+                      heights: _heights,
+                      fraction: frac,
+                      accent: widget.accent,
+                      inactive: widget.inactive,
+                    ),
+                  ),
+                ),
+                if (_dragFrac != null)
+                  Positioned(
+                    left: (frac * w - 24).clamp(0.0, (w - 48).clamp(0.0, w)),
+                    top: -24,
+                    child: Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: widget.accent,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        widget.labelFor(frac),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _WavePainter extends CustomPainter {
+  final List<double> heights;
+  final double fraction;
+  final Color accent;
+  final Color inactive;
+
+  _WavePainter({
+    required this.heights,
+    required this.fraction,
+    required this.accent,
+    required this.inactive,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final n = heights.length;
+    if (n == 0) return;
+    const gap = 2.0;
+    final barW = (size.width - gap * (n - 1)) / n;
+    if (barW <= 0) return;
+    final playedX = fraction * size.width;
+    final mid = size.height / 2;
+    final aPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = accent;
+    final iPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = inactive;
+    for (var i = 0; i < n; i++) {
+      final x = i * (barW + gap);
+      final h = (heights[i] * size.height).clamp(3.0, size.height);
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, mid - h / 2, barW, h),
+        Radius.circular(barW / 2),
+      );
+      canvas.drawRRect(rect, (x + barW) <= playedX ? aPaint : iPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _WavePainter old) =>
+      old.fraction != fraction ||
+      old.accent != accent ||
+      old.inactive != inactive ||
+      old.heights != heights;
+}

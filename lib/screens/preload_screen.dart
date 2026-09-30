@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:on_audio_query/on_audio_query.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'home_page.dart';
 import 'api_service.dart';
@@ -67,80 +68,110 @@ class _PreloadScreenState extends State<PreloadScreen> {
     });
   }
 
-  Future<void> _guard(Future<dynamic> f) async {
+  Future<void> _guard(Future<dynamic> f, {int seconds = 15}) async {
     try {
-      await f.timeout(const Duration(seconds: 15));
+      await f.timeout(Duration(seconds: seconds));
     } catch (_) {}
+  }
+
+  Future<bool> _isOnline() async {
+    try {
+      final r = await Connectivity()
+          .checkConnectivity()
+          .timeout(const Duration(seconds: 3));
+      return r.any((x) => x != ConnectivityResult.none);
+    } catch (_) {
+      return true; // assume online if we can't tell — network tasks self-timeout
+    }
   }
 
   Future<void> _run() async {
     final prefs = await SharedPreferences.getInstance();
-    // Fresh install (no warm cache yet) genuinely has more to pull, so it is
-    // allowed a longer window; a warm relaunch should barely pause.
+    // Fresh install (no warm cache yet) genuinely has more to pull.
     final firstRun = prefs.getString('cached_friends_v1') == null;
     _bump(_wInit, 'Waking up…');
 
-    // Absolute safety ceiling — Home is revealed even if something hangs.
-    final ceiling = Duration(seconds: firstRun ? 25 : 9);
+    // Skip the network tasks entirely when offline so an offline launch stays
+    // snappy (the device reads below still run). Online, each network task is
+    // individually time-boxed and failure-soft.
+    final online = await _isOnline();
+
+    // Absolute LAST-RESORT ceiling — deliberately far beyond the heavy on-device
+    // reads below, so in normal use Home is revealed on TRUE completion, never
+    // mid-load. It only trips if something genuinely hangs, so the user is never
+    // trapped. (This is what stops the old early open at ~80%.)
+    final ceiling = Duration(seconds: firstRun ? 120 : 75);
     final ceilingTimer = Timer(ceiling, _finish);
 
     final api = ApiService();
 
     // Profile — also persists my_user_id, which the chat caches key on.
     final tProfile = () async {
-      try {
-        await api.getUserData().timeout(const Duration(seconds: 12));
-      } catch (_) {}
+      if (online) {
+        try {
+          await api.getUserData().timeout(const Duration(seconds: 15));
+        } catch (_) {}
+      }
       _bump(_wProfile, 'Loading your space…');
     }();
 
     // Your circle: friends, conversations and Our Spaces, warmed together.
     final tCircle = () async {
-      await Future.wait([
-        _guard(api.fetchUsers()),
-        _guard(api.listConversations()),
-        _guard(api.listSpaces()),
-      ]);
+      if (online) {
+        await Future.wait([
+          _guard(api.fetchUsers()),
+          _guard(api.listConversations()),
+          _guard(api.listSpaces()),
+        ]);
+      }
       _bump(_wCircle, 'Syncing your circle…');
     }();
 
     // Statuses feed.
     final tStories = () async {
-      try {
-        await api.fetchStoriesFeed().timeout(const Duration(seconds: 15));
-      } catch (_) {}
+      if (online) {
+        try {
+          await api.fetchStoriesFeed().timeout(const Duration(seconds: 15));
+        } catch (_) {}
+      }
       _bump(_wStories, 'Catching up on status…');
     }();
 
     // Contacts match (heavy device scan; asks permission once). Skipped on web.
+    // Given a generous window so it TRULY finishes before Home opens rather than
+    // being cut off to churn in the background (which stuttered MIUI devices).
     final tContacts = () async {
       if (!kIsWeb) {
         try {
           await ConnectedContactsService.instance
               .refresh()
-              .timeout(const Duration(seconds: 12));
+              .timeout(const Duration(seconds: 60));
         } catch (_) {}
       }
       _bump(_wContacts, 'Finding your people…');
     }();
 
-    // Device music — the first OS query is the slow one, so prime it now.
+    // Device music library — the big "read the files" step. Let it fully
+    // complete (huge libraries on slow phones take real time) so Home opens
+    // with everything warm, instead of the scan grinding on after launch.
     final tMusic = () async {
       if (!kIsWeb) {
         try {
           await OnAudioQuery()
               .querySongs()
-              .timeout(const Duration(seconds: 10));
+              .timeout(const Duration(seconds: 90));
         } catch (_) {}
       }
       _bump(_wMusic, 'Tuning your music…');
     }();
 
+    // Home opens only when EVERY task has truly completed (or hit its own
+    // generous timeout) — not on a short wall-clock ceiling.
     await Future.wait([tProfile, tCircle, tStories, tContacts, tMusic]);
     ceilingTimer.cancel();
     _bump(_wFinal, 'Almost there…');
     // Let the bar visibly reach 100% before we leave.
-    await Future.delayed(const Duration(milliseconds: 360));
+    await Future.delayed(const Duration(milliseconds: 420));
     _finish();
   }
 

@@ -170,8 +170,18 @@ class _PreloadScreenState extends State<PreloadScreen> {
     await Future.wait([tProfile, tCircle, tStories, tContacts, tMusic]);
     ceilingTimer.cancel();
     _bump(_wFinal, 'Almost there…');
-    // Let the bar visibly reach 100% before we leave.
-    await Future.delayed(const Duration(milliseconds: 420));
+    // Actually wait for the bar to fill to 100% before opening Home. On fast
+    // platforms (Windows / web) every task finishes almost instantly, so the
+    // eased bar hadn't caught up to the target — a fixed short delay used to
+    // jump to Home at ~90%. Hold until the displayed value reaches full (with a
+    // safety cap so a stalled tick can't trap us), then snap to an exact 100%
+    // and let it show briefly.
+    final capAt = DateTime.now().add(const Duration(milliseconds: 1600));
+    while (mounted && _shown < 0.995 && DateTime.now().isBefore(capAt)) {
+      await Future.delayed(const Duration(milliseconds: 40));
+    }
+    if (mounted) setState(() => _shown = 1.0);
+    await Future.delayed(const Duration(milliseconds: 300));
     _finish();
   }
 

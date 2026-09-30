@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:on_audio_query/on_audio_query.dart';
+import '../services/song_library.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'home_page.dart';
@@ -157,9 +158,7 @@ class _PreloadScreenState extends State<PreloadScreen> {
     final tMusic = () async {
       if (!kIsWeb) {
         try {
-          await OnAudioQuery()
-              .querySongs()
-              .timeout(const Duration(seconds: 90));
+          await SongLibrary.songs().timeout(const Duration(seconds: 90));
         } catch (_) {}
       }
       _bump(_wMusic, 'Tuning your music…');

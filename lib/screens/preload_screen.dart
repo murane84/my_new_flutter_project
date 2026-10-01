@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:on_audio_query/on_audio_query.dart';
 import '../services/song_library.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 

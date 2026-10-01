@@ -1270,50 +1270,50 @@ extension _HomeFriendListView on HomePageState {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color.alphaBlend(scheme.primary.withValues(alpha: 0.10),
-                scheme.surfaceContainerHighest),
-            Color.alphaBlend(scheme.primary.withValues(alpha: 0.04),
-                scheme.surfaceContainerHigh),
+            scheme.surfaceContainerHighest,
+            scheme.surfaceContainerHigh,
           ],
         ),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.16)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.32),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.34),
+            blurRadius: 11,
+            offset: const Offset(0, 5),
           ),
           BoxShadow(
-            color: scheme.primary.withValues(alpha: 0.10),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
           ),
         ],
       );
     }
+    // Neutral 3D in light mode — no theme tint, just a clean white card that
+    // lifts off the page with a soft drop shadow and a tight contact shadow.
     return BoxDecoration(
       borderRadius: BorderRadius.circular(16),
       gradient: LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Color.alphaBlend(scheme.primary.withValues(alpha: 0.04), Colors.white),
-          Color.alphaBlend(scheme.primary.withValues(alpha: 0.07), scheme.surface),
-          Color.alphaBlend(scheme.primary.withValues(alpha: 0.12), scheme.surface),
+          Colors.white,
+          scheme.surface,
+          Color.alphaBlend(Colors.black.withValues(alpha: 0.03), scheme.surface),
         ],
         stops: const [0.0, 0.55, 1.0],
       ),
-      border: Border.all(color: scheme.primary.withValues(alpha: 0.14)),
+      border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
       boxShadow: [
         BoxShadow(
-          color: scheme.primary.withValues(alpha: 0.18),
-          blurRadius: 16,
-          offset: const Offset(0, 8),
+          color: Colors.black.withValues(alpha: 0.10),
+          blurRadius: 14,
+          offset: const Offset(0, 6),
         ),
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.06),
-          blurRadius: 5,
-          offset: const Offset(0, 2),
+          color: Colors.black.withValues(alpha: 0.04),
+          blurRadius: 4,
+          offset: const Offset(0, 1),
         ),
       ],
     );

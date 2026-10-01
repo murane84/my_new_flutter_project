@@ -162,6 +162,13 @@ class _LyricsViewState extends State<_LyricsView> {
                       }
                     },
                   ),
+                  // Explicit close (the drag handle alone is awkward on desktop).
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    color: scheme.onSurfaceVariant,
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  ),
                 ],
               ),
             ),

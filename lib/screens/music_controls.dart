@@ -1033,7 +1033,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                 ),
               ),
               SafeArea(
-                child: Padding(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    child: Padding(
                   padding: const EdgeInsets.fromLTRB(22, 6, 22, 14),
                   child: Column(
                     children: [
@@ -1259,44 +1262,58 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      // Secondary actions.
+                      const SizedBox(height: 14),
+                      // Secondary — labelled, functional utilities.
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          IconButton(
-                            icon: const Icon(Icons.replay_10_rounded),
-                            color: scheme.onSurfaceVariant,
-                            tooltip: 'Back 10s',
-                            onPressed: () => _transportSeekBy(-10),
+                          _fsUtil(
+                            scheme,
+                            Icons.speed_rounded,
+                            _speedLabel(_speed),
+                            () async {
+                              await _showSpeedSheet(context);
+                              if (mounted) setFull(() {});
+                            },
+                            accent: accent,
+                            active: _speed != 1.0,
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.lyrics_rounded),
-                            color: scheme.onSurfaceVariant,
-                            tooltip: 'Lyrics',
-                            onPressed: _openLyrics,
+                          _fsUtil(
+                            scheme,
+                            Icons.bedtime_rounded,
+                            _sleepRemaining != null
+                                ? _fmtSleep(_sleepRemaining!)
+                                : 'Sleep',
+                            () {
+                              _showSleepTimerDialog();
+                              setFull(() {});
+                            },
+                            accent: accent,
+                            active: _sleepRemaining != null,
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.queue_music_rounded),
-                            color: scheme.onSurfaceVariant,
-                            tooltip: 'Queue',
-                            onPressed: _openOrScanPlaylist,
+                          _fsUtil(scheme, Icons.lyrics_rounded, 'Lyrics',
+                              _openLyrics,
+                              accent: accent),
+                          _fsUtil(
+                            scheme,
+                            Icons.queue_music_rounded,
+                            'Queue',
+                            () {
+                              // The queue is a panel drawer (below this route) —
+                              // minimise first so it's visible.
+                              Navigator.of(context).maybePop();
+                              _openOrScanPlaylist();
+                            },
+                            accent: accent,
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.graphic_eq_rounded),
-                            color: scheme.onSurfaceVariant,
-                            tooltip: 'Equalizer',
-                            onPressed: _openEqualizer,
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.forward_10_rounded),
-                            color: scheme.onSurfaceVariant,
-                            tooltip: 'Forward 10s',
-                            onPressed: () => _transportSeekBy(10),
-                          ),
+                          _fsUtil(scheme, Icons.graphic_eq_rounded, 'EQ',
+                              _openEqualizer,
+                              accent: accent),
                         ],
                       ),
                     ],
+                  ),
+                ),
                   ),
                 ),
               ),
@@ -1305,6 +1322,107 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         );
       });
     });
+  }
+
+  Widget _fsUtil(ColorScheme scheme, IconData icon, String label,
+      VoidCallback onTap,
+      {bool active = false, required Color accent}) {
+    final isDark = scheme.brightness == Brightness.dark;
+    final c = active ? accent : scheme.onSurfaceVariant;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: active
+                  ? accent.withValues(alpha: 0.14)
+                  : scheme.surfaceContainerHighest
+                      .withValues(alpha: isDark ? 0.5 : 0.7),
+              border: Border.all(
+                color: active
+                    ? accent.withValues(alpha: 0.55)
+                    : scheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+            ),
+            child: Icon(icon, size: 21, color: c),
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: 62,
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                color: c,
+                fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showSpeedSheet(BuildContext ctx) {
+    final scheme = Theme.of(ctx).colorScheme;
+    return showModalBottomSheet<void>(
+      context: ctx,
+      useRootNavigator: true,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (bctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Playback speed',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: scheme.onSurface)),
+              ),
+            ),
+            for (final sp in _speeds)
+              ListTile(
+                dense: true,
+                leading: Icon(
+                    sp == _speed
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_unchecked_rounded,
+                    color: sp == _speed
+                        ? scheme.primary
+                        : scheme.onSurfaceVariant),
+                title: Text(_speedLabel(sp),
+                    style: TextStyle(
+                        color: scheme.onSurface,
+                        fontWeight: sp == _speed
+                            ? FontWeight.w700
+                            : FontWeight.normal)),
+                onTap: () {
+                  _setSpeed(sp);
+                  Navigator.of(bctx).pop();
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Set the player source (content URI on mobile, path elsewhere) and start

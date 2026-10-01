@@ -2524,7 +2524,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     // Tap the art to open the immersive full-screen player.
-                    onTap: (hasTrack || live) ? _openFullPlayer : null,
+                    onTap: (hasTrack || live)
+                        ? _openFullPlayer
+                        : _openOrScanPlaylist,
                     onDoubleTap: (!live && hasTrack)
                         ? () => _toggleFavorite(_playlist[_currentIndex])
                         : null,
@@ -2554,18 +2556,39 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                       height: isNarrow ? 58 : 76,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        gradient: RadialGradient(colors: [
-                          accent.withAlpha(230),
-                          isDark
-                              ? const Color(0xFF1A1A2E)
-                              : Colors.grey[200]!,
-                        ]),
+                        // Glossy 3D orb: a bright sheen offset to the top-left,
+                        // the accent through the body, and a deep rim at the
+                        // bottom-right — reads as a raised, pressable button.
+                        gradient: RadialGradient(
+                          center: const Alignment(-0.35, -0.42),
+                          radius: 0.95,
+                          colors: [
+                            Color.lerp(accent, Colors.white, 0.60)!,
+                            accent,
+                            Color.lerp(accent, Colors.black, 0.46)!,
+                          ],
+                          stops: const [0.0, 0.55, 1.0],
+                        ),
+                        border: Border.all(
+                          color: Colors.white
+                              .withValues(alpha: isDark ? 0.14 : 0.42),
+                          width: 1.2,
+                        ),
                         boxShadow: [
+                          // Coloured halo — intensifies while playing.
                           BoxShadow(
                             color: accent
-                                .withAlpha(isPlaying ? 120 : 40),
-                            blurRadius: isPlaying ? 18 : 8,
+                                .withAlpha(isPlaying ? 130 : 70),
+                            blurRadius: isPlaying ? 22 : 13,
                             spreadRadius: 1,
+                          ),
+                          // Tight dark contact shadow grounds the orb so it
+                          // sits proud of the panel (the 3D lift).
+                          BoxShadow(
+                            color: Colors.black
+                                .withValues(alpha: isDark ? 0.46 : 0.22),
+                            blurRadius: 10,
+                            offset: const Offset(0, 5),
                           ),
                         ],
                       ),

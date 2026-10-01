@@ -994,7 +994,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       ),
     );
     if (_currentArtId == null || !_isMobile) {
-      return Stack(fit: StackFit.expand, children: [note, hub]);
+      // Plain centre glyph only — the spindle hub is for real album art; over
+      // the note it merged into an unclean blob, so drop it here.
+      return note;
     }
     return Stack(
       fit: StackFit.expand,

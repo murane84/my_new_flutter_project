@@ -100,11 +100,11 @@ class _LyricsViewState extends State<_LyricsView> {
       minChildSize: 0.5,
       maxChildSize: 0.95,
       expand: false,
-      builder: (context, sheetScroll) => Container(
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
-        ),
+      builder: (context, sheetScroll) => Material(
+        color: scheme.surface,
+        clipBehavior: Clip.antiAlias,
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(22)),
         child: Column(
           children: [
             Container(
@@ -129,8 +129,10 @@ class _LyricsViewState extends State<_LyricsView> {
                         Text(widget.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 15)),
+                            style: TextStyle(
+                                color: scheme.onSurface,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15)),
                         if (widget.artist.isNotEmpty)
                           Text(widget.artist,
                               maxLines: 1,
@@ -177,34 +179,88 @@ class _LyricsViewState extends State<_LyricsView> {
     );
   }
 
-  Widget _editor(ColorScheme scheme, ScrollController sc) => ListView(
-        controller: sc,
-        padding: EdgeInsets.fromLTRB(
-            16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+  void _saveEdits() {
+    widget.onSave(_editCtrl.text);
+    setState(() {
+      _raw = _editCtrl.text;
+      _editing = false;
+      _lastLine = -1;
+      _parse();
+    });
+  }
+
+  Widget _editor(ColorScheme scheme, ScrollController sc) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          16, 14, 16, MediaQuery.of(context).viewInsets.bottom + 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Paste plain lyrics, or LRC with [mm:ss.xx] timestamps for synced '
-            'line-by-line highlighting.',
-            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          Row(
+            children: [
+              Icon(Icons.info_outline_rounded,
+                  size: 15, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Paste plain lyrics, or LRC with [mm:ss.xx] timestamps for '
+                  'synced line-by-line highlighting.',
+                  style: TextStyle(
+                      fontSize: 12, color: scheme.onSurfaceVariant),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _editCtrl,
-            maxLines: null,
-            minLines: 8,
-            keyboardType: TextInputType.multiline,
-            decoration: InputDecoration(
-              hintText: '[00:12.50] First line…\n[00:16.20] Second line…',
-              filled: true,
-              fillColor: scheme.surfaceContainerHighest,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
+          const SizedBox(height: 12),
+          // Fill the whole sheet — no awkward empty space below a small box.
+          Expanded(
+            child: TextField(
+              controller: _editCtrl,
+              maxLines: null,
+              expands: true,
+              textAlignVertical: TextAlignVertical.top,
+              keyboardType: TextInputType.multiline,
+              style: TextStyle(
+                  fontSize: 14, height: 1.5, color: scheme.onSurface),
+              decoration: InputDecoration(
+                hintText: '[00:12.50] First line…\n[00:16.20] Second line…',
+                hintStyle: TextStyle(
+                    color: scheme.onSurfaceVariant.withAlpha(130),
+                    height: 1.5),
+                filled: true,
+                fillColor: scheme.surfaceContainerHighest
+                    .withValues(alpha: 0.6),
+                contentPadding: const EdgeInsets.all(14),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              if (_raw.trim().isNotEmpty)
+                TextButton(
+                  onPressed: () => setState(() {
+                    _editCtrl.text = _raw;
+                    _editing = false;
+                  }),
+                  child: const Text('Cancel'),
+                ),
+              const Spacer(),
+              FilledButton.icon(
+                onPressed: _saveEdits,
+                icon: const Icon(Icons.check_rounded, size: 18),
+                label: const Text('Save lyrics'),
+              ),
+            ],
+          ),
         ],
-      );
+      ),
+    );
+  }
 
   Widget _plainView(ColorScheme scheme, ScrollController sc) {
     if (_plain.isEmpty) {

@@ -468,26 +468,11 @@ extension _HomeFriendListView on HomePageState {
       return _listHeader(scheme, e['label'] as String, e['count'] as int?);
     }
     final item = e['item'] as Map<String, dynamic>;
-    final tile = item['is_group'] == true
+    // Each conversation row is now a raised 3D card that self-separates from the
+    // next, so the old hairline divider between tiles is gone.
+    return item['is_group'] == true
         ? _buildGroupTile(item, textColor, scheme)
         : _buildFriendTile(item, textColor, scheme);
-    // A divider only between two consecutive tiles (not before a header, not
-    // after the last row).
-    final next = i + 1 < entries.length ? entries[i + 1] : null;
-    final showDiv = next != null && next['kind'] == 'tile';
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        tile,
-        if (showDiv)
-          Divider(
-            height: 1,
-            indent: 72,
-            endIndent: 8,
-            color: scheme.outlineVariant.withAlpha(40),
-          ),
-      ],
-    );
   }
 
   /// The empty-conversation placeholder (pull-to-refresh friendly).
@@ -1272,6 +1257,68 @@ extension _HomeFriendListView on HomePageState {
     );
   }
 
+  /// Raised "3D" surface for a conversation row in the Circle list — a faint
+  /// theme-tinted card that lifts off the page with a soft accent glow and a
+  /// tight contact shadow. Light mode gets a gentle top-left sheen washing to a
+  /// slightly deeper tint at the bottom-right; dark mode stays dark as usual,
+  /// just nudged above the background so each row reads as its own tile.
+  BoxDecoration _circleTileDecoration(ColorScheme scheme, bool isDark) {
+    if (isDark) {
+      return BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.alphaBlend(scheme.primary.withValues(alpha: 0.10),
+                scheme.surfaceContainerHighest),
+            Color.alphaBlend(scheme.primary.withValues(alpha: 0.04),
+                scheme.surfaceContainerHigh),
+          ],
+        ),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.16)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.32),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: scheme.primary.withValues(alpha: 0.10),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      );
+    }
+    return BoxDecoration(
+      borderRadius: BorderRadius.circular(16),
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color.alphaBlend(scheme.primary.withValues(alpha: 0.04), Colors.white),
+          Color.alphaBlend(scheme.primary.withValues(alpha: 0.07), scheme.surface),
+          Color.alphaBlend(scheme.primary.withValues(alpha: 0.12), scheme.surface),
+        ],
+        stops: const [0.0, 0.55, 1.0],
+      ),
+      border: Border.all(color: scheme.primary.withValues(alpha: 0.14)),
+      boxShadow: [
+        BoxShadow(
+          color: scheme.primary.withValues(alpha: 0.18),
+          blurRadius: 16,
+          offset: const Offset(0, 8),
+        ),
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.06),
+          blurRadius: 5,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    );
+  }
+
   Widget _buildFriendTile(
       Map<String, dynamic> f, Color textColor, ColorScheme scheme) {
     // Show your saved phone-book name for this number when you have it saved,
@@ -1296,6 +1343,7 @@ extension _HomeFriendListView on HomePageState {
       if (t.isNotEmpty) npLine = a.isNotEmpty ? '$t — $a' : t;
     }
     final isTyping = _typingTimers.containsKey((f['id'] as num).toInt());
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Slidable(
       key: ValueKey('friend-${f['id']}'),
@@ -1333,12 +1381,18 @@ extension _HomeFriendListView on HomePageState {
           ),
         ],
       ),
+      child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+      child: Material(
+      color: Colors.transparent,
       child: InkWell(
       onTap: () => _isSharing ? _sendShareTo(friend: f) : openChat(f),
       onLongPress: _isSharing ? null : () => _showFriendQuickSheet(f, name),
-      borderRadius: BorderRadius.circular(14),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 11),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        decoration: _circleTileDecoration(scheme, isDark),
+        child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
         child: Row(
           children: [
             _storyRingAvatar(f, name, isOnline),
@@ -1445,6 +1499,9 @@ extension _HomeFriendListView on HomePageState {
         ),
       ),
       ),
+      ),
+      ),
+      ),
     );
   }
 
@@ -1459,12 +1516,19 @@ extension _HomeFriendListView on HomePageState {
     final unread = (g['unread_count'] as num?)?.toInt() ?? 0;
     final hasUnread = unread > 0;
     final avatar = _avatarFull(g['avatar_url']);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return InkWell(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+      child: Material(
+      color: Colors.transparent,
+      child: InkWell(
       onTap: () => _isSharing ? _sendShareTo(group: g) : openGroupInPanel(g),
-      borderRadius: BorderRadius.circular(14),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 11),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        decoration: _circleTileDecoration(scheme, isDark),
+        child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
         child: Row(
           children: [
             CircleAvatar(
@@ -1564,6 +1628,9 @@ extension _HomeFriendListView on HomePageState {
             ),
           ],
         ),
+      ),
+      ),
+      ),
       ),
     );
   }

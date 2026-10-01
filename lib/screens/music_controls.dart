@@ -968,37 +968,55 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     );
   }
 
+  // Centre content of the spinning full-screen disc: the big music-note glyph
+  // (no art), or the embedded album art inset inside the orb so a ring of the
+  // disc shows around it — with a small centre spindle for the record feel.
   Widget _fullArt(Color accent, ColorScheme scheme) {
-    final fallback = DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color.lerp(accent, Colors.white, 0.30)!,
-            accent,
-            Color.lerp(accent, Colors.black, 0.20)!,
-          ],
+    final note = Center(
+      child: Icon(Icons.music_note_rounded,
+          color: Colors.white.withValues(alpha: 0.95), size: 92),
+    );
+    final hub = Center(
+      child: Container(
+        width: 16,
+        height: 16,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: scheme.surface.withValues(alpha: 0.9),
+          border: Border.all(
+              color: Colors.white.withValues(alpha: 0.6), width: 1.5),
         ),
       ),
-      child: Center(
-        child: Icon(Icons.music_note_rounded,
-            color: Colors.white.withValues(alpha: 0.92), size: 92),
-      ),
     );
-    if (_currentArtId == null || !_isMobile) return fallback;
-    return QueryArtworkWidget(
-      id: _currentArtId!,
-      type: ArtworkType.AUDIO,
-      artworkWidth: 360,
-      artworkHeight: 360,
-      artworkFit: BoxFit.cover,
-      keepOldArtwork: true,
-      nullArtworkWidget: fallback,
+    if (_currentArtId == null || !_isMobile) {
+      return Stack(fit: StackFit.expand, children: [note, hub]);
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: ClipOval(
+            child: QueryArtworkWidget(
+              id: _currentArtId!,
+              type: ArtworkType.AUDIO,
+              artworkWidth: 360,
+              artworkHeight: 360,
+              artworkFit: BoxFit.cover,
+              keepOldArtwork: true,
+              nullArtworkWidget: note,
+            ),
+          ),
+        ),
+        hub,
+      ],
     );
   }
 
   Widget _fullPlayerBody() {
+    // Persists across Consumer/StatefulBuilder rebuilds (declared in the method
+    // scope, above the builders): whether the in-page queue panel is open.
+    bool queueOpen = false;
     return Consumer(builder: (context, ref, _) {
       final scheme = Theme.of(context).colorScheme;
       final accent = scheme.primary;
@@ -1033,11 +1051,11 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                 ),
               ),
               SafeArea(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 560),
-                    child: Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 6, 22, 14),
+                child: LayoutBuilder(builder: (lctx, lc) {
+                  final wideQ = lc.maxWidth >= 720;
+                  Widget playerCol(bool compact) => Padding(
+                  padding: EdgeInsets.fromLTRB(22, compact ? 2 : 6, 22,
+                      compact ? 6 : 14),
                   child: Column(
                     children: [
                       // Top bar.
@@ -1078,30 +1096,56 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                       ),
                       // Big art.
                       Expanded(
-                        flex: 5,
+                        flex: compact ? 4 : 5,
                         child: Center(
                           child: LayoutBuilder(builder: (c, cc) {
                             final side = (cc.maxWidth < cc.maxHeight
                                     ? cc.maxWidth
                                     : cc.maxHeight)
-                                .clamp(0.0, 360.0)
+                                .clamp(0.0, compact ? 160.0 : 360.0)
                                 .toDouble();
-                            return Container(
-                              width: side,
-                              height: side,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(26),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color:
-                                        accent.withValues(alpha: 0.35),
-                                    blurRadius: 44,
-                                    spreadRadius: 2,
-                                  ),
-                                ],
+                            return AnimatedBuilder(
+                              animation: _discCtrl,
+                              builder: (_, child) => Transform.rotate(
+                                angle: _discCtrl.value * 2 * pi,
+                                child: child,
                               ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(26),
+                              child: Container(
+                                width: side,
+                                height: side,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  // Glossy 3D orb — the same raised-disc look as
+                                  // the mini-player, now spinning while it plays.
+                                  gradient: RadialGradient(
+                                    center: const Alignment(-0.32, -0.40),
+                                    radius: 0.95,
+                                    colors: [
+                                      Color.lerp(accent, Colors.white, 0.58)!,
+                                      accent,
+                                      Color.lerp(accent, Colors.black, 0.46)!,
+                                    ],
+                                    stops: const [0.0, 0.55, 1.0],
+                                  ),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(
+                                        alpha: isDark ? 0.14 : 0.40),
+                                    width: 1.6,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: accent.withValues(alpha: 0.42),
+                                      blurRadius: 46,
+                                      spreadRadius: 2,
+                                    ),
+                                    BoxShadow(
+                                      color: Colors.black.withValues(
+                                          alpha: isDark ? 0.50 : 0.22),
+                                      blurRadius: 16,
+                                      offset: const Offset(0, 10),
+                                    ),
+                                  ],
+                                ),
                                 child: _fullArt(accent, scheme),
                               ),
                             );
@@ -1119,7 +1163,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      if (artist.isNotEmpty) ...[
+                      if (artist.isNotEmpty && !compact) ...[
                         const SizedBox(height: 4),
                         MarqueeText(
                           text: artist,
@@ -1130,7 +1174,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                           ),
                         ),
                       ],
-                      const SizedBox(height: 18),
+                      SizedBox(height: compact ? 8 : 18),
                       // Waveform + times (live via the position stream).
                       StreamBuilder<Duration>(
                         stream: _player.positionStream,
@@ -1178,7 +1222,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                           );
                         },
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: compact ? 8 : 16),
                       // Primary transport.
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -1209,8 +1253,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                               return GestureDetector(
                                 onTap: _transportPlayPause,
                                 child: Container(
-                                  width: 76,
-                                  height: 76,
+                                  width: compact ? 62 : 76,
+                                  height: compact ? 62 : 76,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     gradient: LinearGradient(
@@ -1235,7 +1279,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                                       playing
                                           ? Icons.pause_rounded
                                           : Icons.play_arrow_rounded,
-                                      size: 40,
+                                      size: compact ? 32 : 40,
                                       color: Colors.white),
                                 ),
                               );
@@ -1262,9 +1306,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                           ),
                         ],
                       ),
-                      const SizedBox(height: 14),
+                      if (!compact) const SizedBox(height: 14),
                       // Secondary — labelled, functional utilities.
-                      Row(
+                      if (!compact)
+                        Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
                           _fsUtil(
@@ -1298,13 +1343,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                             scheme,
                             Icons.queue_music_rounded,
                             'Queue',
-                            () {
-                              // The queue is a panel drawer (below this route) —
-                              // minimise first so it's visible.
-                              Navigator.of(context).maybePop();
-                              _openOrScanPlaylist();
-                            },
+                            () => setFull(() => queueOpen = !queueOpen),
                             accent: accent,
+                            active: queueOpen,
                           ),
                           _fsUtil(scheme, Icons.graphic_eq_rounded, 'EQ',
                               _openEqualizer,
@@ -1313,15 +1354,264 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                       ),
                     ],
                   ),
-                ),
-                  ),
-                ),
+                );
+                  if (!queueOpen) {
+                    return Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 560),
+                        child: playerCol(false),
+                      ),
+                    );
+                  }
+                  if (wideQ) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints:
+                                  const BoxConstraints(maxWidth: 520),
+                              child: playerCol(false),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 360,
+                          child: _inlineQueuePanel(
+                              scheme, accent, isDark, setFull,
+                              () => setFull(() => queueOpen = false),
+                              sidePanel: true),
+                        ),
+                      ],
+                    );
+                  }
+                  return Column(
+                    children: [
+                      Expanded(flex: 5, child: playerCol(true)),
+                      Expanded(
+                        flex: 6,
+                        child: _inlineQueuePanel(
+                            scheme, accent, isDark, setFull,
+                            () => setFull(() => queueOpen = false),
+                            sidePanel: false),
+                      ),
+                    ],
+                  );
+                }),
               ),
             ],
           ),
         );
       });
     });
+  }
+
+  /// The in-page "Up next" queue — shown beside the now-playing view on wide
+  /// screens, or below it (with a minimised player above) on phones, instead of
+  /// popping back to the playlist drawer. Tapping a row jumps to that track and
+  /// the current one stays highlighted.
+  Widget _inlineQueuePanel(ColorScheme scheme, Color accent, bool isDark,
+      StateSetter setFull, VoidCallback onClose,
+      {required bool sidePanel}) {
+    final total = _playlist.length;
+    final pos = total == 0 ? 0 : (_currentIndex + 1).clamp(1, total);
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: sidePanel
+            ? Border(
+                left: BorderSide(
+                    color: scheme.outlineVariant.withValues(alpha: 0.4)))
+            : null,
+        borderRadius: sidePanel
+            ? null
+            : const BorderRadius.vertical(top: Radius.circular(22)),
+        boxShadow: sidePanel
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.40 : 0.12),
+                  blurRadius: 18,
+                  offset: const Offset(0, -4),
+                ),
+              ],
+      ),
+      child: Column(
+        children: [
+          if (!sidePanel)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, bottom: 2),
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: scheme.onSurfaceVariant.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 6, 6),
+            child: Row(
+              children: [
+                Icon(Icons.queue_music_rounded, size: 18, color: accent),
+                const SizedBox(width: 8),
+                Text('Up next',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: scheme.onSurface)),
+                const SizedBox(width: 8),
+                if (total > 0)
+                  Text('$pos / $total',
+                      style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.onSurfaceVariant)),
+                const Spacer(),
+                IconButton(
+                  icon: Icon(
+                      sidePanel
+                          ? Icons.close_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      color: scheme.onSurfaceVariant),
+                  tooltip: 'Hide queue',
+                  onPressed: onClose,
+                ),
+              ],
+            ),
+          ),
+          Divider(
+              height: 1, color: scheme.outlineVariant.withValues(alpha: 0.4)),
+          Expanded(
+            child: total == 0
+                ? Center(
+                    child: Text('Nothing queued yet',
+                        style: TextStyle(color: scheme.onSurfaceVariant)),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.only(top: 4, bottom: 16),
+                    itemCount: total,
+                    itemBuilder: (_, i) =>
+                        _queueRow(i, scheme, accent, isDark, setFull),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _queueRow(int i, ColorScheme scheme, Color accent, bool isDark,
+      StateSetter setFull) {
+    final path = _playlist[i];
+    final isNow = i == _currentIndex;
+    final title = metadataStore.title(path, _nameFromPath(path));
+    final artist = metadataStore.artist(path, '');
+    // Small accent-tinted disc per row (a glowing one for the playing track) —
+    // built from the main player's own helpers, no overlay-state dependency.
+    final leading = Container(
+      width: 34,
+      height: 34,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isNow
+              ? [
+                  Color.lerp(accent, Colors.white, 0.45)!,
+                  accent,
+                  Color.lerp(accent, Colors.black, 0.30)!,
+                ]
+              : [
+                  Color.alphaBlend(
+                      accent.withValues(alpha: isDark ? 0.22 : 0.12),
+                      scheme.surface),
+                  Color.alphaBlend(
+                      accent.withValues(alpha: isDark ? 0.30 : 0.18),
+                      scheme.surfaceContainerHighest),
+                ],
+        ),
+        border: Border.all(
+            color: isNow
+                ? Colors.white.withValues(alpha: 0.35)
+                : accent.withValues(alpha: isDark ? 0.28 : 0.18)),
+        boxShadow: isNow
+            ? [
+                BoxShadow(
+                    color: accent.withValues(alpha: 0.45),
+                    blurRadius: 10,
+                    spreadRadius: 1),
+              ]
+            : null,
+      ),
+      child: Icon(
+        isNow ? Icons.equalizer_rounded : Icons.music_note_rounded,
+        size: 16,
+        color: isNow
+            ? scheme.onPrimary
+            : Color.alphaBlend(
+                accent.withValues(alpha: 0.5), scheme.onSurfaceVariant),
+      ),
+    );
+    return Material(
+      color: isNow
+          ? accent.withValues(alpha: isDark ? 0.20 : 0.12)
+          : Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          if (!isNow) _play(i);
+          setFull(() {});
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          child: Row(
+            children: [
+              leading,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: isNow ? FontWeight.w700 : FontWeight.w500,
+                        color: isNow ? accent : scheme.onSurface,
+                      ),
+                    ),
+                    if (artist.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        artist,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 11.5, color: scheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              isNow
+                  ? Icon(Icons.volume_up_rounded, size: 15, color: accent)
+                  : Text('${i + 1}',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: scheme.onSurfaceVariant
+                              .withValues(alpha: 0.6))),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _fsUtil(ColorScheme scheme, IconData icon, String label,

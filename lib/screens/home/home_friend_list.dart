@@ -216,14 +216,28 @@ extension _HomeFriendListView on HomePageState {
       List<Map<String, dynamic>> combined,
       ColorScheme scheme,
       Color textColor) {
-    // Desktop/web CIRCLE column: pin "Status & Stories" at the top so it never
-    // scrolls away, and let ONLY the conversation list scroll beneath it. Split
-    // the stories header + tray out of the scrollable entries.
-    final convoEntries = circleEntries
-        .where((e) =>
-            e['kind'] != 'stories' &&
-            !(e['kind'] == 'header' && e['label'] == 'Status & Stories'))
-        .toList();
+    // Desktop/web CIRCLE column uses the same space discipline as the mobile
+    // hub: a collapsible Status & Stories tray, a HEIGHT-CAPPED "Listening now"
+    // zone, and a pinned "Your circle" header above the scrolling chat list.
+    // Split the circle entries into those two zones.
+    final wideListening = <Map<String, dynamic>>[];
+    final wideCircle = <Map<String, dynamic>>[];
+    {
+      var zone = '';
+      for (final e in circleEntries) {
+        if (e['kind'] == 'header') {
+          final label = e['label'] as String? ?? '';
+          zone = label == 'Listening now'
+              ? 'listening'
+              : label == 'Your circle'
+                  ? 'circle'
+                  : 'other';
+          continue;
+        }
+        if (e['kind'] != 'tile') continue;
+        (zone == 'listening' ? wideListening : wideCircle).add(e);
+      }
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -274,21 +288,44 @@ extension _HomeFriendListView on HomePageState {
                 child: _friendSearchField(scheme, _searchCtrl,
                     'Search chats & people…', _filterFriends),
               ),
-              // Pinned, compact Status & Stories (scrolls horizontally on its
-              // own); stays visible while the conversation list scrolls.
-              if (_myUserId != null) _pinnedStories(scheme),
+              // Collapsible Status & Stories — tap its header to reclaim the
+              // tray's height for the chat list.
+              if (_myUserId != null) _collapsibleStories(scheme),
+              if (wideListening.isNotEmpty) ...[
+                _listHeader(scheme, 'Listening now', wideListening.length),
+                // Capped so a growing listener count scrolls within this zone
+                // instead of pushing "Your circle" down the column.
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 220),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    physics: const ClampingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    itemCount: wideListening.length,
+                    itemBuilder: (_, i) =>
+                        _friendEntry(wideListening, i, scheme, textColor),
+                  ),
+                ),
+              ],
+              // Pinned "Your circle" header (fixed above the scrolling list).
+              if (wideCircle.isNotEmpty) _listHeader(scheme, 'Your circle'),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _onPullToRefresh,
-                  child: combined.isEmpty
-                      ? _emptyConversations(scheme)
-                      : ListView.builder(
+                  child: wideCircle.isNotEmpty
+                      ? ListView.builder(
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.symmetric(horizontal: 6),
-                          itemCount: convoEntries.length,
+                          itemCount: wideCircle.length,
                           itemBuilder: (_, i) =>
-                              _friendEntry(convoEntries, i, scheme, textColor),
-                        ),
+                              _friendEntry(wideCircle, i, scheme, textColor),
+                        )
+                      : (wideListening.isEmpty
+                          ? _emptyConversations(scheme)
+                          : ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              children: const [SizedBox(height: 220)],
+                            )),
                 ),
               ),
             ],

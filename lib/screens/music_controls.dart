@@ -950,7 +950,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     if (!hasTrack && !_liveActive) return;
     Navigator.of(context, rootNavigator: true).push(
       PageRouteBuilder(
-        opaque: true,
+        // Non-opaque so the home route underneath stays "on stage" and its
+        // TickerMode keeps running — otherwise the spinning disc's controller
+        // (_discCtrl, vsynced to the covered MusicControls) freezes and the
+        // full-screen disc is stuck mid-rotation. The full player's own Scaffold
+        // background is opaque, so nothing shows through once it's in.
+        opaque: false,
         transitionDuration: const Duration(milliseconds: 300),
         reverseTransitionDuration: const Duration(milliseconds: 240),
         pageBuilder: (ctx, a, b) => _fullPlayerBody(),

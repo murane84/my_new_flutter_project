@@ -22,39 +22,178 @@ extension _HomeHub on HomePageState {
       ColorScheme scheme,
       Color textColor) {
     final harmony = _friendLayer == 'harmony';
-    // On the CIRCLE layer, pin Status & Stories at the top (compact, horizontal)
-    // and let ONLY the conversation list scroll beneath it — same behaviour as
-    // the desktop column, so the story tray never scrolls away.
-    final entries = harmony
-        ? harmonyEntries
-        : circleEntries
-            .where((e) =>
-                e['kind'] != 'stories' &&
-                !(e['kind'] == 'header' && e['label'] == 'Status & Stories'))
-            .toList();
+
+    // HARMONY layer is unchanged: contextual search + a single scrolling list.
+    if (harmony) {
+      return Column(
+        children: [
+          _friendSearchField(
+            scheme,
+            _spaceSearchCtrl,
+            'Search your spaces…',
+            _filterSpaces,
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _onPullToRefresh,
+              child: ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.only(bottom: 12),
+                itemCount: harmonyEntries.length,
+                itemBuilder: (_, i) =>
+                    _friendEntry(harmonyEntries, i, scheme, textColor),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // CIRCLE layer — a space-savvy, consistent layout:
+    //  • search (fixed)
+    //  • Status & Stories: pinned but COLLAPSIBLE, so a user who just wants
+    //    chats can reclaim the whole tray's height with one tap.
+    //  • Listening now: still pops above the list when friends are live, but it
+    //    sits in a HEIGHT-CAPPED box that scrolls internally once it passes a
+    //    couple of rows — so many listeners can never shove the circle down.
+    //  • "YOUR CIRCLE": a FIXED header above the scrolling chat list, so it is
+    //    always pinned in view no matter what sits above it.
+    final listening = <Map<String, dynamic>>[];
+    final circle = <Map<String, dynamic>>[];
+    var zone = '';
+    for (final e in circleEntries) {
+      if (e['kind'] == 'header') {
+        final label = e['label'] as String? ?? '';
+        zone = label == 'Listening now'
+            ? 'listening'
+            : label == 'Your circle'
+                ? 'circle'
+                : 'other';
+        continue;
+      }
+      if (e['kind'] != 'tile') continue;
+      (zone == 'listening' ? listening : circle).add(e);
+    }
+
     return Column(
       children: [
-        // Contextual search — follows the open layer, each with its own box.
         _friendSearchField(
           scheme,
-          harmony ? _spaceSearchCtrl : _searchCtrl,
-          harmony ? 'Search your spaces…' : 'Search chats & people…',
-          harmony ? _filterSpaces : _filterFriends,
+          _searchCtrl,
+          'Search chats & people…',
+          _filterFriends,
         ),
         const SizedBox(height: 10),
-        if (!harmony && _myUserId != null) _pinnedStories(scheme),
+        if (_myUserId != null) _collapsibleStories(scheme),
+        if (listening.isNotEmpty) ...[
+          _listHeader(scheme, 'Listening now', listening.length),
+          // Cap the live-listeners block so a growing count scrolls WITHIN this
+          // region instead of pushing "Your circle" off the screen.
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 190),
+            child: ListView.builder(
+              shrinkWrap: true,
+              physics: const ClampingScrollPhysics(),
+              padding: EdgeInsets.zero,
+              itemCount: listening.length,
+              itemBuilder: (_, i) =>
+                  _friendEntry(listening, i, scheme, textColor),
+            ),
+          ),
+        ],
+        if (circle.isNotEmpty) _listHeader(scheme, 'Your circle'),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _onPullToRefresh,
-            child: ListView.builder(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.only(bottom: 12),
-              itemCount: entries.length,
-              itemBuilder: (_, i) =>
-                  _friendEntry(entries, i, scheme, textColor),
+            child: circle.isNotEmpty
+                ? ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(bottom: 12),
+                    itemCount: circle.length,
+                    itemBuilder: (_, i) =>
+                        _friendEntry(circle, i, scheme, textColor),
+                  )
+                : (listening.isEmpty
+                    ? _emptyConversations(scheme)
+                    : ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: const [SizedBox(height: 220)],
+                      )),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The mobile CIRCLE "Status & Stories" tray — pinned at the top, but now
+  /// COLLAPSIBLE. Its header is a tap target with a Hide/Show chevron; folding
+  /// it away animates the tray shut and hands that height to the chat list.
+  Widget _collapsibleStories(ColorScheme scheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _toggleStories,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
+              child: Row(
+                children: [
+                  Text(
+                    'STATUS & STORIES',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.1,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    _storiesExpanded ? 'Hide' : 'Show',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  AnimatedRotation(
+                    turns: _storiesExpanded ? 0.0 : 0.5,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(Icons.keyboard_arrow_up_rounded,
+                        size: 20, color: scheme.primary),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeInOut,
+          alignment: Alignment.topCenter,
+          child: _storiesExpanded
+              ? Padding(
+                  padding: const EdgeInsets.fromLTRB(6, 2, 6, 0),
+                  child: StoriesTray(
+                    apiBase: _apiBase,
+                    myUserId: _myUserId,
+                    myName: _username.isNotEmpty ? _username : 'You',
+                    myAvatarUrl: _myAvatar,
+                    groups: _storyGroups,
+                    onReload: _fetchStories,
+                    compact: true,
+                  ),
+                )
+              : const SizedBox(width: double.infinity, height: 0),
+        ),
+        const SizedBox(height: 6),
+        Container(height: 1, color: scheme.outlineVariant.withAlpha(45)),
+        const SizedBox(height: 2),
       ],
     );
   }

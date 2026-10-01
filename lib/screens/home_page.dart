@@ -209,6 +209,16 @@ class HomePageState extends rp.ConsumerState<HomePage>
     setState(() => _friendLayer = layer);
   }
 
+  // Mobile CIRCLE layer: whether the pinned "Status & Stories" tray is expanded.
+  // Collapsing it hands the vertical space to the conversation list for users
+  // who want chats front-and-centre; tapping its header toggles it back. (Kept
+  // here in the main State so the home_hub extension can flip it without
+  // touching @protected setState directly.)
+  bool _storiesExpanded = true;
+  void _toggleStories() {
+    setState(() => _storiesExpanded = !_storiesExpanded);
+  }
+
   // Images shared into Aluta from another app, waiting to be handed to the chat
   // the user next taps (screenshot-share flow). Null when nothing is pending.
   List<String>? _shareToSend;

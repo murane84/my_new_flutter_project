@@ -37,7 +37,9 @@ extension PlayerDiscStyleX on PlayerDiscStyle {
       };
 
   /// Round styles get the circular progress ring; the cassette does not.
-  bool get roundRing => this != PlayerDiscStyle.cassette;
+  bool get roundRing =>
+      this != PlayerDiscStyle.cassette &&
+      this != PlayerDiscStyle.classicVinyl;
 
   static PlayerDiscStyle fromId(String? s) => PlayerDiscStyle.values
       .firstWhere((e) => e.id == s, orElse: () => PlayerDiscStyle.orb);
@@ -297,30 +299,58 @@ class PlayerDisc extends StatelessWidget {
             height: side,
             child: CustomPaint(
               painter: _GroovePainter(
-                color: Colors.white.withValues(alpha: 0.10),
+                color: Colors.white.withValues(alpha: 0.12),
                 innerFrac: labelD / side * 1.1,
               ),
             ),
           ),
-          // Centre label with art.
+          // Glossy specular streaks — give it life and make the spin read.
+          Container(
+            width: side,
+            height: side,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: SweepGradient(
+                colors: [
+                  Colors.transparent,
+                  Colors.white.withValues(alpha: 0.0),
+                  Colors.white.withValues(alpha: 0.35),
+                  Colors.white.withValues(alpha: 0.0),
+                  Colors.transparent,
+                  Colors.white.withValues(alpha: 0.0),
+                  Colors.white.withValues(alpha: 0.18),
+                  Colors.white.withValues(alpha: 0.0),
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.11, 0.14, 0.17, 0.5, 0.61, 0.64, 0.67, 1.0],
+              ),
+            ),
+          ),
+          // Centre label — an inset dark disc with the art, or a cleanly
+          // centred glyph (no clashing spindle dot).
           Container(
             width: labelD,
             height: labelD,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Color.alphaBlend(
-                  accent.withValues(alpha: 0.5), const Color(0xFF17171E)),
+              gradient: RadialGradient(
+                colors: [
+                  Color.alphaBlend(accent.withValues(alpha: 0.40),
+                      const Color(0xFF101017)),
+                  Color.alphaBlend(accent.withValues(alpha: 0.58),
+                      const Color(0xFF1C1C26)),
+                ],
+              ),
               border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.18), width: 1),
+                  color: Colors.white.withValues(alpha: 0.16), width: 1),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 8,
+                    spreadRadius: -2),
+              ],
             ),
-            child: ClipOval(child: Center(child: artBuilder(labelD * 0.8))),
-          ),
-          // Spindle hole.
-          Container(
-            width: side * 0.05,
-            height: side * 0.05,
-            decoration: const BoxDecoration(
-                shape: BoxShape.circle, color: Color(0xFF0C0C10)),
+            child: ClipOval(child: Center(child: artBuilder(labelD * 0.6))),
           ),
         ],
       )),
@@ -384,6 +414,29 @@ class PlayerDisc extends StatelessWidget {
                   Colors.black.withValues(alpha: 0.42),
                 ],
                 stops: const [0.0, 0.45, 1.0],
+              ),
+            ),
+          ),
+          // Two bright specular streaks so the spin is clearly visible — a
+          // smooth iridescent sweep alone looks static as it turns.
+          Container(
+            width: side,
+            height: side,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: SweepGradient(
+                colors: [
+                  Colors.transparent,
+                  Colors.white.withValues(alpha: 0.0),
+                  Colors.white.withValues(alpha: 0.6),
+                  Colors.white.withValues(alpha: 0.0),
+                  Colors.transparent,
+                  Colors.white.withValues(alpha: 0.0),
+                  Colors.white.withValues(alpha: 0.35),
+                  Colors.white.withValues(alpha: 0.0),
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.10, 0.13, 0.16, 0.5, 0.60, 0.63, 0.66, 1.0],
               ),
             ),
           ),
@@ -636,11 +689,12 @@ class _ClassicVinylState extends State<_ClassicVinyl>
     final side = widget.side;
     final accent = widget.accent;
     final isDark = widget.isDark;
-    final labelD = side * 0.44;
+    final rd = side * 0.84;
+    final labelD = rd * 0.44;
 
     final record = Container(
-      width: side,
-      height: side,
+      width: rd,
+      height: rd,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: const RadialGradient(
@@ -669,19 +723,19 @@ class _ClassicVinylState extends State<_ClassicVinyl>
         children: [
           // Grooves.
           SizedBox(
-            width: side,
-            height: side,
+            width: rd,
+            height: rd,
             child: CustomPaint(
               painter: _GroovePainter(
                 color: Colors.white.withValues(alpha: 0.055),
-                innerFrac: labelD / side * 1.15,
+                innerFrac: labelD / rd * 1.15,
               ),
             ),
           ),
           // Diagonal sheen.
           Container(
-            width: side,
-            height: side,
+            width: rd,
+            height: rd,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: LinearGradient(
@@ -707,12 +761,14 @@ class _ClassicVinylState extends State<_ClassicVinyl>
               border: Border.all(
                   color: Colors.white.withValues(alpha: 0.12), width: 1),
             ),
-            child: ClipOval(child: Center(child: widget.artBuilder(labelD * 0.82))),
+            child: ClipOval(
+              child: Center(
+                  child: widget.artBuilder(labelD * 0.82, Colors.transparent))),
           ),
           // Spindle hole.
           Container(
-            width: side * 0.045,
-            height: side * 0.045,
+            width: rd * 0.045,
+            height: rd * 0.045,
             decoration: const BoxDecoration(
                 shape: BoxShape.circle, color: Color(0xFF060608)),
           ),
@@ -735,8 +791,8 @@ class _ClassicVinylState extends State<_ClassicVinyl>
           child: AnimatedBuilder(
             animation: _lift,
             builder: (_, _) => Transform.rotate(
-              angle: _lift.value * 0.26,
-              alignment: const Alignment(0.82, -0.82),
+              angle: -_lift.value * 1.25,
+              alignment: const Alignment(0.80, -0.76),
               child: CustomPaint(
                 painter: _TonearmPainter(
                   metal: const Color(0xFFEAEBF1),
@@ -821,7 +877,7 @@ class _TonearmPainter extends CustomPainter {
   void paint(Canvas c, Size s) {
     final side = s.width;
     final pivot = Offset(side * 0.9, side * 0.12);
-    final head = Offset(side * 0.52, side * 0.42);
+    final head = Offset(side * 0.50, side * 0.30);
     final d = head - pivot;
     final len = d.distance;
     final u = len == 0 ? const Offset(0, 0) : d / len;

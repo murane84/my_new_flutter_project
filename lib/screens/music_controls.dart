@@ -358,6 +358,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   late AnimationController _discCtrl;
   late AnimationController _queueCtrl; // drives the in-page queue open/close
   final ScrollController _queueScrollCtrl = ScrollController();
+  // Identifies the playing row so the queue can centre it on open.
+  final GlobalKey _nowQueueRowKey = GlobalKey();
   late AnimationController _playlistCtrl;
   late AnimationController _speedCtrl;
   late AnimationController _volumeCtrl;
@@ -1767,7 +1769,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       ),
     );
     // ReorderableListView needs a stable key on each item.
-    return KeyedSubtree(key: ValueKey('q_$path'), child: row);
+    return KeyedSubtree(
+      key: ValueKey('q_$path'),
+      child: isNow ? KeyedSubtree(key: _nowQueueRowKey, child: row) : row,
+    );
   }
 
   // Wrap the spinning full-screen disc with swipe/double-tap gestures and an
@@ -1951,22 +1956,37 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // context above it) instead of resting at the top. Row heights vary slightly,
   // so this estimates — close enough to land the highlighted track on screen.
   void _scrollQueueToCurrent([int tries = 0]) {
-    if (_currentIndex <= 0) return;
-    // The list may not be attached yet on the first opening frame (the reveal
-    // controller is still at 0), so retry across a few frames until it is.
+    if (_currentIndex < 0) return;
     final attached =
         _queueScrollCtrl.hasClients && _queueScrollCtrl.positions.isNotEmpty;
-    final max =
-        attached ? _queueScrollCtrl.position.maxScrollExtent : 0.0;
-    if ((!attached || max <= 0) && tries < 6) {
+    // Wait until the panel has finished revealing (its viewport is full height)
+    // AND the list is attached — otherwise we'd centre against a half-open
+    // viewport and land off. The reveal runs on _queueCtrl (0 -> 1).
+    final ready = attached && _queueCtrl.value >= 0.995;
+    if (!ready && tries < 28) {
       WidgetsBinding.instance
           .addPostFrameCallback((_) => _scrollQueueToCurrent(tries + 1));
       return;
     }
     if (!attached) return;
-    const estRow = 52.0;
-    final target = (_currentIndex * estRow - 80).clamp(0.0, max);
-    _queueScrollCtrl.jumpTo(target);
+    final pos = _queueScrollCtrl.position;
+    // First jump roughly so the playing row is built near the viewport…
+    const estRow = 58.0;
+    final rough =
+        (_currentIndex * estRow + estRow / 2 - pos.viewportDimension / 2)
+            .clamp(0.0, pos.maxScrollExtent);
+    _queueScrollCtrl.jumpTo(rough);
+    // …then centre it precisely once it's laid out (alignment 0.5 = middle).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _nowQueueRowKey.currentContext;
+      if (ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   // newI here is the onReorderItem index: already adjusted for the removal of

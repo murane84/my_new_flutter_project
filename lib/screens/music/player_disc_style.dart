@@ -1019,6 +1019,7 @@ Future<void> showPlayerStyleSheet(BuildContext context,
     isScrollControlled: true,
     useRootNavigator: true,
     backgroundColor: scheme.surface,
+    constraints: const BoxConstraints(maxWidth: 560),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
     ),
@@ -1042,7 +1043,10 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
       animation: PlayerStyleController.instance,
       builder: (context, _) {
         final current = PlayerStyleController.instance.style;
-        return SafeArea(
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.86),
+          child: SafeArea(
           top: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
@@ -1080,12 +1084,15 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
                 ),
                 const SizedBox(height: 14),
                 Flexible(
-                  child: GridView.count(
+                  child: GridView(
                     shrinkWrap: true,
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 14,
-                    crossAxisSpacing: 14,
-                    childAspectRatio: 0.82,
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 190,
+                      mainAxisSpacing: 14,
+                      crossAxisSpacing: 14,
+                      childAspectRatio: 0.82,
+                    ),
                     children: [
                       for (final st in PlayerDiscStyle.values)
                         _styleCard(st, st == current, scheme, isDark),
@@ -1095,6 +1102,7 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
               ],
             ),
           ),
+        ),
         );
       },
     );

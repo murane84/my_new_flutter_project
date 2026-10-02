@@ -352,6 +352,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   late AnimationController _discCtrl;
   late AnimationController _queueCtrl; // drives the in-page queue open/close
+  final ScrollController _queueScrollCtrl = ScrollController();
   late AnimationController _playlistCtrl;
   late AnimationController _speedCtrl;
   late AnimationController _volumeCtrl;
@@ -534,6 +535,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _sleepTick?.cancel();
     _discCtrl.dispose();
     _queueCtrl.dispose();
+    _queueScrollCtrl.dispose();
     _artAccentVN.dispose();
     _playlistCtrl.dispose();
     _speedCtrl.dispose();
@@ -1060,6 +1062,11 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           if (queueOpen == open) return;
           queueOpen = open;
           open ? _queueCtrl.forward() : _queueCtrl.reverse();
+          if (open) {
+            // Open the queue already scrolled to the playing track, not the top.
+            WidgetsBinding.instance
+                .addPostFrameCallback((_) => _scrollQueueToCurrent());
+          }
           setFull(() {});
         }
         // Album-art adaptive accent: when artwork gave us a colour the whole
@@ -1566,6 +1573,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                         style: TextStyle(color: scheme.onSurfaceVariant)),
                   )
                 : ReorderableListView.builder(
+                    scrollController: _queueScrollCtrl,
                     padding: const EdgeInsets.only(top: 4, bottom: 16),
                     buildDefaultDragHandles: false,
                     itemCount: total,
@@ -1895,6 +1903,28 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // ── In-page queue mutations (drag-reorder / remove / play-next) ──────────────
   // A manual reorder makes the list order authoritative, so we clear any active
   // scope and keep _currentIndex pinned to whatever is actually playing.
+  // Jump the queue list so the currently-playing track is in view (a little
+  // context above it) instead of resting at the top. Row heights vary slightly,
+  // so this estimates — close enough to land the highlighted track on screen.
+  void _scrollQueueToCurrent([int tries = 0]) {
+    if (_currentIndex <= 0) return;
+    // The list may not be attached yet on the first opening frame (the reveal
+    // controller is still at 0), so retry across a few frames until it is.
+    final attached =
+        _queueScrollCtrl.hasClients && _queueScrollCtrl.positions.isNotEmpty;
+    final max =
+        attached ? _queueScrollCtrl.position.maxScrollExtent : 0.0;
+    if ((!attached || max <= 0) && tries < 6) {
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _scrollQueueToCurrent(tries + 1));
+      return;
+    }
+    if (!attached) return;
+    const estRow = 52.0;
+    final target = (_currentIndex * estRow - 80).clamp(0.0, max);
+    _queueScrollCtrl.jumpTo(target);
+  }
+
   // newI here is the onReorderItem index: already adjusted for the removal of
   // the item at oldI, so we insert at it directly.
   void _reorderQueue(int oldI, int newI, StateSetter setFull) {

@@ -125,6 +125,7 @@ dependencies:
   # Detect + tap http/https links (and emails) inside chat message bubbles.
   # Pure Dart, no native side — safe on every platform / SDK.
   flutter_linkify: ^6.0.0
+  linkify: ^5.0.0  # linkify() parser used with buildTextSpan for floated captions
   share_plus: ^13.1.0
   cryptography: ^2.5.0   # pure-Dart AES-GCM + PBKDF2 for encrypted local backups
   cached_network_image: ^3.4.1

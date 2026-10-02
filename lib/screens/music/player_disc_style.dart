@@ -49,10 +49,13 @@ class PlayerStyleController extends ChangeNotifier {
   static final PlayerStyleController instance = PlayerStyleController._();
 
   static const _key = 'player_disc_style_v1';
+  static const _dimKey = 'player_orb_dimmed_v1';
   PlayerDiscStyle _style = PlayerDiscStyle.orb;
+  bool _orbDimmed = false;
   bool _loaded = false;
 
   PlayerDiscStyle get style => _style;
+  bool get orbDimmed => _orbDimmed;
   bool get loaded => _loaded;
 
   Future<void> load() async {
@@ -60,6 +63,7 @@ class PlayerStyleController extends ChangeNotifier {
     try {
       final p = await SharedPreferences.getInstance();
       _style = PlayerDiscStyleX.fromId(p.getString(_key));
+      _orbDimmed = p.getBool(_dimKey) ?? false;
     } catch (_) {
       // Keep the default on any read failure.
     }
@@ -76,6 +80,20 @@ class PlayerStyleController extends ChangeNotifier {
       await p.setString(_key, s.id);
     } catch (_) {
       // Best-effort — selection still applies this session.
+    }
+  }
+
+  Future<void> toggleOrbDim() => setOrbDimmed(!_orbDimmed);
+
+  Future<void> setOrbDimmed(bool v) async {
+    if (_orbDimmed == v) return;
+    _orbDimmed = v;
+    notifyListeners();
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setBool(_dimKey, v);
+    } catch (_) {
+      // Best-effort — toggle still applies this session.
     }
   }
 }
@@ -97,6 +115,7 @@ class PlayerDisc extends StatelessWidget {
     required this.spin,
     required this.artBuilder,
     this.playing = true,
+    this.dimmed = false,
   });
 
   final PlayerDiscStyle style;
@@ -105,8 +124,9 @@ class PlayerDisc extends StatelessWidget {
   final ColorScheme scheme;
   final bool isDark;
   final Animation<double> spin;
-  final Widget Function(double diameter) artBuilder;
+  final Widget Function(double diameter, [Color? noteColor]) artBuilder;
   final bool playing;
+  final bool dimmed;
 
   Widget _rotate(Widget child) => AnimatedBuilder(
         animation: spin,
@@ -144,6 +164,7 @@ class PlayerDisc extends StatelessWidget {
 
   // ── Default glossy orb ────────────────────────────────────────────────────
   Widget _orb() {
+    if (dimmed) return _orbDim();
     return _rotate(Container(
       width: side,
       height: side,
@@ -177,6 +198,50 @@ class PlayerDisc extends StatelessWidget {
         ],
       ),
       child: ClipOval(child: Center(child: artBuilder(side * 0.86))),
+    ));
+  }
+
+  // Muted "transport-button" finish for the orb — a soft top-lit accent disc
+  // instead of the bright glossy ball, so a neon accent in dark mode isn't
+  // blinding. Still spins, still carries the accent side-glow.
+  Widget _orbDim() {
+    final d = side * 0.86;
+    final glyph = isDark
+        ? Color.lerp(accent, Colors.white, 0.38)!
+        : Color.lerp(accent, Colors.black, 0.32)!;
+    return _rotate(Container(
+      width: side,
+      height: side,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.alphaBlend(
+                accent.withValues(alpha: isDark ? 0.16 : 0.10), scheme.surface),
+            Color.alphaBlend(accent.withValues(alpha: isDark ? 0.26 : 0.18),
+                scheme.surfaceContainerHighest),
+          ],
+        ),
+        border: Border.all(
+          color: accent.withValues(alpha: isDark ? 0.34 : 0.26),
+          width: 1.6,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: isDark ? 0.28 : 0.18),
+            blurRadius: 34,
+            spreadRadius: 1,
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.20),
+            blurRadius: 16,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: ClipOval(child: Center(child: artBuilder(d, glyph))),
     ));
   }
 
@@ -511,7 +576,7 @@ class PlayerDisc extends StatelessWidget {
                   offset: const Offset(0, 8)),
             ],
           ),
-          child: ClipOval(child: Center(child: artBuilder(artD))),
+          child: ClipOval(child: Center(child: artBuilder(artD, accent))),
         ),
       ],
     );
@@ -535,7 +600,7 @@ class _ClassicVinyl extends StatefulWidget {
   final bool isDark;
   final Animation<double> spin;
   final bool playing;
-  final Widget Function(double diameter) artBuilder;
+  final Widget Function(double diameter, [Color? noteColor]) artBuilder;
 
   @override
   State<_ClassicVinyl> createState() => _ClassicVinylState();
@@ -669,7 +734,7 @@ class _ClassicVinylState extends State<_ClassicVinyl>
         Positioned.fill(
           child: AnimatedBuilder(
             animation: _lift,
-            builder: (_, __) => Transform.rotate(
+            builder: (_, _) => Transform.rotate(
               angle: _lift.value * 0.26,
               alignment: const Alignment(0.82, -0.82),
               child: CustomPaint(
@@ -690,13 +755,13 @@ class _ClassicVinylState extends State<_ClassicVinyl>
 // ── Painters ────────────────────────────────────────────────────────────────
 
 class _GroovePainter extends CustomPainter {
-  _GroovePainter({required this.color, this.rings = 16, this.innerFrac = 0.3});
+  _GroovePainter({required this.color, this.innerFrac = 0.3});
   final Color color;
-  final int rings;
   final double innerFrac;
 
   @override
   void paint(Canvas c, Size s) {
+    const rings = 16;
     final ctr = Offset(s.width / 2, s.height / 2);
     final r = s.width / 2;
     final p = Paint()
@@ -712,7 +777,7 @@ class _GroovePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _GroovePainter o) =>
-      o.color != color || o.rings != rings || o.innerFrac != innerFrac;
+      o.color != color || o.innerFrac != innerFrac;
 }
 
 class _ReelPainter extends CustomPainter {
@@ -818,7 +883,7 @@ class _PulseDisc extends StatefulWidget {
   final ColorScheme scheme;
   final bool isDark;
   final bool playing;
-  final Widget Function(double diameter) artBuilder;
+  final Widget Function(double diameter, [Color? noteColor]) artBuilder;
 
   @override
   State<_PulseDisc> createState() => _PulseDiscState();
@@ -868,7 +933,7 @@ class _PulseDiscState extends State<_PulseDisc>
               duration: const Duration(milliseconds: 260),
               child: AnimatedBuilder(
                 animation: _c,
-                builder: (_, __) => CustomPaint(
+                builder: (_, _) => CustomPaint(
                   painter: _PulseRingsPainter(
                       progress: _c.value, accent: accent, innerFrac: 0.5),
                 ),
@@ -1085,10 +1150,10 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
                         isDark: isDark,
                         spin: const AlwaysStoppedAnimation<double>(0.0),
                         playing: true,
-                        artBuilder: (d) => Center(
+                        artBuilder: (d, [c]) => Center(
                           child: Icon(Icons.music_note_rounded,
                               size: d * 0.42,
-                              color: Colors.white.withValues(alpha: 0.9)),
+                              color: c ?? Colors.white.withValues(alpha: 0.9)),
                         ),
                       ),
                     ),

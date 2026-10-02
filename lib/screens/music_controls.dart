@@ -997,10 +997,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // dot" over the note whenever a track had an id but no embedded cover.)
   // Centre art/note sized to [d] for the disc styles — album cover when we
   // have one, else the music-note fallback.
-  Widget _discCenter(double d, Color accent, ColorScheme scheme) {
+  Widget _discCenter(double d, [Color? noteColor]) {
     final note = Center(
       child: Icon(Icons.music_note_rounded,
-          color: Colors.white.withValues(alpha: 0.95),
+          color: noteColor ?? Colors.white.withValues(alpha: 0.95),
           size: (d * 0.42).clamp(14.0, 96.0)),
     );
     if (_currentArtId == null || !_isMobile) {
@@ -1161,6 +1161,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                                       isDark,
                                       setFull,
                                       roundRing: dStyle.roundRing,
+                                      onTap: dStyle == PlayerDiscStyle.orb
+                                          ? () => PlayerStyleController.instance
+                                              .toggleOrbDim()
+                                          : null,
                                       child: PlayerDisc(
                                         style: dStyle,
                                         side: side,
@@ -1169,8 +1173,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                                         isDark: isDark,
                                         spin: _discCtrl,
                                         playing: discPlaying,
-                                        artBuilder: (d) =>
-                                            _discCenter(d, accent, scheme),
+                                        dimmed: PlayerStyleController
+                                            .instance.orbDimmed,
+                                        artBuilder: (d, [c]) => _discCenter(d, c),
                                       ),
                                     );
                                   },
@@ -1768,9 +1773,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // Wrap the spinning full-screen disc with swipe/double-tap gestures and an
   // elapsed-progress ring hugging its edge. Same widget drives mobile + desktop.
   Widget _wrapDisc(double side, Color accent, bool isDark, StateSetter setFull,
-      {required Widget child, bool roundRing = true}) {
+      {required Widget child, bool roundRing = true, VoidCallback? onTap}) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
+      onTap: onTap,
       onDoubleTap: () {
         if (_currentIndex >= 0 && _currentIndex < _playlist.length) {
           _toggleFavorite(_playlist[_currentIndex]);
@@ -3315,7 +3321,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                         isDark: isDark,
                         spin: _discCtrl,
                         playing: isPlaying,
-                        artBuilder: (d) => _discCenter(d, accent, mScheme),
+                        dimmed: PlayerStyleController.instance.orbDimmed,
+                        artBuilder: (d, [c]) => _discCenter(d, c),
                       );
                     },
                   ),

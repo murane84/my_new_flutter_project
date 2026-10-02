@@ -1080,9 +1080,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
               SafeArea(
                 child: LayoutBuilder(builder: (lctx, lc) {
                   final wideQ = lc.maxWidth >= 720;
-                  Widget playerCol(bool compact) => Padding(
-                  padding: EdgeInsets.fromLTRB(22, compact ? 2 : 6, 22,
-                      compact ? 6 : 14),
+                  Widget playerCol(double openT) => Padding(
+                  padding: EdgeInsets.fromLTRB(22, 6 - 4 * openT.clamp(0.0, 1.0),
+                      22, 14 - 8 * openT.clamp(0.0, 1.0)),
                   child: Column(
                     children: [
                       // Top bar.
@@ -1123,13 +1123,14 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                       ),
                       // Big art.
                       Expanded(
-                        flex: compact ? 4 : 5,
+                        flex: 5,
                         child: Center(
                           child: LayoutBuilder(builder: (c, cc) {
                             final side = (cc.maxWidth < cc.maxHeight
                                     ? cc.maxWidth
                                     : cc.maxHeight)
-                                .clamp(0.0, compact ? 160.0 : 360.0)
+                                .clamp(
+                                    0.0, 360.0 - 210.0 * openT.clamp(0.0, 1.0))
                                 .toDouble();
                             return _wrapDisc(side, accent, isDark, setFull,
                                 child: AnimatedBuilder(
@@ -1191,7 +1192,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      if (artist.isNotEmpty && !compact) ...[
+                      if (artist.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         MarqueeText(
                           text: artist,
@@ -1204,8 +1205,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                       ],
                       // Synced-lyric ticker — shows only when the song has LRC
                       // timing; tap it to open the full lyrics sheet.
-                      _syncedLyricLine(scheme, accent, compact),
-                      SizedBox(height: compact ? 8 : 18),
+                      _syncedLyricLine(scheme, accent, false),
+                      SizedBox(height: 18 - 10 * openT.clamp(0.0, 1.0)),
                       // Waveform + times (live via the position stream).
                       StreamBuilder<Duration>(
                         stream: _player.positionStream,
@@ -1253,7 +1254,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                           );
                         },
                       ),
-                      SizedBox(height: compact ? 8 : 16),
+                      SizedBox(height: 16 - 8 * openT.clamp(0.0, 1.0)),
                       // Primary transport.
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -1284,8 +1285,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                               return GestureDetector(
                                 onTap: _transportPlayPause,
                                 child: Container(
-                                  width: compact ? 62 : 76,
-                                  height: compact ? 62 : 76,
+                                  width: 76 - 14 * openT.clamp(0.0, 1.0),
+                                  height: 76 - 14 * openT.clamp(0.0, 1.0),
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     gradient: LinearGradient(
@@ -1310,7 +1311,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                                       playing
                                           ? Icons.pause_rounded
                                           : Icons.play_arrow_rounded,
-                                      size: compact ? 32 : 40,
+                                      size: 40 - 8 * openT.clamp(0.0, 1.0),
                                       color: Colors.white),
                                 ),
                               );
@@ -1337,10 +1338,22 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                           ),
                         ],
                       ),
-                      if (!compact) const SizedBox(height: 14),
-                      // Secondary — labelled, functional utilities.
-                      if (!compact)
-                        Row(
+                      // Secondary utilities collapse smoothly as the queue
+                      // opens, so the disc above resizes without a jump.
+                      ClipRect(
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          heightFactor:
+                              (1.0 - openT.clamp(0.0, 1.0) * 1.8)
+                                  .clamp(0.0, 1.0),
+                          child: Opacity(
+                            opacity: (1.0 - openT.clamp(0.0, 1.0) * 1.8)
+                                .clamp(0.0, 1.0),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(height: 14),
+                                Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
                           _fsUtil(
@@ -1383,6 +1396,11 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                               accent: accent),
                         ],
                       ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 );
@@ -1395,7 +1413,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                     builder: (actx, _) {
                       final t = Curves.easeInOutCubic
                           .transform(_queueCtrl.value.clamp(0.0, 1.0));
-                      final showPanel = t > 0.001;
+                      // Keep the panel mounted while it's logically open too, so
+                      // a drag that reaches the bottom doesn't unmount mid-gesture.
+                      final showPanel = queueOpen || t > 0.001;
                       if (wideQ) {
                         return Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1405,7 +1425,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                                 child: ConstrainedBox(
                                   constraints:
                                       const BoxConstraints(maxWidth: 560),
-                                  child: playerCol(false),
+                                  child: playerCol(0.0),
                                 ),
                               ),
                             ),
@@ -1433,7 +1453,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                       final queueH = lc.maxHeight * 0.52;
                       return Column(
                         children: [
-                          Expanded(child: playerCol(showPanel)),
+                          Expanded(child: playerCol(t)),
                           if (showPanel)
                             SizedBox(
                               height: t * queueH,
@@ -1447,7 +1467,24 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                                     child: _inlineQueuePanel(
                                         scheme, accent, isDark, setFull,
                                         () => setQueue(false),
-                                        sidePanel: false),
+                                        sidePanel: false,
+                                        onDrag: (dy) {
+                                          _queueCtrl.value =
+                                              (_queueCtrl.value - dy / queueH)
+                                                  .clamp(0.0, 1.0);
+                                        },
+                                        onDragEnd: (vy) {
+                                          final open = vy < -250
+                                              ? true
+                                              : (vy > 250
+                                                  ? false
+                                                  : _queueCtrl.value >= 0.5);
+                                          queueOpen = open;
+                                          open
+                                              ? _queueCtrl.forward()
+                                              : _queueCtrl.reverse();
+                                          setFull(() {});
+                                        }),
                                   ),
                                 ),
                               ),
@@ -1473,7 +1510,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   /// the current one stays highlighted.
   Widget _inlineQueuePanel(ColorScheme scheme, Color accent, bool isDark,
       StateSetter setFull, VoidCallback onClose,
-      {required bool sidePanel}) {
+      {required bool sidePanel,
+      void Function(double dy)? onDrag,
+      void Function(double vy)? onDragEnd}) {
     final total = _playlist.length;
     final pos = total == 0 ? 0 : (_currentIndex + 1).clamp(1, total);
     return Container(
@@ -1503,11 +1542,14 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           // swipe it down to dismiss the queue sheet. (Side panel: no drag.)
           GestureDetector(
             behavior: HitTestBehavior.opaque,
+            // Interactive drag: pull the header to shrink/grow the queue in real
+            // time (the disc above resizes with it); a flick settles it open or
+            // closed. Side panel (desktop) has no drag.
+            onVerticalDragUpdate:
+                sidePanel ? null : (d) => onDrag?.call(d.delta.dy),
             onVerticalDragEnd: sidePanel
                 ? null
-                : (d) {
-                    if ((d.primaryVelocity ?? 0) > 180) onClose();
-                  },
+                : (d) => onDragEnd?.call(d.primaryVelocity ?? 0),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [

@@ -1528,7 +1528,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                     padding: const EdgeInsets.only(top: 4, bottom: 16),
                     buildDefaultDragHandles: false,
                     itemCount: total,
-                    onReorder: (o, n) => _reorderQueue(o, n, setFull),
+                    onReorderItem: (o, n) => _reorderQueue(o, n, setFull),
                     itemBuilder: (_, i) =>
                         _queueRow(i, scheme, accent, isDark, setFull),
                   ),
@@ -1854,10 +1854,11 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // ── In-page queue mutations (drag-reorder / remove / play-next) ──────────────
   // A manual reorder makes the list order authoritative, so we clear any active
   // scope and keep _currentIndex pinned to whatever is actually playing.
+  // newI here is the onReorderItem index: already adjusted for the removal of
+  // the item at oldI, so we insert at it directly.
   void _reorderQueue(int oldI, int newI, StateSetter setFull) {
     if (oldI < 0 || oldI >= _playlist.length) return;
     setState(() {
-      if (newI > oldI) newI -= 1;
       final cur = (_currentIndex >= 0 && _currentIndex < _playlist.length)
           ? _playlist[_currentIndex]
           : null;

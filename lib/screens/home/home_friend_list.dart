@@ -385,43 +385,6 @@ extension _HomeFriendListView on HomePageState {
     );
   }
 
-  /// Compact "Status & Stories" pinned atop the desktop CIRCLE column. Stays put
-  /// while the conversation list scrolls, and the tray scrolls horizontally.
-  Widget _pinnedStories(ColorScheme scheme) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(6, 0, 6, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 2),
-            child: Text(
-              'STATUS & STORIES',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.1,
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          StoriesTray(
-            apiBase: _apiBase,
-            myUserId: _myUserId,
-            myName: _username.isNotEmpty ? _username : 'You',
-            myAvatarUrl: _myAvatar,
-            groups: _storyGroups,
-            onReload: _fetchStories,
-            compact: true,
-          ),
-          const SizedBox(height: 4),
-          Container(height: 1, color: scheme.outlineVariant.withAlpha(45)),
-          const SizedBox(height: 4),
-        ],
-      ),
-    );
-  }
-
   /// Harmony empty-state — shown when the user has pinned no bonds yet, so the
   /// column reads as an invitation instead of a mysterious blank.
   Widget _noSpacesCard(ColorScheme scheme) {

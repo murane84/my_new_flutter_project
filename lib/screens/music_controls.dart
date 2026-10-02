@@ -3453,24 +3453,33 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       PresenceShareButton(color: accent, size: 20),
-                      if (!live && hasTrack)
+                      if (!live && hasTrack) ...[
+                        // Clear gap + a padded hit area so the heart and the
+                        // broadcast toggle above it are distinct tap targets.
+                        const SizedBox(height: 10),
                         GestureDetector(
+                          behavior: HitTestBehavior.opaque,
                           onTap: () =>
                               _toggleFavorite(_playlist[_currentIndex]),
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 200),
-                            child: Icon(
-                              isFav
-                                  ? Icons.favorite
-                                  : Icons.favorite_border,
-                              key: ValueKey(isFav),
-                              color: isFav
-                                  ? Colors.pinkAccent
-                                  : onSurface.withAlpha(130),
-                              size: 24,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              child: Icon(
+                                isFav
+                                    ? Icons.favorite
+                                    : Icons.favorite_border,
+                                key: ValueKey(isFav),
+                                color: isFav
+                                    ? Colors.pinkAccent
+                                    : onSurface.withAlpha(130),
+                                size: 24,
+                              ),
                             ),
                           ),
                         ),
+                      ],
                     ],
                   ),
                 ],

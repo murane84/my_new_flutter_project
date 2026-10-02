@@ -28,6 +28,7 @@ import '../utils/popup_shell.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:palette_generator/palette_generator.dart';
 import '../services/song_library.dart';
+import '../services/now_playing_presence.dart';
 import '../services/audio_handler.dart';
 import '../services/metadata_overrides.dart';
 import '../utils/marquee_text.dart';
@@ -1117,6 +1118,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 1.6)),
                           const Spacer(),
+                          // Privacy: share "listening now" with friends on/off.
+                          PresenceShareButton(color: accent, size: 22),
                           IconButton(
                             icon: Icon(
                                 isFav

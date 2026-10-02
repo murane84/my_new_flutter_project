@@ -2983,6 +2983,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
           'Music',
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
         ),
+        const Spacer(),
+        // Privacy: broadcast "listening now" to friends on/off.
+        PresenceShareButton(color: scheme.primary, size: 20),
       ],
     );
   }

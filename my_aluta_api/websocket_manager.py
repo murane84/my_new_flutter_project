@@ -18,8 +18,15 @@ now_playing: Dict[int, dict] = {}
 NOW_PLAYING_TTL = 180  # seconds; the client refreshes well within this window
 
 
-def set_now_playing(user_id: int, track: dict) -> None:
-    now_playing[int(user_id)] = {"track": track, "ts": time.time()}
+def set_now_playing(user_id: int, track: dict, audience=None) -> None:
+    # audience: None = every friend may see it; otherwise an iterable of the
+    # viewer user-ids allowed to see this user's "listening now".
+    aud = None if audience is None else set(int(x) for x in audience)
+    now_playing[int(user_id)] = {
+        "track": track,
+        "ts": time.time(),
+        "audience": aud,
+    }
 
 
 def clear_now_playing(user_id: int) -> None:
@@ -33,6 +40,22 @@ def get_now_playing(user_id: int) -> Optional[dict]:
         return None
     if time.time() - entry["ts"] > NOW_PLAYING_TTL:
         now_playing.pop(int(user_id), None)
+        return None
+    return entry["track"]
+
+
+def get_now_playing_for(owner_id: int, viewer_id: int) -> Optional[dict]:
+    """The owner's current track as VIEWER is allowed to see it, honouring the
+    owner's audience setting (None = everyone). None if not playing / expired, or
+    the viewer isn't in the owner's chosen audience."""
+    entry = now_playing.get(int(owner_id))
+    if not entry:
+        return None
+    if time.time() - entry["ts"] > NOW_PLAYING_TTL:
+        now_playing.pop(int(owner_id), None)
+        return None
+    aud = entry.get("audience")
+    if aud is not None and int(viewer_id) not in aud:
         return None
     return entry["track"]
 

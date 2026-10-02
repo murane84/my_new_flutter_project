@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'audio_handler.dart';
@@ -32,12 +32,24 @@ class NowPlayingPresence extends ChangeNotifier {
   bool _settingLoaded = false;
   bool get shareEnabled => _shareEnabled;
 
+  // Audience: 'everyone' (all friends) or 'selected' (only _allowedFriends).
+  String _shareMode = 'everyone';
+  Set<int> _allowedFriends = <int>{};
+  String get shareMode => _shareMode;
+  bool get shareToSelected => _shareMode == 'selected';
+  Set<int> get allowedFriends => Set<int>.from(_allowedFriends);
+
   /// Load the saved share preference (call once at startup). Emits the current
   /// state once loaded so the first broadcast already respects the choice.
   Future<void> loadShareSetting() async {
     try {
       final p = await SharedPreferences.getInstance();
       _shareEnabled = p.getBool('share_listening_now') ?? true;
+      _shareMode = p.getString('share_listening_mode') ?? 'everyone';
+      _allowedFriends = (p.getStringList('share_listening_allowed') ?? const [])
+          .map((e) => int.tryParse(e) ?? -1)
+          .where((e) => e >= 0)
+          .toSet();
     } catch (_) {}
     _settingLoaded = true;
     notifyListeners();
@@ -54,6 +66,22 @@ class NowPlayingPresence extends ChangeNotifier {
     try {
       final p = await SharedPreferences.getInstance();
       await p.setBool('share_listening_now', v);
+    } catch (_) {}
+  }
+
+  /// Choose WHO sees my listening now: mode 'everyone' or 'selected' (with the
+  /// given friend ids). Persisted; re-broadcasts so the change applies live
+  /// (friends removed from the audience get a 'stopped' event server-side).
+  Future<void> setAudience(String mode, Set<int> allowed) async {
+    _shareMode = mode == 'selected' ? 'selected' : 'everyone';
+    _allowedFriends = Set<int>.from(allowed);
+    notifyListeners();
+    _emit(force: true);
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString('share_listening_mode', _shareMode);
+      await p.setStringList('share_listening_allowed',
+          _allowedFriends.map((e) => e.toString()).toList());
     } catch (_) {}
   }
 
@@ -169,36 +197,10 @@ class NowPlayingPresence extends ChangeNotifier {
       'track': playing
           ? {'title': title, 'artist': artist == 'Aluta' ? '' : artist}
           : null,
+      // null = every friend; a list = only these friend ids may see it.
+      'audience': (playing && _shareMode == 'selected')
+          ? _allowedFriends.toList()
+          : null,
     });
-  }
-}
-
-/// A small toggle for whether the app broadcasts the user's "listening now"
-/// status to friends. Placed in the music player headers (compact + full). It
-/// reflects and flips the persisted NowPlayingPresence setting live.
-class PresenceShareButton extends StatelessWidget {
-  const PresenceShareButton({super.key, required this.color, this.size = 22});
-  final Color color;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final presence = NowPlayingPresence.instance;
-    return AnimatedBuilder(
-      animation: presence,
-      builder: (context, _) {
-        final on = presence.shareEnabled;
-        return IconButton(
-          tooltip: on
-              ? "Sharing what you're listening to — tap to keep it private"
-              : 'Listening is private — tap to share with friends',
-          visualDensity: VisualDensity.compact,
-          iconSize: size,
-          color: on ? color : color.withValues(alpha: 0.45),
-          icon: Icon(on ? Icons.sensors_rounded : Icons.sensors_off_rounded),
-          onPressed: () => presence.setShareEnabled(!on),
-        );
-      },
-    );
   }
 }

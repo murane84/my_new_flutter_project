@@ -2297,11 +2297,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         child: const Icon(Icons.broken_image_rounded),
       );
 
-  Widget _imageBubble(String url) {
-    // Decode the thumbnail at ~bubble-size × pixel ratio instead of the photo's
-    // full resolution. A full-res decode is ~48MB each; dozens of them in a
-    // thread exhaust memory and freeze the UI. Full res is still loaded in the
-    // tap-to-open viewer. Cap the multiplier so huge-DPR devices stay bounded.
+  // The decoded photo (cache-first: on-device copy, else network), shared by
+  // the full image bubble and the side-by-side caption thumbnail. Decodes at
+  // ~bubble size, not full resolution, so a thread of photos doesn't exhaust
+  // memory (full res still loads in the tap-to-open viewer).
+  Widget _imageData(String url) {
     final dpr = MediaQuery.of(context).devicePixelRatio.clamp(1.0, 3.0);
     final thumbW = (240 * dpr).round();
     final headers = mediaAuthHeaders(url);
@@ -2313,24 +2313,24 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           placeholder: (_) => _imgLoader(),
           error: (_) => _imgBroken(),
         );
-    // Cache-first: render the on-device copy so the photo stays visible after
-    // the server purges its bytes. Web has no local FS → straight network.
-    final Widget img = kIsWeb
-        ? net()
-        : FutureBuilder<File?>(
-            future: _imgFile(url),
-            builder: (ctx, snap) {
-              if (snap.connectionState == ConnectionState.waiting) return net();
-              final f = snap.data;
-              if (f != null) {
-                return Image.file(f,
-                    fit: BoxFit.cover,
-                    cacheWidth: thumbW,
-                    errorBuilder: (_, _, _) => _imgBroken());
-              }
-              return net();
-            },
-          );
+    if (kIsWeb) return net();
+    return FutureBuilder<File?>(
+      future: _imgFile(url),
+      builder: (ctx, snap) {
+        if (snap.connectionState == ConnectionState.waiting) return net();
+        final f = snap.data;
+        if (f != null) {
+          return Image.file(f,
+              fit: BoxFit.cover,
+              cacheWidth: thumbW,
+              errorBuilder: (_, _, _) => _imgBroken());
+        }
+        return net();
+      },
+    );
+  }
+
+  Widget _imageBubble(String url) {
     return GestureDetector(
       onTap: () => _openImageViewer(url),
       child: ClipRRect(
@@ -2338,9 +2338,71 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         child: ConstrainedBox(
           constraints: const BoxConstraints(
               maxWidth: 240, maxHeight: 300, minWidth: 120, minHeight: 80),
-          child: img,
+          child: _imageData(url),
         ),
       ),
+    );
+  }
+
+  // A fixed-width portrait thumbnail for the image+caption card.
+  Widget _imageThumb(String url, double w, double ar) {
+    return GestureDetector(
+      onTap: () => _openImageViewer(url),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(13),
+        child: SizedBox(
+          width: w,
+          child: AspectRatio(aspectRatio: ar, child: _imageData(url)),
+        ),
+      ),
+    );
+  }
+
+  // Image + caption laid out as a card: the photo as a portrait thumbnail on
+  // the left with the caption filling the space beside it, so a tall photo and
+  // its text no longer leave a blank column. A compact look that is ours, not
+  // the usual stacked photo-then-caption.
+  Widget _imageCaptionCard(
+      String url, String caption, Color textColor, Color linkColor) {
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        final maxW = c.maxWidth.isFinite ? c.maxWidth : 280.0;
+        final imgW = (maxW * 0.42).clamp(116.0, 158.0).toDouble();
+        final capW = (maxW - imgW - 9).clamp(70.0, maxW).toDouble();
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _imageThumb(url, imgW, 0.78),
+            const SizedBox(width: 9),
+            SizedBox(
+              width: capW,
+              child: Linkify(
+                text: caption,
+                onOpen: (link) => _openLink(link.url),
+                linkifiers: const [
+                  UrlLinkifier(),
+                  EmailLinkifier(),
+                  LooseUrlLinkifier(),
+                ],
+                options: const LinkifyOptions(humanize: false),
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 15,
+                  height: 1.38,
+                ),
+                linkStyle: TextStyle(
+                  color: linkColor,
+                  fontSize: 15,
+                  height: 1.38,
+                  decoration: TextDecoration.underline,
+                  decorationColor: linkColor,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -4316,6 +4378,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final isContact = !tomb && msgType == 'contact';
     final emojiOnly =
         !tomb && !hasQuote && !isMedia && _isEmojiOnly(mainText);
+    // Image + caption: lay the caption beside the photo (using the blank side
+    // strip a tall photo leaves) instead of stacking it underneath.
+    final imgCaption =
+        isMedia && msgType == 'image' && mainText.trim().isNotEmpty;
 
     // ── Bubble colours ──────────────────────────────────────────────────────
     // Sent messages use the brand red family (not WhatsApp green): a soft warm
@@ -4588,9 +4654,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                           _locationContent(msg, isMe, textColor, scheme),
                         if (isContact)
                           _contactContent(msg, isMe, textColor, scheme),
-                        if (isMedia)
+                        if (isMedia && !imgCaption)
                           _mediaContent(
                               msgType, mediaRel, msg, isMe, textColor, scheme),
+                        if (imgCaption)
+                          _imageCaptionCard(fullMediaUrl(mediaRel!), mainText,
+                              textColor, linkColor),
                         // A shared song shows its title inside the card, so skip
                         // the duplicate text line. Call/live logs store their
                         // outcome in `content` (rendered above), so skip that too.
@@ -4600,6 +4669,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             msgType != 'live' &&
                             msgType != 'location' &&
                             msgType != 'contact' &&
+                            !imgCaption &&
                             mainText.trim().isNotEmpty)
                           Padding(
                             padding: EdgeInsets.only(top: isMedia ? 6 : 0),

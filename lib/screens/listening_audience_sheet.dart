@@ -147,24 +147,10 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
                             letterSpacing: 1,
                             color: scheme.onSurfaceVariant)),
                   ),
-                  RadioListTile<String>(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    value: 'everyone',
-                    groupValue: _presence.shareMode,
-                    onChanged: (_) =>
-                        _presence.setAudience('everyone', _selected),
-                    title: const Text('Everyone in my circle'),
-                  ),
-                  RadioListTile<String>(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    value: 'selected',
-                    groupValue: _presence.shareMode,
-                    onChanged: (_) =>
-                        _presence.setAudience('selected', _selected),
-                    title: const Text('Only selected friends'),
-                  ),
+                  _audienceOption(
+                      scheme, 'Everyone in my circle', 'everyone'),
+                  _audienceOption(
+                      scheme, 'Only selected friends', 'selected'),
                   if (selectedMode)
                     Flexible(
                       child: _loading
@@ -202,6 +188,21 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
           );
         },
       ),
+    );
+  }
+
+  // A radio-style option without RadioListTile (whose groupValue/onChanged are
+  // deprecated in favour of a RadioGroup ancestor) — a plain tappable tile.
+  Widget _audienceOption(ColorScheme scheme, String label, String value) {
+    final on = _presence.shareMode == value;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      leading: Icon(
+          on ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+          color: on ? scheme.primary : scheme.onSurfaceVariant),
+      title: Text(label),
+      onTap: () => _presence.setAudience(value, _selected),
     );
   }
 

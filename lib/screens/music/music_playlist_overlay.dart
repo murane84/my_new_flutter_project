@@ -1341,8 +1341,19 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   // ── Header ──────────────────────────────────────────────────────────────────
 
   Widget _header(ColorScheme scheme) {
-    return Container(
-      padding: EdgeInsets.fromLTRB(widget.fullPage ? 6 : 14, 8, 6, 8),
+    // The header doubles as a swipe handle: a downward or rightward fling
+    // dismisses the playlist (back to Now Playing), alongside the back/collapse
+    // button. The scrolling track list below is untouched.
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragEnd: (d) {
+        if ((d.primaryVelocity ?? 0) > 150) widget.onClose();
+      },
+      onHorizontalDragEnd: (d) {
+        if ((d.primaryVelocity ?? 0) > 200) widget.onClose();
+      },
+      child: Container(
+        padding: EdgeInsets.fromLTRB(widget.fullPage ? 6 : 14, 8, 6, 8),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest.withAlpha(120),
         border: Border(
@@ -1427,6 +1438,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             ),
           ],
         ],
+      ),
       ),
     );
   }

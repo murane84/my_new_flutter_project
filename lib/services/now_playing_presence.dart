@@ -1,5 +1,7 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'audio_handler.dart';
 import 'live_session_service.dart' show activeLiveSession;
@@ -23,6 +25,37 @@ class NowPlayingPresence extends ChangeNotifier {
 
   // friendId -> {title, artist}
   final Map<int, Map<String, dynamic>> _friends = {};
+
+  // User setting: whether to broadcast MY "listening now" to friends. Off keeps
+  // listening private (nothing is sent; friends' lists drop me). Persisted.
+  bool _shareEnabled = true;
+  bool _settingLoaded = false;
+  bool get shareEnabled => _shareEnabled;
+
+  /// Load the saved share preference (call once at startup). Emits the current
+  /// state once loaded so the first broadcast already respects the choice.
+  Future<void> loadShareSetting() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      _shareEnabled = p.getBool('share_listening_now') ?? true;
+    } catch (_) {}
+    _settingLoaded = true;
+    notifyListeners();
+    _emit(force: true);
+  }
+
+  /// Flip the share preference. OFF immediately announces not-listening so
+  /// friends' lists drop me; ON re-announces the current track.
+  Future<void> setShareEnabled(bool v) async {
+    if (_shareEnabled == v) return;
+    _shareEnabled = v;
+    notifyListeners();
+    _emit(force: true);
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setBool('share_listening_now', v);
+    } catch (_) {}
+  }
 
   /// Set by HomePage to the home socket's send function.
   void Function(Map<String, dynamic>)? emitSink;
@@ -77,6 +110,7 @@ class NowPlayingPresence extends ChangeNotifier {
   void start() {
     final h = audioHandler;
     if (h == null) return;
+    if (!_settingLoaded) loadShareSetting();
     _miSub ??= h.mediaItem.listen((_) => _emit());
     _psSub ??= h.playbackState.listen((_) => _emit());
     // Refresh within the server's presence TTL so a long, uninterrupted play
@@ -109,6 +143,7 @@ class NowPlayingPresence extends ChangeNotifier {
     final h = audioHandler;
     final sink = emitSink;
     if (h == null || sink == null) return;
+    if (!_settingLoaded) return; // don't broadcast before the choice is known
     final mi = h.mediaItem.value;
     final title = (mi?.title ?? '').trim();
     final artist = (mi?.artist ?? '').trim();
@@ -119,7 +154,8 @@ class NowPlayingPresence extends ChangeNotifier {
     // track) the moment the session ends and the local player takes over.
     final inLiveSession = activeLiveSession != null;
     // 'Aluta' is the handler's placeholder when nothing real is loaded.
-    final playing = !inLiveSession &&
+    final playing = _shareEnabled &&
+        !inLiveSession &&
         h.playbackState.value.playing &&
         title.isNotEmpty &&
         title != 'Aluta';
@@ -134,5 +170,35 @@ class NowPlayingPresence extends ChangeNotifier {
           ? {'title': title, 'artist': artist == 'Aluta' ? '' : artist}
           : null,
     });
+  }
+}
+
+/// A small toggle for whether the app broadcasts the user's "listening now"
+/// status to friends. Placed in the music player headers (compact + full). It
+/// reflects and flips the persisted NowPlayingPresence setting live.
+class PresenceShareButton extends StatelessWidget {
+  const PresenceShareButton({super.key, required this.color, this.size = 22});
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final presence = NowPlayingPresence.instance;
+    return AnimatedBuilder(
+      animation: presence,
+      builder: (context, _) {
+        final on = presence.shareEnabled;
+        return IconButton(
+          tooltip: on
+              ? "Sharing what you're listening to — tap to keep it private"
+              : 'Listening is private — tap to share with friends',
+          visualDensity: VisualDensity.compact,
+          iconSize: size,
+          color: on ? color : color.withValues(alpha: 0.45),
+          icon: Icon(on ? Icons.sensors_rounded : Icons.sensors_off_rounded),
+          onPressed: () => presence.setShareEnabled(!on),
+        );
+      },
+    );
   }
 }

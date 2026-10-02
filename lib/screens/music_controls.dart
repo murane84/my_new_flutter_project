@@ -351,6 +351,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   bool _scanning = false;
 
   late AnimationController _discCtrl;
+  late AnimationController _queueCtrl; // drives the in-page queue open/close
   late AnimationController _playlistCtrl;
   late AnimationController _speedCtrl;
   late AnimationController _volumeCtrl;
@@ -374,6 +375,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
     _discCtrl = AnimationController(
       duration: const Duration(seconds: 15),
+      vsync: this,
+    );
+    _queueCtrl = AnimationController(
+      duration: const Duration(milliseconds: 320),
       vsync: this,
     );
     _playlistCtrl = AnimationController(
@@ -528,6 +533,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _sleepTimer?.cancel();
     _sleepTick?.cancel();
     _discCtrl.dispose();
+    _queueCtrl.dispose();
     _artAccentVN.dispose();
     _playlistCtrl.dispose();
     _speedCtrl.dispose();
@@ -961,6 +967,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   void _openFullPlayer() {
     final hasTrack = _currentIndex >= 0 && _playlist.isNotEmpty;
     if (!hasTrack && !_liveActive) return;
+    _queueCtrl.value = 0; // always open the full player with the queue closed
     Navigator.of(context, rootNavigator: true).push(
       PageRouteBuilder(
         // Non-opaque so the home route underneath stays "on stage" and its
@@ -1048,6 +1055,13 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
       return StatefulBuilder(builder: (context, setFull) {
         final isFav = hasTrack && _favorites.contains(_playlist[_currentIndex]);
+        // Drive the queue open/close animation and keep the toggle state in sync.
+        void setQueue(bool open) {
+          if (queueOpen == open) return;
+          queueOpen = open;
+          open ? _queueCtrl.forward() : _queueCtrl.reverse();
+          setFull(() {});
+        }
         // Album-art adaptive accent: when artwork gave us a colour the whole
         // page (disc, ring, waveform, buttons) tints to it; else theme accent.
         return ValueListenableBuilder<Color?>(
@@ -1372,7 +1386,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                             scheme,
                             Icons.queue_music_rounded,
                             'Queue',
-                            () => setFull(() => queueOpen = !queueOpen),
+                            () => setQueue(!queueOpen),
                             accent: accent,
                             active: queueOpen,
                           ),
@@ -1384,48 +1398,75 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                     ],
                   ),
                 );
-                  if (!queueOpen) {
-                    return Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 560),
-                        child: playerCol(false),
-                      ),
-                    );
-                  }
-                  if (wideQ) {
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          child: Center(
-                            child: ConstrainedBox(
-                              constraints:
-                                  const BoxConstraints(maxWidth: 520),
-                              child: playerCol(false),
+                  // Animated open/close: the side panel grows + fades in on
+                  // wide screens (player reflows to the left), and the bottom
+                  // sheet rises + fades on phones (player shrinks up) — no more
+                  // hard on/off switch.
+                  return AnimatedBuilder(
+                    animation: _queueCtrl,
+                    builder: (actx, _) {
+                      final t = Curves.easeInOutCubic
+                          .transform(_queueCtrl.value.clamp(0.0, 1.0));
+                      final showPanel = t > 0.001;
+                      if (wideQ) {
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              child: Center(
+                                child: ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(maxWidth: 560),
+                                  child: playerCol(false),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        SizedBox(
-                          width: 360,
-                          child: _inlineQueuePanel(
-                              scheme, accent, isDark, setFull,
-                              () => setFull(() => queueOpen = false),
-                              sidePanel: true),
-                        ),
-                      ],
-                    );
-                  }
-                  return Column(
-                    children: [
-                      Expanded(flex: 5, child: playerCol(true)),
-                      Expanded(
-                        flex: 6,
-                        child: _inlineQueuePanel(
-                            scheme, accent, isDark, setFull,
-                            () => setFull(() => queueOpen = false),
-                            sidePanel: false),
-                      ),
-                    ],
+                            if (showPanel)
+                              SizedBox(
+                                width: 360 * t,
+                                child: ClipRect(
+                                  child: OverflowBox(
+                                    minWidth: 360,
+                                    maxWidth: 360,
+                                    alignment: Alignment.centerLeft,
+                                    child: Opacity(
+                                      opacity: t,
+                                      child: _inlineQueuePanel(
+                                          scheme, accent, isDark, setFull,
+                                          () => setQueue(false),
+                                          sidePanel: true),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      }
+                      final queueH = lc.maxHeight * 0.52;
+                      return Column(
+                        children: [
+                          Expanded(child: playerCol(showPanel)),
+                          if (showPanel)
+                            SizedBox(
+                              height: t * queueH,
+                              child: ClipRect(
+                                child: OverflowBox(
+                                  minHeight: queueH,
+                                  maxHeight: queueH,
+                                  alignment: Alignment.topCenter,
+                                  child: Opacity(
+                                    opacity: t,
+                                    child: _inlineQueuePanel(
+                                        scheme, accent, isDark, setFull,
+                                        () => setQueue(false),
+                                        sidePanel: false),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
                   );
                 }),
               ),

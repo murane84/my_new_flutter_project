@@ -45,6 +45,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
+import 'package:float_column/float_column.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import '../utils/app_config.dart';
@@ -2364,45 +2365,77 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   // the left with the caption filling the space beside it, so a tall photo and
   // its text no longer leave a blank column. A compact look that is ours, not
   // the usual stacked photo-then-caption.
-  Widget _imageCaptionCard(
+  // A linkified, wrappable text span for a caption (clickable URLs / emails),
+  // shared by the image+caption layouts so text can flow around the photo.
+  TextSpan _captionSpan(
+      String caption, TextStyle style, TextStyle linkStyle) {
+    final elements = linkify(
+      caption,
+      options: const LinkifyOptions(humanize: false),
+      linkifiers: const [UrlLinkifier(), EmailLinkifier(), LooseUrlLinkifier()],
+    );
+    return buildTextSpan(
+      elements,
+      style: style,
+      linkStyle: linkStyle,
+      onOpen: (link) => _openLink(link.url),
+    );
+  }
+
+  TextStyle _capStyle(Color c) =>
+      TextStyle(color: c, fontSize: 15, height: 1.38);
+
+  TextStyle _capLinkStyle(Color linkColor) => _capStyle(linkColor).copyWith(
+        decoration: TextDecoration.underline,
+        decorationColor: linkColor,
+      );
+
+  // Image + caption as a FLOAT: the photo floats to the left and the caption
+  // flows down its right-hand side, then spills into the full width BELOW the
+  // photo once there is more text than fits beside it — so the bubble never
+  // grows taller than it needs to with a wasted gap under the image.
+  Widget _imageCaptionFloat(
       String url, String caption, Color textColor, Color linkColor) {
     return LayoutBuilder(
       builder: (ctx, c) {
         final maxW = c.maxWidth.isFinite ? c.maxWidth : 280.0;
-        final imgW = (maxW * 0.42).clamp(116.0, 158.0).toDouble();
-        final capW = (maxW - imgW - 9).clamp(70.0, maxW).toDouble();
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+        final imgW = (maxW * 0.42).clamp(118.0, 160.0).toDouble();
+        return FloatColumn(
           children: [
-            _imageThumb(url, imgW, 0.78),
-            const SizedBox(width: 9),
-            SizedBox(
-              width: capW,
-              child: Linkify(
-                text: caption,
-                onOpen: (link) => _openLink(link.url),
-                linkifiers: const [
-                  UrlLinkifier(),
-                  EmailLinkifier(),
-                  LooseUrlLinkifier(),
-                ],
-                options: const LinkifyOptions(humanize: false),
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 15,
-                  height: 1.38,
-                ),
-                linkStyle: TextStyle(
-                  color: linkColor,
-                  fontSize: 15,
-                  height: 1.38,
-                  decoration: TextDecoration.underline,
-                  decorationColor: linkColor,
-                ),
-              ),
+            Floatable(
+              float: FCFloat.start,
+              padding: const EdgeInsetsDirectional.only(end: 10, bottom: 6),
+              child: _imageThumb(url, imgW, 0.78),
             ),
+            _captionSpan(
+                caption, _capStyle(textColor), _capLinkStyle(linkColor)),
           ],
+        );
+      },
+    );
+  }
+
+  // Short caption: stacked and tight — photo on top, caption below, both
+  // constrained to the photo's width so the bubble wraps instead of stretching
+  // into a blank column.
+  Widget _imageCaptionStacked(
+      String url, String caption, Color textColor, Color linkColor) {
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        final maxW = c.maxWidth.isFinite ? c.maxWidth : 280.0;
+        final iw = (maxW * 0.52).clamp(150.0, 200.0).toDouble();
+        return SizedBox(
+          width: iw,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _imageThumb(url, iw, 0.82),
+              const SizedBox(height: 6),
+              Text.rich(_captionSpan(
+                  caption, _capStyle(textColor), _capLinkStyle(linkColor))),
+            ],
+          ),
         );
       },
     );
@@ -4283,13 +4316,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final isContact = !tomb && msgType == 'contact';
     final emojiOnly =
         !tomb && !hasQuote && !isMedia && _isEmojiOnly(mainText);
-    // Image + caption: lay the caption beside the photo (using the blank side
-    // strip a tall photo leaves) instead of stacking it underneath.
-    // Only lay the caption beside the photo when it is long enough to fill the
-    // tall side strip; a short caption stays stacked below the image (side-by-
-    // side there would just leave an awkward blank column).
-    final imgCaption =
-        isMedia && msgType == 'image' && mainText.trim().length >= 60;
+    // Image + caption layout. Few words: stacked & tight under the photo.
+    // More: float — the caption sits to the right of the photo and flows into
+    // the full width below it as it grows, so the bubble stays compact.
+    final imgCap =
+        isMedia && msgType == 'image' && mainText.trim().isNotEmpty;
+    final capLen = mainText.trim().length;
+    final imgStack = imgCap && capLen < 45;
+    final imgFloat = imgCap && capLen >= 45;
 
     // ── Bubble colours ──────────────────────────────────────────────────────
     // Sent messages use the brand red family (not WhatsApp green): a soft warm
@@ -4562,11 +4596,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                           _locationContent(msg, isMe, textColor, scheme),
                         if (isContact)
                           _contactContent(msg, isMe, textColor, scheme),
-                        if (isMedia && !imgCaption)
+                        if (isMedia && !imgCap)
                           _mediaContent(
                               msgType, mediaRel, msg, isMe, textColor, scheme),
-                        if (imgCaption)
-                          _imageCaptionCard(fullMediaUrl(mediaRel), mainText,
+                        if (imgStack)
+                          _imageCaptionStacked(fullMediaUrl(mediaRel),
+                              mainText, textColor, linkColor),
+                        if (imgFloat)
+                          _imageCaptionFloat(fullMediaUrl(mediaRel), mainText,
                               textColor, linkColor),
                         // A shared song shows its title inside the card, so skip
                         // the duplicate text line. Call/live logs store their
@@ -4577,7 +4614,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             msgType != 'live' &&
                             msgType != 'location' &&
                             msgType != 'contact' &&
-                            !imgCaption &&
+                            !imgCap &&
                             mainText.trim().isNotEmpty)
                           Padding(
                             padding: EdgeInsets.only(top: isMedia ? 6 : 0),

@@ -641,24 +641,6 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // The centre of the spinning disc: real embedded album art when we know the
   // track's MediaStore id (Android), else the music-note glyph. QueryArtworkWidget
   // loads + caches the art itself and shows nullArtworkWidget when there's none.
-  Widget _discArt(bool isNarrow) {
-    final fallback = Icon(Icons.music_note_rounded,
-        size: isNarrow ? 28 : 38, color: Colors.white.withAlpha(220));
-    if (_currentArtId == null) return fallback;
-    final d = isNarrow ? 58.0 : 76.0;
-    return ClipOval(
-      child: QueryArtworkWidget(
-        id: _currentArtId!,
-        type: ArtworkType.AUDIO,
-        artworkWidth: d,
-        artworkHeight: d,
-        artworkFit: BoxFit.cover,
-        keepOldArtwork: true,
-        nullArtworkWidget: fallback,
-      ),
-    );
-  }
-
   // ── Lyrics ──────────────────────────────────────────────────────────────────
 
   Future<void> _loadLyrics() async {
@@ -3322,62 +3304,20 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                       }
                     },
                     child: AnimatedBuilder(
-                    animation: _discCtrl,
-                    builder: (ctx, child) => Transform.rotate(
-                      angle: _discCtrl.value * 2 * pi,
-                      child: child,
-                    ),
-                    child: Container(
-                      width: isNarrow ? 58 : 76,
-                      height: isNarrow ? 58 : 76,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        // Glossy 3D orb: a bright sheen offset to the top-left,
-                        // the accent through the body, and a deep rim at the
-                        // bottom-right — reads as a raised, pressable button.
-                        gradient: RadialGradient(
-                          center: const Alignment(-0.35, -0.42),
-                          radius: 0.95,
-                          colors: [
-                            Color.lerp(accent, Colors.white, 0.60)!,
-                            accent,
-                            Color.lerp(accent, Colors.black, 0.46)!,
-                          ],
-                          stops: const [0.0, 0.55, 1.0],
-                        ),
-                        border: Border.all(
-                          color: Colors.white
-                              .withValues(alpha: isDark ? 0.14 : 0.42),
-                          width: 1.2,
-                        ),
-                        boxShadow: [
-                          // Coloured halo — intensifies while playing.
-                          BoxShadow(
-                            color: accent
-                                .withAlpha(isPlaying ? 130 : 70),
-                            blurRadius: isPlaying ? 22 : 13,
-                            spreadRadius: 1,
-                          ),
-                          // Tight dark contact shadow grounds the orb so it
-                          // sits proud of the panel (the 3D lift).
-                          BoxShadow(
-                            color: Colors.black
-                                .withValues(alpha: isDark ? 0.46 : 0.22),
-                            blurRadius: 10,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      child: buffering
-                          ? Padding(
-                              padding: const EdgeInsets.all(18),
-                              child: CircularProgressIndicator(
-                                color: Colors.white.withAlpha(200),
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : _discArt(isNarrow),
-                    ),
+                    animation: PlayerStyleController.instance,
+                    builder: (context, _) {
+                      final mScheme = Theme.of(context).colorScheme;
+                      return PlayerDisc(
+                        style: PlayerStyleController.instance.style,
+                        side: isNarrow ? 58.0 : 76.0,
+                        accent: accent,
+                        scheme: mScheme,
+                        isDark: isDark,
+                        spin: _discCtrl,
+                        playing: isPlaying,
+                        artBuilder: (d) => _discCenter(d, accent, mScheme),
+                      );
+                    },
                   ),
                   ),
                   const SizedBox(width: 14),

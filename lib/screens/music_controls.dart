@@ -26,6 +26,7 @@ import '../utils/toast_helper.dart';
 import 'equalizer_screen.dart';
 import '../utils/popup_shell.dart';
 import 'package:on_audio_query/on_audio_query.dart';
+import 'package:palette_generator/palette_generator.dart';
 import '../services/song_library.dart';
 import '../services/audio_handler.dart';
 import '../services/metadata_overrides.dart';
@@ -302,6 +303,16 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // MediaStore id of the current track (Android), for embedded album-art lookup
   // via QueryArtworkWidget. null = no art (file-picker song / non-mobile).
   int? _currentArtId;
+  // Album-art adaptive accent for the full-screen player (mobile only, where
+  // embedded art exists): derived from the current track's artwork; null → fall
+  // back to the theme accent. Cached per-id so we don't re-derive each build.
+  final ValueNotifier<Color?> _artAccentVN = ValueNotifier<Color?>(null);
+  int? _artAccentForId;
+  // Cached parsed LRC lines for the now-playing synced-lyric ticker.
+  String? _lrcCachePath;
+  List<(Duration, String)> _lrcCache = const [];
+  static final RegExp _lrcTagRe =
+      RegExp(r'\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]');
   // In-app lyrics the user pasted, path -> raw text (LRC or plain). Persisted.
   // A `.lrc`/`.txt` file sitting next to the song is used as a fallback source.
   Map<String, String> _lyrics = {};
@@ -517,6 +528,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _sleepTimer?.cancel();
     _sleepTick?.cancel();
     _discCtrl.dispose();
+    _artAccentVN.dispose();
     _playlistCtrl.dispose();
     _speedCtrl.dispose();
     _player.dispose();
@@ -648,6 +660,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   }
 
   void _setLyrics(String path, String text) {
+    _lrcCachePath = null; // force the synced-ticker parser to refresh
     setState(() {
       if (text.trim().isEmpty) {
         _lyrics.remove(path);
@@ -1026,7 +1039,6 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     bool queueOpen = false;
     return Consumer(builder: (context, ref, _) {
       final scheme = Theme.of(context).colorScheme;
-      final accent = scheme.primary;
       final isDark = scheme.brightness == Brightness.dark;
       final np = ref.watch(nowPlayingProvider);
       final live = _liveActive;
@@ -1036,7 +1048,13 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
       return StatefulBuilder(builder: (context, setFull) {
         final isFav = hasTrack && _favorites.contains(_playlist[_currentIndex]);
-        return Scaffold(
+        // Album-art adaptive accent: when artwork gave us a colour the whole
+        // page (disc, ring, waveform, buttons) tints to it; else theme accent.
+        return ValueListenableBuilder<Color?>(
+          valueListenable: _artAccentVN,
+          builder: (context, artAccent, _) {
+            final accent = artAccent ?? scheme.primary;
+            return Scaffold(
           backgroundColor: scheme.surface,
           body: Stack(
             children: [
@@ -1111,7 +1129,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                                     : cc.maxHeight)
                                 .clamp(0.0, compact ? 160.0 : 360.0)
                                 .toDouble();
-                            return AnimatedBuilder(
+                            return _wrapDisc(side, accent, isDark, setFull,
+                                child: AnimatedBuilder(
                               animation: _discCtrl,
                               builder: (_, child) => Transform.rotate(
                                 angle: _discCtrl.value * 2 * pi,
@@ -1155,7 +1174,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                                 ),
                                 child: _fullArt(accent, scheme),
                               ),
-                            );
+                            ));
                           }),
                         ),
                       ),
@@ -1181,6 +1200,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                           ),
                         ),
                       ],
+                      // Synced-lyric ticker — shows only when the song has LRC
+                      // timing; tap it to open the full lyrics sheet.
+                      _syncedLyricLine(scheme, accent, compact),
                       SizedBox(height: compact ? 8 : 18),
                       // Waveform + times (live via the position stream).
                       StreamBuilder<Duration>(
@@ -1409,6 +1431,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
               ),
             ],
           ),
+            );
+          },
         );
       });
     });
@@ -1497,9 +1521,11 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                     child: Text('Nothing queued yet',
                         style: TextStyle(color: scheme.onSurfaceVariant)),
                   )
-                : ListView.builder(
+                : ReorderableListView.builder(
                     padding: const EdgeInsets.only(top: 4, bottom: 16),
+                    buildDefaultDragHandles: false,
                     itemCount: total,
+                    onReorder: (o, n) => _reorderQueue(o, n, setFull),
                     itemBuilder: (_, i) =>
                         _queueRow(i, scheme, accent, isDark, setFull),
                   ),
@@ -1563,7 +1589,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                 accent.withValues(alpha: 0.5), scheme.onSurfaceVariant),
       ),
     );
-    return Material(
+    final row = Material(
       color: isNow
           ? accent.withValues(alpha: isDark ? 0.20 : 0.12)
           : Colors.transparent,
@@ -1573,7 +1599,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           setFull(() {});
         },
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          padding: const EdgeInsets.fromLTRB(12, 9, 2, 9),
           child: Row(
             children: [
               leading,
@@ -1606,19 +1632,270 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              isNow
-                  ? Icon(Icons.volume_up_rounded, size: 15, color: accent)
-                  : Text('${i + 1}',
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: scheme.onSurfaceVariant
-                              .withValues(alpha: 0.6))),
+              if (isNow)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Icon(Icons.volume_up_rounded, size: 16, color: accent),
+                )
+              else
+                PopupMenuButton<String>(
+                  tooltip: 'Track options',
+                  padding: EdgeInsets.zero,
+                  icon: Icon(Icons.more_vert_rounded,
+                      size: 20, color: scheme.onSurfaceVariant),
+                  onSelected: (v) {
+                    if (v == 'next') {
+                      _playNextInQueue(i, setFull);
+                    } else if (v == 'remove') {
+                      _removeFromQueue(i, setFull);
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'next', child: Text('Play next')),
+                    PopupMenuItem(
+                        value: 'remove', child: Text('Remove from queue')),
+                  ],
+                ),
+              // Explicit drag handle: grab-and-drag to reorder — the same
+              // gesture works with a finger (mobile) or a mouse (desktop).
+              ReorderableDragStartListener(
+                index: i,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8, left: 2),
+                  child: Icon(Icons.drag_handle_rounded,
+                      size: 20,
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.7)),
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
+    // ReorderableListView needs a stable key on each item.
+    return KeyedSubtree(key: ValueKey('q_$path'), child: row);
+  }
+
+  // Wrap the spinning full-screen disc with swipe/double-tap gestures and an
+  // elapsed-progress ring hugging its edge. Same widget drives mobile + desktop.
+  Widget _wrapDisc(double side, Color accent, bool isDark, StateSetter setFull,
+      {required Widget child}) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onDoubleTap: () {
+        if (_currentIndex >= 0 && _currentIndex < _playlist.length) {
+          _toggleFavorite(_playlist[_currentIndex]);
+          setFull(() {});
+        }
+      },
+      onHorizontalDragEnd: (d) {
+        final v = d.primaryVelocity ?? 0;
+        if (v < -120) {
+          _transportNext();
+        } else if (v > 120) {
+          _transportPrev();
+        }
+      },
+      child: SizedBox(
+        width: side,
+        height: side,
+        child: Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            child,
+            Positioned.fill(
+              child: IgnorePointer(
+                child: StreamBuilder<Duration>(
+                  stream: _player.positionStream,
+                  builder: (ctx, snap) {
+                    final pos = _liveActive
+                        ? (_live?.player.position ?? Duration.zero)
+                        : (snap.data ?? _player.position);
+                    final dur = _liveActive
+                        ? (_live?.player.duration ?? Duration.zero)
+                        : (_player.duration ?? Duration.zero);
+                    final frac = dur.inMilliseconds > 0
+                        ? (pos.inMilliseconds / dur.inMilliseconds)
+                            .clamp(0.0, 1.0)
+                            .toDouble()
+                        : 0.0;
+                    return CustomPaint(
+                      painter: _DiscRingPainter(
+                          fraction: frac, accent: accent, isDark: isDark),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // One synced-lyric line that follows playback, under the title. Hidden when
+  // the song has no LRC timing, and on the compact (queue-open mobile) layout.
+  Widget _syncedLyricLine(ColorScheme scheme, Color accent, bool compact) {
+    if (compact) return const SizedBox.shrink();
+    if (_currentIndex < 0 || _currentIndex >= _playlist.length) {
+      return const SizedBox.shrink();
+    }
+    final lines = _syncedLyricLines(_playlist[_currentIndex]);
+    if (lines.isEmpty) return const SizedBox.shrink();
+    return StreamBuilder<Duration>(
+      stream: _player.positionStream,
+      builder: (ctx, snap) {
+        final pos = _liveActive
+            ? (_live?.player.position ?? Duration.zero)
+            : (snap.data ?? _player.position);
+        var text = '';
+        for (final l in lines) {
+          if (l.$1 <= pos) {
+            text = l.$2;
+          } else {
+            break;
+          }
+        }
+        if (text.isEmpty) return const SizedBox(height: 0);
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: GestureDetector(
+            onTap: _openLyrics,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: Text(
+                text,
+                key: ValueKey(text),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: accent,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Parse (and cache) the current song's LRC lines, sorted by time. Empty when
+  // the lyrics are plain text with no [mm:ss.xx] timestamps.
+  List<(Duration, String)> _syncedLyricLines(String path) {
+    if (_lrcCachePath == path) return _lrcCache;
+    final raw = _lyricsRaw(path);
+    final out = <(Duration, String)>[];
+    for (final line in raw.split('\n')) {
+      final matches = _lrcTagRe.allMatches(line).toList();
+      if (matches.isEmpty) continue;
+      final text = line.replaceAll(_lrcTagRe, '').trim();
+      if (text.isEmpty) continue;
+      for (final m in matches) {
+        final mm = int.parse(m.group(1)!);
+        final ss = int.parse(m.group(2)!);
+        final fr = m.group(3);
+        final ms =
+            fr != null ? int.parse(fr.padRight(3, '0').substring(0, 3)) : 0;
+        out.add((Duration(minutes: mm, seconds: ss, milliseconds: ms), text));
+      }
+    }
+    out.sort((a, b) => a.$1.compareTo(b.$1));
+    _lrcCachePath = path;
+    _lrcCache = out;
+    return out;
+  }
+
+  // Derive a usable accent from the current track's embedded artwork (mobile
+  // only — desktop/web have no MediaStore art, so it stays on the theme colour).
+  Future<void> _resolveArtAccent(int id) async {
+    if (!_isMobile) return;
+    if (_artAccentForId == id && _artAccentVN.value != null) return;
+    try {
+      final bytes = await _audioQuery.queryArtwork(
+        id,
+        ArtworkType.AUDIO,
+        format: ArtworkFormat.JPEG,
+        size: 200,
+      );
+      if (bytes == null || bytes.isEmpty) return;
+      final palette = await PaletteGenerator.fromImageProvider(
+        MemoryImage(bytes),
+        size: const Size(120, 120),
+        maximumColorCount: 8,
+      );
+      final picked = palette.vibrantColor?.color ??
+          palette.lightVibrantColor?.color ??
+          palette.dominantColor?.color;
+      if (picked == null) return;
+      final accent = _makeUsableAccent(picked);
+      if (!mounted) return;
+      _artAccentForId = id;
+      _artAccentVN.value = accent;
+    } catch (_) {}
+  }
+
+  // Nudge an extracted artwork colour into a usable accent: enough saturation to
+  // read as a colour, and a mid lightness so it works on light AND dark.
+  Color _makeUsableAccent(Color c) {
+    final hsl = HSLColor.fromColor(c);
+    var sat = hsl.saturation;
+    if (sat < 0.38) sat = 0.52;
+    final lig = hsl.lightness.clamp(0.42, 0.60);
+    return hsl.withSaturation(sat).withLightness(lig).toColor();
+  }
+
+  // ── In-page queue mutations (drag-reorder / remove / play-next) ──────────────
+  // A manual reorder makes the list order authoritative, so we clear any active
+  // scope and keep _currentIndex pinned to whatever is actually playing.
+  void _reorderQueue(int oldI, int newI, StateSetter setFull) {
+    if (oldI < 0 || oldI >= _playlist.length) return;
+    setState(() {
+      if (newI > oldI) newI -= 1;
+      final cur = (_currentIndex >= 0 && _currentIndex < _playlist.length)
+          ? _playlist[_currentIndex]
+          : null;
+      final path = _playlist.removeAt(oldI);
+      _playlist.insert(newI.clamp(0, _playlist.length), path);
+      if (cur != null) _currentIndex = _playlist.indexOf(cur);
+      _activeQueue = null;
+    });
+    _publishPlaylist();
+    setFull(() {});
+  }
+
+  void _removeFromQueue(int i, StateSetter setFull) {
+    if (i < 0 || i >= _playlist.length || i == _currentIndex) return;
+    setState(() {
+      final cur = (_currentIndex >= 0 && _currentIndex < _playlist.length)
+          ? _playlist[_currentIndex]
+          : null;
+      final removed = _playlist.removeAt(i);
+      _activeQueue?.remove(removed);
+      if (cur != null) _currentIndex = _playlist.indexOf(cur);
+    });
+    _publishPlaylist();
+    setFull(() {});
+  }
+
+  void _playNextInQueue(int i, StateSetter setFull) {
+    if (i < 0 || i >= _playlist.length || i == _currentIndex) return;
+    setState(() {
+      final cur = (_currentIndex >= 0 && _currentIndex < _playlist.length)
+          ? _playlist[_currentIndex]
+          : null;
+      final path = _playlist.removeAt(i);
+      var at = (cur != null ? _playlist.indexOf(cur) : _currentIndex) + 1;
+      at = at.clamp(0, _playlist.length);
+      _playlist.insert(at, path);
+      if (cur != null) _currentIndex = _playlist.indexOf(cur);
+      _activeQueue = null;
+    });
+    _publishPlaylist();
+    setFull(() {});
   }
 
   Widget _fsUtil(ColorScheme scheme, IconData icon, String label,
@@ -1766,6 +2043,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       _trackName = initTitle;
       _artistName = initArtist;
       _currentArtId = null; // resolved by _fetchMetadata once the song is found
+      _artAccentForId = null; // re-derive the artwork accent for the new track
+      _artAccentVN.value = null;
     });
     ref.read(nowPlayingProvider.notifier).update(
         track: initTitle, artist: initArtist, playing: true);
@@ -1839,6 +2118,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           _artistName = a;
           _currentArtId = m.id; // enables embedded album art on the disc
         });
+        _resolveArtAccent(m.id);
         // Use the real player state — a late metadata fetch must not re-mark a
         // paused track as playing.
         ref.read(nowPlayingProvider.notifier).update(track: t, artist: a, playing: _player.playing);

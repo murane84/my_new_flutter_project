@@ -59,6 +59,7 @@ dependencies:
   just_audio_windows: ^0.2.0
   audioplayers: ^6.5.0
   on_audio_query: ^2.9.0
+  palette_generator: ^0.3.3
   audio_service: ^0.18.14
   audio_session: ^0.2.2
 

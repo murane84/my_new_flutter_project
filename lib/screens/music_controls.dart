@@ -3457,8 +3457,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                         // Clear gap + a padded hit area so the heart and the
                         // broadcast toggle above it are distinct tap targets.
                         const SizedBox(height: 10),
-                        GestureDetector(
-                          behavior: HitTestBehavior.opaque,
+                        BounceTap(
                           onTap: () =>
                               _toggleFavorite(_playlist[_currentIndex]),
                           child: Padding(

@@ -1658,6 +1658,65 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
+  // Shared presenter for the chat's floating popups (attach sheet, message
+  // menu): a frosted-blur backdrop with a spring scale + slide-up, all wrapped
+  // in a Material so text/ink render properly (no raw-overlay default style).
+  Future<void> _showPopPanel({
+    required WidgetBuilder builder,
+    String label = 'Menu',
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    return showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: label,
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (ctx, a1, a2) {
+        return Material(
+          type: MaterialType.transparency,
+          child: AnimatedBuilder(
+            animation: a1,
+            builder: (context, _) {
+              final t = Curves.easeOutCubic.transform(a1.value.clamp(0.0, 1.0));
+              final tb =
+                  Curves.easeOutBack.transform(a1.value.clamp(0.0, 1.0));
+              return Stack(
+                children: [
+                  Positioned.fill(
+                    child: Opacity(
+                      opacity: t,
+                      child: BackdropFilter(
+                        filter:
+                            ui.ImageFilter.blur(sigmaX: 8 * t, sigmaY: 8 * t),
+                        child: Container(
+                          color: Colors.black
+                              .withValues(alpha: (isDark ? 0.32 : 0.22) * t),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Opacity(
+                    opacity: t,
+                    child: Transform.translate(
+                      offset: Offset(0, (1 - t) * 20),
+                      child: Transform.scale(
+                        scale: 0.92 + 0.08 * tb,
+                        child: builder(ctx),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+      transitionBuilder: (ctx, anim, sec, child) => child,
+    );
+  }
+
   void _openAttachSheet() {
     // Run an action after closing the sheet (so the picker/preview isn't shown
     // behind it).
@@ -1668,13 +1727,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
     // Appears from the chat screen itself (a scale + fade pop), rather than
     // sliding up from the footer as a bottom sheet.
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Attach',
-      barrierColor: Colors.black.withValues(alpha: 0.45),
-      transitionDuration: const Duration(milliseconds: 210),
-      pageBuilder: (ctx, a1, a2) {
+    _showPopPanel(
+      label: 'Attach',
+      builder: (ctx) {
         final media = MediaQuery.of(ctx);
         return Center(
           child: Padding(
@@ -1694,17 +1749,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     act(() => _previewAndSendImage(bytes, name, 'image/jpeg')),
               ),
             ),
-          ),
-        );
-      },
-      transitionBuilder: (ctx, anim, sec, child) {
-        final curved =
-            CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
-        return FadeTransition(
-          opacity: anim,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.92, end: 1.0).animate(curved),
-            child: child,
           ),
         );
       },
@@ -3023,13 +3067,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       ),
     ];
 
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Message actions',
-      barrierColor: Colors.black.withValues(alpha: 0.45),
-      transitionDuration: const Duration(milliseconds: 210),
-      pageBuilder: (ctx, a1, a2) {
+    _showPopPanel(
+      label: 'Message actions',
+      builder: (ctx) {
         // Built here so the action closures can pop THIS popup route.
         final actions = <Widget>[
               _ActionTile(
@@ -3145,8 +3185,22 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 8, vertical: 6),
                     decoration: BoxDecoration(
-                      color: scheme.surface,
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color.alphaBlend(
+                              scheme.primary
+                                  .withValues(alpha: isDark ? 0.10 : 0.06),
+                              scheme.surface),
+                          scheme.surface,
+                        ],
+                      ),
                       borderRadius: BorderRadius.circular(30),
+                      border: Border.all(
+                          color: scheme.outlineVariant
+                              .withValues(alpha: isDark ? 0.45 : 0.30),
+                          width: 1),
                       boxShadow: softShadow,
                     ),
                     child: Row(
@@ -3168,8 +3222,22 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   Flexible(
                     child: Container(
                       decoration: BoxDecoration(
-                        color: scheme.surface,
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Color.alphaBlend(
+                                scheme.primary
+                                    .withValues(alpha: isDark ? 0.08 : 0.05),
+                                scheme.surface),
+                            scheme.surface,
+                          ],
+                        ),
                         borderRadius: BorderRadius.circular(22),
+                        border: Border.all(
+                            color: scheme.outlineVariant
+                                .withValues(alpha: isDark ? 0.45 : 0.30),
+                            width: 1),
                         boxShadow: softShadow,
                       ),
                       clipBehavior: Clip.antiAlias,
@@ -3184,17 +3252,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                 ],
               ),
             ),
-          ),
-        );
-      },
-      transitionBuilder: (ctx, anim, sec, child) {
-        final curved =
-            CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
-        return FadeTransition(
-          opacity: anim,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.92, end: 1.0).animate(curved),
-            child: child,
           ),
         );
       },

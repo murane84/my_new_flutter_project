@@ -162,22 +162,38 @@ class _ActionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final c = color ?? scheme.onSurface;
+    final isDark = scheme.brightness == Brightness.dark;
+    final destructive = color != null;
+    final tint = destructive ? scheme.error : scheme.primary;
+    final textColor = destructive ? scheme.error : scheme.onSurface;
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
         child: Row(
           children: [
-            Icon(icon, color: c, size: 22),
-            const SizedBox(width: 18),
+            // Soft tinted chip behind the icon — matches the app's 3D chips.
+            Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: tint.withValues(alpha: isDark ? 0.16 : 0.10),
+                borderRadius: BorderRadius.circular(11),
+                border: Border.all(
+                    color: tint.withValues(alpha: isDark ? 0.28 : 0.20),
+                    width: 1),
+              ),
+              child: Icon(icon, color: tint, size: 19),
+            ),
+            const SizedBox(width: 14),
             Expanded(
               child: Text(
                 label,
                 style: TextStyle(
-                  color: c,
+                  color: textColor,
                   fontSize: 15,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),

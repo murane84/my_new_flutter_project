@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/biometric_service.dart';
 import 'preload_screen.dart';
 import 'auth_page.dart';
+import '../utils/bounce_tap.dart';
 
 /// Shown on launch when the user is signed in AND has quick-unlock enabled.
 /// Auto-invokes the fingerprint / Face / Windows Hello prompt; on success it
@@ -184,7 +185,7 @@ class _UnlockButton extends StatelessWidget {
     final ring = isDark ? primary.withAlpha(120) : primary.withAlpha(90);
     final fill = isDark ? primary.withAlpha(48) : primary.withAlpha(28);
     final icon = isDark ? const Color(0xFFFF8A93) : primary;
-    return Semantics(
+    return Tactile(enabled: onTap != null, child: Semantics(
       button: true,
       label: 'Unlock with biometrics',
       child: GestureDetector(
@@ -212,6 +213,6 @@ class _UnlockButton extends StatelessWidget {
               : Icon(Icons.fingerprint_rounded, size: 54, color: icon),
         ),
       ),
-    );
+    ));
   }
 }

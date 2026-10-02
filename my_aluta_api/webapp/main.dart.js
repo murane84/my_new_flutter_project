@@ -75877,7 +75877,7 @@ e=n&&i==="live"
 d=n&&i==="location"
 c=n&&i==="contact"
 b=n&&!q&&!g&&A.cqf(l)
-a=g&&i==="image"&&B.c.X(l).length!==0
+a=g&&i==="image"&&B.c.X(l).length>=60
 a0=e4?B.adG:B.aax
 a1=e4?B.J9:B.i
 a2=e3?a0:a1

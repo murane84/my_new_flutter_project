@@ -1518,9 +1518,21 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       ),
       child: Column(
         children: [
-          if (!sidePanel)
-            Padding(
-              padding: const EdgeInsets.only(top: 8, bottom: 2),
+          // Header + grabber — on mobile this whole strip is a drag handle:
+          // swipe it down to dismiss the queue sheet. (Side panel: no drag.)
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onVerticalDragEnd: sidePanel
+                ? null
+                : (d) {
+                    if ((d.primaryVelocity ?? 0) > 180) onClose();
+                  },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!sidePanel)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 2),
               child: Container(
                 width: 40,
                 height: 4,
@@ -1561,6 +1573,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                   tooltip: 'Hide queue',
                   onPressed: onClose,
                 ),
+              ],
+            ),
+          ),
               ],
             ),
           ),

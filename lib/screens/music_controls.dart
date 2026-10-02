@@ -1502,9 +1502,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                           color: scheme.onSurfaceVariant)),
                 const Spacer(),
                 IconButton(
+                  // Side panel collapses toward its own edge (chevron) rather
+                  // than a close "X", which read as a duplicate of the desktop
+                  // window's close button sitting right above it.
                   icon: Icon(
                       sidePanel
-                          ? Icons.close_rounded
+                          ? Icons.chevron_right_rounded
                           : Icons.keyboard_arrow_down_rounded,
                       color: scheme.onSurfaceVariant),
                   tooltip: 'Hide queue',

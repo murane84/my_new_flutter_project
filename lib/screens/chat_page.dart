@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, compute, kIsWeb;
 import 'package:flutter/services.dart';
+import 'package:pasteboard/pasteboard.dart';
 import 'package:image/image.dart' as img;
 // Hide intl's TextDirection so the unprefixed name resolves to dart:ui's
 // (needed by the ShapeBorder overrides below).
@@ -339,6 +340,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _ctrl.dispose();
     _scrollCtrl.dispose();
     _pickerScrollCtrl.dispose();
+    _viewerPageCtrl?.dispose();
     _ws.close();
     super.dispose();
   }
@@ -2406,6 +2408,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     );
   }
 
+  // In-body photo viewer state (fills only the conversation card so the
+  // header + composer stay live and the user can keep typing / replying).
+  List<String>? _viewerImages;
+  List<Map<String, dynamic>?> _viewerMsgs = const <Map<String, dynamic>?>[];
+  List<ImageProvider> _viewerProviders = const <ImageProvider>[];
+  int _viewerIndex = 0;
+  bool _viewerChrome = true;
+  PageController? _viewerPageCtrl;
+
   Future<void> _openImageViewer(String tappedUrl) async {
     // Gather EVERY image shared in this thread (chronological order) so the
     // viewer is a swipeable gallery, not a single photo. Opening any image lets
@@ -2445,412 +2456,295 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           : authNetworkImageProvider(u, mediaAuthHeaders(u)));
     }
     if (!mounted) return;
-    final controller = PageController(initialPage: initial);
-    // Thumbnail filmstrip (desktop/web): its own scroll controller so we can
-    // keep the active thumbnail centred as the user pages through.
-    final stripCtrl = ScrollController();
-    var current = initial;
-    var didInitCenter = false;
-    // Tap the photo to hide/show the top bar + counter for a clean view.
-    var showChrome = true;
-    // Each filmstrip thumbnail occupies this much horizontal space (56 tile +
-    // 2×3 margin). Used to centre the active thumbnail in the strip.
-    const stripItem = 62.0;
-    void centerStrip(int i) {
-      if (!stripCtrl.hasClients) return;
-      final target =
-          (i * stripItem) - (stripCtrl.position.viewportDimension / 2) +
-              stripItem / 2;
-      stripCtrl.animateTo(
-        target.clamp(0.0, stripCtrl.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
+    _viewerPageCtrl?.dispose();
+    _viewerPageCtrl = PageController(initialPage: initial);
+    setState(() {
+      _viewerImages = images;
+      _viewerMsgs = imgMsgs;
+      _viewerProviders = providers;
+      _viewerIndex = initial;
+      _viewerChrome = true;
+    });
+  }
+
+  void _closeViewer() {
+    if (_viewerImages == null) return;
+    setState(() {
+      _viewerImages = null;
+      _viewerMsgs = const <Map<String, dynamic>?>[];
+      _viewerProviders = const <ImageProvider>[];
+    });
+  }
+
+  // Back (gesture / app-bar arrow) closes the open photo before leaving chat.
+  Widget _wrapViewerBack(Widget child) => PopScope(
+        canPop: _viewerImages == null,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _closeViewer();
+        },
+        child: child,
       );
+
+  // Desktop/web: Ctrl/Cmd+V pastes a clipboard IMAGE (e.g. a screenshot) into
+  // the composer's preview + caption flow. Text paste, undo (Ctrl+Z), redo and
+  // the other standard field shortcuts are Flutter defaults and keep working —
+  // this only adds image paste on top.
+  Widget _pasteWrapper(Widget child) {
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.keyV &&
+            (HardwareKeyboard.instance.isControlPressed ||
+                HardwareKeyboard.instance.isMetaPressed)) {
+          _tryPasteImage();
+        }
+        return KeyEventResult.ignored;
+      },
+      child: child,
+    );
+  }
+
+  Future<void> _tryPasteImage() async {
+    try {
+      final bytes = await Pasteboard.image;
+      if (bytes == null || bytes.isEmpty || !mounted) return;
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      await _previewAndSendImage(bytes, 'pasted_$ts.png', 'image/png');
+    } catch (_) {
+      // No image on the clipboard (or unsupported) — the default text paste
+      // already handled the keystroke.
     }
+  }
 
-    // Desktop (Windows/Linux/macOS) + web: a mouse can't drag a PageView by
-    // default (Flutter's desktop scroll behaviour excludes the mouse from drag
-    // devices), so we (a) re-enable mouse/trackpad drag-paging via a custom
-    // ScrollBehavior, (b) show <  > arrows, and (c) support left/right/Esc keys.
-    final onDesktopOrWeb = kIsWeb ||
-        defaultTargetPlatform == TargetPlatform.windows ||
-        defaultTargetPlatform == TargetPlatform.linux ||
-        defaultTargetPlatform == TargetPlatform.macOS;
-    void goTo(int i) {
-      if (i >= 0 && i < images.length) {
-        controller.animateToPage(i,
-            duration: const Duration(milliseconds: 260), curve: Curves.easeOut);
-        centerStrip(i);
-      }
+  String _viewerSenderName(int i) {
+    final m = (i >= 0 && i < _viewerMsgs.length) ? _viewerMsgs[i] : null;
+    if (m == null) return '';
+    final mine = m['sender_id']?.toString() == _myId;
+    if (mine) return _myName.isNotEmpty ? _myName : 'You';
+    if (_isGroup) {
+      final sm = (m['sender'] as Map?) ?? const {};
+      return (sm['username'] ?? 'Member').toString();
     }
+    return widget.friendName;
+  }
 
-    Widget arrow(IconData ic, VoidCallback tap) => Material(
-          color: Colors.black.withAlpha(90),
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: tap,
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Icon(ic, color: Colors.white, size: 32),
-            ),
-          ),
-        );
+  String _viewerSenderAvatar(int i) {
+    final m = (i >= 0 && i < _viewerMsgs.length) ? _viewerMsgs[i] : null;
+    if (m == null) return '';
+    final mine = m['sender_id']?.toString() == _myId;
+    if (mine) return _myAvatar ?? '';
+    if (_isGroup) {
+      final sm = (m['sender'] as Map?) ?? const {};
+      return (sm['avatar_url'] ?? '').toString();
+    }
+    return _friendAvatar;
+  }
 
-    // WhatsApp-style top bar: who sent this photo (avatar · name · time) on the
-    // left, save + close on the right — with the app accent ringing the avatar
-    // for a touch of Aluta identity.
+  String _viewerSentTime(int i) {
+    final m = (i >= 0 && i < _viewerMsgs.length) ? _viewerMsgs[i] : null;
+    final iso = m?['timestamp']?.toString();
+    final t = iso != null ? DateTime.tryParse(iso) : null;
+    if (t == null) return '';
+    final local = t.toLocal();
+    final now = DateTime.now();
+    final today = local.year == now.year &&
+        local.month == now.month &&
+        local.day == now.day;
+    final y = now.subtract(const Duration(days: 1));
+    final yday =
+        local.year == y.year && local.month == y.month && local.day == y.day;
+    final hm = DateFormat('HH:mm').format(local);
+    if (today) return 'Today at $hm';
+    if (yday) return 'Yesterday at $hm';
+    return DateFormat('MMM d, HH:mm').format(local);
+  }
+
+  // In-body photo viewer: fills ONLY the conversation card (header + composer
+  // stay live), so the user can keep typing / reply while the photo is open.
+  // Tap toggles the top bar; swipe pages; pinch zooms.
+  Widget _buildInlineViewer() {
+    final imgs = _viewerImages;
+    if (imgs == null || imgs.isEmpty) return const SizedBox.shrink();
     final accent = Theme.of(context).colorScheme.primary;
-    String senderNameFor(int i) {
-      final m = (i >= 0 && i < imgMsgs.length) ? imgMsgs[i] : null;
-      if (m == null) return '';
-      final mine = m['sender_id']?.toString() == _myId;
-      if (mine) return _myName.isNotEmpty ? _myName : 'You';
-      if (_isGroup) {
-        final sm = (m['sender'] as Map?) ?? const {};
-        return (sm['username'] ?? 'Member').toString();
-      }
-      return widget.friendName;
-    }
-    String senderAvatarFor(int i) {
-      final m = (i >= 0 && i < imgMsgs.length) ? imgMsgs[i] : null;
-      if (m == null) return '';
-      final mine = m['sender_id']?.toString() == _myId;
-      if (mine) return _myAvatar ?? '';
-      if (_isGroup) {
-        final sm = (m['sender'] as Map?) ?? const {};
-        return (sm['avatar_url'] ?? '').toString();
-      }
-      return _friendAvatar;
-    }
-    String sentTimeFor(int i) {
-      final m = (i >= 0 && i < imgMsgs.length) ? imgMsgs[i] : null;
-      final iso = m?['timestamp']?.toString();
-      final t = iso != null ? DateTime.tryParse(iso) : null;
-      if (t == null) return '';
-      final local = t.toLocal();
-      final now = DateTime.now();
-      final today = local.year == now.year &&
-          local.month == now.month &&
-          local.day == now.day;
-      final y = now.subtract(const Duration(days: 1));
-      final yday =
-          local.year == y.year && local.month == y.month && local.day == y.day;
-      final hm = DateFormat('HH:mm').format(local);
-      if (today) return 'Today at $hm';
-      if (yday) return 'Yesterday at $hm';
-      return DateFormat('MMM d, HH:mm').format(local);
-    }
-    Widget topBar(BuildContext bctx) {
-      final name = senderNameFor(current);
-      final avRel = senderAvatarFor(current);
-      final av = avRel.isEmpty
-          ? ''
-          : (avRel.startsWith('http') ? avRel : fullMediaUrl(avRel));
-      return Positioned(
-        top: 0,
-        left: 0,
-        right: 0,
-        child: IgnorePointer(
-          ignoring: !showChrome,
-          child: AnimatedOpacity(
-            opacity: showChrome ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 200),
-            child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Colors.black.withAlpha(175), Colors.black.withAlpha(0)],
-            ),
-          ),
-          child: SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 6, 6, 14),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(1.6),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: accent, width: 1.6),
-                    ),
-                    child: CircleAvatar(
-                      radius: 17,
-                      backgroundColor: Colors.white24,
-                      backgroundImage: av.isNotEmpty
-                          ? authNetworkImageProvider(
-                              av, mediaAuthHeaders(av), cacheSize: 96)
-                          : null,
-                      child: av.isEmpty
-                          ? Text(
-                              name.isNotEmpty ? name[0].toUpperCase() : '?',
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold))
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          name.isEmpty ? 'Photo' : name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14.5),
-                        ),
-                        Text(
-                          sentTimeFor(current),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              color: Colors.white.withAlpha(180),
-                              fontSize: 11.5),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Save',
-                    onPressed: () {
-                      final m = (current >= 0 && current < imgMsgs.length)
-                          ? imgMsgs[current]
-                          : null;
-                      if (m != null) {
-                        _saveMediaToDevice(m);
-                      } else {
-                        _saveImage(images[current]);
-                      }
-                    },
-                    icon: const Icon(Icons.download_rounded,
-                        color: Colors.white),
-                  ),
-                  IconButton(
-                    tooltip: 'Close',
-                    onPressed: () => Navigator.pop(bctx),
-                    icon: const Icon(Icons.close_rounded, color: Colors.white),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        )),
-        ),
-      );
-    }
-
-    Navigator.of(context)
-        .push(PageRouteBuilder(
-          opaque: true,
-          transitionDuration: const Duration(milliseconds: 200),
-          reverseTransitionDuration: const Duration(milliseconds: 200),
-          pageBuilder: (_, _, _) => StatefulBuilder(
-            builder: (ctx, setSB) {
-              // Once, after first layout, scroll the strip so the image the
-              // user actually tapped is centred instead of starting at #1.
-              if (!didInitCenter) {
-                didInitCenter = true;
-                WidgetsBinding.instance
-                    .addPostFrameCallback((_) => centerStrip(initial));
-              }
-              return Scaffold(
-              backgroundColor: Colors.black,
-              body: Focus(
-                autofocus: true,
-                onKeyEvent: (_, event) {
-                  if (event is KeyDownEvent) {
-                    final k = event.logicalKey;
-                    if (k == LogicalKeyboardKey.arrowRight) {
-                      goTo(current + 1);
-                      return KeyEventResult.handled;
-                    }
-                    if (k == LogicalKeyboardKey.arrowLeft) {
-                      goTo(current - 1);
-                      return KeyEventResult.handled;
-                    }
-                    if (k == LogicalKeyboardKey.escape) {
-                      Navigator.pop(ctx);
-                      return KeyEventResult.handled;
-                    }
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: Stack(
-                  children: [
-                    ScrollConfiguration(
-                      behavior: ScrollConfiguration.of(ctx).copyWith(
-                        dragDevices: {
-                          ui.PointerDeviceKind.touch,
-                          ui.PointerDeviceKind.mouse,
-                          ui.PointerDeviceKind.trackpad,
-                          ui.PointerDeviceKind.stylus,
-                        },
-                        scrollbars: false,
-                      ),
-                      child: PhotoViewGallery.builder(
-                        pageController: controller,
-                        itemCount: images.length,
-                        onPageChanged: (i) {
-                          setSB(() => current = i);
-                          WidgetsBinding.instance
-                              .addPostFrameCallback((_) => centerStrip(i));
-                        },
-                        backgroundDecoration:
-                            const BoxDecoration(color: Colors.black),
-                        loadingBuilder: (_, _) => const Center(
-                          child: SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
-                          ),
-                        ),
-                        builder: (ctx2, i) => PhotoViewGalleryPageOptions(
-                          imageProvider: providers[i],
-                          minScale: PhotoViewComputedScale.contained,
-                          maxScale: PhotoViewComputedScale.covered * 3,
-                          initialScale: PhotoViewComputedScale.contained,
-                          onTapUp: (_, _, _) => setSB(() => showChrome = !showChrome),
-                        ),
-                      ),
-                    ),
-                    // WhatsApp-style top bar (sender · time · save · close).
-                    topBar(ctx),
-                    // < > paging arrows (mouse-friendly) on desktop / web.
-                    if (onDesktopOrWeb && images.length > 1) ...[
-                      Positioned(
-                        left: 8,
-                        top: 0,
-                        bottom: 0,
-                        child: Center(
-                          child: arrow(Icons.chevron_left_rounded,
-                              () => goTo(current - 1)),
-                        ),
-                      ),
-                      Positioned(
-                        right: 8,
-                        top: 0,
-                        bottom: 0,
-                        child: Center(
-                          child: arrow(Icons.chevron_right_rounded,
-                              () => goTo(current + 1)),
-                        ),
-                      ),
-                    ],
-                    // (Save + Close now live in the top bar above.)
-                    // Position counter (only when there's more than one image).
-                    if (images.length > 1)
-                      Positioned(
-                        top: 46,
-                        left: 0,
-                        right: 0,
-                        child: IgnorePointer(
-                          child: AnimatedOpacity(
-                            opacity: showChrome ? 1.0 : 0.0,
-                            duration: const Duration(milliseconds: 200),
-                            child: Center(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withAlpha(115),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text('${current + 1} of ${images.length}',
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 13)),
-                            ),
-                          )),
-                        ),
-                      ),
-                    // Thumbnail filmstrip along the bottom (desktop/web only):
-                    // every image in the thread, active one ringed, click to
-                    // jump. Phones skip it — too little screen and touch paging
-                    // already covers it.
-                    if (onDesktopOrWeb && images.length > 1)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 18,
-                        child: Center(
-                          child: Container(
-                            height: 68,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 6),
-                            constraints: BoxConstraints(
-                              maxWidth: (images.length * stripItem)
-                                  .clamp(0.0,
-                                      MediaQuery.of(ctx).size.width - 24)
-                                  .toDouble(),
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withAlpha(140),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: ListView.builder(
-                              controller: stripCtrl,
-                              scrollDirection: Axis.horizontal,
-                              itemCount: images.length,
-                              itemBuilder: (_, i) {
-                                final selected = i == current;
-                                return GestureDetector(
-                                  onTap: () => goTo(i),
-                                  child: Container(
-                                    width: 56,
-                                    margin: const EdgeInsets.symmetric(
-                                        horizontal: 3),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(7),
-                                      border: Border.all(
-                                        color: selected
-                                            ? accent
-                                            : Colors.white24,
-                                        width: selected ? 2.5 : 1,
-                                      ),
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(5),
-                                      child: Image(
-                                        image: ResizeImage(providers[i],
-                                            width: 140),
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, _, _) =>
-                                            const ColoredBox(
-                                          color: Color(0x22000000),
-                                          child: Icon(
-                                              Icons.broken_image_rounded,
-                                              size: 18),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
+    final i = _viewerIndex.clamp(0, imgs.length - 1);
+    final msg = (i < _viewerMsgs.length) ? _viewerMsgs[i] : null;
+    final name = _viewerSenderName(i);
+    final avRel = _viewerSenderAvatar(i);
+    final av = avRel.isEmpty
+        ? ''
+        : (avRel.startsWith('http') ? avRel : fullMediaUrl(avRel));
+    void toggle() => setState(() => _viewerChrome = !_viewerChrome);
+    return Positioned.fill(
+      child: ColoredBox(
+        color: Colors.black,
+        child: Stack(
+          children: [
+            PhotoViewGallery.builder(
+              pageController: _viewerPageCtrl,
+              itemCount: imgs.length,
+              onPageChanged: (p) => setState(() => _viewerIndex = p),
+              backgroundDecoration: const BoxDecoration(color: Colors.black),
+              loadingBuilder: (_, _) => const Center(
+                child: SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
                 ),
               ),
-            );
-            },
-          ),
-          transitionsBuilder: (_, anim, _, child) =>
-              FadeTransition(opacity: anim, child: child),
-        ))
-        .then((_) {
-      controller.dispose();
-      stripCtrl.dispose();
-    });
+              builder: (ctx2, p) => PhotoViewGalleryPageOptions(
+                imageProvider: _viewerProviders[p],
+                minScale: PhotoViewComputedScale.contained,
+                maxScale: PhotoViewComputedScale.covered * 3,
+                initialScale: PhotoViewComputedScale.contained,
+                onTapUp: (_, _, _) => toggle(),
+              ),
+            ),
+            // Top bar (sender · time · reply · save · close).
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                ignoring: !_viewerChrome,
+                child: AnimatedOpacity(
+                  opacity: _viewerChrome ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withAlpha(180),
+                          Colors.black.withAlpha(0),
+                        ],
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(6, 8, 4, 16),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(1.6),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: accent, width: 1.6),
+                            ),
+                            child: CircleAvatar(
+                              radius: 15,
+                              backgroundColor: Colors.white24,
+                              backgroundImage: av.isNotEmpty
+                                  ? authNetworkImageProvider(
+                                      av, mediaAuthHeaders(av), cacheSize: 96)
+                                  : null,
+                              child: av.isEmpty
+                                  ? Text(
+                                      name.isNotEmpty
+                                          ? name[0].toUpperCase()
+                                          : '?',
+                                      style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold))
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  name.isEmpty ? 'Photo' : name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14),
+                                ),
+                                Text(
+                                  _viewerSentTime(i),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      color: Colors.white.withAlpha(180),
+                                      fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Reply',
+                            onPressed: msg == null
+                                ? null
+                                : () {
+                                    setState(() => _replyTo = msg);
+                                    _closeViewer();
+                                    FocusScope.of(context)
+                                        .requestFocus(FocusNode());
+                                  },
+                            icon: const Icon(Icons.reply_rounded,
+                                color: Colors.white),
+                          ),
+                          IconButton(
+                            tooltip: 'Save',
+                            onPressed: () {
+                              if (msg != null) {
+                                _saveMediaToDevice(msg);
+                              } else {
+                                _saveImage(imgs[i]);
+                              }
+                            },
+                            icon: const Icon(Icons.download_rounded,
+                                color: Colors.white),
+                          ),
+                          IconButton(
+                            tooltip: 'Close',
+                            onPressed: _closeViewer,
+                            icon: const Icon(Icons.close_rounded,
+                                color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Position counter.
+            if (imgs.length > 1)
+              Positioned(
+                bottom: 12,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: AnimatedOpacity(
+                    opacity: _viewerChrome ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withAlpha(120),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text('${i + 1} of ${imgs.length}',
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 13)),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _fileBubble(String url, Map<String, dynamic> msg, Color textColor,
@@ -5543,6 +5437,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                           ),
                         ),
                       ),
+                    if (_viewerImages != null) _buildInlineViewer(),
                   ],
                 ),
           ),
@@ -5552,7 +5447,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       ],
     );
 
-    if (!widget.showAppBar) return body;
+    if (!widget.showAppBar) return _wrapViewerBack(_pasteWrapper(body));
 
     final String headerTitle = _isGroup ? widget.groupTitle : widget.friendName;
     final String headerAvatar = _isGroup ? widget.groupAvatar : _friendAvatar;
@@ -5643,7 +5538,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           ),
         ],
       ),
-      body: body,
+      body: _wrapViewerBack(_pasteWrapper(body)),
     );
   }
 }

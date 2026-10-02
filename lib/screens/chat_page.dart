@@ -4285,8 +4285,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         !tomb && !hasQuote && !isMedia && _isEmojiOnly(mainText);
     // Image + caption: lay the caption beside the photo (using the blank side
     // strip a tall photo leaves) instead of stacking it underneath.
+    // Only lay the caption beside the photo when it is long enough to fill the
+    // tall side strip; a short caption stays stacked below the image (side-by-
+    // side there would just leave an awkward blank column).
     final imgCaption =
-        isMedia && msgType == 'image' && mainText.trim().isNotEmpty;
+        isMedia && msgType == 'image' && mainText.trim().length >= 60;
 
     // ── Bubble colours ──────────────────────────────────────────────────────
     // Sent messages use the brand red family (not WhatsApp green): a soft warm

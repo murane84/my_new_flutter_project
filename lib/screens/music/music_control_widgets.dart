@@ -566,3 +566,41 @@ class _WavePainter extends CustomPainter {
       old.inactive != inactive ||
       old.heights != heights;
 }
+
+/// A thin elapsed-progress arc hugging the full-screen disc: a faint full-circle
+/// track with a bright arc sweeping from the top clockwise as the track plays.
+class _DiscRingPainter extends CustomPainter {
+  _DiscRingPainter(
+      {required this.fraction, required this.accent, required this.isDark});
+  final double fraction;
+  final Color accent;
+  final bool isDark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final r = size.shortestSide / 2 - 5;
+    if (r <= 0) return;
+    final track = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round
+      ..color = Colors.white.withValues(alpha: isDark ? 0.16 : 0.26);
+    canvas.drawCircle(center, r, track);
+    if (fraction > 0) {
+      final prog = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4
+        ..strokeCap = StrokeCap.round
+        ..color = Colors.white.withValues(alpha: 0.95);
+      canvas.drawArc(Rect.fromCircle(center: center, radius: r), -pi / 2,
+          fraction * 2 * pi, false, prog);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DiscRingPainter old) =>
+      old.fraction != fraction ||
+      old.accent != accent ||
+      old.isDark != isDark;
+}

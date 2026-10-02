@@ -689,7 +689,7 @@ class _ClassicVinylState extends State<_ClassicVinyl>
     final side = widget.side;
     final accent = widget.accent;
     final isDark = widget.isDark;
-    final rd = side * 0.78;
+    final rd = side * 0.68;
     final labelD = rd * 0.46;
 
     final record = Container(
@@ -821,8 +821,8 @@ class _ClassicVinylState extends State<_ClassicVinyl>
           child: AnimatedBuilder(
             animation: _lift,
             builder: (_, _) => Transform.rotate(
-              angle: -_lift.value * 1.30,
-              alignment: const Alignment(0.76, -0.80),
+              angle: -_lift.value * 1.20,
+              alignment: const Alignment(0.80, -0.82),
               child: CustomPaint(
                 painter: _TonearmPainter(
                   metal: const Color(0xFFEAEBF1),
@@ -906,8 +906,8 @@ class _TonearmPainter extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final side = s.width;
-    final pivot = Offset(side * 0.88, side * 0.10);
-    final head = Offset(side * 0.46, side * 0.30);
+    final pivot = Offset(side * 0.90, side * 0.09);
+    final head = Offset(side * 0.45, side * 0.29);
     final d = head - pivot;
     final len = d.distance;
     final u = len == 0 ? const Offset(0, 0) : d / len;

@@ -17,20 +17,72 @@ class PresenceShareButton extends StatelessWidget {
       animation: presence,
       builder: (context, _) {
         final on = presence.shareEnabled;
-        return GestureDetector(
-          onLongPress: () => showListeningAudienceSheet(context),
-          child: IconButton(
-            tooltip: on
-                ? "Sharing your listening — tap to go private, hold to pick who sees"
-                : "Listening is private — tap to share, hold to pick who sees",
-            visualDensity: VisualDensity.compact,
-            iconSize: size,
-            color: on ? color : color.withValues(alpha: 0.45),
-            icon: Icon(on ? Icons.sensors_rounded : Icons.sensors_off_rounded),
-            onPressed: () => presence.setShareEnabled(!on),
+        return Tooltip(
+          message: on
+              ? "Sharing your listening — tap to go private, hold to pick who sees"
+              : "Listening is private — tap to share, hold to pick who sees",
+          child: BounceTap(
+            onTap: () => presence.setShareEnabled(!on),
+            onLongPress: () => showListeningAudienceSheet(context),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Icon(
+                on ? Icons.sensors_rounded : Icons.sensors_off_rounded,
+                size: size,
+                color: on ? color : color.withValues(alpha: 0.45),
+              ),
+            ),
           ),
         );
       },
+    );
+  }
+}
+
+/// A tap target that gives a quick scale "pop" (press-in, elastic bounce back)
+/// when tapped — tactile feedback for small icon toggles.
+class BounceTap extends StatefulWidget {
+  const BounceTap(
+      {super.key, required this.child, required this.onTap, this.onLongPress});
+  final Widget child;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+
+  @override
+  State<BounceTap> createState() => _BounceTapState();
+}
+
+class _BounceTapState extends State<BounceTap>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 260));
+  late final Animation<double> _scale = TweenSequence<double>([
+    TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 0.8)
+            .chain(CurveTween(curve: Curves.easeOut)),
+        weight: 35),
+    TweenSequenceItem(
+        tween: Tween(begin: 0.8, end: 1.0)
+            .chain(CurveTween(curve: Curves.elasticOut)),
+        weight: 65),
+  ]).animate(_c);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        _c.forward(from: 0);
+        widget.onTap();
+      },
+      onLongPress: widget.onLongPress,
+      child: ScaleTransition(scale: _scale, child: widget.child),
     );
   }
 }

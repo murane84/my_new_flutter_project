@@ -7265,6 +7265,7 @@ SOFTWARE.
 flutter_lints
 image_picker_linux
 image_picker_windows
+palette_generator
 path_provider_windows
 plugin_platform_interface
 shared_preferences_linux

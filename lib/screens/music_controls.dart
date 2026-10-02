@@ -29,6 +29,7 @@ import 'package:on_audio_query/on_audio_query.dart';
 import 'package:palette_generator/palette_generator.dart';
 import '../services/song_library.dart';
 import '../utils/bounce_tap.dart';
+import 'music/player_disc_style.dart';
 import 'listening_audience_sheet.dart';
 import '../services/audio_handler.dart';
 import '../services/metadata_overrides.dart';
@@ -382,6 +383,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       duration: const Duration(seconds: 15),
       vsync: this,
     );
+    PlayerStyleController.instance.load();
     _queueCtrl = AnimationController(
       duration: const Duration(milliseconds: 320),
       vsync: this,
@@ -1011,20 +1013,20 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // or the embedded album art inset inside the orb so a ring of the disc shows
   // around it. (No spindle hub — in dark mode its dark fill showed as a "black
   // dot" over the note whenever a track had an id but no embedded cover.)
-  Widget _fullArt(double side, Color accent, ColorScheme scheme) {
-    // Size the glyph + the art inset to the disc so they shrink with it (a
-    // squeezed desktop window drops the disc to ~110px; a fixed 92px note then
-    // overflowed the orb).
+  // Centre art/note sized to [d] for the disc styles — album cover when we
+  // have one, else the music-note fallback.
+  Widget _discCenter(double d, Color accent, ColorScheme scheme) {
     final note = Center(
       child: Icon(Icons.music_note_rounded,
           color: Colors.white.withValues(alpha: 0.95),
-          size: (side * 0.27).clamp(18.0, 100.0)),
+          size: (d * 0.42).clamp(14.0, 96.0)),
     );
     if (_currentArtId == null || !_isMobile) {
-      return note;
+      return SizedBox(width: d, height: d, child: note);
     }
-    return Padding(
-      padding: EdgeInsets.all((side * 0.075).clamp(5.0, 18.0)),
+    return SizedBox(
+      width: d,
+      height: d,
       child: ClipOval(
         child: QueryArtworkWidget(
           id: _currentArtId!,
@@ -1038,6 +1040,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       ),
     );
   }
+
 
   Widget _fullPlayerBody() {
     // Persists across Consumer/StatefulBuilder rebuilds (declared in the method
@@ -1119,6 +1122,15 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 1.6)),
                           const Spacer(),
+                          // Switch the spinning glyph style.
+                          IconButton(
+                            icon: const Icon(Icons.album_rounded),
+                            iconSize: 24,
+                            color: scheme.onSurfaceVariant,
+                            tooltip: 'Player style',
+                            onPressed: () =>
+                                showPlayerStyleSheet(context, accent: accent),
+                          ),
                           // Privacy: share "listening now" with friends on/off.
                           PresenceShareButton(color: accent, size: 22),
                           IconButton(
@@ -1150,52 +1162,39 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                                 .clamp(
                                     0.0, 360.0 - 210.0 * openT.clamp(0.0, 1.0))
                                 .toDouble();
-                            return _wrapDisc(side, accent, isDark, setFull,
-                                child: AnimatedBuilder(
-                              animation: _discCtrl,
-                              builder: (_, child) => Transform.rotate(
-                                angle: _discCtrl.value * 2 * pi,
-                                child: child,
-                              ),
-                              child: Container(
-                                width: side,
-                                height: side,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  // Glossy 3D orb — the same raised-disc look as
-                                  // the mini-player, now spinning while it plays.
-                                  gradient: RadialGradient(
-                                    center: const Alignment(-0.32, -0.40),
-                                    radius: 0.95,
-                                    colors: [
-                                      Color.lerp(accent, Colors.white, 0.58)!,
+                            return AnimatedBuilder(
+                              animation: PlayerStyleController.instance,
+                              builder: (context, _) {
+                                final dStyle =
+                                    PlayerStyleController.instance.style;
+                                return StreamBuilder<bool>(
+                                  stream: _player.playingStream,
+                                  initialData: _player.playing,
+                                  builder: (ctx, psnap) {
+                                    final discPlaying =
+                                        _liveActive || (psnap.data ?? false);
+                                    return _wrapDisc(
+                                      side,
                                       accent,
-                                      Color.lerp(accent, Colors.black, 0.46)!,
-                                    ],
-                                    stops: const [0.0, 0.55, 1.0],
-                                  ),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(
-                                        alpha: isDark ? 0.14 : 0.40),
-                                    width: 1.6,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: accent.withValues(alpha: 0.42),
-                                      blurRadius: 46,
-                                      spreadRadius: 2,
-                                    ),
-                                    BoxShadow(
-                                      color: Colors.black.withValues(
-                                          alpha: isDark ? 0.50 : 0.22),
-                                      blurRadius: 16,
-                                      offset: const Offset(0, 10),
-                                    ),
-                                  ],
-                                ),
-                                child: _fullArt(side, accent, scheme),
-                              ),
-                            ));
+                                      isDark,
+                                      setFull,
+                                      roundRing: dStyle.roundRing,
+                                      child: PlayerDisc(
+                                        style: dStyle,
+                                        side: side,
+                                        accent: accent,
+                                        scheme: scheme,
+                                        isDark: isDark,
+                                        spin: _discCtrl,
+                                        playing: discPlaying,
+                                        artBuilder: (d) =>
+                                            _discCenter(d, accent, scheme),
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            );
                           }),
                         ),
                       ),
@@ -1787,7 +1786,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // Wrap the spinning full-screen disc with swipe/double-tap gestures and an
   // elapsed-progress ring hugging its edge. Same widget drives mobile + desktop.
   Widget _wrapDisc(double side, Color accent, bool isDark, StateSetter setFull,
-      {required Widget child}) {
+      {required Widget child, bool roundRing = true}) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onDoubleTap: () {
@@ -1812,7 +1811,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           clipBehavior: Clip.none,
           children: [
             child,
-            Positioned.fill(
+            if (roundRing)
+              Positioned.fill(
               child: IgnorePointer(
                 child: StreamBuilder<Duration>(
                   stream: _player.positionStream,

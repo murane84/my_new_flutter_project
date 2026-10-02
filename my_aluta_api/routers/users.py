@@ -360,10 +360,10 @@ def friends_listening(
     """Friends who are playing music RIGHT NOW — the snapshot that seeds the
     'Listening now' zone on load (live updates then arrive over the WebSocket as
     'friend_now_playing'). Returns [{user_id, username, avatar_url, track}]."""
-    from websocket_manager import get_now_playing
+    from websocket_manager import get_now_playing_for
     out = []
     for fid in crud._get_friend_ids(db, current_user.id):
-        track = get_now_playing(int(fid))
+        track = get_now_playing_for(int(fid), current_user.id)
         if not track:
             continue
         u = db.query(User).filter(User.id == fid).first()

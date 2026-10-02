@@ -210,26 +210,30 @@ def _friend_ids(uid: int) -> list:
         db.close()
 
 
-async def _now_playing_update(uid: int, track, playing: bool, username: str):
+async def _now_playing_update(uid: int, track, playing: bool, username: str,
+                              audience=None):
     """A user's playback changed → update presence and tell their FRIENDS ONLY
     (privacy) so the friend list's 'Listening now' updates live. `track` is a
-    small dict {title, artist, art}. A falsy/empty track or playing=False clears
-    the user's presence and pushes a 'stopped' event."""
+    small dict {title, artist, art}. `audience` is None (every friend) or the
+    list of friend user-ids the user allows to see it — friends outside it get a
+    'stopped' event so they never see this track. A falsy/empty track or
+    playing=False clears the user's presence for everyone."""
     valid = bool(playing) and isinstance(track, dict) and bool(track.get("title"))
     if valid:
-        set_now_playing(uid, track)
+        set_now_playing(uid, track, audience)
     else:
         clear_now_playing(uid)
-    msg = {
-        "type": "friend_now_playing",
-        "user_id": uid,
-        "username": username,
-        "playing": valid,
-        "track": track if valid else None,
-    }
+    allowed = None if audience is None else set(int(x) for x in audience)
     for f in _friend_ids(uid):
+        f_sees = valid and (allowed is None or int(f) in allowed)
         try:
-            await notify_user(f, msg)
+            await notify_user(f, {
+                "type": "friend_now_playing",
+                "user_id": uid,
+                "username": username,
+                "playing": f_sees,
+                "track": track if f_sees else None,
+            })
         except Exception:
             pass
 
@@ -415,6 +419,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                     data.get("track"),
                     bool(data.get("playing")),
                     caller_name,
+                    data.get("audience"),  # None = everyone, else allowed ids
                 )
             elif etype == "group_call_start":
                 room_id = _to_int(data.get("room"))

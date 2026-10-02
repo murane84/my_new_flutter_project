@@ -103,6 +103,7 @@ dependencies:
   # gesture arbitration in a paged gallery (the chat image viewer).
   photo_view: ^0.15.0
   pasteboard: ^0.4.0  # read a clipboard image (screenshot) on desktop/web
+  float_column: ^4.1.3  # wrap caption around the photo (float)
   # Playback of short video-clip Stories (also used by the story viewer's
   # progress bar, which tracks the clip's position).
   video_player: ^2.9.2

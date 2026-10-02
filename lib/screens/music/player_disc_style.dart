@@ -1019,7 +1019,7 @@ Future<void> showPlayerStyleSheet(BuildContext context,
     isScrollControlled: true,
     useRootNavigator: true,
     backgroundColor: scheme.surface,
-    constraints: const BoxConstraints(maxWidth: 560),
+    constraints: const BoxConstraints(maxWidth: 640),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
     ),

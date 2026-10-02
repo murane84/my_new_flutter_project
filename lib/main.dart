@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:provider/provider.dart';
 // Prefixed: package:provider also exports Consumer/ChangeNotifierProvider.
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rp;
@@ -397,6 +398,10 @@ class MyApp extends StatelessWidget {
         return MaterialApp(
           navigatorKey: navigatorKey,
           debugShowCheckedModeBanner: false,
+          // Let lists be dragged with a mouse / trackpad on web + desktop
+          // (Flutter disables mouse drag-scrolling by default there, which made
+          // the Circle friend list feel unscrollable on the web build).
+          scrollBehavior: const _AppScrollBehavior(),
           title: 'Aluta',
           theme: _buildTheme(lightScheme),
           darkTheme: _buildTheme(darkScheme),
@@ -572,4 +577,21 @@ class SplashScreenState extends State<SplashScreen> {
       }),
     );
   }
+}
+
+/// App-wide scroll behavior: enable drag-scrolling with every pointer kind so
+/// mouse and trackpad users on web and desktop can drag lists (not just use the
+/// wheel). Mouse-wheel scrolling keeps working as the Material default.
+class _AppScrollBehavior extends MaterialScrollBehavior {
+  const _AppScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.invertedStylus,
+        PointerDeviceKind.unknown,
+      };
 }

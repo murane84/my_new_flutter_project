@@ -46,6 +46,7 @@ import 'package:just_audio/just_audio.dart' as ja;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:float_column/float_column.dart';
+import 'package:linkify/linkify.dart' show linkify;
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import '../utils/app_config.dart';

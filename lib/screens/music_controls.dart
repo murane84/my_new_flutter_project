@@ -3753,12 +3753,83 @@ class _MusicControlsState extends ConsumerState<MusicControls>
               ),
             ),
           ),
-          // Cute base motif — a soft equalizer that gently dances while a
-          // track plays and rests as faint bars when paused, giving the
-          // panel's base a finished, musical feel instead of empty space.
+          // Base motif — the soft dancing equalizer — is now a raised 3D
+          // button: tapping it opens the full Now Playing page, a second way in
+          // alongside tapping the spinning disc.
           Padding(
             padding: EdgeInsets.only(bottom: isNarrow ? 8 : 14, top: 2),
-            child: _MiniEqualizer(active: isPlaying, color: accent),
+            child: Center(
+              child: Tooltip(
+                message: 'Open Now Playing',
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: (hasTrack || live) ? _openFullPlayer : null,
+                    borderRadius: BorderRadius.circular(16),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: EdgeInsets.symmetric(
+                          horizontal: isNarrow ? 14 : 20, vertical: 5),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: isDark
+                              ? [
+                                  Color.alphaBlend(
+                                      accent.withValues(alpha: 0.12),
+                                      scheme.surfaceContainerHighest),
+                                  Color.alphaBlend(
+                                      accent.withValues(alpha: 0.05),
+                                      scheme.surfaceContainerHigh),
+                                ]
+                              : [
+                                  Color.alphaBlend(
+                                      accent.withValues(alpha: 0.05),
+                                      Colors.white),
+                                  Color.alphaBlend(
+                                      accent.withValues(alpha: 0.10),
+                                      scheme.surface),
+                                ],
+                        ),
+                        border: Border.all(
+                            color: accent.withValues(
+                                alpha: isDark ? 0.22 : 0.16)),
+                        boxShadow: [
+                          // Accent lift — glows a touch brighter while playing.
+                          BoxShadow(
+                            color: accent.withValues(
+                                alpha: isPlaying
+                                    ? (isDark ? 0.20 : 0.22)
+                                    : (isDark ? 0.10 : 0.14)),
+                            blurRadius: isPlaying ? 16 : 10,
+                            offset: const Offset(0, 5),
+                          ),
+                          // Tight contact shadow grounds the raised pill.
+                          BoxShadow(
+                            color: Colors.black
+                                .withValues(alpha: isDark ? 0.30 : 0.06),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _MiniEqualizer(active: isPlaying, color: accent),
+                          const SizedBox(width: 8),
+                          Icon(Icons.keyboard_arrow_up_rounded,
+                              size: 16,
+                              color: accent.withValues(alpha: 0.65)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       );

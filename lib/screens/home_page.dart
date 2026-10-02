@@ -71,7 +71,6 @@ import 'add_friend_sheet.dart';
 import 'spinning_vinyl_ring.dart';
 import '../services/connected_contacts_service.dart';
 import '../services/now_playing_presence.dart';
-import 'listening_audience_sheet.dart';
 import '../services/live_rooms_registry.dart';
 import '../services/telecom_service.dart';
 import '../utils/file_bytes.dart';
@@ -2984,9 +2983,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
           'Music',
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
         ),
-        const Spacer(),
-        // Privacy: broadcast "listening now" to friends on/off.
-        PresenceShareButton(color: scheme.primary, size: 20),
       ],
     );
   }

@@ -3445,25 +3445,34 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  if (!live && hasTrack)
-                    GestureDetector(
-                      onTap: () =>
-                          _toggleFavorite(_playlist[_currentIndex]),
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        child: Icon(
-                          isFav
-                              ? Icons.favorite
-                              : Icons.favorite_border,
-                          key: ValueKey(isFav),
-                          color: isFav
-                              ? Colors.pinkAccent
-                              : onSurface.withAlpha(130),
-                          size: 24,
+                  const SizedBox(width: 4),
+                  // Stacked on the card's right edge: the listening-now share
+                  // toggle on top (moved off the panel header, where tapping it
+                  // minimised the player), the favourite heart below.
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      PresenceShareButton(color: accent, size: 20),
+                      if (!live && hasTrack)
+                        GestureDetector(
+                          onTap: () =>
+                              _toggleFavorite(_playlist[_currentIndex]),
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 200),
+                            child: Icon(
+                              isFav
+                                  ? Icons.favorite
+                                  : Icons.favorite_border,
+                              key: ValueKey(isFav),
+                              color: isFav
+                                  ? Colors.pinkAccent
+                                  : onSurface.withAlpha(130),
+                              size: 24,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
+                    ],
+                  ),
                 ],
               ),
             ),

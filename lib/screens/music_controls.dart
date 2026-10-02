@@ -2273,7 +2273,13 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     } else if (_repeatAll) {
       _play(scope.first);
     } else {
-      // End of scope, no repeat
+      // End of scope, no repeat: just_audio parks at the end with playing still
+      // true, so the disc kept spinning and the button stayed on pause. Pause
+      // and rewind to the start so the player reads as genuinely stopped (disc
+      // halts, button shows play) and the track is ready to replay from 0.
+      _player.pause();
+      _player.seek(Duration.zero);
+      _discCtrl.stop();
       ref.read(nowPlayingProvider.notifier).update(
           track: _trackName, artist: _artistName, playing: false);
       if (mounted) setState(() {});

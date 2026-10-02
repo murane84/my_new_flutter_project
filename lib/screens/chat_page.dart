@@ -2451,6 +2451,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final stripCtrl = ScrollController();
     var current = initial;
     var didInitCenter = false;
+    // Tap the photo to hide/show the top bar + counter for a clean view.
+    var showChrome = true;
     // Each filmstrip thumbnail occupies this much horizontal space (56 tile +
     // 2×3 margin). Used to centre the active thumbnail in the strip.
     const stripItem = 62.0;
@@ -2549,7 +2551,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         top: 0,
         left: 0,
         right: 0,
-        child: Container(
+        child: IgnorePointer(
+          ignoring: !showChrome,
+          child: AnimatedOpacity(
+            opacity: showChrome ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 200),
+            child: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
@@ -2635,6 +2642,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               ),
             ),
           ),
+        )),
         ),
       );
     }
@@ -2710,7 +2718,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                           minScale: PhotoViewComputedScale.contained,
                           maxScale: PhotoViewComputedScale.covered * 3,
                           initialScale: PhotoViewComputedScale.contained,
-                          onTapUp: (_, _, _) => Navigator.pop(ctx),
+                          onTapUp: (_, _, _) => setSB(() => showChrome = !showChrome),
                         ),
                       ),
                     ),
@@ -2745,7 +2753,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         left: 0,
                         right: 0,
                         child: IgnorePointer(
-                          child: Center(
+                          child: AnimatedOpacity(
+                            opacity: showChrome ? 1.0 : 0.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: Center(
                             child: Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 4),
@@ -2757,7 +2768,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                   style: const TextStyle(
                                       color: Colors.white, fontSize: 13)),
                             ),
-                          ),
+                          )),
                         ),
                       ),
                     // Thumbnail filmstrip along the bottom (desktop/web only):

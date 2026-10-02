@@ -995,50 +995,31 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     );
   }
 
-  // Centre content of the spinning full-screen disc: the big music-note glyph
-  // (no art), or the embedded album art inset inside the orb so a ring of the
-  // disc shows around it — with a small centre spindle for the record feel.
+  // Centre content of the spinning full-screen disc: the big music-note glyph,
+  // or the embedded album art inset inside the orb so a ring of the disc shows
+  // around it. (No spindle hub — in dark mode its dark fill showed as a "black
+  // dot" over the note whenever a track had an id but no embedded cover.)
   Widget _fullArt(Color accent, ColorScheme scheme) {
     final note = Center(
       child: Icon(Icons.music_note_rounded,
           color: Colors.white.withValues(alpha: 0.95), size: 92),
     );
-    final hub = Center(
-      child: Container(
-        width: 16,
-        height: 16,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: scheme.surface.withValues(alpha: 0.9),
-          border: Border.all(
-              color: Colors.white.withValues(alpha: 0.6), width: 1.5),
-        ),
-      ),
-    );
     if (_currentArtId == null || !_isMobile) {
-      // Plain centre glyph only — the spindle hub is for real album art; over
-      // the note it merged into an unclean blob, so drop it here.
       return note;
     }
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: ClipOval(
-            child: QueryArtworkWidget(
-              id: _currentArtId!,
-              type: ArtworkType.AUDIO,
-              artworkWidth: 360,
-              artworkHeight: 360,
-              artworkFit: BoxFit.cover,
-              keepOldArtwork: true,
-              nullArtworkWidget: note,
-            ),
-          ),
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: ClipOval(
+        child: QueryArtworkWidget(
+          id: _currentArtId!,
+          type: ArtworkType.AUDIO,
+          artworkWidth: 360,
+          artworkHeight: 360,
+          artworkFit: BoxFit.cover,
+          keepOldArtwork: true,
+          nullArtworkWidget: note,
         ),
-        hub,
-      ],
+      ),
     );
   }
 

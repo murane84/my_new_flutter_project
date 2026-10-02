@@ -114,6 +114,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   AndroidLoudnessEnhancer? _loudness;
 
   List<String> _playlist = [];
+  Timer? _lastTrackTimer; // periodic save of the last-played track + position
+  bool _lastTrackRestored = false;
   // Android scoped storage can't reliably open many media by raw file PATH
   // (WhatsApp audio, downloads, etc.) — playback then fails with a bogus
   // "check file format". So we play through each song's MediaStore CONTENT URI
@@ -402,6 +404,11 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _loadLyrics();
     _restorePlaylist();
     _listenPlayer();
+    // Keep the "last played" marker fresh so an update/relaunch lands the user
+    // back on their song at roughly where they left it.
+    _lastTrackTimer = Timer.periodic(const Duration(seconds: 6), (_) {
+      if (_player.playing) _saveLastTrack();
+    });
     if (Platform.isAndroid) _restoreEqualizer();
 
     // Ambient controls (now-playing bar, car/lock-screen buttons) drive the
@@ -533,6 +540,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _volumeCtrl.dispose();
     _sleepTimer?.cancel();
     _sleepTick?.cancel();
+    _lastTrackTimer?.cancel();
+    _saveLastTrack();
     _discCtrl.dispose();
     _queueCtrl.dispose();
     _queueScrollCtrl.dispose();
@@ -906,6 +915,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       } else {
         _discCtrl.stop();
       }
+      _saveLastTrack();
     });
 
     // Completion is handled separately — avoids calling _play() synchronously
@@ -2119,7 +2129,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   /// Set the player source (content URI on mobile, path elsewhere) and start
   /// playback. Returns null on success, or an error string on failure ('format'
   /// for an unreadable/unsupported source, else the engine's message).
-  Future<String?> _openSource(String path) async {
+  Future<String?> _openSource(String path, {bool autoplay = true}) async {
     try {
       if (_isMobile) {
         if (!_uriMapBuilt || !_uriByPath.containsKey(path)) {
@@ -2136,7 +2146,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       }
       await _player.setVolume(_muted ? 0 : _volume);
       await _player.setSpeed(_speed);
-      await _player.play();
+      if (autoplay) await _player.play();
       return null;
     } on PlayerException catch (e) {
       return e.message ?? 'format';
@@ -2166,6 +2176,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     ref.read(nowPlayingProvider.notifier).update(
         track: initTitle, artist: initArtist, playing: true);
     _syncFavoriteAmbient();
+    _saveLastTrack(resetPos: true);
 
     // The VERY FIRST play after a cold start often fails because the audio
     // engine / background service hasn't finished coming up yet — the exact
@@ -2347,6 +2358,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         if (!mounted) return;
         setState(() => _playlist = List<String>.from(saved));
         _publishPlaylist();
+        _restoreLastTrack();
       }
     } catch (_) {}
     // LAZY BY DESIGN: we do NOT scan the device library at launch. A cold scan
@@ -2355,6 +2367,66 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     // the saved playlist (if any) is restored above, and the FIRST tap on
     // "Playlist" triggers the scan on demand (with a spinner) — see
     // _openOrScanPlaylist. Nothing here touches the device until the user asks.
+  }
+
+  // Persist which track is current and where playback is, so an app restart or
+  // version update can land the user back on it. Reads the position BEFORE any
+  // await so it's safe to call from dispose().
+  Future<void> _saveLastTrack({bool resetPos = false}) async {
+    try {
+      if (_currentIndex < 0 || _currentIndex >= _playlist.length) return;
+      final path = _playlist[_currentIndex];
+      final pos = resetPos ? 0 : _player.position.inMilliseconds;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('music_last_track',
+          jsonEncode({'path': path, 'pos': pos < 0 ? 0 : pos}));
+    } catch (_) {}
+  }
+
+  // On launch (after the saved playlist is restored): re-select the last track
+  // and LOAD it PAUSED at its last position — the user lands on their song and
+  // presses play when ready. Never auto-plays. Light: the source is just
+  // prepared, and the one metadata/URI lookup rides the persisted SongLibrary
+  // cache, so this adds no device scan to startup.
+  Future<void> _restoreLastTrack() async {
+    if (_lastTrackRestored) return;
+    _lastTrackRestored = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('music_last_track');
+      if (raw == null || raw.isEmpty) return;
+      final obj = jsonDecode(raw) as Map<String, dynamic>;
+      final path = obj['path'] as String?;
+      final posMs = (obj['pos'] as num?)?.toInt() ?? 0;
+      if (path == null) return;
+      final idx = _playlist.indexOf(path);
+      if (idx < 0) return; // track no longer in the playlist — skip
+      final initTitle = metadataStore.title(path, _nameFromPath(path));
+      final initArtist = metadataStore.artist(path, '');
+      if (!mounted) return;
+      setState(() {
+        _currentIndex = idx;
+        _trackName = initTitle;
+        _artistName = initArtist;
+        _currentArtId = null;
+      });
+      ref.read(nowPlayingProvider.notifier).update(
+          track: initTitle, artist: initArtist, playing: false);
+      _syncFavoriteAmbient();
+      _switching = true; // don't let a prepare emit a spurious auto-advance
+      final err = await _openSource(path, autoplay: false);
+      Future.delayed(const Duration(milliseconds: 600), () {
+        _switching = false;
+      });
+      if (err == null) {
+        if (posMs > 0) {
+          try {
+            await _player.seek(Duration(milliseconds: posMs));
+          } catch (_) {}
+        }
+        if (_isMobile) _fetchMetadata(path);
+      }
+    } catch (_) {}
   }
 
   /// Nudge the playback position by [seconds] (negative rewinds), clamped

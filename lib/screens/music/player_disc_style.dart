@@ -689,8 +689,8 @@ class _ClassicVinylState extends State<_ClassicVinyl>
     final side = widget.side;
     final accent = widget.accent;
     final isDark = widget.isDark;
-    final rd = side * 0.84;
-    final labelD = rd * 0.44;
+    final rd = side * 0.78;
+    final labelD = rd * 0.46;
 
     final record = Container(
       width: rd,
@@ -727,8 +727,31 @@ class _ClassicVinylState extends State<_ClassicVinyl>
             height: rd,
             child: CustomPaint(
               painter: _GroovePainter(
-                color: Colors.white.withValues(alpha: 0.055),
-                innerFrac: labelD / rd * 1.15,
+                color: Colors.white.withValues(alpha: 0.06),
+                innerFrac: labelD / rd * 1.12,
+              ),
+            ),
+          ),
+          // Glossy specular sweep — two bright glints that ride round with the
+          // vinyl so the spin is clearly visible on the black surface.
+          Container(
+            width: rd,
+            height: rd,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: SweepGradient(
+                colors: [
+                  Colors.transparent,
+                  Colors.white.withValues(alpha: 0.0),
+                  Colors.white.withValues(alpha: 0.16),
+                  Colors.white.withValues(alpha: 0.0),
+                  Colors.transparent,
+                  Colors.white.withValues(alpha: 0.0),
+                  Colors.white.withValues(alpha: 0.09),
+                  Colors.white.withValues(alpha: 0.0),
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.10, 0.14, 0.18, 0.5, 0.60, 0.64, 0.68, 1.0],
               ),
             ),
           ),
@@ -756,8 +779,15 @@ class _ClassicVinylState extends State<_ClassicVinyl>
             height: labelD,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Color.alphaBlend(
-                  accent.withValues(alpha: 0.45), const Color(0xFF15151D)),
+              gradient: RadialGradient(
+                center: const Alignment(-0.25, -0.3),
+                colors: [
+                  Color.alphaBlend(accent.withValues(alpha: 0.55),
+                      const Color(0xFF20202B)),
+                  Color.alphaBlend(accent.withValues(alpha: 0.42),
+                      const Color(0xFF101017)),
+                ],
+              ),
               border: Border.all(
                   color: Colors.white.withValues(alpha: 0.12), width: 1),
             ),
@@ -791,8 +821,8 @@ class _ClassicVinylState extends State<_ClassicVinyl>
           child: AnimatedBuilder(
             animation: _lift,
             builder: (_, _) => Transform.rotate(
-              angle: -_lift.value * 1.25,
-              alignment: const Alignment(0.80, -0.76),
+              angle: -_lift.value * 1.30,
+              alignment: const Alignment(0.76, -0.80),
               child: CustomPaint(
                 painter: _TonearmPainter(
                   metal: const Color(0xFFEAEBF1),
@@ -876,8 +906,8 @@ class _TonearmPainter extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final side = s.width;
-    final pivot = Offset(side * 0.9, side * 0.12);
-    final head = Offset(side * 0.50, side * 0.30);
+    final pivot = Offset(side * 0.88, side * 0.10);
+    final head = Offset(side * 0.46, side * 0.30);
     final d = head - pivot;
     final len = d.distance;
     final u = len == 0 ? const Offset(0, 0) : d / len;
@@ -906,7 +936,7 @@ class _TonearmPainter extends CustomPainter {
     c.drawCircle(pivot, side * 0.05, Paint()..color = joint);
     c.drawCircle(pivot, side * 0.022, Paint()..color = accent);
     // Headshell.
-    c.drawCircle(head, side * 0.05, Paint()..color = metal);
+    c.drawCircle(head, side * 0.042, Paint()..color = metal);
     final perp = Offset(-u.dy, u.dx);
     c.drawLine(
       head + perp * (side * 0.045),

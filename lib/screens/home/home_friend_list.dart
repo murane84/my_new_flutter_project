@@ -1345,7 +1345,13 @@ extension _HomeFriendListView on HomePageState {
     final isTyping = _typingTimers.containsKey((f['id'] as num).toInt());
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Slidable(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+      child: Container(
+        decoration: _circleTileDecoration(scheme, isDark),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Slidable(
       key: ValueKey('friend-${f['id']}'),
       // Swipe RIGHT (drag from the left edge) → Call.
       startActionPane: ActionPane(
@@ -1381,17 +1387,12 @@ extension _HomeFriendListView on HomePageState {
           ),
         ],
       ),
-      child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
       child: Material(
       color: Colors.transparent,
       child: InkWell(
       onTap: () => _isSharing ? _sendShareTo(friend: f) : openChat(f),
       onLongPress: _isSharing ? null : () => _showFriendQuickSheet(f, name),
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        decoration: _circleTileDecoration(scheme, isDark),
-        child: Padding(
+      child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
         child: Row(
           children: [
@@ -1497,6 +1498,7 @@ extension _HomeFriendListView on HomePageState {
             ),
           ],
         ),
+      ),
       ),
       ),
       ),

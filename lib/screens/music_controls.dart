@@ -999,16 +999,20 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // or the embedded album art inset inside the orb so a ring of the disc shows
   // around it. (No spindle hub — in dark mode its dark fill showed as a "black
   // dot" over the note whenever a track had an id but no embedded cover.)
-  Widget _fullArt(Color accent, ColorScheme scheme) {
+  Widget _fullArt(double side, Color accent, ColorScheme scheme) {
+    // Size the glyph + the art inset to the disc so they shrink with it (a
+    // squeezed desktop window drops the disc to ~110px; a fixed 92px note then
+    // overflowed the orb).
     final note = Center(
       child: Icon(Icons.music_note_rounded,
-          color: Colors.white.withValues(alpha: 0.95), size: 92),
+          color: Colors.white.withValues(alpha: 0.95),
+          size: (side * 0.27).clamp(18.0, 100.0)),
     );
     if (_currentArtId == null || !_isMobile) {
       return note;
     }
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all((side * 0.075).clamp(5.0, 18.0)),
       child: ClipOval(
         child: QueryArtworkWidget(
           id: _currentArtId!,
@@ -1175,7 +1179,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                                     ),
                                   ],
                                 ),
-                                child: _fullArt(accent, scheme),
+                                child: _fullArt(side, accent, scheme),
                               ),
                             ));
                           }),

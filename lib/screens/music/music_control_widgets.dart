@@ -26,7 +26,7 @@ class _CtrlBtn extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final isDark = scheme.brightness == Brightness.dark;
     final enabled = onTap != null;
-    return Tooltip(
+    return Tactile(enabled: enabled, child: Tooltip(
       message: tooltip,
       child: GestureDetector(
         onTap: onTap,
@@ -79,7 +79,7 @@ class _CtrlBtn extends StatelessWidget {
           child: Icon(icon, size: size, color: color),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -193,7 +193,7 @@ class _CtrlChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = scheme.brightness == Brightness.dark;
-    return Tooltip(
+    return Tactile(child: Tooltip(
       message: tooltip,
       child: GestureDetector(
         onTap: onTap,
@@ -259,7 +259,7 @@ class _CtrlChip extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 

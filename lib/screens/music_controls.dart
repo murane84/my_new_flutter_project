@@ -28,6 +28,7 @@ import '../utils/popup_shell.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:palette_generator/palette_generator.dart';
 import '../services/song_library.dart';
+import '../utils/bounce_tap.dart';
 import 'listening_audience_sheet.dart';
 import '../services/audio_handler.dart';
 import '../services/metadata_overrides.dart';
@@ -1299,7 +1300,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                               final playing = live
                                   ? (_live?.player.playing ?? false)
                                   : (snap.data?.playing ?? _player.playing);
-                              return GestureDetector(
+                              return Tactile(child: GestureDetector(
                                 onTap: _transportPlayPause,
                                 child: Container(
                                   width: 76 - 14 * openT.clamp(0.0, 1.0),
@@ -1331,7 +1332,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                                       size: 40 - 8 * openT.clamp(0.0, 1.0),
                                       color: Colors.white),
                                 ),
-                              );
+                              ));
                             },
                           ),
                           _CtrlBtn(
@@ -2033,7 +2034,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       {bool active = false, required Color accent}) {
     final isDark = scheme.brightness == Brightness.dark;
     final c = active ? accent : scheme.onSurfaceVariant;
-    return GestureDetector(
+    return Tactile(child: GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Column(
@@ -2074,7 +2075,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           ),
         ],
       ),
-    );
+    ));
   }
 
   Future<void> _showSpeedSheet(BuildContext ctx) {
@@ -3550,7 +3551,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                     tooltip: 'Back 10s',
                   ),
                   const SizedBox(width: 14),
-                  GestureDetector(
+                  Tactile(child: GestureDetector(
                     onTap: _transportPlayPause,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
@@ -3594,7 +3595,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                               color: Colors.white,
                             ),
                     ),
-                  ),
+                  )),
                   const SizedBox(width: 14),
                   _CtrlBtn(
                     icon: Icons.forward_10_rounded,
@@ -3988,7 +3989,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     bool active = false,
     String? badge,
   }) {
-    return GestureDetector(
+    return Tactile(child: GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Column(
@@ -4093,7 +4094,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           ),
         ],
       ),
-    );
+    ));
   }
 }
 

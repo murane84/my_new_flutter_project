@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/now_playing_presence.dart';
 import 'api_service.dart';
+import '../utils/bounce_tap.dart';
 
 /// The music-player toggle for broadcasting "listening now" to friends.
 /// Tap flips sharing on/off; long-press opens the audience sheet (who can see).
@@ -35,54 +36,6 @@ class PresenceShareButton extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-/// A tap target that gives a quick scale "pop" (press-in, elastic bounce back)
-/// when tapped — tactile feedback for small icon toggles.
-class BounceTap extends StatefulWidget {
-  const BounceTap(
-      {super.key, required this.child, required this.onTap, this.onLongPress});
-  final Widget child;
-  final VoidCallback onTap;
-  final VoidCallback? onLongPress;
-
-  @override
-  State<BounceTap> createState() => _BounceTapState();
-}
-
-class _BounceTapState extends State<BounceTap>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 260));
-  late final Animation<double> _scale = TweenSequence<double>([
-    TweenSequenceItem(
-        tween: Tween(begin: 1.0, end: 0.8)
-            .chain(CurveTween(curve: Curves.easeOut)),
-        weight: 35),
-    TweenSequenceItem(
-        tween: Tween(begin: 0.8, end: 1.0)
-            .chain(CurveTween(curve: Curves.elasticOut)),
-        weight: 65),
-  ]).animate(_c);
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        _c.forward(from: 0);
-        widget.onTap();
-      },
-      onLongPress: widget.onLongPress,
-      child: ScaleTransition(scale: _scale, child: widget.child),
     );
   }
 }

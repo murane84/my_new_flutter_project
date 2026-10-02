@@ -2081,7 +2081,7 @@ class _RefreshSpinButtonState extends State<_RefreshSpinButton>
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
+    return Tactile(enabled: !_busy, child: IconButton(
       onPressed: _busy ? null : _run,
       tooltip: 'Refresh',
       visualDensity: VisualDensity.compact,
@@ -2093,6 +2093,6 @@ class _RefreshSpinButtonState extends State<_RefreshSpinButton>
         turns: _ctrl,
         child: const Icon(Icons.refresh_rounded),
       ),
-    );
+    ));
   }
 }

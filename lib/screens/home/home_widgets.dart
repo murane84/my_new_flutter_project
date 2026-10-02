@@ -26,7 +26,7 @@ class _PanelToggleBtn extends StatelessWidget {
         (customIcon == Icons.keyboard_arrow_down_rounded
             ? 'Minimize'
             : (isFullScreen ? 'Exit full screen' : 'Full screen'));
-    return Tooltip(
+    return Tactile(child: Tooltip(
       message: label,
       child: GestureDetector(
         onTap: onTap,
@@ -50,7 +50,7 @@ class _PanelToggleBtn extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 

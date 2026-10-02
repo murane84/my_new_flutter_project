@@ -33,8 +33,11 @@ import 'utils/toast_helper.dart';
 import 'utils/popup_shell.dart' show GlobalTapOrigin;
 import 'screens/token_helper.dart' show warmMediaAuth;
 import 'state/playback_state.dart' show providerContainer;
+import 'services/web_update_checker.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
 
 // ── Share-into-Aluta (receive images shared from other apps) ─────────────────
 // Android/iOS only. The plugin has no web/Windows implementation, so guard every
@@ -186,6 +189,9 @@ Future<void> _bootstrapServices() {
     // Start listening for images shared into Aluta while it's running (Android/
     // iOS only; a no-op elsewhere).
     _listenForSharedMedia();
+    // Web only: watch for a newer deployed build and offer a "Reload" banner so
+    // the open tab doesn't keep running stale assets. No-op off the web.
+    WebUpdateChecker.instance.start(scaffoldMessengerKey);
   }();
 }
 
@@ -397,6 +403,7 @@ class MyApp extends StatelessWidget {
 
         return MaterialApp(
           navigatorKey: navigatorKey,
+          scaffoldMessengerKey: scaffoldMessengerKey,
           debugShowCheckedModeBanner: false,
           // Let lists be dragged with a mouse / trackpad on web + desktop
           // (Flutter disables mouse drag-scrolling by default there, which made

@@ -220,6 +220,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   String? _highlightedId;
 
   final _ctrl = TextEditingController();
+  // Smart-list continuation state (bullets / numbers).
+  String _lastComposerText = '';
+  bool _applyingListEdit = false;
   final _scrollCtrl = ScrollController();
   // Dedicated controller so the Listen-together picker's scrollbar can auto-hide
   // (show only while scrolling) instead of sitting over the row icons.
@@ -1594,6 +1597,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   // ── Typing indicator ──────────────────────────────────────────────────────
 
   void _onTextChanged() {
+    if (!_applyingListEdit) _maybeContinueList();
     setState(() {});
     _markActivity();
     if (!_iTyping && !_isGroup) {
@@ -1608,6 +1612,60 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _typingTimer = Timer(const Duration(seconds: 2), () {
       _iTyping = false;
     });
+    _lastComposerText = _ctrl.text;
+  }
+
+  // Word-doc-style lists: pressing Enter after a "- ", "* ", "• " or
+  // a numbered line continues the list with the next marker; pressing Enter
+  // on an empty item ends the list. Triggered on the newline insertion (mobile
+  // Enter, or desktop Shift+Enter — plain desktop Enter sends).
+  void _maybeContinueList() {
+    final text = _ctrl.text;
+    final old = _lastComposerText;
+    if (text.length != old.length + 1) return; // only a single-char insert
+    final sel = _ctrl.selection;
+    if (!sel.isValid || !sel.isCollapsed) return;
+    final caret = sel.baseOffset;
+    if (caret <= 0 || caret > text.length || text[caret - 1] != '\n') return;
+    final before = text.substring(0, caret - 1);
+    final lineStart = before.lastIndexOf('\n') + 1;
+    final line = before.substring(lineStart);
+
+    final bullet = RegExp(r'^(\s*)([-*•])\s+(.*)$').firstMatch(line);
+    final number = RegExp(r'^(\s*)(\d+)([.)])\s+(.*)$').firstMatch(line);
+
+    String nextMarker;
+    bool emptyItem;
+    if (bullet != null) {
+      emptyItem = bullet.group(3)!.trim().isEmpty;
+      nextMarker = '${bullet.group(1)}${bullet.group(2)} ';
+    } else if (number != null) {
+      emptyItem = number.group(4)!.trim().isEmpty;
+      final n = int.tryParse(number.group(2)!) ?? 0;
+      nextMarker = '${number.group(1)}${n + 1}${number.group(3)} ';
+    } else {
+      return;
+    }
+
+    if (emptyItem) {
+      // End the list: drop the empty marker line and the newline.
+      final newText = text.substring(0, lineStart) + text.substring(caret);
+      _applyComposerEdit(newText, lineStart);
+    } else {
+      final newText =
+          text.substring(0, caret) + nextMarker + text.substring(caret);
+      _applyComposerEdit(newText, caret + nextMarker.length);
+    }
+  }
+
+  void _applyComposerEdit(String newText, int caret) {
+    _applyingListEdit = true;
+    _ctrl.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: caret),
+    );
+    _applyingListEdit = false;
+    _lastComposerText = newText;
   }
 
   // ── Send ──────────────────────────────────────────────────────────────────

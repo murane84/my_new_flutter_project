@@ -1725,8 +1725,49 @@ class HomePageState extends rp.ConsumerState<HomePage>
         return '📍 Location';
       case 'contact':
         return '👤 Contact';
+      case 'live':
+        return _livePreview((m['content'] ?? '').toString().trim());
+      case 'call':
+        return _callPreview((m['content'] ?? '').toString().trim(),
+            (m['media_duration'] as num?)?.toInt() ?? 0);
       default:
         return (m['content'] ?? '').toString().trim();
+    }
+  }
+
+  // Friendly friend-list label for a "listen together" (live) outcome token.
+  String _livePreview(String outcome) {
+    switch (outcome) {
+      case 'listened':
+        return '🎧 Listened together';
+      case 'declined':
+        return '🎧 Listen together declined';
+      case 'noanswer':
+        return '🎧 Listen together — no answer';
+      default:
+        return '🎧 Listen together';
+    }
+  }
+
+  // Friendly friend-list label for a call-log outcome. A connected call
+  // (secs > 0) just reads "Call"; otherwise the reason is spelled out.
+  String _callPreview(String outcome, int secs) {
+    if (secs > 0) return '📞 Call';
+    switch (outcome) {
+      case 'declined':
+        return '📞 Call declined';
+      case 'busy':
+        return '📞 Line busy';
+      case 'unreachable':
+        return '📞 Unreachable';
+      case 'failed':
+        return '📞 Call failed';
+      case 'cancelled':
+        return '📞 Call cancelled';
+      case 'noanswer':
+        return '📞 No answer';
+      default: // 'missed' / unknown
+        return '📞 Missed call';
     }
   }
 
@@ -2025,6 +2066,22 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// list instead of the raw JSON.
   String _previewText(String raw) {
     final s = raw.trim();
+    // Safety net: a call / listen-together log whose raw outcome token leaked
+    // into the preview (e.g. a server last_message that carries no type). Map
+    // it so a row never reads "noanswer" / "declined" / "busy" etc.
+    const outcomes = <String, String>{
+      'listened': '🎧 Listened together',
+      'noanswer': 'No answer',
+      'declined': 'Declined',
+      'busy': '📞 Line busy',
+      'unreachable': '📞 Unreachable',
+      'failed': '📞 Call failed',
+      'cancelled': '📞 Call cancelled',
+      'missed': '📞 Missed call',
+      'answered': '📞 Call',
+    };
+    final mapped = outcomes[s.toLowerCase()];
+    if (mapped != null) return mapped;
     if (s.startsWith('{') && s.endsWith('}')) {
       try {
         final j = jsonDecode(s);

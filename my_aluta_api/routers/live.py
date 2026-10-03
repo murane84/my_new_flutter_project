@@ -297,6 +297,18 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
                 record_shared_listen(
                     _sldb, session.host_id, user.id,
                     (session.track or {}).get("title"))
+                # The shared song also flows into the bond's soundtrack
+                # (de-duped, source=listen_together).
+                try:
+                    from bonding import pair_key, record_soundtrack_track
+                    _tr = session.track or {}
+                    if _tr.get("title"):
+                        record_soundtrack_track(
+                            _sldb, pair_key(session.host_id, user.id),
+                            user.id, _tr.get("title"), _tr.get("artist"),
+                            source="listen_together")
+                except Exception:
+                    pass
             finally:
                 _sldb.close()
         except Exception:

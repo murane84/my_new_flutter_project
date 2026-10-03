@@ -117,6 +117,30 @@ def send_message(message: schemas.MessageCreate, background: BackgroundTasks, db
         },
     )
 
+    # Harmony: a song shared with a BONDED partner flows into their soundtrack
+    # (Our Playlist), de-duped, source=share — the "reminds me of you" feed.
+    try:
+        if (db_message.message_type or "") == "song" and message.receiver_id:
+            from models import BondRequest
+            from bonding import pair_key, record_soundtrack_track
+            a = current_user.id
+            b = int(message.receiver_id)
+            bonded = db.query(BondRequest).filter(
+                BondRequest.status == "accepted",
+            ).filter(
+                ((BondRequest.from_user_id == a) & (BondRequest.to_user_id == b))
+                | ((BondRequest.from_user_id == b) & (BondRequest.to_user_id == a))
+            ).first() is not None
+            if bonded:
+                title = ((db_message.content or "").strip()
+                         or (db_message.media_name or "").strip())
+                if title:
+                    record_soundtrack_track(
+                        db, pair_key(a, b), current_user.id, title, None,
+                        source="share")
+    except Exception:
+        pass
+
     return validated_message
 
 # 2️⃣ MESSAGE DELIVERED (auto when fetching messages)

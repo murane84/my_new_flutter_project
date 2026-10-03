@@ -10,7 +10,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from models import SharedListenDay
+from models import SharedListenDay, PlaylistTrack
 
 
 def pair_key(a: int, b: int) -> str:
@@ -128,3 +128,60 @@ def bond_stats(db: Session, a: int, b: int,
         "next_milestone": _next_milestone(streak, days_together),
         "milestone_reached": _reached_milestone(streak, days_together),
     }
+
+
+def record_soundtrack_track(db: Session, pair_key_str: str, user_id,
+                            title, artist=None, ref=None, source="manual",
+                            memo=None):
+    """Add a track to a bond's soundtrack (playlist_tracks), de-duping on
+    title+artist so the same song flowing in from several sources never piles
+    up. Backfills a missing memo/ref on an existing match. Best-effort; returns
+    (track, created)."""
+    title = (title or "").strip()
+    if not title:
+        return None, False
+    title = title[:200]
+    artist = ((artist or "").strip() or None)
+    if artist:
+        artist = artist[:200]
+    memo = ((memo or "").strip() or None)
+    tl = title.lower()
+    al = (artist or "").lower()
+    match = None
+    try:
+        rows = db.query(PlaylistTrack).filter(
+            PlaylistTrack.pair_key == pair_key_str).all()
+    except Exception:
+        return None, False
+    for e in rows:
+        if (e.title or "").strip().lower() == tl and \
+                (e.artist or "").strip().lower() == al:
+            match = e
+            break
+    if match is not None:
+        changed = False
+        if memo and not match.memo:
+            match.memo = memo[:500]
+            changed = True
+        if ref and not match.ref:
+            match.ref = ref
+            changed = True
+        if changed:
+            try:
+                db.commit()
+                db.refresh(match)
+            except Exception:
+                db.rollback()
+        return match, False
+    track = PlaylistTrack(
+        pair_key=pair_key_str, added_by=user_id, title=title, artist=artist,
+        ref=ref, source=source, memo=(memo[:500] if memo else None),
+    )
+    db.add(track)
+    try:
+        db.commit()
+        db.refresh(track)
+    except Exception:
+        db.rollback()
+        return None, False
+    return track, True

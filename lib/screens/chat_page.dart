@@ -28,6 +28,7 @@ import '../services/call_service.dart';
 import '../services/contact_names.dart';
 import '../utils/net_image.dart';
 import '../utils/chat_background.dart';
+import '../utils/bubble_theme.dart';
 import '../utils/romantic_pattern.dart';
 import '../services/media_store.dart';
 import 'package:photo_manager/photo_manager.dart';
@@ -4401,18 +4402,30 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     // Sent messages use the brand red family (not WhatsApp green): a soft warm
     // rose on light, a deep muted maroon on dark — both easy on the eyes and
     // clearly "mine". Received bubbles stay a clean neutral (white / charcoal).
-    final sentBubble =
-        isDark ? const Color(0xFF4C2328) : const Color(0xFFFBDCDB);
-    final recvBubble =
-        isDark ? const Color(0xFF241E20) : Colors.white;
+    // Honour the user's custom bubble theme (Appearance → Message bubbles):
+    // their picks apply to every chat, with text/links derived for contrast so
+    // the same colour reads well in both light and dark mode.
+    final bool customBubbles = bubbleCustomEnabled;
+    final Color sentBubble = customBubbles
+        ? bubbleSentColor
+        : (isDark ? const Color(0xFF4C2328) : const Color(0xFFFBDCDB));
+    final Color recvBubble = customBubbles
+        ? bubbleRecvColor
+        : (isDark ? const Color(0xFF241E20) : Colors.white);
     final bubbleColor = isMe ? sentBubble : recvBubble;
     // Warm near-white text on the dark maroon; deep maroon text on the rose.
-    final onSent = isDark ? const Color(0xFFF6E1E1) : const Color(0xFF4A141A);
-    final textColor = isMe ? onSent : scheme.onSurface;
+    final Color onSent = customBubbles
+        ? bubbleTextOn(sentBubble)
+        : (isDark ? const Color(0xFFF6E1E1) : const Color(0xFF4A141A));
+    final Color onRecv =
+        customBubbles ? bubbleTextOn(recvBubble) : scheme.onSurface;
+    final textColor = isMe ? onSent : onRecv;
     // Tappable links: readable + clearly a link on either bubble colour.
-    final linkColor = isDark
-        ? const Color(0xFF9FD0FF)
-        : (isMe ? const Color(0xFF0B4EA2) : const Color(0xFF1565C0));
+    final Color linkColor = customBubbles
+        ? bubbleLinkOn(isMe ? sentBubble : recvBubble)
+        : (isDark
+            ? const Color(0xFF9FD0FF)
+            : (isMe ? const Color(0xFF0B4EA2) : const Color(0xFF1565C0)));
     final quoteBarColor = isMe
         ? (isDark ? const Color(0xFFFF8A93) : scheme.primary)
         : scheme.primary;
@@ -4426,11 +4439,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final tickGray =
         isDark ? const Color(0xFFB3ACAE) : const Color(0xFF8C8A8E);
     // Subtle border to lift each bubble off the wallpaper.
-    final bubbleBorder = isMe
-        ? (isDark
-            ? Colors.white.withAlpha(16)
-            : scheme.primary.withAlpha(46))
-        : (isDark ? Colors.white.withAlpha(20) : Colors.black.withAlpha(14));
+    final bubbleBorder = customBubbles
+        ? bubbleBorderOn(isMe ? sentBubble : recvBubble)
+        : (isMe
+            ? (isDark
+                ? Colors.white.withAlpha(16)
+                : scheme.primary.withAlpha(46))
+            : (isDark
+                ? Colors.white.withAlpha(20)
+                : Colors.black.withAlpha(14)));
 
     // ── Bubble shape: a little beak/tail on the bottom-most bubble of each
     // group, pointing to its sender's side (avatar for received, edge for me).
@@ -5513,7 +5530,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         FocusScope.of(context).unfocus();
                         setState(() => _showEmoji = false);
                       },
-                      child: ListView.builder(
+                      child: ValueListenableBuilder<int>(
+                        valueListenable: bubbleThemeRevision,
+                        builder: (_, __, ___) => ListView.builder(
                         controller: _scrollCtrl,
                         reverse: true,
                         padding: const EdgeInsets.symmetric(
@@ -5575,6 +5594,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             ],
                           );
                         },
+                      ),
                       ),
                     ),
                     // New messages chip

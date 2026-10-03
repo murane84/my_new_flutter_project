@@ -2556,7 +2556,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final m = (i >= 0 && i < _viewerMsgs.length) ? _viewerMsgs[i] : null;
     if (m == null) return '';
     final mine = m['sender_id']?.toString() == _myId;
-    if (mine) return _myName.isNotEmpty ? _myName : 'You';
+    if (mine) return 'Me';
     if (_isGroup) {
       final sm = (m['sender'] as Map?) ?? const {};
       return (sm['username'] ?? 'Member').toString();
@@ -2611,7 +2611,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         : (avRel.startsWith('http') ? avRel : fullMediaUrl(avRel));
     void toggle() => setState(() => _viewerChrome = !_viewerChrome);
     return Positioned.fill(
-      child: ColoredBox(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        // Swipe the photo down to close the viewer (when not zoomed).
+        onVerticalDragEnd: (d) {
+          if ((d.primaryVelocity ?? 0) > 300) _closeViewer();
+        },
+        child: ColoredBox(
         color: Colors.black,
         child: Stack(
           children: [
@@ -2777,7 +2783,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               ),
           ],
         ),
-      ),
+      )),
     );
   }
 

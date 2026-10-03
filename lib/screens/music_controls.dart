@@ -1198,17 +1198,23 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      if (artist.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        MarqueeText(
-                          text: artist,
-                          height: 20,
-                          style: TextStyle(
-                            color: scheme.onSurfaceVariant,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
+                      // Reserve the artist slot even when a track has no
+                      // artist, so the Expanded disc above keeps a constant
+                      // height and doesn't snap/resize when the song changes.
+                      const SizedBox(height: 4),
+                      SizedBox(
+                        height: 20,
+                        child: artist.isNotEmpty
+                            ? MarqueeText(
+                                text: artist,
+                                height: 20,
+                                style: TextStyle(
+                                  color: scheme.onSurfaceVariant,
+                                  fontSize: 14,
+                                ),
+                              )
+                            : null,
+                      ),
                       // Synced-lyric ticker — shows only when the song has LRC
                       // timing; tap it to open the full lyrics sheet.
                       _syncedLyricLine(scheme, accent, false),

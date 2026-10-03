@@ -149,6 +149,11 @@ def ensure_media_schema():
         # Our Diary: the author's per-memory typeface (client font key; null =
         # default). Added here in case diary_entries predates the column.
         "ALTER TABLE diary_entries ADD COLUMN IF NOT EXISTS font VARCHAR",
+        # Our Playlist → Soundtrack of Us: how a track entered, and an
+        # optional one-line memory. Added here in case playlist_tracks
+        # predates these columns.
+        "ALTER TABLE playlist_tracks ADD COLUMN IF NOT EXISTS source VARCHAR DEFAULT 'manual'",
+        "ALTER TABLE playlist_tracks ADD COLUMN IF NOT EXISTS memo TEXT",
     ]
     try:
         with engine.begin() as conn:

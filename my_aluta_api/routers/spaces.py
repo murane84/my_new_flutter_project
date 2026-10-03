@@ -48,6 +48,12 @@ class _TrackBody(BaseModel):
     title: str
     artist: Optional[str] = None
     ref: Optional[str] = None
+    memo: Optional[str] = None
+    source: Optional[str] = None
+
+
+class _MemoBody(BaseModel):
+    memo: Optional[str] = None
 
 
 class _DiaryBody(BaseModel):
@@ -497,6 +503,8 @@ def _track_dict(db: Session, t: PlaylistTrack, current_user_id: int) -> dict:
         "added_by": t.added_by,
         "added_by_username": adder.username if adder else None,
         "mine": t.added_by == current_user_id,
+        "source": (t.source or "manual"),
+        "memo": t.memo,
         "created_at": t.created_at.isoformat() if t.created_at else None,
     }
 
@@ -534,6 +542,8 @@ def _notify_partner_playlist(db: Session, space: RelationshipSpace,
                 "from_username": who,
                 "title": track.title,
                 "artist": track.artist,
+                "memo": track.memo,
+                "source": track.source,
                 "line": line,
             },
         })
@@ -1202,6 +1212,61 @@ def nudge_partner(
     return {"ok": True}
 
 
+_VALID_TRACK_SOURCES = {"manual", "share", "listen_together",
+                        "question", "dedication"}
+
+
+def _upsert_soundtrack_track(db: Session, pk: str, user_id: int, title: str,
+                             artist=None, ref=None, source="manual",
+                             memo=None):
+    """Add a track to the bond's soundtrack, de-duping on title+artist so the
+    same song can flow in from several sources without piling up. If it already
+    exists, backfill a memo/ref it was missing instead of duplicating. Returns
+    (track, created)."""
+    title = (title or "").strip()
+    if not title:
+        return None, False
+    title = title[:200]
+    artist = ((artist or "").strip() or None)
+    if artist:
+        artist = artist[:200]
+    src = source if source in _VALID_TRACK_SOURCES else "manual"
+    memo = ((memo or "").strip() or None)
+    # De-dupe in Python (a couple's crate is small) — case-insensitive on the
+    # title + artist pair.
+    tl = title.lower()
+    al = (artist or "").lower()
+    match = None
+    for e in db.query(PlaylistTrack).filter(PlaylistTrack.pair_key == pk).all():
+        if (e.title or "").strip().lower() == tl and \
+                (e.artist or "").strip().lower() == al:
+            match = e
+            break
+    if match is not None:
+        changed = False
+        if memo and not match.memo:
+            match.memo = memo[:500]
+            changed = True
+        if ref and not match.ref:
+            match.ref = ref
+            changed = True
+        if changed:
+            try:
+                db.commit()
+                db.refresh(match)
+            except Exception:
+                db.rollback()
+        return match, False
+    track = PlaylistTrack(
+        pair_key=pk, added_by=user_id, title=title, artist=artist,
+        ref=ref, source=src, memo=(memo[:500] if memo else None),
+    )
+    db.add(track)
+    db.commit()
+    db.refresh(track)
+    return track, True
+
+
 @router.get("/{space_id}/playlist")
 def get_playlist(
     space_id: int,
@@ -1228,22 +1293,15 @@ def add_track(
         raise HTTPException(
             status_code=400,
             detail="This space has no partner to share a playlist with")
-    title = (payload.title or "").strip()
-    if not title:
-        raise HTTPException(status_code=400, detail="A track needs a title")
-    artist = (payload.artist or "").strip() or None
-    ref = (payload.ref or "").strip() or None
-    track = PlaylistTrack(
-        pair_key=pk,
-        added_by=current_user.id,
-        title=title[:200],
-        artist=artist[:200] if artist else None,
-        ref=ref,
+    track, created = _upsert_soundtrack_track(
+        db, pk, current_user.id, payload.title, payload.artist, payload.ref,
+        source=(payload.source or "manual"), memo=payload.memo,
     )
-    db.add(track)
-    db.commit()
-    db.refresh(track)
-    _notify_partner_playlist(db, space, current_user, track)
+    if track is None:
+        raise HTTPException(status_code=400, detail="A track needs a title")
+    # Only ping the partner for a genuinely new add, not a silent de-dupe.
+    if created:
+        _notify_partner_playlist(db, space, current_user, track)
     return _track_dict(db, track, current_user.id)
 
 
@@ -1270,6 +1328,33 @@ def remove_track(
     db.delete(track)
     db.commit()
     return {"ok": True}
+
+
+@router.patch("/{space_id}/playlist/{track_id}")
+def annotate_track(
+    space_id: int,
+    track_id: int,
+    payload: _MemoBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Attach / edit the one-line memory on a soundtrack track. Either partner
+    may annotate — it's a shared memory, not a personal note."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, _partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(status_code=404, detail="Track not found")
+    track = db.query(PlaylistTrack).filter(
+        PlaylistTrack.id == track_id,
+        PlaylistTrack.pair_key == pk,
+    ).first()
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+    memo = (payload.memo or "").strip()
+    track.memo = memo[:500] if memo else None
+    db.commit()
+    db.refresh(track)
+    return _track_dict(db, track, current_user.id)
 
 
 @router.get("/{space_id}/diary")

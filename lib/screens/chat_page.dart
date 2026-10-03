@@ -3195,7 +3195,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final content = msg['content'] as String? ?? '';
     final scheme = Theme.of(context).colorScheme;
     final isDark = scheme.brightness == Brightness.dark;
-    final media = MediaQuery.of(context);
 
     const reactions = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -3207,194 +3206,347 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       ),
     ];
 
-    _showPopPanel(
-      label: 'Message actions',
-      builder: (ctx) {
-        // Built here so the action closures can pop THIS popup route.
-        final actions = <Widget>[
-              _ActionTile(
-                icon: Icons.reply_rounded,
-                label: 'Reply',
-                onTap: () {
-                  Navigator.pop(ctx);
-                  setState(() => _replyTo = msg);
-                  FocusScope.of(context).requestFocus(FocusNode());
-                },
-              ),
-              if (msg['is_deleted'] != true)
-                _ActionTile(
-                  icon: _isPinned(msg)
-                      ? Icons.push_pin
-                      : Icons.push_pin_outlined,
-                  label: _isPinned(msg) ? 'Unpin message' : 'Pin message',
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    if (_isPinned(msg)) {
-                      _unpinMessage(msg);
-                    } else {
-                      _showPinDurationSheet(msg);
-                    }
-                  },
-                ),
-              _ActionTile(
-                icon: Icons.copy_rounded,
-                label: 'Copy',
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Clipboard.setData(ClipboardData(text: _stripQuote(content)));
-                  showToast(context, 'Copied');
-                },
-              ),
-              if (msg['is_deleted'] != true)
-                _ActionTile(
-                  icon: Icons.forward_rounded,
-                  label: 'Forward',
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _showForwardPicker(msg);
-                  },
-                ),
-              // Save any received/sent media (song, PDF, doc, image, voice
-              // note) to the device's own storage via a Save As… dialog.
-              if (msg['is_deleted'] != true &&
-                  (msg['message_type'] ?? 'text') != 'text' &&
-                  (msg['media_url'] as String? ?? '').isNotEmpty)
-                _ActionTile(
-                  icon: Icons.download_rounded,
-                  label: 'Save to device',
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _saveMediaToDevice(msg);
-                  },
-                ),
-              if (isMe) ...[
-                // Group only: who has read / received / not-yet-received this.
-                if (_isGroup && msg['is_deleted'] != true)
-                  _ActionTile(
-                    icon: Icons.info_outline_rounded,
-                    label: 'Message info',
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _showMessageInfo(msg);
-                    },
-                  ),
-                if ((msg['message_type'] ?? 'text') == 'text' &&
-                    msg['is_deleted'] != true &&
-                    _withinEditWindow(msg))
-                  _ActionTile(
-                    icon: Icons.edit_rounded,
-                    label: 'Edit',
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _startEditing(msg);
-                    },
-                  ),
-                _ActionTile(
-                  icon: Icons.delete_outline_rounded,
-                  label: 'Delete for me',
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _deleteMessage(msg['id'], false);
-                  },
-                ),
-                _ActionTile(
-                  icon: Icons.delete_forever_rounded,
-                  label: 'Delete for everyone',
-                  color: scheme.error,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _deleteMessage(msg['id'], true);
-                  },
-                ),
-              ],
-              const SizedBox(height: 6),
-        ];
+    // Capture the pressed bubble's on-screen rect so the spotlight keeps that
+    // one bubble crisp while everything else is dimmed/blurred.
+    Rect? bubbleRect;
+    final box = _msgKeys[msg['id'].toString()]
+        ?.currentContext
+        ?.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize) {
+      bubbleRect = box.localToGlobal(Offset.zero) & box.size;
+    }
 
-        return Center(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-                18, media.padding.top + 24, 18, media.padding.bottom + 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Floating reaction pill — sits apart from the action card,
-                  // the way modern messengers present quick reactions.
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 6),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Color.alphaBlend(
-                              scheme.primary
-                                  .withValues(alpha: isDark ? 0.10 : 0.06),
-                              scheme.surface),
-                          scheme.surface,
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(
-                          color: scheme.outlineVariant
-                              .withValues(alpha: isDark ? 0.45 : 0.30),
-                          width: 1),
-                      boxShadow: softShadow,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        for (final e in reactions)
-                          _ReactionButton(
-                            emoji: e,
-                            onTap: () {
-                              Navigator.pop(ctx);
-                              _addReaction(msg, e);
-                            },
-                          ),
-                      ],
-                    ),
+    Widget reactionBar(BuildContext ctx) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color.alphaBlend(
+                  scheme.primary.withValues(alpha: isDark ? 0.10 : 0.06),
+                  scheme.surface),
+              scheme.surface,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(
+              color: scheme.outlineVariant
+                  .withValues(alpha: isDark ? 0.45 : 0.30),
+              width: 1),
+          boxShadow: softShadow,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            for (final e in reactions)
+              _ReactionButton(
+                emoji: e,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _addReaction(msg, e);
+                },
+              ),
+          ],
+        ),
+      );
+    }
+
+    Widget actionCard(BuildContext ctx) {
+      final actions = <Widget>[
+        _ActionTile(
+          icon: Icons.reply_rounded,
+          label: 'Reply',
+          onTap: () {
+            Navigator.pop(ctx);
+            setState(() => _replyTo = msg);
+            FocusScope.of(context).requestFocus(FocusNode());
+          },
+        ),
+        if (msg['is_deleted'] != true)
+          _ActionTile(
+            icon: _isPinned(msg) ? Icons.push_pin : Icons.push_pin_outlined,
+            label: _isPinned(msg) ? 'Unpin message' : 'Pin message',
+            onTap: () {
+              Navigator.pop(ctx);
+              if (_isPinned(msg)) {
+                _unpinMessage(msg);
+              } else {
+                _showPinDurationSheet(msg);
+              }
+            },
+          ),
+        _ActionTile(
+          icon: Icons.copy_rounded,
+          label: 'Copy',
+          onTap: () {
+            Navigator.pop(ctx);
+            Clipboard.setData(ClipboardData(text: _stripQuote(content)));
+            showToast(context, 'Copied');
+          },
+        ),
+        if (msg['is_deleted'] != true)
+          _ActionTile(
+            icon: Icons.forward_rounded,
+            label: 'Forward',
+            onTap: () {
+              Navigator.pop(ctx);
+              _showForwardPicker(msg);
+            },
+          ),
+        if (msg['is_deleted'] != true &&
+            (msg['message_type'] ?? 'text') != 'text' &&
+            (msg['media_url'] as String? ?? '').isNotEmpty)
+          _ActionTile(
+            icon: Icons.download_rounded,
+            label: 'Save to device',
+            onTap: () {
+              Navigator.pop(ctx);
+              _saveMediaToDevice(msg);
+            },
+          ),
+        if (isMe) ...[
+          if (_isGroup && msg['is_deleted'] != true)
+            _ActionTile(
+              icon: Icons.info_outline_rounded,
+              label: 'Message info',
+              onTap: () {
+                Navigator.pop(ctx);
+                _showMessageInfo(msg);
+              },
+            ),
+          if ((msg['message_type'] ?? 'text') == 'text' &&
+              msg['is_deleted'] != true &&
+              _withinEditWindow(msg))
+            _ActionTile(
+              icon: Icons.edit_rounded,
+              label: 'Edit',
+              onTap: () {
+                Navigator.pop(ctx);
+                _startEditing(msg);
+              },
+            ),
+          _ActionTile(
+            icon: Icons.delete_outline_rounded,
+            label: 'Delete for me',
+            onTap: () {
+              Navigator.pop(ctx);
+              _deleteMessage(msg['id'], false);
+            },
+          ),
+          _ActionTile(
+            icon: Icons.delete_forever_rounded,
+            label: 'Delete for everyone',
+            color: scheme.error,
+            onTap: () {
+              Navigator.pop(ctx);
+              _deleteMessage(msg['id'], true);
+            },
+          ),
+        ],
+        const SizedBox(height: 6),
+      ];
+      return Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color.alphaBlend(
+                  scheme.primary.withValues(alpha: isDark ? 0.08 : 0.05),
+                  scheme.surface),
+              scheme.surface,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+              color: scheme.outlineVariant
+                  .withValues(alpha: isDark ? 0.45 : 0.30),
+              width: 1),
+          boxShadow: softShadow,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: actions),
+        ),
+      );
+    }
+
+    _showSpotlightPanel(
+      bubbleRect: bubbleRect,
+      isMe: isMe,
+      reactionBarBuilder: reactionBar,
+      actionCardBuilder: actionCard,
+    );
+  }
+
+  /// Shows the message reaction bar + action menu as a SPOTLIGHT: the whole
+  /// screen is dimmed and blurred EXCEPT a hole cut over the pressed bubble, so
+  /// that one bubble stays crisp and lifted (WhatsApp / iMessage style). The
+  /// reactions sit just above the bubble and the menu just below — flipping to
+  /// the side with more room when the bubble is near a screen edge. Falls back
+  /// to a centred panel if the bubble's rect couldn't be measured.
+  Future<void> _showSpotlightPanel({
+    required Rect? bubbleRect,
+    required bool isMe,
+    required WidgetBuilder reactionBarBuilder,
+    required WidgetBuilder actionCardBuilder,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    return showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Message actions',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 220),
+      pageBuilder: (ctx, a1, a2) {
+        final media = MediaQuery.of(ctx);
+        final sw = media.size.width;
+        final sh = media.size.height;
+        final topSafe = media.padding.top + 8;
+        final botSafe = media.padding.bottom + 8;
+        return AnimatedBuilder(
+          animation: a1,
+          builder: (context, _) {
+            final t = Curves.easeOutCubic.transform(a1.value.clamp(0.0, 1.0));
+            final tb = Curves.easeOutBack.transform(a1.value.clamp(0.0, 1.0));
+            final rect = bubbleRect;
+
+            Widget dim = BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 8 * t, sigmaY: 8 * t),
+              child: Container(
+                color: Colors.black
+                    .withValues(alpha: (isDark ? 0.34 : 0.24) * t),
+              ),
+            );
+            if (rect != null) {
+              dim = ClipPath(
+                clipper: _HoleClipper(rect.inflate(4), 16),
+                child: dim,
+              );
+            }
+
+            final children = <Widget>[
+              Positioned.fill(
+                child: Opacity(
+                  opacity: t,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => Navigator.of(ctx).pop(),
+                    child: dim,
                   ),
-                  const SizedBox(height: 10),
-                  // Action card
-                  Flexible(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Color.alphaBlend(
-                                scheme.primary
-                                    .withValues(alpha: isDark ? 0.08 : 0.05),
-                                scheme.surface),
-                            scheme.surface,
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(22),
-                        border: Border.all(
-                            color: scheme.outlineVariant
-                                .withValues(alpha: isDark ? 0.45 : 0.30),
-                            width: 1),
-                        boxShadow: softShadow,
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: SingleChildScrollView(
+                ),
+              ),
+            ];
+
+            if (rect == null) {
+              children.add(Opacity(
+                opacity: t,
+                child: Transform.scale(
+                  scale: 0.92 + 0.08 * tb,
+                  child: Center(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                          18, topSafe + 16, 18, botSafe + 16),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 440),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
-                          children: actions,
+                          children: [
+                            reactionBarBuilder(ctx),
+                            const SizedBox(height: 10),
+                            Flexible(child: actionCardBuilder(ctx)),
+                          ],
                         ),
                       ),
                     ),
                   ),
-                ],
-              ),
-            ),
-          ),
+                ),
+              ));
+            } else {
+              const barH = 60.0;
+              const gap = 10.0;
+              final aboveRoom = rect.top - topSafe;
+              final belowRoom = sh - botSafe - rect.bottom;
+              final barAbove = aboveRoom > barH + gap + 8;
+              final barTop =
+                  barAbove ? rect.top - gap - barH : rect.bottom + gap;
+
+              final barW = (sw - 32).clamp(0.0, 340.0);
+              double barLeft = rect.center.dx - barW / 2;
+              barLeft = barLeft.clamp(8.0, (sw - 8 - barW).clamp(8.0, sw));
+
+              final menuW = (sw - 32).clamp(0.0, 300.0);
+              double menuLeft = isMe ? rect.right - menuW : rect.left;
+              menuLeft = menuLeft.clamp(8.0, (sw - 8 - menuW).clamp(8.0, sw));
+
+              final menuBelow = belowRoom >= aboveRoom;
+              final Widget menu = Transform.scale(
+                scale: 0.96 + 0.04 * tb,
+                alignment:
+                    isMe ? Alignment.topRight : Alignment.topLeft,
+                child: actionCardBuilder(ctx),
+              );
+              Widget menuPositioned;
+              if (menuBelow) {
+                final mTop = barAbove
+                    ? rect.bottom + gap
+                    : rect.bottom + gap + barH + gap;
+                final maxH = (sh - botSafe - mTop).clamp(90.0, sh);
+                menuPositioned = Positioned(
+                  top: mTop,
+                  left: menuLeft,
+                  width: menuW,
+                  child: Opacity(
+                    opacity: t,
+                    child: ConstrainedBox(
+                        constraints: BoxConstraints(maxHeight: maxH),
+                        child: menu),
+                  ),
+                );
+              } else {
+                final mBottomY = barAbove
+                    ? rect.top - gap - barH - gap
+                    : rect.top - gap;
+                final maxH = (mBottomY - topSafe).clamp(90.0, sh);
+                menuPositioned = Positioned(
+                  bottom: sh - mBottomY,
+                  left: menuLeft,
+                  width: menuW,
+                  child: Opacity(
+                    opacity: t,
+                    child: ConstrainedBox(
+                        constraints: BoxConstraints(maxHeight: maxH),
+                        child: menu),
+                  ),
+                );
+              }
+
+              children.add(Positioned(
+                top: barTop,
+                left: barLeft,
+                width: barW,
+                child: Opacity(
+                  opacity: t,
+                  child: Transform.scale(
+                    scale: 0.9 + 0.1 * tb,
+                    child: reactionBarBuilder(ctx),
+                  ),
+                ),
+              ));
+              children.add(menuPositioned);
+            }
+
+            return Material(
+              type: MaterialType.transparency,
+              child: Stack(children: children),
+            );
+          },
         );
       },
+      transitionBuilder: (ctx, anim, sec, child) => child,
     );
   }
 
@@ -5801,4 +5953,27 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       body: _wrapViewerBack(_pasteWrapper(body)),
     );
   }
+}
+
+/// Clips a full-screen layer to everything EXCEPT a rounded-rect hole — used by
+/// the message spotlight so the blur/dim covers the screen but leaves the
+/// pressed bubble crisp.
+class _HoleClipper extends CustomClipper<Path> {
+  _HoleClipper(this.hole, this.radius);
+  final Rect hole;
+  final double radius;
+
+  @override
+  Path getClip(Size size) {
+    return Path.combine(
+      PathOperation.difference,
+      Path()..addRect(Offset.zero & size),
+      Path()
+        ..addRRect(RRect.fromRectAndRadius(hole, Radius.circular(radius))),
+    );
+  }
+
+  @override
+  bool shouldReclip(covariant _HoleClipper old) =>
+      old.hole != hole || old.radius != radius;
 }

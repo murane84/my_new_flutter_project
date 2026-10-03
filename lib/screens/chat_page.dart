@@ -3190,7 +3190,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   // ── Message actions ───────────────────────────────────────────────────────
 
-  void _showMessageMenu(BuildContext context, Map<String, dynamic> msg) {
+  void _showMessageMenu(BuildContext context, Map<String, dynamic> msg,
+      {Offset? anchor}) {
     final isMe = msg['sender_id'].toString() == _myId;
     final content = msg['content'] as String? ?? '';
     final scheme = Theme.of(context).colorScheme;
@@ -3253,7 +3254,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       );
     }
 
-    Widget actionCard(BuildContext ctx) {
+    List<_MenuAction> buildFull(BuildContext ctx) {
       final deleted = msg['is_deleted'] == true;
       final isTextMsg = (msg['message_type'] ?? 'text') == 'text';
       final hasMedia = (msg['message_type'] ?? 'text') != 'text' &&
@@ -3314,6 +3315,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           }, color: scheme.error),
         ],
       ];
+    }
+
+    Widget actionCard(BuildContext ctx) {
+      final full = buildFull(ctx);
       _MenuAction? pick(String id) {
         for (final a in full) {
           if (a.id == id) return a;
@@ -3332,11 +3337,108 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       );
     }
 
-    _showSpotlightPanel(
-      bubbleRect: bubbleRect,
-      isMe: isMe,
-      reactionBarBuilder: reactionBar,
-      actionCardBuilder: actionCard,
+    final wide = MediaQuery.of(context).size.width >= 640;
+    if (wide && anchor != null) {
+      // Desktop / window: a dropdown anchored at the pointer (no full-screen
+      // blur), WhatsApp-Web style.
+      _showAnchoredDropdown(
+        anchor: anchor,
+        isMe: isMe,
+        reactionBarBuilder: reactionBar,
+        fullMenuBuilder: (ctx, maxH) => _FullMenuCard(
+          actions: buildFull(ctx),
+          scheme: scheme,
+          isDark: isDark,
+          shadow: softShadow,
+          maxHeight: maxH,
+        ),
+      );
+    } else {
+      // Mobile: the spotlight (dim + hole over the bubble) with a quick-row.
+      _showSpotlightPanel(
+        bubbleRect: bubbleRect,
+        isMe: isMe,
+        reactionBarBuilder: reactionBar,
+        actionCardBuilder: actionCard,
+      );
+    }
+  }
+
+  /// A desktop/window dropdown anchored at the pointer: a compact reaction row
+  /// above the full action list, no full-screen blur. Tap outside or press
+  /// Escape to dismiss.
+  Future<void> _showAnchoredDropdown({
+    required Offset anchor,
+    required bool isMe,
+    required WidgetBuilder reactionBarBuilder,
+    required Widget Function(BuildContext, double) fullMenuBuilder,
+  }) {
+    return showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Message actions',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 140),
+      pageBuilder: (ctx, a1, a2) {
+        final media = MediaQuery.of(ctx);
+        final sw = media.size.width;
+        final sh = media.size.height;
+        final topSafe = media.padding.top + 8;
+        final botSafe = media.padding.bottom + 8;
+        const menuW = 250.0;
+        double left = isMe ? anchor.dx - menuW : anchor.dx;
+        left = left.clamp(8.0, (sw - 8 - menuW).clamp(8.0, sw));
+        final belowRoom = sh - botSafe - anchor.dy;
+        final aboveRoom = anchor.dy - topSafe;
+        final below = belowRoom >= aboveRoom;
+        final avail = (below ? belowRoom : aboveRoom) - 20;
+        final menuMaxH = (avail - 72).clamp(120.0, sh);
+        return AnimatedBuilder(
+          animation: a1,
+          builder: (context, _) {
+            final t = Curves.easeOut.transform(a1.value.clamp(0.0, 1.0));
+            final col = SizedBox(
+              width: menuW,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  reactionBarBuilder(ctx),
+                  const SizedBox(height: 8),
+                  fullMenuBuilder(ctx, menuMaxH),
+                ],
+              ),
+            );
+            return Material(
+              type: MaterialType.transparency,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => Navigator.of(ctx).pop(),
+                    ),
+                  ),
+                  Positioned(
+                    left: left,
+                    top: below ? anchor.dy.clamp(topSafe, sh - 40) : null,
+                    bottom: below ? null : (sh - anchor.dy).clamp(0.0, sh),
+                    child: Opacity(
+                      opacity: t,
+                      child: Transform.scale(
+                        scale: 0.97 + 0.03 * t,
+                        alignment:
+                            isMe ? Alignment.topRight : Alignment.topLeft,
+                        child: col,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -4697,8 +4799,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               setState(() => _replyTo = msg);
               FocusScope.of(context).requestFocus(FocusNode());
             },
-            child: GestureDetector(
-              onLongPress: () => _showMessageMenu(context, msg),
+            child: _HoverChevron(
+              enabled: MediaQuery.of(context).size.width >= 640,
+              isMe: isMe,
+              onOpen: (pos) =>
+                  _showMessageMenu(context, msg, anchor: pos),
+              child: GestureDetector(
+              onLongPressStart: (d) =>
+                  _showMessageMenu(context, msg, anchor: d.globalPosition),
+              onSecondaryTapDown: (d) =>
+                  _showMessageMenu(context, msg, anchor: d.globalPosition),
               child: Row(
               mainAxisAlignment:
                   isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
@@ -4954,7 +5064,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                 ),
               ],
             ),
-            ),
+            )),
           ),
           // Reactions
           if (reactions.isNotEmpty)
@@ -5974,27 +6084,8 @@ class _MsgActionMenu extends StatefulWidget {
 class _MsgActionMenuState extends State<_MsgActionMenu> {
   bool _expanded = false;
 
-  BoxDecoration _deco(double radius) {
-    final scheme = widget.scheme;
-    return BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color.alphaBlend(
-              scheme.primary.withValues(alpha: widget.isDark ? 0.08 : 0.05),
-              scheme.surface),
-          scheme.surface,
-        ],
-      ),
-      borderRadius: BorderRadius.circular(radius),
-      border: Border.all(
-          color: scheme.outlineVariant
-              .withValues(alpha: widget.isDark ? 0.45 : 0.30),
-          width: 1),
-      boxShadow: widget.shadow,
-    );
-  }
+  BoxDecoration _deco(double radius) =>
+      _menuDeco(widget.scheme, widget.isDark, widget.shadow, radius);
 
   Widget _quickItem(
       ColorScheme scheme, IconData icon, String label, VoidCallback onTap,
@@ -6037,23 +6128,11 @@ class _MsgActionMenuState extends State<_MsgActionMenu> {
   Widget build(BuildContext context) {
     final scheme = widget.scheme;
     if (_expanded) {
-      return Container(
-        decoration: _deco(22),
-        clipBehavior: Clip.antiAlias,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final a in widget.full)
-                _ActionTile(
-                    icon: a.icon,
-                    label: a.label,
-                    color: a.color,
-                    onTap: a.onTap),
-              const SizedBox(height: 6),
-            ],
-          ),
-        ),
+      return _FullMenuCard(
+        actions: widget.full,
+        scheme: widget.scheme,
+        isDark: widget.isDark,
+        shadow: widget.shadow,
       );
     }
     return Container(
@@ -6072,3 +6151,158 @@ class _MsgActionMenuState extends State<_MsgActionMenu> {
   }
 }
 
+/// Shared frosted-card decoration for the message menu (house style).
+BoxDecoration _menuDeco(
+    ColorScheme scheme, bool isDark, List<BoxShadow> shadow, double radius) {
+  return BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Color.alphaBlend(
+            scheme.primary.withValues(alpha: isDark ? 0.08 : 0.05),
+            scheme.surface),
+        scheme.surface,
+      ],
+    ),
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(
+        color: scheme.outlineVariant.withValues(alpha: isDark ? 0.45 : 0.30),
+        width: 1),
+    boxShadow: shadow,
+  );
+}
+
+/// The full scrollable action list (house style) with an always-visible scroll
+/// indicator so it's clear there is more below — used by the expanded mobile
+/// menu and the desktop dropdown.
+class _FullMenuCard extends StatefulWidget {
+  const _FullMenuCard({
+    required this.actions,
+    required this.scheme,
+    required this.isDark,
+    required this.shadow,
+    this.maxHeight,
+  });
+  final List<_MenuAction> actions;
+  final ColorScheme scheme;
+  final bool isDark;
+  final List<BoxShadow> shadow;
+  final double? maxHeight;
+
+  @override
+  State<_FullMenuCard> createState() => _FullMenuCardState();
+}
+
+class _FullMenuCardState extends State<_FullMenuCard> {
+  final ScrollController _sc = ScrollController();
+
+  @override
+  void dispose() {
+    _sc.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final card = Container(
+      decoration: _menuDeco(widget.scheme, widget.isDark, widget.shadow, 18),
+      clipBehavior: Clip.antiAlias,
+      child: Scrollbar(
+        controller: _sc,
+        thumbVisibility: true,
+        radius: const Radius.circular(8),
+        child: SingleChildScrollView(
+          controller: _sc,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final a in widget.actions)
+                  _ActionTile(
+                      icon: a.icon,
+                      label: a.label,
+                      color: a.color,
+                      onTap: a.onTap),
+                const SizedBox(height: 6),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (widget.maxHeight == null) return card;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: widget.maxHeight!),
+      child: card,
+    );
+  }
+}
+
+/// On wide/desktop layouts, shows a small chevron on a message bubble while the
+/// pointer hovers it — tapping it opens the action dropdown anchored there.
+/// Long-press / right-click still work via the bubble's own gestures.
+class _HoverChevron extends StatefulWidget {
+  const _HoverChevron({
+    required this.enabled,
+    required this.isMe,
+    required this.onOpen,
+    required this.child,
+  });
+  final bool enabled;
+  final bool isMe;
+  final void Function(Offset globalAnchor) onOpen;
+  final Widget child;
+
+  @override
+  State<_HoverChevron> createState() => _HoverChevronState();
+}
+
+class _HoverChevronState extends State<_HoverChevron> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.child;
+    final scheme = Theme.of(context).colorScheme;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          widget.child,
+          if (_hover)
+            Positioned(
+              top: -6,
+              left: widget.isMe ? null : 30,
+              right: widget.isMe ? 2 : null,
+              child: GestureDetector(
+                onTapDown: (d) => widget.onOpen(d.globalPosition),
+                child: Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: scheme.surface,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: scheme.outlineVariant.withValues(alpha: 0.6)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Icon(Icons.expand_more_rounded,
+                      size: 18, color: scheme.primary),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}

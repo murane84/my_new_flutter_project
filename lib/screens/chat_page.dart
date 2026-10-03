@@ -2442,7 +2442,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   TextStyle _capStyle(Color c) =>
-      TextStyle(color: c, fontSize: 15, height: 1.38);
+      (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
+          .merge(TextStyle(color: c, fontSize: 15, height: 1.38));
 
   TextStyle _capLinkStyle(Color linkColor) => _capStyle(linkColor).copyWith(
         decoration: TextDecoration.underline,
@@ -2466,8 +2467,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               padding: const EdgeInsetsDirectional.only(end: 10, bottom: 6),
               child: _imageThumb(url, imgW, 0.78),
             ),
-            _captionSpan(
-                caption, _capStyle(textColor), _capLinkStyle(linkColor)),
+            WrappableText(
+              text: _captionSpan(
+                  caption, _capStyle(textColor), _capLinkStyle(linkColor)),
+              textScaler: MediaQuery.textScalerOf(ctx),
+            ),
           ],
         );
       },
@@ -2491,8 +2495,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             children: [
               _imageThumb(url, iw, 0.82),
               const SizedBox(height: 6),
-              Text.rich(_captionSpan(
-                  caption, _capStyle(textColor), _capLinkStyle(linkColor))),
+              Text.rich(
+                _captionSpan(
+                    caption, _capStyle(textColor), _capLinkStyle(linkColor)),
+                textScaler: MediaQuery.textScalerOf(ctx),
+              ),
             ],
           ),
         );
@@ -4945,17 +4952,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       label = 'Contact';
     }
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(8, 7, 4, 7),
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: 0.5)),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+              color: scheme.outlineVariant.withValues(alpha: 0.45)),
         ),
-        child: Row(
+      ),
+      child: Row(
           children: [
             // Accent bar.
             Container(
@@ -5049,8 +5054,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildInput(bool isDark) {
@@ -5076,7 +5080,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               text: _stripQuote((_editing!['content'] as String?) ?? ''),
               onCancel: _cancelEditing,
             ),
-          if (_replyTo != null) _buildReplyPreview(_replyTo!),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             child: _isRecording
@@ -5106,7 +5109,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                               ),
                             ],
                           ),
-                          child: Row(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_replyTo != null)
+                                _buildReplyPreview(_replyTo!),
+                              Row(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               // Side actions collapse while typing so the
@@ -5227,6 +5235,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                         ],
                                       ),
                               ),
+                            ],
+                          ),
                             ],
                           ),
                         ),

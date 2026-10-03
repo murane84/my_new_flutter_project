@@ -5533,7 +5533,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                       },
                       child: ValueListenableBuilder<int>(
                         valueListenable: bubbleThemeRevision,
-                        builder: (_, __, ___) => ListView.builder(
+                        builder: (_, _, _) => ListView.builder(
                         controller: _scrollCtrl,
                         reverse: true,
                         padding: const EdgeInsets.symmetric(

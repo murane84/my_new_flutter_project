@@ -2483,29 +2483,59 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     );
   }
 
-  // Image + caption as a FLOAT: the photo floats to the left and the caption
-  // flows down its right-hand side, then spills into the full width BELOW the
-  // photo once there is more text than fits beside it — so the bubble never
-  // grows taller than it needs to with a wasted gap under the image.
-  Widget _imageCaptionFloat(
+  // Image + caption. The layout adapts to the caption so the bubble never
+  // shows a dead gap: a caption long enough to wrap down the side of the photo
+  // FLOATS (photo left, words beside it, then full-width below); a short one
+  // STACKS under the photo instead of sitting beside it with blank space. Both
+  // render their text through the same FloatColumn/WrappableText path (the
+  // stack via _bubbleTextOnly) so the caption font matches every other bubble.
+  Widget _imageCaption(
       String url, String caption, Color textColor, Color linkColor) {
     return LayoutBuilder(
       builder: (ctx, c) {
+        final scaler = MediaQuery.textScalerOf(ctx);
         final maxW = c.maxWidth.isFinite ? c.maxWidth : 280.0;
+        final span = _captionSpan(
+            caption, _capStyle(textColor), _capLinkStyle(linkColor));
+        // Float geometry: photo on the left, caption in the column beside it.
         final imgW = (maxW * 0.42).clamp(118.0, 160.0).toDouble();
-        return FloatColumn(
-          children: [
-            Floatable(
-              float: FCFloat.start,
-              padding: const EdgeInsetsDirectional.only(end: 10, bottom: 6),
-              child: _imageThumb(url, imgW, 0.78),
-            ),
-            WrappableText(
-              text: _captionSpan(
-                  caption, _capStyle(textColor), _capLinkStyle(linkColor)),
-              textScaler: MediaQuery.textScalerOf(ctx),
-            ),
-          ],
+        final imgH = imgW / 0.78; // _imageThumb uses aspectRatio 0.78
+        final besideW = maxW - imgW - 10;
+        final tp = TextPainter(
+          text: span,
+          textDirection: TextDirection.ltr,
+          textScaler: scaler,
+        )..layout(maxWidth: besideW > 40 ? besideW : maxW);
+        // If the caption (wrapped at the beside width) runs most of the way
+        // down the photo, floating fills the side nicely. If it is shorter it
+        // would leave a blank gap beside the photo, so stack it below instead.
+        final useFloat = tp.height >= imgH * 0.85;
+        if (useFloat) {
+          return FloatColumn(
+            children: [
+              Floatable(
+                float: FCFloat.start,
+                padding:
+                    const EdgeInsetsDirectional.only(end: 10, bottom: 6),
+                child: _imageThumb(url, imgW, 0.78),
+              ),
+              WrappableText(text: span, textScaler: scaler),
+            ],
+          );
+        }
+        // Stacked: photo on top, caption below, bubble sized to the photo width.
+        final iw = (maxW * 0.52).clamp(150.0, 220.0).toDouble();
+        return SizedBox(
+          width: iw,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _imageThumb(url, iw, 0.82),
+              const SizedBox(height: 6),
+              _bubbleTextOnly(caption, textColor, linkColor),
+            ],
+          ),
         );
       },
     );
@@ -4392,15 +4422,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final isContact = !tomb && msgType == 'contact';
     final emojiOnly =
         !tomb && !hasQuote && !isMedia && _isEmojiOnly(mainText);
-    // Image + caption: the photo floats left, the words wrap beside it and
-    // then flow full-width below — rendered through the same FloatColumn path
-    // as plain text so the caption font matches every other bubble.
+    // Image + caption: _imageCaption adapts per caption length — float (photo
+    // left, text beside then below) when the text is long enough to fill the
+    // side, else stacked under the photo — so there is never a blank gap. Both
+    // render text through FloatColumn/WrappableText for a consistent font.
     final imgCap =
         isMedia && msgType == 'image' && mainText.trim().isNotEmpty;
-    // Unified: every image caption uses the float layout (photo left, words
-    // beside it, then full-width below) so its font matches plain text bubbles
-    // — both render through FloatColumn.
-    final imgFloat = imgCap;
 
     // ── Bubble colours ──────────────────────────────────────────────────────
     // Sent messages use the brand red family (not WhatsApp green): a soft warm
@@ -4692,8 +4719,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         if (isMedia && !imgCap)
                           _mediaContent(
                               msgType, mediaRel, msg, isMe, textColor, scheme),
-                        if (imgFloat)
-                          _imageCaptionFloat(fullMediaUrl(mediaRel), mainText,
+                        if (imgCap)
+                          _imageCaption(fullMediaUrl(mediaRel), mainText,
                               textColor, linkColor),
                         // A shared song shows its title inside the card, so skip
                         // the duplicate text line. Call/live logs store their

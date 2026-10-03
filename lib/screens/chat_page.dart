@@ -2451,6 +2451,38 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         decorationColor: linkColor,
       );
 
+  // Plain text bubble (no image), rendered through FloatColumn with the SAME
+  // span + style + scaler as image captions — so every bubble, image or not,
+  // shares one text engine and one font. Links stay tappable via _captionSpan.
+  Widget _bubbleTextOnly(String text, Color textColor, Color linkColor) {
+    final span = _captionSpan(
+        text, _capStyle(textColor), _capLinkStyle(linkColor));
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        final scaler = MediaQuery.textScalerOf(ctx);
+        final maxW = c.maxWidth.isFinite ? c.maxWidth : 280.0;
+        // FloatColumn always fills its max width, so measure the text and size
+        // the bubble to its content — short messages stay short, long ones wrap
+        // at the bubble's max — while still rendering through FloatColumn for a
+        // font identical to image captions.
+        final tp = TextPainter(
+          text: span,
+          textDirection: TextDirection.ltr,
+          textScaler: scaler,
+        )..layout(maxWidth: maxW);
+        final w = (tp.width + 0.5).clamp(0.0, maxW);
+        return SizedBox(
+          width: w,
+          child: FloatColumn(
+            children: [
+              WrappableText(text: span, textScaler: scaler),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   // Image + caption as a FLOAT: the photo floats to the left and the caption
   // flows down its right-hand side, then spills into the full width BELOW the
   // photo once there is more text than fits beside it — so the bubble never
@@ -2474,35 +2506,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               textScaler: MediaQuery.textScalerOf(ctx),
             ),
           ],
-        );
-      },
-    );
-  }
-
-  // Short caption: stacked and tight — photo on top, caption below, both
-  // constrained to the photo's width so the bubble wraps instead of stretching
-  // into a blank column.
-  Widget _imageCaptionStacked(
-      String url, String caption, Color textColor, Color linkColor) {
-    return LayoutBuilder(
-      builder: (ctx, c) {
-        final maxW = c.maxWidth.isFinite ? c.maxWidth : 280.0;
-        final iw = (maxW * 0.52).clamp(150.0, 200.0).toDouble();
-        return SizedBox(
-          width: iw,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _imageThumb(url, iw, 0.82),
-              const SizedBox(height: 6),
-              Text.rich(
-                _captionSpan(
-                    caption, _capStyle(textColor), _capLinkStyle(linkColor)),
-                textScaler: MediaQuery.textScalerOf(ctx),
-              ),
-            ],
-          ),
         );
       },
     );
@@ -4389,14 +4392,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final isContact = !tomb && msgType == 'contact';
     final emojiOnly =
         !tomb && !hasQuote && !isMedia && _isEmojiOnly(mainText);
-    // Image + caption layout. Few words: stacked & tight under the photo.
-    // More: float — the caption sits to the right of the photo and flows into
-    // the full width below it as it grows, so the bubble stays compact.
+    // Image + caption: the photo floats left, the words wrap beside it and
+    // then flow full-width below — rendered through the same FloatColumn path
+    // as plain text so the caption font matches every other bubble.
     final imgCap =
         isMedia && msgType == 'image' && mainText.trim().isNotEmpty;
-    final capLen = mainText.trim().length;
-    final imgStack = imgCap && capLen < 45;
-    final imgFloat = imgCap && capLen >= 45;
+    // Unified: every image caption uses the float layout (photo left, words
+    // beside it, then full-width below) so its font matches plain text bubbles
+    // — both render through FloatColumn.
+    final imgFloat = imgCap;
 
     // ── Bubble colours ──────────────────────────────────────────────────────
     // Sent messages use the brand red family (not WhatsApp green): a soft warm
@@ -4688,9 +4692,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         if (isMedia && !imgCap)
                           _mediaContent(
                               msgType, mediaRel, msg, isMe, textColor, scheme),
-                        if (imgStack)
-                          _imageCaptionStacked(fullMediaUrl(mediaRel),
-                              mainText, textColor, linkColor),
                         if (imgFloat)
                           _imageCaptionFloat(fullMediaUrl(mediaRel), mainText,
                               textColor, linkColor),
@@ -4707,32 +4708,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             mainText.trim().isNotEmpty)
                           Padding(
                             padding: EdgeInsets.only(top: isMedia ? 6 : 0),
-                            child: Linkify(
-                              text: mainText,
-                              onOpen: (link) => _openLink(link.url),
-                              // Also catch www.* and bare domains (foo.com) that
-                              // lack an http(s):// scheme, after the built-in
-                              // url/email detectors.
-                              linkifiers: const [
-                                UrlLinkifier(),
-                                EmailLinkifier(),
-                                LooseUrlLinkifier(),
-                              ],
-                              options:
-                                  const LinkifyOptions(humanize: false),
-                              style: TextStyle(
-                                color: textColor,
-                                fontSize: 15,
-                                height: 1.38,
-                              ),
-                              linkStyle: TextStyle(
-                                color: linkColor,
-                                fontSize: 15,
-                                height: 1.38,
-                                decoration: TextDecoration.underline,
-                                decorationColor: linkColor,
-                              ),
-                            ),
+                            child: _bubbleTextOnly(
+                                mainText, textColor, linkColor),
                           ),
 
                         // ── Time + delivery status ────────────────────

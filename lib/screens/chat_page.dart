@@ -4494,6 +4494,22 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final quoteBarColor = isMe
         ? (isDark ? const Color(0xFFFF8A93) : scheme.primary)
         : scheme.primary;
+    // Cap the quoted-reply preview so a long quote can't stretch the bubble
+    // past what the actual message needs: size it to the message's own width
+    // (a readable minimum, up to the bubble max). The quote truncates with an
+    // ellipsis and stays tappable (via _jumpToQuoted) to read the original.
+    double quoteMaxWidth = double.infinity;
+    if (quotedText != null) {
+      final screenW = MediaQuery.of(context).size.width;
+      final bubbleMax = (screenW * 0.72).clamp(220.0, 560.0);
+      final mp = TextPainter(
+        text: TextSpan(text: mainText, style: _capStyle(textColor)),
+        textDirection: TextDirection.ltr,
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
+      )..layout();
+      quoteMaxWidth = (mp.width + 20).clamp(160.0, bubbleMax);
+    }
     // Muted + "read" accent for the timestamp/ticks, tuned per bubble.
     final sentMuted = onSent.withAlpha(isDark ? 160 : 150);
     // Read receipt: a blue double-tick, so it stands out against the red/rose
@@ -4705,7 +4721,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         if (!tomb && quotedText != null)
                           GestureDetector(
                             onTap: () => _jumpToQuoted(quotedText!),
-                            child: Container(
+                            child: ConstrainedBox(
+                              constraints:
+                                  BoxConstraints(maxWidth: quoteMaxWidth),
+                              child: Container(
                             margin: const EdgeInsets.only(bottom: 7),
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 6),
@@ -4722,6 +4741,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                               children: [
                                 Text(
                                   _quotedAuthor(quotedText, isMe),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     color: quoteBarColor,
                                     fontSize: 11,
@@ -4739,6 +4760,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ],
+                            ),
                             ),
                             ),
                           ),

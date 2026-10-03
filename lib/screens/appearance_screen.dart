@@ -808,7 +808,7 @@ class _BubbleThemeSection extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return ValueListenableBuilder<int>(
       valueListenable: bubbleThemeRevision,
-      builder: (context, _, __) {
+      builder: (context, _, _) {
         final on = bubbleCustomEnabled;
         return Container(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),

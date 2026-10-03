@@ -1596,6 +1596,84 @@ class ApiService {
     }
   }
 
+  /// Send a dedication (song + mood + line). Returns the created dedication.
+  Future<Map<String, dynamic>?> createDedication(
+    int spaceId, {
+    required String title,
+    String? artist,
+    String? ref,
+    String? mood,
+    String? note,
+    String? voiceNoteUrl,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/dedications'),
+        headers: _authHeaders(token),
+        body: jsonEncode({
+          'track_title': title,
+          'track_artist': ?artist,
+          'track_ref': ?ref,
+          'mood': ?mood,
+          'note': ?note,
+          'voice_note_url': ?voiceNoteUrl,
+        }),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final d = jsonDecode(resp.body);
+        if (d is Map<String, dynamic>) return d;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('createDedication failed: $e');
+      return null;
+    }
+  }
+
+  /// All dedications in this bond (sent + received), newest first.
+  Future<Map<String, dynamic>?> getDedications(int spaceId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/dedications'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final d = jsonDecode(resp.body);
+        if (d is Map<String, dynamic>) return d;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('getDedications failed: $e');
+      return null;
+    }
+  }
+
+  /// Mark a received dedication as opened.
+  Future<Map<String, dynamic>?> openDedication(
+      int spaceId, int dedicationId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse(
+            '${await _baseUrl}/spaces/$spaceId/dedications/$dedicationId/open'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final d = jsonDecode(resp.body);
+        if (d is Map<String, dynamic>) return d;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('openDedication failed: $e');
+      return null;
+    }
+  }
+
   // ── Our Diary (shared notebook: memories + plans) ──────────────────────────
   /// Fetch the shared diary for a space (plans-first, soonest upcoming). Returns
   /// the list of entry maps, or an empty list on failure.

@@ -4887,77 +4887,110 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       label = 'Contact';
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        border: Border(left: BorderSide(color: scheme.primary, width: 3)),
-      ),
-      child: Row(
-        children: [
-          // Thumbnail preview so an image reply is instantly recognisable.
-          if (isMedia && msgType == 'image')
-            Padding(
-              padding: const EdgeInsets.only(right: 10),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: authNetworkImage(
-                  url: fullMediaUrl(mediaRel),
-                  headers: mediaAuthHeaders(fullMediaUrl(mediaRel)),
-                  width: 36,
-                  height: 36,
-                  fit: BoxFit.cover,
-                  placeholder: (_) => Container(
-                      width: 36, height: 36, color: scheme.surfaceContainerHigh),
-                  error: (_) => Container(
-                      width: 36,
-                      height: 36,
-                      color: scheme.surfaceContainerHigh,
-                      child: Icon(Icons.photo_rounded,
-                          size: 18, color: scheme.onSurfaceVariant)),
-                ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(8, 7, 4, 7),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: 0.5)),
+        ),
+        child: Row(
+          children: [
+            // Accent bar.
+            Container(
+              width: 3.5,
+              height: 40,
+              decoration: BoxDecoration(
+                color: scheme.primary,
+                borderRadius: BorderRadius.circular(3),
               ),
             ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isFromMe ? 'You' : widget.friendName,
-                  style: TextStyle(
-                    color: scheme.primary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+            const SizedBox(width: 10),
+            // Thumbnail for an image reply.
+            if (isMedia && msgType == 'image')
+              Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: authNetworkImage(
+                    url: fullMediaUrl(mediaRel),
+                    headers: mediaAuthHeaders(fullMediaUrl(mediaRel)),
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.cover,
+                    placeholder: (_) => Container(
+                        width: 40,
+                        height: 40,
+                        color: scheme.surfaceContainerHigh),
+                    error: (_) => Container(
+                        width: 40,
+                        height: 40,
+                        color: scheme.surfaceContainerHigh,
+                        child: Icon(Icons.photo_rounded,
+                            size: 18, color: scheme.onSurfaceVariant)),
                   ),
                 ),
-                Row(
-                  children: [
-                    if (typeIcon != null) ...[
-                      Icon(typeIcon,
-                          size: 13, color: scheme.onSurface.withAlpha(150)),
+              ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.reply_rounded,
+                          size: 13, color: scheme.primary),
                       const SizedBox(width: 4),
-                    ],
-                    Flexible(
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            color: scheme.onSurface.withAlpha(160),
-                            fontSize: 12),
+                      Flexible(
+                        child: Text(
+                          isFromMe
+                              ? 'Replying to yourself'
+                              : 'Replying to ${widget.friendName}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: scheme.primary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      if (typeIcon != null) ...[
+                        Icon(typeIcon,
+                            size: 13, color: scheme.onSurface.withAlpha(150)),
+                        const SizedBox(width: 4),
+                      ],
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: scheme.onSurface.withAlpha(165),
+                              fontSize: 12.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, size: 16),
-            onPressed: () => setState(() => _replyTo = null),
-            visualDensity: VisualDensity.compact,
-          ),
-        ],
+            IconButton(
+              icon: const Icon(Icons.close_rounded, size: 18),
+              color: scheme.onSurfaceVariant,
+              onPressed: () => setState(() => _replyTo = null),
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -5018,19 +5051,31 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              IconButton(
-                                tooltip: _showEmoji ? 'Keyboard' : 'Emoji',
-                                icon: Icon(
-                                  _showEmoji
-                                      ? Icons.keyboard_rounded
-                                      : Icons.emoji_emotions_outlined,
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                                onPressed: () {
-                                  FocusScope.of(context).unfocus();
-                                  setState(() => _showEmoji = !_showEmoji);
-                                },
-                                visualDensity: VisualDensity.compact,
+                              // Side actions collapse while typing so the
+                              // field uses the full width; they re-appear when
+                              // the text is sent / cleared.
+                              AnimatedSize(
+                                duration: const Duration(milliseconds: 180),
+                                curve: Curves.easeOut,
+                                alignment: Alignment.centerLeft,
+                                child: hasText
+                                    ? const SizedBox.shrink()
+                                    : IconButton(
+                                        tooltip:
+                                            _showEmoji ? 'Keyboard' : 'Emoji',
+                                        icon: Icon(
+                                          _showEmoji
+                                              ? Icons.keyboard_rounded
+                                              : Icons.emoji_emotions_outlined,
+                                          color: scheme.onSurfaceVariant,
+                                        ),
+                                        onPressed: () {
+                                          FocusScope.of(context).unfocus();
+                                          setState(
+                                              () => _showEmoji = !_showEmoji);
+                                        },
+                                        visualDensity: VisualDensity.compact,
+                                      ),
                               ),
                               // Text field. Desktop: Enter=send, Shift+Enter=newline.
                               Expanded(
@@ -5078,33 +5123,52 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                   ),
                                 ),
                               ),
-                              IconButton(
-                                tooltip: 'Listen together',
-                                icon: Icon(Icons.headphones_rounded,
-                                    color: scheme.primary),
-                                onPressed: _uploadingMedia
-                                    ? null
-                                    : _startListenTogether,
-                                visualDensity: VisualDensity.compact,
+                              AnimatedSize(
+                                duration: const Duration(milliseconds: 180),
+                                curve: Curves.easeOut,
+                                alignment: Alignment.centerRight,
+                                child: hasText
+                                    ? const SizedBox(width: 4)
+                                    : Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
+                                        children: [
+                                          IconButton(
+                                            tooltip: 'Listen together',
+                                            icon: Icon(Icons.headphones_rounded,
+                                                color: scheme.primary),
+                                            onPressed: _uploadingMedia
+                                                ? null
+                                                : _startListenTogether,
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                          ),
+                                          IconButton(
+                                            tooltip: 'Attach',
+                                            icon: Icon(Icons.attach_file_rounded,
+                                                color: scheme.onSurfaceVariant),
+                                            onPressed: _uploadingMedia
+                                                ? null
+                                                : _openAttachSheet,
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                          ),
+                                          IconButton(
+                                            tooltip: 'Camera',
+                                            icon: Icon(Icons.camera_alt_rounded,
+                                                color: scheme.onSurfaceVariant),
+                                            onPressed: _uploadingMedia
+                                                ? null
+                                                : () => _pickImage(
+                                                    ImageSource.camera),
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                          ),
+                                          const SizedBox(width: 4),
+                                        ],
+                                      ),
                               ),
-                              IconButton(
-                                tooltip: 'Attach',
-                                icon: Icon(Icons.attach_file_rounded,
-                                    color: scheme.onSurfaceVariant),
-                                onPressed:
-                                    _uploadingMedia ? null : _openAttachSheet,
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              IconButton(
-                                tooltip: 'Camera',
-                                icon: Icon(Icons.camera_alt_rounded,
-                                    color: scheme.onSurfaceVariant),
-                                onPressed: _uploadingMedia
-                                    ? null
-                                    : () => _pickImage(ImageSource.camera),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              const SizedBox(width: 4),
                             ],
                           ),
                         ),

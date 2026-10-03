@@ -23,7 +23,7 @@ from database import get_db
 from models import (
     User, RelationshipSpace, SpaceMember, PinnedMoment, MomentReaction,
     PlaylistTrack, BondRequest, DiaryEntry, DiaryReaction, DiaryComment,
-    MediaAsset, DailyPrompt, DailyPromptAnswer,
+    MediaAsset, DailyPrompt, DailyPromptAnswer, Dedication,
 )
 import uuid as _uuid
 from datetime import date as _date
@@ -743,6 +743,14 @@ def _space_full(db: Session, space: RelationshipSpace, current_user: User) -> di
         data["question"] = _question_state(db, space, current_user)
     except Exception:
         data["question"] = None
+    try:
+        _deds = _dedications_for(db, space, current_user.id)
+        data["dedications"] = _deds
+        data["dedication_unopened"] = sum(
+            1 for x in _deds if not x["mine"] and not x["opened"])
+    except Exception:
+        data["dedications"] = []
+        data["dedication_unopened"] = 0
     # "Our Diary" — the shared notebook (memories + upcoming plans) for the bond.
     data["diary"] = _diary_for(db, space, current_user.id)
     return data
@@ -1613,6 +1621,155 @@ def question_archive(
             break
     return {"items": items}
 
+
+
+# ── Dedications — a song sent as a feeling ───────────────────────────────────
+class _DedicationBody(BaseModel):
+    track_title: str
+    track_artist: Optional[str] = None
+    track_ref: Optional[str] = None
+    mood: Optional[str] = None
+    note: Optional[str] = None
+    voice_note_url: Optional[str] = None
+
+
+def _dedication_dict(db: Session, d: Dedication, current_user_id: int) -> dict:
+    sender = db.query(User).filter(User.id == d.from_user_id).first()
+    return {
+        "id": d.id,
+        "from_id": d.from_user_id,
+        "from_username": sender.username if sender else None,
+        "mine": d.from_user_id == current_user_id,
+        "track_title": d.track_title,
+        "track_artist": d.track_artist,
+        "track_ref": d.track_ref,
+        "mood": d.mood,
+        "note": d.note,
+        "voice_note_url": d.voice_note_url,
+        "opened": d.opened_at is not None,
+        "opened_at": d.opened_at.isoformat() if d.opened_at else None,
+        "created_at": d.created_at.isoformat() if d.created_at else None,
+    }
+
+
+def _dedications_for(db: Session, space: RelationshipSpace,
+                     current_user_id: int) -> list:
+    pk, _partner = _bond_pair_key(space, current_user_id)
+    if pk is None:
+        return []
+    rows = (
+        db.query(Dedication)
+        .filter(Dedication.pair_key == pk)
+        .order_by(Dedication.id.desc())
+        .all()
+    )
+    return [_dedication_dict(db, d, current_user_id) for d in rows]
+
+
+def _notify_dedication(space: RelationshipSpace, from_user: User,
+                       partner_id: Optional[int], d: Dedication) -> None:
+    if not partner_id:
+        return
+    who = from_user.username or "Someone"
+    mood = (d.mood or "").strip()
+    line = (f"{who} dedicated '{d.track_title}' to you"
+            + (f" · {mood}" if mood else "") + " 💝")
+    try:
+        safe_notify_user(partner_id, {
+            "type": "dedication_received",
+            "data": {
+                "space_id": space.id,
+                "dedication_id": d.id,
+                "from_id": from_user.id,
+                "from_username": who,
+                "track_title": d.track_title,
+                "mood": d.mood,
+                "line": line,
+            },
+        })
+    except Exception:
+        pass
+    try:
+        _push(partner_id, "A dedication 💝", line, "dedication_received")
+    except Exception:
+        pass
+
+
+@router.get("/{space_id}/dedications")
+def list_dedications(
+    space_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Every dedication in this bond (sent + received), newest first."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    return {"dedications": _dedications_for(db, space, current_user.id)}
+
+
+@router.post("/{space_id}/dedications")
+def create_dedication(
+    space_id: int,
+    payload: _DedicationBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Dedicate a song to the partner — a mood + a line + (optionally) a voice
+    note. Delivered as an event (one nudge) and auto-added to the soundtrack."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(
+            status_code=400, detail="This space has no partner yet")
+    title = (payload.track_title or "").strip()
+    if not title:
+        raise HTTPException(
+            status_code=400, detail="A dedication needs a song")
+    artist = (payload.track_artist or "").strip() or None
+    d = Dedication(
+        pair_key=pk,
+        from_user_id=current_user.id,
+        track_title=title[:200],
+        track_artist=(artist[:200] if artist else None),
+        track_ref=((payload.track_ref or "").strip() or None),
+        mood=(((payload.mood or "").strip())[:60] or None),
+        note=(((payload.note or "").strip())[:500] or None),
+        voice_note_url=((payload.voice_note_url or "").strip() or None),
+    )
+    db.add(d)
+    db.commit()
+    db.refresh(d)
+    # The dedicated song lands in the soundtrack, memo'd with the note/mood.
+    memo = d.note or (f"{d.mood} 💝" if d.mood else "A dedication 💝")
+    _upsert_soundtrack_track(
+        db, pk, current_user.id, d.track_title, d.track_artist, d.track_ref,
+        source="dedication", memo=memo)
+    _notify_dedication(space, current_user, partner, d)
+    return _dedication_dict(db, d, current_user.id)
+
+
+@router.post("/{space_id}/dedications/{dedication_id}/open")
+def open_dedication(
+    space_id: int,
+    dedication_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mark a received dedication as opened (first open only)."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, _partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(status_code=404, detail="Dedication not found")
+    d = db.query(Dedication).filter(
+        Dedication.id == dedication_id,
+        Dedication.pair_key == pk,
+    ).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Dedication not found")
+    if d.from_user_id != current_user.id and d.opened_at is None:
+        d.opened_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(d)
+    return _dedication_dict(db, d, current_user.id)
 
 
 @router.get("/{space_id}/diary")

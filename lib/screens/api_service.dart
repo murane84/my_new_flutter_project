@@ -1457,6 +1457,8 @@ class ApiService {
     required String title,
     String? artist,
     String? ref,
+    String? memo,
+    String? source,
   }) async {
     try {
       final token = await _getToken();
@@ -1468,6 +1470,8 @@ class ApiService {
           'title': title,
           'artist': ?artist,
           'ref': ?ref,
+          'memo': ?memo,
+          'source': ?source,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
@@ -1494,6 +1498,29 @@ class ApiService {
     } catch (e) {
       _logger.w('removeTrack failed: $e');
       return false;
+    }
+  }
+
+  /// Attach / edit the one-line memory on a soundtrack track. Pass an empty
+  /// string to clear it. Returns the updated track map, or null on failure.
+  Future<Map<String, dynamic>?> annotateTrack(
+      int spaceId, int trackId, String? memo) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.patch(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/playlist/$trackId'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'memo': memo ?? ''}),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('annotateTrack failed: $e');
+      return null;
     }
   }
 

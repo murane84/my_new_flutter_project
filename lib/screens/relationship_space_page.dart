@@ -3391,68 +3391,177 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final id = (t['id'] as num?)?.toInt();
     final title = (t['title'] ?? '').toString();
     final artist = (t['artist'] ?? '').toString();
+    final memo = (t['memo'] ?? '').toString().trim();
+    final source = (t['source'] ?? 'manual').toString();
     final mine = t['mine'] == true;
     final adder = mine ? 'You' : (t['added_by_username'] ?? '').toString();
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: _accent.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(Icons.music_note_rounded, color: _accent, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    final (srcIcon, srcText) = _sourceBadge(source);
+    final subParts = <String>[];
+    if (artist.isNotEmpty) subParts.add(artist);
+    subParts.add('added by $adder');
+    if (srcText.isNotEmpty) subParts.add('from $srcText');
+    final subtitle = subParts.join(' · ');
+    return GestureDetector(
+      onLongPress: id == null ? null : () => _editTrackMemo(t),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
               children: [
-                Text(title,
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: _accent.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child:
+                      Icon(Icons.music_note_rounded, color: _accent, size: 18),
+                ),
+                if (srcIcon != null)
+                  Positioned(
+                    right: -4,
+                    bottom: -4,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(srcIcon, size: 12, color: _accent),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: scheme.onSurface)),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                        color: scheme.onSurface)),
-                const SizedBox(height: 2),
-                Text(
-                  artist.isNotEmpty
-                      ? '$artist · added by $adder'
-                      : 'Added by $adder',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 11, color: scheme.onSurfaceVariant),
-                ),
-              ],
+                        fontSize: 11, color: scheme.onSurfaceVariant),
+                  ),
+                  if (memo.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      '\u201c$memo\u201d',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        height: 1.25,
+                        fontStyle: FontStyle.italic,
+                        color: scheme.onSurface.withValues(alpha: 0.75),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ),
-          IconButton(
-            tooltip: 'Listen together',
-            visualDensity: VisualDensity.compact,
-            icon: Icon(Icons.play_circle_fill_rounded, color: _accent),
-            onPressed: () => _playCrateTrack(t),
-          ),
-          if (id != null)
             IconButton(
-              tooltip: 'Remove',
+              tooltip: memo.isEmpty ? 'Add a memory' : 'Edit memory',
               visualDensity: VisualDensity.compact,
-              icon: Icon(Icons.close_rounded,
-                  size: 18, color: scheme.onSurfaceVariant),
-              onPressed: () => _removeTrackFromCrate(id),
+              icon: Icon(
+                memo.isEmpty
+                    ? Icons.note_add_outlined
+                    : Icons.sticky_note_2_rounded,
+                size: 18,
+                color: memo.isEmpty ? scheme.onSurfaceVariant : _accent,
+              ),
+              onPressed: id == null ? null : () => _editTrackMemo(t),
             ),
+            IconButton(
+              tooltip: 'Listen together',
+              visualDensity: VisualDensity.compact,
+              icon: Icon(Icons.play_circle_fill_rounded, color: _accent),
+              onPressed: () => _playCrateTrack(t),
+            ),
+            if (id != null)
+              IconButton(
+                tooltip: 'Remove',
+                visualDensity: VisualDensity.compact,
+                icon: Icon(Icons.close_rounded,
+                    size: 18, color: scheme.onSurfaceVariant),
+                onPressed: () => _removeTrackFromCrate(id),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Small badge describing how a track entered the soundtrack. Manual adds get
+  // no badge (the default needs no explanation).
+  (IconData?, String) _sourceBadge(String source) {
+    switch (source) {
+      case 'dedication':
+        return (Icons.favorite_rounded, 'a dedication');
+      case 'question':
+        return (Icons.lightbulb_rounded, 'a daily question');
+      case 'listen_together':
+        return (Icons.headphones_rounded, 'a listen together');
+      case 'share':
+        return (Icons.auto_awesome_rounded, '\u201creminds me of you\u201d');
+      default:
+        return (null, '');
+    }
+  }
+
+  /// Add or edit the one-line memory on a soundtrack track (long-press, or the
+  /// note button). Saving an empty note clears it.
+  Future<void> _editTrackMemo(Map<String, dynamic> t) async {
+    final id = (t['id'] as num?)?.toInt();
+    if (id == null) return;
+    final ctrl = TextEditingController(text: (t['memo'] ?? '').toString());
+    final result = await showDialog<String?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add a memory'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          minLines: 1,
+          maxLines: 3,
+          maxLength: 140,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(hintText: 'playing the night we\u2026'),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+              child: const Text('Save')),
         ],
       ),
     );
+    if (result == null || !mounted) return;
+    final updated = await ApiService().annotateTrack(_id, id, result);
+    if (!mounted) return;
+    if (updated != null) {
+      _load();
+    } else {
+      showToast(context, 'Could not save the memory', type: ToastType.error);
+    }
   }
 
   // ── moments ───────────────────────────────────────────────────────────────

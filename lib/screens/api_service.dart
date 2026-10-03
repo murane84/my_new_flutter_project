@@ -1524,6 +1524,78 @@ class ApiService {
     }
   }
 
+  /// Today's "Us" question for this bond (prompt + my/partner answers).
+  Future<Map<String, dynamic>?> getQuestion(int spaceId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/question'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final d = jsonDecode(resp.body);
+        if (d is Map<String, dynamic>) return d;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('getQuestion failed: $e');
+      return null;
+    }
+  }
+
+  /// Answer today's question (text or a song). Returns the new question state.
+  Future<Map<String, dynamic>?> answerQuestion(
+    int spaceId, {
+    String? answerText,
+    String? trackTitle,
+    String? trackArtist,
+    String? trackRef,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/question'),
+        headers: _authHeaders(token),
+        body: jsonEncode({
+          'answer_text': ?answerText,
+          'track_title': ?trackTitle,
+          'track_artist': ?trackArtist,
+          'track_ref': ?trackRef,
+        }),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final d = jsonDecode(resp.body);
+        if (d is Map<String, dynamic>) return d;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('answerQuestion failed: $e');
+      return null;
+    }
+  }
+
+  /// Past questions this bond both answered, newest first.
+  Future<Map<String, dynamic>?> getQuestionArchive(int spaceId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/question/archive'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final d = jsonDecode(resp.body);
+        if (d is Map<String, dynamic>) return d;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('getQuestionArchive failed: $e');
+      return null;
+    }
+  }
+
   // ── Our Diary (shared notebook: memories + plans) ──────────────────────────
   /// Fetch the shared diary for a space (plans-first, soonest upcoming). Returns
   /// the list of entry maps, or an empty list on failure.

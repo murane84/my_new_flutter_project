@@ -406,6 +406,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   Color get _accent => spaceThemeColor(_space['theme'] as String?);
 
   bool _nudging = false;
+  // Today's "Us" question: inline text answer + submit guard.
+  final TextEditingController _qAnswerCtrl = TextEditingController();
+  bool _qSubmitting = false;
 
   // A stable key per feature tile, so its on-screen centre can anchor the
   // open/close animation of its floating card (the card grows FROM and is
@@ -454,6 +457,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     NowPlayingPresence.instance.removeListener(_onPresence);
     spaceEventBus.removeListener(_onSpaceEvent);
     _diaryPageCtrl.dispose();
+    _qAnswerCtrl.dispose();
     super.dispose();
   }
 
@@ -1195,6 +1199,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       _milestoneBanner(scheme),
       const SizedBox(height: 14),
       _tuneInCard(scheme),
+      if (isPair) const SizedBox(height: 12),
+      if (isPair) _dailyQuestionCard(scheme),
       _upcomingPlanBanner(scheme),
       if (isPair) _quickPill(scheme),
       if (isPair) const SizedBox(height: 14),
@@ -3359,6 +3365,326 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       ),
     );
   }
+
+  // ── Today's "Us" question (hub card) ──────────────────────────────────────
+  Widget _dailyQuestionCard(ColorScheme scheme) {
+    final q = (_space['question'] as Map?)?.cast<String, dynamic>();
+    if (q == null) return const SizedBox.shrink();
+    final prompt = (q['prompt'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final body = (prompt['body'] ?? '').toString();
+    if (body.isEmpty) return const SizedBox.shrink();
+    final kind = (prompt['kind'] ?? 'text').toString();
+    final answered = q['answered'] == true;
+    final revealed = q['revealed'] == true;
+    final partnerName = (q['partner_name'] ?? 'your partner').toString();
+    final myAns = (q['my_answer'] as Map?)?.cast<String, dynamic>();
+    final partnerAns = (q['partner_answer'] as Map?)?.cast<String, dynamic>();
+
+    Widget content;
+    if (revealed) {
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _answerBubble(scheme, 'You', myAns, kind),
+          const SizedBox(height: 8),
+          _answerBubble(scheme, partnerName, partnerAns, kind),
+        ],
+      );
+    } else if (answered) {
+      content = Row(
+        children: [
+          Icon(Icons.hourglass_top_rounded,
+              size: 16, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text('Answered — waiting for $partnerName…',
+                style: TextStyle(
+                    fontSize: 12.5, color: scheme.onSurfaceVariant)),
+          ),
+        ],
+      );
+    } else if (kind == 'music') {
+      content = Align(
+        alignment: Alignment.centerLeft,
+        child: FilledButton.icon(
+          style: FilledButton.styleFrom(
+              backgroundColor: _accent,
+              visualDensity: VisualDensity.compact),
+          onPressed: _qSubmitting ? null : _answerWithSong,
+          icon: const Icon(Icons.library_music_rounded, size: 18),
+          label: const Text('Pick your song'),
+        ),
+      );
+    } else {
+      content = Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _qAnswerCtrl,
+              minLines: 1,
+              maxLines: 3,
+              maxLength: 240,
+              buildCounter: (context,
+                      {required int currentLength,
+                      required bool isFocused,
+                      int? maxLength}) =>
+                  null,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(
+                hintText: 'Your answer…',
+                isDense: true,
+                filled: true,
+                fillColor: scheme.surface,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          IconButton(
+            icon: Icon(Icons.send_rounded, color: _accent),
+            onPressed: _qSubmitting ? null : _submitTextAnswer,
+          ),
+        ],
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _accent.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                  kind == 'music'
+                      ? Icons.music_note_rounded
+                      : Icons.favorite_rounded,
+                  size: 16,
+                  color: _accent),
+              const SizedBox(width: 6),
+              Text("Today's question",
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.3,
+                      color: _accent)),
+              const Spacer(),
+              if (revealed)
+                GestureDetector(
+                  onTap: _openQuestionArchive,
+                  child: Text('Past',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.onSurfaceVariant)),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(body,
+              style: TextStyle(
+                  fontSize: 14.5,
+                  height: 1.3,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onSurface)),
+          const SizedBox(height: 12),
+          content,
+        ],
+      ),
+    );
+  }
+
+  Widget _answerBubble(ColorScheme scheme, String who,
+      Map<String, dynamic>? ans, String kind) {
+    final text = (ans?['answer_text'] ?? '').toString().trim();
+    final tt = (ans?['track_title'] ?? '').toString().trim();
+    final ta = (ans?['track_artist'] ?? '').toString().trim();
+    final display = kind == 'music'
+        ? (tt.isEmpty ? '—' : (ta.isEmpty ? tt : '$tt — $ta'))
+        : (text.isEmpty ? '—' : text);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(who,
+              style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w700, color: _accent)),
+          const SizedBox(height: 3),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (kind == 'music') ...[
+                Icon(Icons.music_note_rounded,
+                    size: 14, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 6),
+              ],
+              Expanded(
+                child: Text(display,
+                    style: TextStyle(
+                        fontSize: 13, height: 1.3, color: scheme.onSurface)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submitTextAnswer() async {
+    final text = _qAnswerCtrl.text.trim();
+    if (text.isEmpty) {
+      showToast(context, 'Write a short answer first.', type: ToastType.info);
+      return;
+    }
+    await _sendAnswer(answerText: text);
+  }
+
+  Future<void> _answerWithSong() async {
+    final picked = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _PlaylistAddSheet(accent: _accent),
+    );
+    if (picked == null || !mounted) return;
+    await _sendAnswer(
+      trackTitle: (picked['title'] ?? '').toString(),
+      trackArtist: picked['artist'] as String?,
+      trackRef: picked['ref'] as String?,
+    );
+  }
+
+  Future<void> _sendAnswer({
+    String? answerText,
+    String? trackTitle,
+    String? trackArtist,
+    String? trackRef,
+  }) async {
+    setState(() => _qSubmitting = true);
+    final res = await ApiService().answerQuestion(
+      _id,
+      answerText: answerText,
+      trackTitle: trackTitle,
+      trackArtist: trackArtist,
+      trackRef: trackRef,
+    );
+    if (!mounted) return;
+    setState(() => _qSubmitting = false);
+    if (res != null) {
+      setState(() {
+        _space['question'] = res;
+        _qAnswerCtrl.clear();
+      });
+      showToast(
+        context,
+        res['revealed'] == true
+            ? 'You both answered — revealed 💞'
+            : 'Answer saved — waiting for your partner 💬',
+        type: ToastType.success,
+      );
+    } else {
+      showToast(context, 'Could not send your answer', type: ToastType.error);
+    }
+  }
+
+  Future<void> _openQuestionArchive() async {
+    final data = await ApiService().getQuestionArchive(_id);
+    if (!mounted) return;
+    final items = ((data?['items'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => e.cast<String, dynamic>())
+        .toList();
+    final scheme = Theme.of(context).colorScheme;
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        builder: (ctx, controller) => ListView(
+          controller: controller,
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+          children: [
+            Text('Past questions',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: scheme.onSurface)),
+            const SizedBox(height: 12),
+            if (items.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Text('No answered questions yet.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: scheme.onSurfaceVariant)),
+              )
+            else
+              for (final it in items) _archiveItem(scheme, it),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _archiveItem(ColorScheme scheme, Map<String, dynamic> it) {
+    final prompt = (it['prompt'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final body = (prompt['body'] ?? '').toString();
+    final kind = (prompt['kind'] ?? 'text').toString();
+    final day = (it['day'] ?? '').toString();
+    final mine = (it['my_answer'] as Map?)?.cast<String, dynamic>();
+    final theirs = (it['partner_answer'] as Map?)?.cast<String, dynamic>();
+    final partnerName =
+        ((_space['question'] as Map?)?['partner_name'] ?? 'Partner').toString();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(day,
+              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 4),
+          Text(body,
+              style: TextStyle(
+                  fontWeight: FontWeight.w700, color: scheme.onSurface)),
+          const SizedBox(height: 8),
+          _answerBubble(scheme, 'You', mine, kind),
+          const SizedBox(height: 6),
+          _answerBubble(scheme, partnerName, theirs, kind),
+        ],
+      ),
+    );
+  }
+
 
   Widget _playlistEmpty(ColorScheme scheme) {
     return Container(

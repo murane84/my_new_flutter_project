@@ -1385,6 +1385,22 @@ class HomePageState extends rp.ConsumerState<HomePage>
       spaceEventBus.value++;
       return;
     }
+    // Daily "Us" question — your partner answered, or you both just revealed.
+    if (type == 'prompt_answered' || type == 'prompt_revealed') {
+      final reveal = type == 'prompt_revealed';
+      if (mounted) {
+        showToast(
+          context,
+          reveal
+              ? 'You both answered today\'s question 💞'
+              : 'Your partner answered today\'s question 💬',
+          type: ToastType.info,
+        );
+      }
+      _loadSpaces();
+      spaceEventBus.value++;
+      return;
+    }
     // Your partner wrote in, commented on, or reacted in Our Diary — live-
     // refresh any open Our Space page (and its open memory + comment feed)
     // without a manual refresh. A toast for a new entry/comment; reactions are

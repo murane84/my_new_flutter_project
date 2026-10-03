@@ -797,3 +797,47 @@ class DiaryComment(Base):
     )
 
     author = relationship("User", foreign_keys=[author_id], passive_deletes=True)
+
+
+class DailyPrompt(Base):
+    """The one 'Us' question for a given calendar day — the same prompt for every
+    couple that day, chosen deterministically from a curated list on first
+    access and then fixed so the archive stays stable. kind: 'text' | 'music'.
+    Auto-created; no ALTER."""
+    __tablename__ = "daily_prompts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    day = Column(Date, nullable=False, unique=True, index=True)
+    kind = Column(String, nullable=False, default="text")
+    body = Column(Text, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class DailyPromptAnswer(Base):
+    """A partner's answer to a day's prompt. Keyed by pair_key so the bond owns
+    one pair of answers per day; answers reveal to both only once BOTH have
+    answered (simultaneous reveal). A music answer carries the track; its pick
+    also flows into the soundtrack. One answer per partner per day.
+    Auto-created; no ALTER."""
+    __tablename__ = "daily_prompt_answers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pair_key = Column(String, nullable=False, index=True)
+    day = Column(Date, nullable=False, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    answer_text = Column(Text, nullable=True)
+    track_title = Column(String, nullable=True)
+    track_artist = Column(String, nullable=True)
+    track_ref = Column(String, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint('pair_key', 'day', 'user_id', name='_daily_answer_uc'),
+    )

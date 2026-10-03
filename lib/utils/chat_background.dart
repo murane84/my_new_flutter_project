@@ -74,6 +74,20 @@ const String _kAll = 'chat_bg_all_v1'; // JSON ChatBg: the default for all chats
 const String _kOverrides = 'chat_bg_overrides_v1'; // JSON {convKey: ChatBg}
 const String _kLegacyMode = 'chat_bg_mode_v1'; // migrate old single choice
 const String _kLegacyUrl = 'chat_bg_url_v1';
+const String _kApplyAll = 'chat_bg_apply_all_v1';
+
+// Remembered "Apply to all chats" choice so picking a wallpaper (e.g. from the
+// gallery) keeps applying to every DM once the user has chosen that, instead
+// of silently reverting to this-chat-only each time the sheet re-opens.
+bool _applyAllPref = true;
+bool get wallpaperApplyAllDefault => _applyAllPref;
+Future<void> setWallpaperApplyAllDefault(bool v) async {
+  _applyAllPref = v;
+  try {
+    final p = await SharedPreferences.getInstance();
+    await p.setBool(_kApplyAll, v);
+  } catch (_) {}
+}
 
 ChatBg _all = ChatBg.defaults;
 Map<String, ChatBg> _overrides = {};
@@ -119,6 +133,7 @@ Future<void> loadChatBackground() async {
         _overrides[k] = ChatBg.fromJson(Map<String, dynamic>.from(v));
       });
     }
+    _applyAllPref = p.getBool(_kApplyAll) ?? true;
     chatBackground.value = _all;
     wallpaperClarity.value =
         (p.getDouble(_kClarity) ?? 0.5).clamp(0.0, 1.0).toDouble();

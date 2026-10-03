@@ -68,7 +68,7 @@ Future<void> showChatWallpaperSheet(
   final scheme = Theme.of(context).colorScheme;
   final isDark = Theme.of(context).brightness == Brightness.dark;
   final current = chatBackgroundFor(convKey);
-  bool applyAll = false;
+  bool applyAll = wallpaperApplyAllDefault;
 
   String full(String rel) => resolveWallpaperUrl(rel, base);
 
@@ -231,7 +231,10 @@ Future<void> showChatWallpaperSheet(
                           contentPadding:
                               const EdgeInsets.symmetric(horizontal: 14),
                           value: applyAll,
-                          onChanged: (v) => setSheet(() => applyAll = v),
+                          onChanged: (v) => setSheet(() {
+                            applyAll = v;
+                            setWallpaperApplyAllDefault(v);
+                          }),
                           title: const Text('Apply to all chats',
                               style: TextStyle(
                                   fontSize: 14, fontWeight: FontWeight.w600)),

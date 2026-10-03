@@ -23,7 +23,7 @@ from database import get_db
 from models import (
     User, RelationshipSpace, SpaceMember, PinnedMoment, MomentReaction,
     PlaylistTrack, BondRequest, DiaryEntry, DiaryReaction, DiaryComment,
-    MediaAsset,
+    MediaAsset, DailyPrompt, DailyPromptAnswer,
 )
 import uuid as _uuid
 from datetime import date as _date
@@ -738,6 +738,11 @@ def _space_full(db: Session, space: RelationshipSpace, current_user: User) -> di
     data["moments"] = [_moment_dict(db, m, current_user.id) for m in moments]
     # "Our Playlist" — the shared crate for this bond (both partners' adds).
     data["playlist"] = _playlist_for(db, space, current_user.id)
+    # Today's "Us" question, so the hub card paints on open (bond spaces only).
+    try:
+        data["question"] = _question_state(db, space, current_user)
+    except Exception:
+        data["question"] = None
     # "Our Diary" — the shared notebook (memories + upcoming plans) for the bond.
     data["diary"] = _diary_for(db, space, current_user.id)
     return data
@@ -1355,6 +1360,259 @@ def annotate_track(
     db.commit()
     db.refresh(track)
     return _track_dict(db, track, current_user.id)
+
+
+# ── Daily "Us" question ──────────────────────────────────────────────────────
+# One curated prompt per calendar day, the same for every couple. 'text' prompts
+# invite a few words; 'music' prompts ask for a song (both picks drop into the
+# soundtrack). Answers reveal to both partners only once BOTH have answered —
+# the simultaneous-reveal ritual.
+_DAILY_PROMPTS = [
+    ("text", "What made you smile today?"),
+    ("music", "Pick a song for how you feel about us today."),
+    ("text", "What do you miss about them right now?"),
+    ("text", "What is one small thing they did that you loved?"),
+    ("music", "A song that sounds like your week together."),
+    ("text", "What are you most grateful for about them today?"),
+    ("text", "Where do you wish you two were right now?"),
+    ("music", "Pick a song you want to dance to with them."),
+    ("text", "What are you looking forward to together?"),
+    ("text", "What is a tiny moment with them you keep replaying?"),
+    ("music", "A song that would cheer them up today."),
+    ("text", "What did they teach you this week?"),
+    ("text", "If today had a title, what would it be?"),
+    ("music", "Pick the song for your next slow evening in."),
+    ("text", "What is one thing you want to tell them tonight?"),
+    ("text", "What made you feel close to them lately?"),
+    ("music", "A song that reminds you of how you met."),
+    ("text", "What is your favourite thing about them this month?"),
+    ("text", "What would make tomorrow better for both of you?"),
+    ("music", "Pick a song to wake up to together."),
+    ("text", "What small adventure would you take them on?"),
+    ("text", "When did you last laugh together, and at what?"),
+    ("music", "A song for a long drive, just the two of you."),
+    ("text", "What do you love that only the two of you share?"),
+]
+
+
+def _prompt_for_day(db: Session, day: _date) -> DailyPrompt:
+    """Resolve (or create) the single prompt for `day`, chosen deterministically
+    so it's the same for everyone and stays stable in the archive."""
+    p = db.query(DailyPrompt).filter(DailyPrompt.day == day).first()
+    if p is not None:
+        return p
+    kind, body = _DAILY_PROMPTS[day.toordinal() % len(_DAILY_PROMPTS)]
+    p = DailyPrompt(day=day, kind=kind, body=body)
+    db.add(p)
+    try:
+        db.commit()
+        db.refresh(p)
+    except Exception:
+        db.rollback()  # another request created it first
+        p = db.query(DailyPrompt).filter(DailyPrompt.day == day).first()
+    return p
+
+
+def _answer_payload(a) -> Optional[dict]:
+    if a is None:
+        return None
+    return {
+        "user_id": a.user_id,
+        "answer_text": a.answer_text,
+        "track_title": a.track_title,
+        "track_artist": a.track_artist,
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+    }
+
+
+def _question_state(db: Session, space: RelationshipSpace,
+                    current_user: User) -> dict:
+    pk, partner = _bond_pair_key(space, current_user.id)
+    today = _date.today()
+    prompt = _prompt_for_day(db, today)
+    mine = partner_ans = None
+    if pk is not None:
+        rows = db.query(DailyPromptAnswer).filter(
+            DailyPromptAnswer.pair_key == pk,
+            DailyPromptAnswer.day == today,
+        ).all()
+        for r in rows:
+            if r.user_id == current_user.id:
+                mine = r
+            else:
+                partner_ans = r
+    revealed = (mine is not None and partner_ans is not None)
+    partner_user = (
+        db.query(User).filter(User.id == partner).first() if partner else None
+    )
+    return {
+        "day": today.isoformat(),
+        "prompt": {"kind": prompt.kind, "body": prompt.body},
+        "answered": mine is not None,
+        "my_answer": _answer_payload(mine),
+        "partner_answered": partner_ans is not None,
+        "revealed": revealed,
+        "partner_answer": _answer_payload(partner_ans) if revealed else None,
+        "partner_name": (partner_user.username if partner_user else None),
+    }
+
+
+def _notify_prompt(space: RelationshipSpace, from_user: User,
+                   partner_id: Optional[int], event: str,
+                   prompt: DailyPrompt, reveal: bool) -> None:
+    """Socket + a single gentle push. On reveal, both partners hear; otherwise
+    only the partner gets the 'your turn' nudge (never the person who answered)."""
+    if not partner_id:
+        return
+    who = from_user.username or "Someone"
+    if reveal:
+        title = "Your answers are in 💞"
+        body = "You both answered today's question — tap to see."
+    else:
+        title = "Today's question"
+        body = f"{who} answered — your turn 💬"
+    data = {
+        "space_id": space.id,
+        "day": _date.today().isoformat(),
+        "prompt": prompt.body,
+        "kind": prompt.kind,
+    }
+    targets = [partner_id, from_user.id] if reveal else [partner_id]
+    for uid in targets:
+        try:
+            safe_notify_user(uid, {"type": event, "data": data})
+        except Exception:
+            pass
+    try:
+        _push(partner_id, title, body, event)
+    except Exception:
+        pass
+    if reveal:
+        try:
+            _push(from_user.id, title, body, event)
+        except Exception:
+            pass
+
+
+class _AnswerBody(BaseModel):
+    answer_text: Optional[str] = None
+    track_title: Optional[str] = None
+    track_artist: Optional[str] = None
+    track_ref: Optional[str] = None
+
+
+@router.get("/{space_id}/question")
+def get_question(
+    space_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Today's 'Us' question for this bond, plus my answer and — once both have
+    answered — the partner's, revealed together."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    return _question_state(db, space, current_user)
+
+
+@router.post("/{space_id}/question")
+def answer_question(
+    space_id: int,
+    payload: _AnswerBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Answer today's question (text or a song). One answer per partner per day;
+    re-posting updates it until the reveal. When both have answered, both are
+    notified and a music prompt's two picks flow into the soundtrack."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(
+            status_code=400, detail="This space has no partner yet")
+    today = _date.today()
+    prompt = _prompt_for_day(db, today)
+    text_ans = (payload.answer_text or "").strip() or None
+    title = (payload.track_title or "").strip() or None
+    artist = (payload.track_artist or "").strip() or None
+    ref = (payload.track_ref or "").strip() or None
+    if prompt.kind == "music" and not title:
+        raise HTTPException(status_code=400, detail="Pick a song to answer")
+    if prompt.kind == "text" and not text_ans:
+        raise HTTPException(status_code=400, detail="Write a short answer")
+
+    mine = db.query(DailyPromptAnswer).filter(
+        DailyPromptAnswer.pair_key == pk,
+        DailyPromptAnswer.day == today,
+        DailyPromptAnswer.user_id == current_user.id,
+    ).first()
+    if mine is None:
+        mine = DailyPromptAnswer(
+            pair_key=pk, day=today, user_id=current_user.id)
+        db.add(mine)
+    mine.answer_text = text_ans
+    mine.track_title = title[:200] if title else None
+    mine.track_artist = artist[:200] if artist else None
+    mine.track_ref = ref
+    db.commit()
+    db.refresh(mine)
+
+    partner_ans = db.query(DailyPromptAnswer).filter(
+        DailyPromptAnswer.pair_key == pk,
+        DailyPromptAnswer.day == today,
+        DailyPromptAnswer.user_id == partner,
+    ).first() if partner else None
+    both = partner_ans is not None
+
+    if both and prompt.kind == "music":
+        for ans in (mine, partner_ans):
+            if ans.track_title:
+                _upsert_soundtrack_track(
+                    db, pk, ans.user_id, ans.track_title, ans.track_artist,
+                    ans.track_ref, source="question", memo=prompt.body)
+
+    _notify_prompt(space, current_user, partner,
+                   "prompt_revealed" if both else "prompt_answered",
+                   prompt, reveal=both)
+    return _question_state(db, space, current_user)
+
+
+@router.get("/{space_id}/question/archive")
+def question_archive(
+    space_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Past questions this bond BOTH answered, newest first."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        return {"items": []}
+    rows = db.query(DailyPromptAnswer).filter(
+        DailyPromptAnswer.pair_key == pk,
+    ).order_by(DailyPromptAnswer.day.desc()).all()
+    by_day: dict = {}
+    for r in rows:
+        by_day.setdefault(r.day, []).append(r)
+    today = _date.today()
+    items = []
+    for day in sorted(by_day.keys(), reverse=True):
+        answers = by_day[day]
+        users = {a.user_id for a in answers}
+        # Only fully-answered PAST days belong in the archive.
+        if len(users) < 2 or day == today:
+            continue
+        prompt = _prompt_for_day(db, day)
+        mine = next((a for a in answers if a.user_id == current_user.id), None)
+        theirs = next((a for a in answers if a.user_id != current_user.id), None)
+        items.append({
+            "day": day.isoformat(),
+            "prompt": {"kind": prompt.kind, "body": prompt.body},
+            "my_answer": _answer_payload(mine),
+            "partner_answer": _answer_payload(theirs),
+        })
+        if len(items) >= 30:
+            break
+    return {"items": items}
+
 
 
 @router.get("/{space_id}/diary")

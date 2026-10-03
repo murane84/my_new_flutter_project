@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io' show File;
 import 'dart:typed_data';
 
@@ -8,6 +9,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:just_audio/just_audio.dart' as ja;
 
 import 'api_service.dart';
 import 'home_page.dart' show playbackBus, playlistNotifier;
@@ -19,6 +23,7 @@ import '../utils/avatar_widget.dart';
 import '../utils/popup_shell.dart';
 import '../utils/chat_background.dart';
 import '../utils/net_image.dart';
+import '../utils/app_config.dart';
 import '../services/media_store.dart';
 import '../utils/romantic_pattern.dart';
 import '../services/wallpapers_service.dart';
@@ -7187,6 +7192,15 @@ class _DedicationsSheetState extends State<_DedicationsSheet> {
                   style: TextStyle(
                       fontStyle: FontStyle.italic, color: scheme.onSurface)),
             ],
+            if ((d['voice_note_url'] ?? '').toString().isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _DedVoicePlayer(
+                    url: (d['voice_note_url']).toString(),
+                    accent: widget.accent),
+              ),
+            ],
           ],
         ),
         actions: [
@@ -7385,6 +7399,11 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
   String? _mood;
   final TextEditingController _noteCtrl = TextEditingController();
   bool _sending = false;
+  final AudioRecorder _rec = AudioRecorder();
+  bool _recording = false;
+  String? _voicePath;
+  int _voiceMs = 0;
+  Timer? _voiceTimer;
 
   static const List<String> _moods = [
     '❤️ Loved',
@@ -7400,7 +7419,113 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
   @override
   void dispose() {
     _noteCtrl.dispose();
+    _voiceTimer?.cancel();
+    _rec.dispose();
     super.dispose();
+  }
+
+  Future<void> _toggleRecord() async {
+    if (_recording) {
+      _voiceTimer?.cancel();
+      try {
+        final p = await _rec.stop();
+        if (!mounted) return;
+        setState(() {
+          _recording = false;
+          _voicePath = p;
+        });
+      } catch (_) {
+        if (mounted) setState(() => _recording = false);
+      }
+      return;
+    }
+    try {
+      if (!await _rec.hasPermission()) {
+        if (mounted) {
+          showToast(context, 'Microphone permission needed',
+              type: ToastType.error);
+        }
+        return;
+      }
+      final dir = await getTemporaryDirectory();
+      final path =
+          '${dir.path}/ded_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _rec.start(
+        const RecordConfig(
+            encoder: AudioEncoder.aacLc, bitRate: 128000, sampleRate: 44100),
+        path: path,
+      );
+      if (!mounted) return;
+      setState(() {
+        _recording = true;
+        _voiceMs = 0;
+        _voicePath = null;
+      });
+      _voiceTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
+        if (mounted) setState(() => _voiceMs += 200);
+      });
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not start recording',
+            type: ToastType.error);
+      }
+    }
+  }
+
+  void _clearVoice() {
+    final p = _voicePath;
+    setState(() => _voicePath = null);
+    if (p != null) {
+      try {
+        File(p).delete();
+      } catch (_) {}
+    }
+  }
+
+  String _fmtMs(int ms) {
+    final s = (ms / 1000).floor();
+    return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+  }
+
+  Widget _voiceRow(ColorScheme scheme) {
+    if (_recording) {
+      return Row(
+        children: [
+          IconButton(
+            onPressed: _toggleRecord,
+            icon: const Icon(Icons.stop_circle_rounded, color: Colors.red),
+          ),
+          Text('Recording… ${_fmtMs(_voiceMs)}',
+              style: TextStyle(color: scheme.onSurfaceVariant)),
+        ],
+      );
+    }
+    if (_voicePath != null) {
+      return Row(
+        children: [
+          Icon(Icons.mic_rounded, size: 18, color: widget.accent),
+          const SizedBox(width: 6),
+          Text('Voice note (${_fmtMs(_voiceMs)})',
+              style: TextStyle(
+                  color: scheme.onSurface, fontWeight: FontWeight.w600)),
+          const Spacer(),
+          IconButton(
+            onPressed: _clearVoice,
+            icon: Icon(Icons.close_rounded,
+                size: 18, color: scheme.onSurfaceVariant),
+          ),
+        ],
+      );
+    }
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: _toggleRecord,
+        icon: Icon(Icons.mic_none_rounded, color: widget.accent),
+        label:
+            Text('Add a voice note', style: TextStyle(color: widget.accent)),
+      ),
+    );
   }
 
   Future<void> _pickSong() async {
@@ -7422,6 +7547,20 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
       return;
     }
     setState(() => _sending = true);
+    String? voiceUrl;
+    if (_voicePath != null) {
+      try {
+        final bytes = await File(_voicePath!).readAsBytes();
+        if (bytes.isNotEmpty) {
+          final up = await ApiService().uploadMedia(
+            bytes: bytes,
+            filename: _voicePath!.replaceAll('\\', '/').split('/').last,
+            mime: 'audio/mp4',
+          );
+          voiceUrl = up?['url'] as String?;
+        }
+      } catch (_) {}
+    }
     final res = await ApiService().createDedication(
       widget.spaceId,
       title: (_song!['title'] ?? '').toString(),
@@ -7429,6 +7568,7 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
       ref: _song!['ref'] as String?,
       mood: _mood,
       note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+      voiceNoteUrl: voiceUrl,
     );
     if (!mounted) return;
     setState(() => _sending = false);
@@ -7552,6 +7692,8 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
                   borderSide: BorderSide.none),
             ),
           ),
+          const SizedBox(height: 10),
+          _voiceRow(scheme),
           const SizedBox(height: 6),
           SizedBox(
             width: double.infinity,
@@ -7563,6 +7705,80 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A tiny tap-to-play pill for a dedication's voice note (just_audio).
+class _DedVoicePlayer extends StatefulWidget {
+  const _DedVoicePlayer({required this.url, required this.accent});
+  final String url;
+  final Color accent;
+
+  @override
+  State<_DedVoicePlayer> createState() => _DedVoicePlayerState();
+}
+
+class _DedVoicePlayerState extends State<_DedVoicePlayer> {
+  final ja.AudioPlayer _p = ja.AudioPlayer();
+  bool _playing = false;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _p.playerStateStream.listen((st) {
+      if (!mounted) return;
+      final done = st.processingState == ja.ProcessingState.completed;
+      setState(() => _playing = st.playing && !done);
+      if (done) {
+        _p.seek(Duration.zero);
+        _p.pause();
+      }
+    });
+  }
+
+  Future<void> _load() async {
+    try {
+      final full = widget.url.startsWith('http')
+          ? widget.url
+          : '${await AppConfig.baseUrl}${widget.url}';
+      await _p.setUrl(full, headers: mediaAuthHeaders(full));
+      if (mounted) setState(() => _ready = true);
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _p.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: !_ready ? null : () => _playing ? _p.pause() : _p.play(),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: widget.accent.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(_playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                color: widget.accent),
+            const SizedBox(width: 6),
+            Text(_ready ? 'Voice note' : 'Loading…',
+                style: TextStyle(
+                    color: scheme.onSurface, fontWeight: FontWeight.w600)),
+          ],
+        ),
       ),
     );
   }

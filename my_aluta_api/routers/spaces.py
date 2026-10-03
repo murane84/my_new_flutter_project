@@ -1232,53 +1232,12 @@ _VALID_TRACK_SOURCES = {"manual", "share", "listen_together",
 def _upsert_soundtrack_track(db: Session, pk: str, user_id: int, title: str,
                              artist=None, ref=None, source="manual",
                              memo=None):
-    """Add a track to the bond's soundtrack, de-duping on title+artist so the
-    same song can flow in from several sources without piling up. If it already
-    exists, backfill a memo/ref it was missing instead of duplicating. Returns
-    (track, created)."""
-    title = (title or "").strip()
-    if not title:
-        return None, False
-    title = title[:200]
-    artist = ((artist or "").strip() or None)
-    if artist:
-        artist = artist[:200]
+    """Add a track to the bond's soundtrack, de-duping on title+artist. Thin
+    wrapper over bonding.record_soundtrack_track so every feed (manual, share,
+    listen-together, question, dedication) goes through one place."""
     src = source if source in _VALID_TRACK_SOURCES else "manual"
-    memo = ((memo or "").strip() or None)
-    # De-dupe in Python (a couple's crate is small) — case-insensitive on the
-    # title + artist pair.
-    tl = title.lower()
-    al = (artist or "").lower()
-    match = None
-    for e in db.query(PlaylistTrack).filter(PlaylistTrack.pair_key == pk).all():
-        if (e.title or "").strip().lower() == tl and \
-                (e.artist or "").strip().lower() == al:
-            match = e
-            break
-    if match is not None:
-        changed = False
-        if memo and not match.memo:
-            match.memo = memo[:500]
-            changed = True
-        if ref and not match.ref:
-            match.ref = ref
-            changed = True
-        if changed:
-            try:
-                db.commit()
-                db.refresh(match)
-            except Exception:
-                db.rollback()
-        return match, False
-    track = PlaylistTrack(
-        pair_key=pk, added_by=user_id, title=title, artist=artist,
-        ref=ref, source=src, memo=(memo[:500] if memo else None),
-    )
-    db.add(track)
-    db.commit()
-    db.refresh(track)
-    return track, True
-
+    return bonding.record_soundtrack_track(
+        db, pk, user_id, title, artist, ref, src, memo)
 
 @router.get("/{space_id}/playlist")
 def get_playlist(

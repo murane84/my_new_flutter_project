@@ -5128,6 +5128,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                           ),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               if (_replyTo != null)
                                 _buildReplyPreview(_replyTo!),

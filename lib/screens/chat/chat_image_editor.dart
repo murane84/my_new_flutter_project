@@ -60,9 +60,15 @@ class _ImagePreviewScreen extends StatefulWidget {
   const _ImagePreviewScreen({
     required this.imageBytes,
     required this.friendName,
+    this.index = 0,
+    this.total = 0,
   });
   final Uint8List imageBytes;
   final String friendName;
+  // When sending a batch from the gallery, which photo this is (1-based) and
+  // how many in total — shown as "Photo i of N". 0/0 = a single photo.
+  final int index;
+  final int total;
 
   @override
   State<_ImagePreviewScreen> createState() => _ImagePreviewScreenState();
@@ -335,8 +341,20 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
           icon: const Icon(Icons.close_rounded),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text('Send to ${widget.friendName}',
-            style: const TextStyle(fontSize: 16)),
+        title: widget.total > 1
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Send to ${widget.friendName}',
+                      style: const TextStyle(fontSize: 15)),
+                  Text('Photo ${widget.index} of ${widget.total}',
+                      style: const TextStyle(
+                          fontSize: 11.5, color: Colors.white70)),
+                ],
+              )
+            : Text('Send to ${widget.friendName}',
+                style: const TextStyle(fontSize: 16)),
         actions: [
           IconButton(
             tooltip: 'Undo',

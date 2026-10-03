@@ -1802,7 +1802,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               constraints: const BoxConstraints(maxWidth: 460),
               child: AttachSheet(
                 isMobile: _isMobile,
-                onGallery: () => act(() => _pickImage(ImageSource.gallery)),
+                onGallery: () => act(() => _pickGalleryImages()),
                 onCamera: () => act(() => _pickImage(ImageSource.camera)),
                 onLocation: () => act(_shareLocation),
                 onContact: () => act(_shareContact),
@@ -2042,21 +2042,24 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   /// Show a full-screen preview of the picked image with a caption box, so the
   /// user can add a message and send image + text as ONE bubble. Returns
   /// without sending if the user backs out of the preview.
-  Future<void> _previewAndSendImage(
-      Uint8List bytes, String filename, String mime) async {
-    if (!mounted) return;
+  Future<bool> _previewAndSendImage(
+      Uint8List bytes, String filename, String mime,
+      {int index = 0, int total = 0}) async {
+    if (!mounted) return false;
     final result = await Navigator.of(context).push<Map<String, dynamic>?>(
       MaterialPageRoute(
         fullscreenDialog: true,
         builder: (_) => _ImagePreviewScreen(
           imageBytes: bytes,
           friendName: widget.friendName,
+          index: index,
+          total: total,
         ),
       ),
     );
     // null → the user cancelled/backed out. Otherwise the map carries the
     // (possibly annotated) bytes, its mime, and the caption.
-    if (result == null || !mounted) return;
+    if (result == null || !mounted) return false;
     final outBytes = (result['bytes'] as Uint8List?) ?? bytes;
     final outMime = (result['mime'] as String?) ?? mime;
     final caption = ((result['caption'] as String?) ?? '').trim();
@@ -2076,6 +2079,37 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       caption: caption,
       hd: hd,
     );
+    return true;
+  }
+
+  // Gallery supports selecting several photos at once. A single pick keeps the
+  // normal preview; multiple are previewed + sent one after another ("Photo i
+  // of N"), and backing out of a preview stops the remaining ones.
+  Future<void> _pickGalleryImages() async {
+    try {
+      final files = await ImagePicker()
+          .pickMultiImage(imageQuality: 92, maxWidth: 2560);
+      if (files.isEmpty) return;
+      if (files.length == 1) {
+        final x = files.first;
+        final bytes = await x.readAsBytes();
+        await _previewAndSendImage(bytes, x.name, 'image/jpeg');
+        return;
+      }
+      for (var i = 0; i < files.length; i++) {
+        if (!mounted) break;
+        final x = files[i];
+        final bytes = await x.readAsBytes();
+        final sent = await _previewAndSendImage(
+            bytes, x.name, 'image/jpeg',
+            index: i + 1, total: files.length);
+        if (!sent) break; // user backed out → stop sending the rest
+      }
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not pick images', type: ToastType.error);
+      }
+    }
   }
 
   Future<void> _pickDocument() async {

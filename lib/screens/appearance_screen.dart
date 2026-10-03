@@ -5,6 +5,7 @@ import 'theme_provider.dart';
 import '../utils/popup_shell.dart';
 import '../utils/app_config.dart';
 import '../utils/chat_background.dart';
+import '../utils/bubble_theme.dart';
 import '../services/wallpapers_service.dart';
 import '../widgets/wallpaper_gallery.dart';
 import 'api_service.dart';
@@ -197,6 +198,19 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
               'Wallpaper sets the backdrop for every chat — override any single '
               'chat from its \u22ee menu → Wallpaper. Status videos pre-load '
               'quietly on Wi-Fi so they open instantly.',
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            ),
+          ],
+          const SizedBox(height: 18),
+          _sectionLabel(scheme, 'MESSAGE BUBBLES'),
+          const SizedBox(height: 10),
+          const _BubbleThemeSection(),
+          if (_showGuide) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Give your chats your own colours — one shade for your '
+              'messages, one for theirs. Text and links stay readable '
+              'automatically, in light or dark mode.',
               style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
             ),
           ],
@@ -772,6 +786,245 @@ class _StatusMediaSectionState extends State<_StatusMediaSection> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Settings card for the custom message-bubble colour theme. A switch turns the
+/// user's palette on, a live preview shows how a chat reads, and two swatches
+/// open a curated colour grid for "my" and "their" bubbles. Everything rebuilds
+/// on [bubbleThemeRevision] so the preview tracks each pick instantly.
+class _BubbleThemeSection extends StatelessWidget {
+  const _BubbleThemeSection();
+
+  bool _sameColour(Color a, Color b) =>
+      (a.r - b.r).abs() < 0.004 &&
+      (a.g - b.g).abs() < 0.004 &&
+      (a.b - b.b).abs() < 0.004;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ValueListenableBuilder<int>(
+      valueListenable: bubbleThemeRevision,
+      builder: (context, _, __) {
+        final on = bubbleCustomEnabled;
+        return Container(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest.withAlpha(90),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: scheme.outlineVariant.withAlpha(80)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.chat_bubble_outline_rounded,
+                      size: 20, color: scheme.primary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Custom colours',
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: scheme.onSurface)),
+                        Text(on ? 'Your palette, every chat' : 'Using app default',
+                            style: TextStyle(
+                                fontSize: 11.5,
+                                color: scheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: on,
+                    onChanged: (v) => setBubbleCustomEnabled(v),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _preview(scheme, on),
+              if (on) ...[
+                const SizedBox(height: 14),
+                _sideRow(context, scheme, 'My messages', bubbleSentColor, true),
+                const SizedBox(height: 10),
+                _sideRow(
+                    context, scheme, 'Their messages', bubbleRecvColor, false),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => resetBubbleTheme(),
+                    icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                    label: const Text('Reset to default'),
+                    style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _preview(ColorScheme scheme, bool on) {
+    final isDark = scheme.brightness == Brightness.dark;
+    final sent = on
+        ? bubbleSentColor
+        : (isDark ? const Color(0xFF4C2328) : const Color(0xFFFBDCDB));
+    final recv = on
+        ? bubbleRecvColor
+        : (isDark ? const Color(0xFF241E20) : Colors.white);
+    final onSent = on
+        ? bubbleTextOn(sent)
+        : (isDark ? const Color(0xFFF6E1E1) : const Color(0xFF4A141A));
+    final onRecv = on ? bubbleTextOn(recv) : scheme.onSurface;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.outlineVariant.withAlpha(60)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: _bubble('Hey! Love this song', recv, onRecv, false),
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerRight,
+            child: _bubble('Right? Adding it to our playlist', sent, onSent, true),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _bubble(String text, Color bg, Color fg, bool mine) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 230),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(14),
+          topRight: const Radius.circular(14),
+          bottomLeft: Radius.circular(mine ? 14 : 4),
+          bottomRight: Radius.circular(mine ? 4 : 14),
+        ),
+        border: Border.all(color: bubbleBorderOn(bg)),
+      ),
+      child: Text(text,
+          style: TextStyle(color: fg, fontSize: 13.5, height: 1.3)),
+    );
+  }
+
+  Widget _sideRow(BuildContext context, ColorScheme scheme, String label,
+      Color color, bool sent) {
+    return InkWell(
+      onTap: () => _pickColour(context, sent),
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(label,
+                  style: TextStyle(fontSize: 13.5, color: scheme.onSurface)),
+            ),
+            Container(
+              width: 48,
+              height: 30,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: scheme.outlineVariant),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.edit_rounded, size: 16, color: scheme.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickColour(BuildContext context, bool sent) async {
+    final scheme = Theme.of(context).colorScheme;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final current = sent ? bubbleSentColor : bubbleRecvColor;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(18, 2, 18, 26),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(sent ? 'My message colour' : 'Their message colour',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurface)),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  for (final v in bubblePalette)
+                    _swatchCell(ctx, Color(v), current, sent),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _swatchCell(BuildContext ctx, Color c, Color current, bool sent) {
+    final selected = _sameColour(c, current);
+    final light = c.computeLuminance() > 0.5;
+    return GestureDetector(
+      onTap: () {
+        if (sent) {
+          setBubbleSentColor(c);
+        } else {
+          setBubbleRecvColor(c);
+        }
+        Navigator.pop(ctx);
+      },
+      child: Container(
+        width: 46,
+        height: 46,
+        decoration: BoxDecoration(
+          color: c,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: selected
+                ? (light ? Colors.black54 : Colors.white)
+                : Colors.black.withAlpha(30),
+            width: selected ? 2.5 : 1,
+          ),
+        ),
+        child: selected
+            ? Icon(Icons.check_rounded,
+                size: 20, color: light ? Colors.black87 : Colors.white)
+            : null,
       ),
     );
   }

@@ -32,6 +32,7 @@ import 'call_reliability_screen.dart';
 import 'music/song_identifier.dart' show showSongIdentifier;
 import 'profile_screen.dart';
 import '../utils/popup_shell.dart';
+import '../utils/bounce_tap.dart';
 import '../utils/brand_theme.dart';
 import '../widgets/chat_wallpaper_sheet.dart';
 import 'api_service.dart';
@@ -56,6 +57,7 @@ import '../services/media_store.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
 import '../utils/chat_background.dart';
+import '../utils/bubble_theme.dart';
 import '../services/biometric_service.dart';
 import '../services/call_service.dart';
 import '../services/group_call_service.dart';
@@ -342,6 +344,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _loadCachedSpaces();     // and the pinned Our Space hero(es), for offline
     _loadCachedStories();    // status & stories, for offline (24h-filtered)
     loadChatBackground();    // the chosen chat wallpaper (photo/motif/default)
+    loadBubbleTheme();       // the chosen message-bubble colour theme
     _fetchFriends();          // then refresh from network
     _loadSpaces();            // pinned "Our Space" hero(es) — one-shot, no poll
     _loadBondRequests();      // pending "pin a bond" requests (banner + chip)

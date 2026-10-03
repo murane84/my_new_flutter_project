@@ -1189,13 +1189,28 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                       ),
                       const SizedBox(height: 10),
                       // Title + artist.
-                      MarqueeText(
-                        text: title,
+                      // Always reserve the title line's height (28) so the
+                      // disc above never nudges when a song loads. With nothing
+                      // playing, show a soft hint instead of a blank gap.
+                      SizedBox(
                         height: 28,
-                        style: TextStyle(
-                          color: scheme.onSurface,
-                          fontSize: 21,
-                          fontWeight: FontWeight.w800,
+                        child: Align(
+                          alignment: Alignment.center,
+                          child: MarqueeText(
+                            text: title.trim().isNotEmpty
+                                ? title
+                                : 'Nothing playing',
+                            height: 28,
+                            style: TextStyle(
+                              color: title.trim().isNotEmpty
+                                  ? scheme.onSurface
+                                  : scheme.onSurfaceVariant.withAlpha(140),
+                              fontSize: 21,
+                              fontWeight: title.trim().isNotEmpty
+                                  ? FontWeight.w800
+                                  : FontWeight.w600,
+                            ),
+                          ),
                         ),
                       ),
                       // Reserve the artist slot even when a track has no

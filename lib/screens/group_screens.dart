@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import '../utils/net_image.dart';
+import '../utils/message_preview.dart';
 
 import 'api_service.dart';
 import 'token_helper.dart' show mediaAuthHeaders;
@@ -129,7 +130,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
   Widget _tile(Map<String, dynamic> g, ColorScheme scheme) {
     final members = (g['members'] as List?) ?? const [];
     final unread = (g['unread_count'] as num?)?.toInt() ?? 0;
-    final last = (g['last_message'] ?? '').toString();
+    final lastRaw = (g['last_message'] ?? '').toString();
+    // Friendly label if the preview is a bare call / listen outcome token.
+    final last = mapOutcomeToken(lastRaw) ?? lastRaw;
     return ListTile(
       onTap: () => Navigator.pop(context, g), // home opens it in the panel
       leading: CircleAvatar(

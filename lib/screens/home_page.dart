@@ -57,6 +57,7 @@ import '../services/media_store.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/app_config.dart';
 import '../utils/chat_background.dart';
+import '../utils/message_preview.dart';
 import '../utils/bubble_theme.dart';
 import '../services/biometric_service.dart';
 import '../services/call_service.dart';
@@ -2067,20 +2068,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
   String _previewText(String raw) {
     final s = raw.trim();
     // Safety net: a call / listen-together log whose raw outcome token leaked
-    // into the preview (e.g. a server last_message that carries no type). Map
-    // it so a row never reads "noanswer" / "declined" / "busy" etc.
-    const outcomes = <String, String>{
-      'listened': '🎧 Listened together',
-      'noanswer': 'No answer',
-      'declined': 'Declined',
-      'busy': '📞 Line busy',
-      'unreachable': '📞 Unreachable',
-      'failed': '📞 Call failed',
-      'cancelled': '📞 Call cancelled',
-      'missed': '📞 Missed call',
-      'answered': '📞 Call',
-    };
-    final mapped = outcomes[s.toLowerCase()];
+    // into the preview (e.g. a server last_message that carries no type).
+    final mapped = mapOutcomeToken(s);
     if (mapped != null) return mapped;
     if (s.startsWith('{') && s.endsWith('}')) {
       try {

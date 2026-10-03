@@ -841,3 +841,32 @@ class DailyPromptAnswer(Base):
     __table_args__ = (
         UniqueConstraint('pair_key', 'day', 'user_id', name='_daily_answer_uc'),
     )
+
+
+class Dedication(Base):
+    """A song sent as a feeling — 'send a song' upgraded into an event. Carries
+    an optional mood, a short line, and (optionally) a voice note, delivered to
+    the partner with a single nudge. Opening it plays the song + note; it also
+    auto-lands in the soundtrack. Keyed by pair_key so it belongs to the bond.
+    Auto-created; no ALTER."""
+    __tablename__ = "dedications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pair_key = Column(String, nullable=False, index=True)
+    from_user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    track_title = Column(String, nullable=False)
+    track_artist = Column(String, nullable=True)
+    track_ref = Column(String, nullable=True)
+    mood = Column(String, nullable=True)
+    note = Column(Text, nullable=True)
+    voice_note_url = Column(String, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    opened_at = Column(DateTime(timezone=True), nullable=True)
+
+    sender = relationship("User", foreign_keys=[from_user_id],
+                          passive_deletes=True)

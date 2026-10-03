@@ -3254,122 +3254,81 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
 
     Widget actionCard(BuildContext ctx) {
-      final actions = <Widget>[
-        _ActionTile(
-          icon: Icons.reply_rounded,
-          label: 'Reply',
-          onTap: () {
+      final deleted = msg['is_deleted'] == true;
+      final isTextMsg = (msg['message_type'] ?? 'text') == 'text';
+      final hasMedia = (msg['message_type'] ?? 'text') != 'text' &&
+          (msg['media_url'] as String? ?? '').isNotEmpty;
+      final full = <_MenuAction>[
+        _MenuAction('reply', Icons.reply_rounded, 'Reply', () {
+          Navigator.pop(ctx);
+          setState(() => _replyTo = msg);
+          FocusScope.of(context).requestFocus(FocusNode());
+        }),
+        if (!deleted)
+          _MenuAction(
+              'pin',
+              _isPinned(msg) ? Icons.push_pin : Icons.push_pin_outlined,
+              _isPinned(msg) ? 'Unpin' : 'Pin', () {
             Navigator.pop(ctx);
-            setState(() => _replyTo = msg);
-            FocusScope.of(context).requestFocus(FocusNode());
-          },
-        ),
-        if (msg['is_deleted'] != true)
-          _ActionTile(
-            icon: _isPinned(msg) ? Icons.push_pin : Icons.push_pin_outlined,
-            label: _isPinned(msg) ? 'Unpin message' : 'Pin message',
-            onTap: () {
-              Navigator.pop(ctx);
-              if (_isPinned(msg)) {
-                _unpinMessage(msg);
-              } else {
-                _showPinDurationSheet(msg);
-              }
-            },
-          ),
-        _ActionTile(
-          icon: Icons.copy_rounded,
-          label: 'Copy',
-          onTap: () {
+            if (_isPinned(msg)) {
+              _unpinMessage(msg);
+            } else {
+              _showPinDurationSheet(msg);
+            }
+          }),
+        _MenuAction('copy', Icons.copy_rounded, 'Copy', () {
+          Navigator.pop(ctx);
+          Clipboard.setData(ClipboardData(text: _stripQuote(content)));
+          showToast(context, 'Copied');
+        }),
+        if (!deleted)
+          _MenuAction('forward', Icons.forward_rounded, 'Forward', () {
             Navigator.pop(ctx);
-            Clipboard.setData(ClipboardData(text: _stripQuote(content)));
-            showToast(context, 'Copied');
-          },
-        ),
-        if (msg['is_deleted'] != true)
-          _ActionTile(
-            icon: Icons.forward_rounded,
-            label: 'Forward',
-            onTap: () {
-              Navigator.pop(ctx);
-              _showForwardPicker(msg);
-            },
-          ),
-        if (msg['is_deleted'] != true &&
-            (msg['message_type'] ?? 'text') != 'text' &&
-            (msg['media_url'] as String? ?? '').isNotEmpty)
-          _ActionTile(
-            icon: Icons.download_rounded,
-            label: 'Save to device',
-            onTap: () {
-              Navigator.pop(ctx);
-              _saveMediaToDevice(msg);
-            },
-          ),
+            _showForwardPicker(msg);
+          }),
+        if (!deleted && hasMedia)
+          _MenuAction('save', Icons.download_rounded, 'Save to device', () {
+            Navigator.pop(ctx);
+            _saveMediaToDevice(msg);
+          }),
         if (isMe) ...[
-          if (_isGroup && msg['is_deleted'] != true)
-            _ActionTile(
-              icon: Icons.info_outline_rounded,
-              label: 'Message info',
-              onTap: () {
-                Navigator.pop(ctx);
-                _showMessageInfo(msg);
-              },
-            ),
-          if ((msg['message_type'] ?? 'text') == 'text' &&
-              msg['is_deleted'] != true &&
-              _withinEditWindow(msg))
-            _ActionTile(
-              icon: Icons.edit_rounded,
-              label: 'Edit',
-              onTap: () {
-                Navigator.pop(ctx);
-                _startEditing(msg);
-              },
-            ),
-          _ActionTile(
-            icon: Icons.delete_outline_rounded,
-            label: 'Delete for me',
-            onTap: () {
+          if (_isGroup && !deleted)
+            _MenuAction('info', Icons.info_outline_rounded, 'Message info', () {
               Navigator.pop(ctx);
-              _deleteMessage(msg['id'], false);
-            },
-          ),
-          _ActionTile(
-            icon: Icons.delete_forever_rounded,
-            label: 'Delete for everyone',
-            color: scheme.error,
-            onTap: () {
+              _showMessageInfo(msg);
+            }),
+          if (isTextMsg && !deleted && _withinEditWindow(msg))
+            _MenuAction('edit', Icons.edit_rounded, 'Edit', () {
               Navigator.pop(ctx);
-              _deleteMessage(msg['id'], true);
-            },
-          ),
+              _startEditing(msg);
+            }),
+          _MenuAction('delme', Icons.delete_outline_rounded, 'Delete for me',
+              () {
+            Navigator.pop(ctx);
+            _deleteMessage(msg['id'], false);
+          }, short: 'Delete'),
+          _MenuAction('delall', Icons.delete_forever_rounded,
+              'Delete for everyone', () {
+            Navigator.pop(ctx);
+            _deleteMessage(msg['id'], true);
+          }, color: scheme.error),
         ],
-        const SizedBox(height: 6),
       ];
-      return Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color.alphaBlend(
-                  scheme.primary.withValues(alpha: isDark ? 0.08 : 0.05),
-                  scheme.surface),
-              scheme.surface,
-            ],
-          ),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-              color: scheme.outlineVariant
-                  .withValues(alpha: isDark ? 0.45 : 0.30),
-              width: 1),
-          boxShadow: softShadow,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: actions),
-        ),
+      _MenuAction? pick(String id) {
+        for (final a in full) {
+          if (a.id == id) return a;
+        }
+        return null;
+      }
+      final quick = [pick('reply'), pick('pin'), pick('forward'), pick('delme')]
+          .whereType<_MenuAction>()
+          .toList();
+      return _MsgActionMenu(
+        quick: quick,
+        full: full,
+        scheme: scheme,
+        isDark: isDark,
+        shadow: softShadow,
       );
     }
 
@@ -5977,3 +5936,139 @@ class _HoleClipper extends CustomClipper<Path> {
   bool shouldReclip(covariant _HoleClipper old) =>
       old.hole != hole || old.radius != radius;
 }
+
+/// One entry in the message menu — reused by both the quick-action row and the
+/// expanded dropdown so a button behaves identically in either place.
+class _MenuAction {
+  const _MenuAction(this.id, this.icon, this.label, this.onTap,
+      {this.color, this.short});
+  final String id;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? color;
+  final String? short; // compact label for the quick row
+}
+
+/// The message action menu: a compact quick-action row (Reply · Pin · Forward ·
+/// Delete · More) in the house style, which expands to the full dropdown of
+/// every action when "More" (⋮) is tapped. Keeps the pink frosted card look.
+class _MsgActionMenu extends StatefulWidget {
+  const _MsgActionMenu({
+    required this.quick,
+    required this.full,
+    required this.scheme,
+    required this.isDark,
+    required this.shadow,
+  });
+  final List<_MenuAction> quick;
+  final List<_MenuAction> full;
+  final ColorScheme scheme;
+  final bool isDark;
+  final List<BoxShadow> shadow;
+
+  @override
+  State<_MsgActionMenu> createState() => _MsgActionMenuState();
+}
+
+class _MsgActionMenuState extends State<_MsgActionMenu> {
+  bool _expanded = false;
+
+  BoxDecoration _deco(double radius) {
+    final scheme = widget.scheme;
+    return BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color.alphaBlend(
+              scheme.primary.withValues(alpha: widget.isDark ? 0.08 : 0.05),
+              scheme.surface),
+          scheme.surface,
+        ],
+      ),
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(
+          color: scheme.outlineVariant
+              .withValues(alpha: widget.isDark ? 0.45 : 0.30),
+          width: 1),
+      boxShadow: widget.shadow,
+    );
+  }
+
+  Widget _quickItem(
+      ColorScheme scheme, IconData icon, String label, VoidCallback onTap,
+      Color? color) {
+    final c = color ?? scheme.primary;
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: c.withValues(alpha: widget.isDark ? 0.22 : 0.14),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: c, size: 20),
+              ),
+              const SizedBox(height: 5),
+              Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = widget.scheme;
+    if (_expanded) {
+      return Container(
+        decoration: _deco(22),
+        clipBehavior: Clip.antiAlias,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final a in widget.full)
+                _ActionTile(
+                    icon: a.icon,
+                    label: a.label,
+                    color: a.color,
+                    onTap: a.onTap),
+              const SizedBox(height: 6),
+            ],
+          ),
+        ),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      decoration: _deco(26),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          for (final a in widget.quick)
+            _quickItem(scheme, a.icon, a.short ?? a.label, a.onTap, a.color),
+          _quickItem(scheme, Icons.more_vert_rounded, 'More',
+              () => setState(() => _expanded = true), null),
+        ],
+      ),
+    );
+  }
+}
+

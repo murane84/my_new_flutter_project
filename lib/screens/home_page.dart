@@ -1385,6 +1385,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
       spaceEventBus.value++;
       return;
     }
+    // A dedication just arrived for you — warm toast + refresh the hub badge.
+    if (type == 'dedication_received') {
+      final data = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final line = (data['line'] ??
+              '${data['from_username'] ?? 'Someone'} sent you a dedication 💝')
+          .toString();
+      if (mounted) showToast(context, line, type: ToastType.info);
+      _loadSpaces();
+      spaceEventBus.value++;
+      return;
+    }
     // Daily "Us" question — your partner answered, or you both just revealed.
     if (type == 'prompt_answered' || type == 'prompt_revealed') {
       final reveal = type == 'prompt_revealed';

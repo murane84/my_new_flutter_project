@@ -416,6 +416,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   final GlobalKey _kPlaylist = GlobalKey();
   final GlobalKey _kMoments = GlobalKey();
   final GlobalKey _kDiary = GlobalKey();
+  final GlobalKey _kDedications = GlobalKey();
   final GlobalKey _kSong = GlobalKey();
 
   // A feature opens as a FULL PAGE below the Our Space header (the header +
@@ -1243,6 +1244,19 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             count: diaryCount,
             subtitle: 'Memories & plans ahead',
             onTap: () => _openDiary(_globalCenter(_kDiary))),
+      if (_partnerId != null)
+        _featureTile(scheme,
+            tileKey: _kDedications,
+            icon: Icons.favorite_border_rounded,
+            label: 'Dedications',
+            count: countOf(
+                'dedication_unopened',
+                ((_space['dedications'] as List?) ?? const [])
+                    .where((x) =>
+                        x is Map && x['mine'] != true && x['opened'] != true)
+                    .length),
+            subtitle: 'A song as a feeling',
+            onTap: _openDedicationsInbox),
       _featureTile(scheme,
           tileKey: _kSong,
           icon: Icons.auto_awesome_rounded,
@@ -3364,6 +3378,27 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         ),
       ),
     );
+  }
+
+  // ── Dedications ───────────────────────────────────────────────────────────
+  Future<void> _openDedicationsInbox() async {
+    final partnerName =
+        ((_space['question'] as Map?)?['partner_name'] ?? 'Partner').toString();
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _DedicationsSheet(
+        spaceId: _id,
+        accent: _accent,
+        partnerName: partnerName,
+        onPlay: _playCrateTrack,
+      ),
+    );
+    if (mounted) _load();
   }
 
   // ── Today's "Us" question (hub card) ──────────────────────────────────────
@@ -7052,6 +7087,483 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
       children: mine
           ? [bubble, const SizedBox(width: 6), avatar]
           : [avatar, const SizedBox(width: 6), bubble],
+    );
+  }
+}
+
+// ── Dedications: inbox + compose ─────────────────────────────────────────────
+
+/// The dedications inbox for a bond: sent + received, newest first. Received and
+/// not-yet-opened ones are highlighted; tapping one opens it (marking it read)
+/// and offers to play the song together.
+class _DedicationsSheet extends StatefulWidget {
+  const _DedicationsSheet({
+    required this.spaceId,
+    required this.accent,
+    required this.partnerName,
+    required this.onPlay,
+  });
+  final int spaceId;
+  final Color accent;
+  final String partnerName;
+  final void Function(Map<String, dynamic> track) onPlay;
+
+  @override
+  State<_DedicationsSheet> createState() => _DedicationsSheetState();
+}
+
+class _DedicationsSheetState extends State<_DedicationsSheet> {
+  List<Map<String, dynamic>> _items = const [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    final d = await ApiService().getDedications(widget.spaceId);
+    if (!mounted) return;
+    setState(() {
+      _items = (((d?['dedications'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
+          .toList());
+      _loading = false;
+    });
+  }
+
+  Future<void> _compose() async {
+    final created = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) =>
+          _DedicateComposeSheet(spaceId: widget.spaceId, accent: widget.accent),
+    );
+    if (created == true) _fetch();
+  }
+
+  Future<void> _open(Map<String, dynamic> d) async {
+    final id = (d['id'] as num?)?.toInt();
+    final mine = d['mine'] == true;
+    if (id != null && !mine && d['opened'] != true) {
+      await ApiService().openDedication(widget.spaceId, id);
+    }
+    if (!mounted) return;
+    final scheme = Theme.of(context).colorScheme;
+    final title = (d['track_title'] ?? '').toString();
+    final artist = (d['track_artist'] ?? '').toString();
+    final mood = (d['mood'] ?? '').toString();
+    final note = (d['note'] ?? '').toString();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(mine ? 'Your dedication' : 'A dedication for you 💝'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title,
+                style: TextStyle(
+                    fontWeight: FontWeight.w800, color: scheme.onSurface)),
+            if (artist.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(artist,
+                    style: TextStyle(color: scheme.onSurfaceVariant)),
+              ),
+            if (mood.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(mood, style: TextStyle(color: widget.accent)),
+            ],
+            if (note.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text('“$note”',
+                  style: TextStyle(
+                      fontStyle: FontStyle.italic, color: scheme.onSurface)),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close')),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: widget.accent),
+            onPressed: () {
+              Navigator.pop(ctx);
+              widget.onPlay({
+                'title': title,
+                'ref': (d['track_ref'] ?? '').toString(),
+              });
+            },
+            icon: const Icon(Icons.headphones_rounded, size: 18),
+            label: const Text('Listen together'),
+          ),
+        ],
+      ),
+    );
+    _fetch();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      maxChildSize: 0.92,
+      builder: (ctx, controller) => Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Row(
+              children: [
+                Text('Dedications',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: scheme.onSurface)),
+                const Spacer(),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                      backgroundColor: widget.accent,
+                      visualDensity: VisualDensity.compact),
+                  onPressed: _compose,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Dedicate'),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _items.isEmpty
+                    ? ListView(
+                        controller: controller,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
+                            child: Column(
+                              children: [
+                                Icon(Icons.favorite_border_rounded,
+                                    color: widget.accent, size: 30),
+                                const SizedBox(height: 10),
+                                Text('No dedications yet',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: scheme.onSurface)),
+                                const SizedBox(height: 4),
+                                Text(
+                                    'Send a song as a feeling — tap Dedicate.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: scheme.onSurfaceVariant)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    : ListView.builder(
+                        controller: controller,
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                        itemCount: _items.length,
+                        itemBuilder: (_, i) => _dedCard(scheme, _items[i]),
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dedCard(ColorScheme scheme, Map<String, dynamic> d) {
+    final mine = d['mine'] == true;
+    final unopened = !mine && d['opened'] != true;
+    final title = (d['track_title'] ?? '').toString();
+    final artist = (d['track_artist'] ?? '').toString();
+    final mood = (d['mood'] ?? '').toString();
+    final who = mine
+        ? 'To ${widget.partnerName}'
+        : 'From ${(d['from_username'] ?? widget.partnerName)}';
+    return GestureDetector(
+      onTap: () => _open(d),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: unopened
+              ? widget.accent.withValues(alpha: 0.12)
+              : scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(14),
+          border: unopened
+              ? Border.all(color: widget.accent.withValues(alpha: 0.5))
+              : null,
+        ),
+        child: Row(
+          children: [
+            Icon(mine ? Icons.send_rounded : Icons.favorite_rounded,
+                size: 20, color: widget.accent),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(who,
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: widget.accent)),
+                      if (unopened) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: widget.accent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text('New',
+                              style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white)),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    artist.isNotEmpty ? '$title — $artist' : title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        color: scheme.onSurface),
+                  ),
+                  if (mood.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(mood,
+                          style: TextStyle(
+                              fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                    ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                color: scheme.onSurfaceVariant, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Compose a dedication: pick a song, choose a mood, add a line. Returns true on
+/// a successful send so the inbox refreshes.
+class _DedicateComposeSheet extends StatefulWidget {
+  const _DedicateComposeSheet({required this.spaceId, required this.accent});
+  final int spaceId;
+  final Color accent;
+
+  @override
+  State<_DedicateComposeSheet> createState() => _DedicateComposeSheetState();
+}
+
+class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
+  Map<String, dynamic>? _song;
+  String? _mood;
+  final TextEditingController _noteCtrl = TextEditingController();
+  bool _sending = false;
+
+  static const List<String> _moods = [
+    '❤️ Loved',
+    '🥰 Missing you',
+    '🌙 Thinking of you',
+    '🙏 Grateful',
+    '🔥 Hyped',
+    '😌 Calm',
+    '🎉 Celebrating',
+    '😢 Blue',
+  ];
+
+  @override
+  void dispose() {
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickSong() async {
+    final picked = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _PlaylistAddSheet(accent: widget.accent),
+    );
+    if (picked != null && mounted) setState(() => _song = picked);
+  }
+
+  Future<void> _send() async {
+    if (_song == null) {
+      showToast(context, 'Pick a song to dedicate.', type: ToastType.info);
+      return;
+    }
+    setState(() => _sending = true);
+    final res = await ApiService().createDedication(
+      widget.spaceId,
+      title: (_song!['title'] ?? '').toString(),
+      artist: _song!['artist'] as String?,
+      ref: _song!['ref'] as String?,
+      mood: _mood,
+      note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+    );
+    if (!mounted) return;
+    setState(() => _sending = false);
+    if (res != null) {
+      showToast(context, 'Dedication sent 💝', type: ToastType.success);
+      Navigator.pop(context, true);
+    } else {
+      showToast(context, 'Could not send the dedication',
+          type: ToastType.error);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final songLabel = _song == null
+        ? 'Pick a song'
+        : ((_song!['artist'] ?? '').toString().isNotEmpty
+            ? '${_song!['title']} — ${_song!['artist']}'
+            : (_song!['title'] ?? '').toString());
+    return Padding(
+      padding: EdgeInsets.fromLTRB(18, 14, 18, 18 + bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Dedicate a song 💝',
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: scheme.onSurface)),
+          const SizedBox(height: 14),
+          InkWell(
+            onTap: _pickSong,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: _song == null
+                        ? scheme.outlineVariant
+                        : widget.accent.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.library_music_rounded,
+                      size: 20, color: widget.accent),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(songLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: _song == null
+                                ? scheme.onSurfaceVariant
+                                : scheme.onSurface,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                  Icon(Icons.chevron_right_rounded,
+                      color: scheme.onSurfaceVariant),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text('Mood',
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final m in _moods)
+                GestureDetector(
+                  onTap: () =>
+                      setState(() => _mood = (_mood == m) ? null : m),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: _mood == m
+                          ? widget.accent.withValues(alpha: 0.18)
+                          : scheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: _mood == m
+                              ? widget.accent
+                              : Colors.transparent),
+                    ),
+                    child: Text(m,
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            color: scheme.onSurface,
+                            fontWeight: _mood == m
+                                ? FontWeight.w700
+                                : FontWeight.w500)),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _noteCtrl,
+            minLines: 1,
+            maxLines: 3,
+            maxLength: 300,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(
+              hintText: 'A line, if you like…',
+              filled: true,
+              fillColor: scheme.surfaceContainerHighest,
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none),
+            ),
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: widget.accent),
+              onPressed: _sending ? null : _send,
+              icon: const Icon(Icons.send_rounded, size: 18),
+              label: Text(_sending ? 'Sending…' : 'Send dedication'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -4289,7 +4289,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                 ),
               ),
             ],
-            if (kind == 'photo' && _full(m['ref']) != null) ...[
+            if ((kind == 'photo' || kind == 'gif') &&
+                _full(m['ref']) != null) ...[
               const SizedBox(height: 12),
               _momentPhoto(scheme, _full(m['ref'])!),
             ],
@@ -4299,7 +4300,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             ],
             if (kind == 'video' && _full(m['ref']) != null) ...[
               const SizedBox(height: 12),
-              _momentVideo(scheme, _full(m['ref'])!),
+              _MomentVideoInline(
+                url: _full(m['ref'])!,
+                accent: _accent,
+                onFullscreen: () => _openMomentVideo(_full(m['ref'])!),
+              ),
             ],
             if (caption.isNotEmpty) ...[
               const SizedBox(height: 12),
@@ -4382,14 +4387,19 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       onTap: () => _openMomentPhoto(url),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 260),
-          child: authNetworkImage(
-            url: url,
-            headers: mediaAuthHeaders(url),
-            fit: BoxFit.cover,
-            width: double.infinity,
-            cacheWidth: 1000,
+        child: ColoredBox(
+          color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+          child: ConstrainedBox(
+            // Show the WHOLE item (contain, not crop); letterboxed on a soft
+            // surface. Taller cap so portrait media still reads.
+            constraints: const BoxConstraints(
+                maxHeight: 420, minWidth: double.infinity),
+            child: authNetworkImage(
+              url: url,
+              headers: mediaAuthHeaders(url),
+              fit: BoxFit.contain,
+              cacheWidth: 1200,
+            ),
           ),
         ),
       ),
@@ -4431,48 +4441,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   /// A kept video shows a dark poster with a play button; tap opens a
   /// fullscreen player.
-  Widget _momentVideo(ColorScheme scheme, String url) {
-    return GestureDetector(
-      onTap: () => _openMomentVideo(url),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: AspectRatio(
-          aspectRatio: 16 / 9,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Container(color: Colors.black87),
-              Center(
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  decoration: const BoxDecoration(
-                    color: Colors.white24,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.play_arrow_rounded,
-                      color: Colors.white, size: 34),
-                ),
-              ),
-              const Positioned(
-                left: 10,
-                bottom: 8,
-                child: Row(
-                  children: [
-                    Icon(Icons.movie_rounded, size: 14, color: Colors.white70),
-                    SizedBox(width: 6),
-                    Text('Video',
-                        style: TextStyle(color: Colors.white70, fontSize: 12)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   void _openMomentVideo(String url) {
     showDialog<void>(
       context: context,
@@ -4537,6 +4505,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         return Icons.photo_rounded;
       case 'video':
         return Icons.movie_rounded;
+      case 'gif':
+        return Icons.gif_box_rounded;
       default:
         return Icons.sticky_note_2_rounded;
     }
@@ -4554,6 +4524,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         return 'A photo';
       case 'video':
         return 'A video';
+      case 'gif':
+        return 'A GIF';
       default:
         return 'A note';
     }
@@ -7755,6 +7727,145 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
 }
 
 /// A tiny tap-to-play pill for a dedication's voice note (just_audio).
+class _MomentVideoInline extends StatefulWidget {
+  const _MomentVideoInline(
+      {required this.url, required this.accent, this.onFullscreen});
+  final String url;
+  final Color accent;
+  final VoidCallback? onFullscreen;
+
+  @override
+  State<_MomentVideoInline> createState() => _MomentVideoInlineState();
+}
+
+class _MomentVideoInlineState extends State<_MomentVideoInline> {
+  VideoPlayerController? _c;
+  bool _loading = false;
+  bool _error = false;
+
+  Future<void> _start() async {
+    if (_c != null || _loading) return;
+    setState(() => _loading = true);
+    try {
+      final c = VideoPlayerController.networkUrl(
+        Uri.parse(widget.url),
+        httpHeaders: mediaAuthHeaders(widget.url),
+      );
+      await c.initialize();
+      if (!mounted) {
+        c.dispose();
+        return;
+      }
+      setState(() {
+        _c = c;
+        _loading = false;
+      });
+      c.setLooping(true);
+      c.play();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = true;
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _c?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _c;
+    final ready = c != null && c.value.isInitialized;
+    final ar = ready
+        ? (c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio)
+        : 16 / 9;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: AspectRatio(
+        aspectRatio: ar,
+        child: GestureDetector(
+          onTap: () {
+            if (_error) return;
+            if (!ready) {
+              _start();
+              return;
+            }
+            if (c.value.isPlaying) {
+              c.pause();
+            } else {
+              c.play();
+            }
+            setState(() {});
+          },
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Container(color: Colors.black87),
+              if (ready) Center(child: VideoPlayer(c)),
+              if (_error)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text(
+                      "Can't play here — tap the expand icon for full screen.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ),
+                ),
+              if (!ready && !_error)
+                Center(
+                  child: _loading
+                      ? const SizedBox(
+                          width: 34,
+                          height: 34,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : Container(
+                          width: 54,
+                          height: 54,
+                          decoration: const BoxDecoration(
+                              color: Colors.white24, shape: BoxShape.circle),
+                          child: const Icon(Icons.play_arrow_rounded,
+                              color: Colors.white, size: 32),
+                        ),
+                ),
+              if (ready && !c.value.isPlaying)
+                const Center(
+                  child: Icon(Icons.play_arrow_rounded,
+                      color: Colors.white70, size: 54),
+                ),
+              if (widget.onFullscreen != null)
+                Positioned(
+                  right: 8,
+                  bottom: 8,
+                  child: GestureDetector(
+                    onTap: widget.onFullscreen,
+                    child: Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: Colors.black38,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.fullscreen_rounded,
+                          color: Colors.white, size: 18),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MomentVideoPlayer extends StatefulWidget {
   const _MomentVideoPlayer({required this.url});
   final String url;

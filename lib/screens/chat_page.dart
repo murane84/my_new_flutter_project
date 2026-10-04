@@ -476,13 +476,21 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final sid = (space['id'] as num).toInt();
     final type = (msg['message_type'] as String?) ?? 'text';
     final rel = (msg['media_url'] as String?) ?? '';
+    final mime = (msg['media_mime'] as String?)?.toLowerCase() ?? '';
     final text = _stripQuote((msg['content'] as String?) ?? '').trim();
     String kind;
     String? ref;
     String? caption;
     switch (type) {
       case 'image':
-        kind = 'photo';
+        // A kept GIF/sticker (image/gif) gets its own kind so Our Space labels
+        // it "A GIF" (and still animates) instead of flattening to a photo.
+        kind = ((mime).contains('gif') ||
+                ((msg['media_name'] as String?) ?? '')
+                    .toLowerCase()
+                    .endsWith('.gif'))
+            ? 'gif'
+            : 'photo';
         ref = rel;
         break;
       case 'audio':
@@ -540,14 +548,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     if (kind == 'photo' ||
         kind == 'voice' ||
         kind == 'song' ||
-        kind == 'video') {
+        kind == 'video' ||
+        kind == 'gif') {
       final note = await _keepsakeNoteSheet(msg, type, space);
       if (note == null || !mounted) return; // cancelled
       final t = note.trim();
       caption = t.isEmpty ? null : t;
       // Durable, moment-owned copy (see _durableMediaRef) so the photo / voice
-      // / song never breaks after the chat media is purged.
-      final mime = (msg['media_mime'] as String?) ?? '';
+      // / song never breaks after the chat media is purged. (A GIF is an
+      // external CDN url, so _durableMediaRef returns it unchanged.)
       final durable = await _durableMediaRef(
           rel, mime.isNotEmpty ? mime : (type == 'image' ? 'image/jpeg' : ''));
       if (!mounted) return;

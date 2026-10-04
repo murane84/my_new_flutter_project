@@ -379,6 +379,47 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     return (name != null && name.isNotEmpty) ? name : 'A song';
   }
 
+  /// Capture a DURABLE, moment-owned server copy of a kept media file so the
+  /// moment survives the chat's store-and-forward purge — and so the partner,
+  /// who may never have been in the source chat, can fetch it through Our Space.
+  /// Reads the device's local cache first (what it already holds), falls back to
+  /// a server fetch while the bytes are still there, then re-uploads them as a
+  /// NON-ephemeral asset. Returns the new ref, or [rel] unchanged on any failure
+  /// so keeping never hard-fails.
+  Future<String> _durableMediaRef(String rel, String mime) async {
+    if (rel.isEmpty || rel.startsWith('http')) return rel;
+    try {
+      final url = fullMediaUrl(rel);
+      List<int>? bytes;
+      if (!kIsWeb) {
+        try {
+          final f =
+              await MediaStore.instance.getFile(url, mediaAuthHeaders(url));
+          if (f != null) bytes = await f.readAsBytes();
+        } catch (_) {}
+      }
+      if (bytes == null || bytes.isEmpty) {
+        final res =
+            await http.get(Uri.parse(url), headers: mediaAuthHeaders(url));
+        if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
+          bytes = res.bodyBytes;
+        }
+      }
+      if (bytes == null || bytes.isEmpty) return rel;
+      final name = rel.split('/').last;
+      final up = await ApiService().uploadMedia(
+        bytes: bytes,
+        filename: name.isEmpty ? 'keepsake' : name,
+        mime: mime.isNotEmpty ? mime : 'application/octet-stream',
+        ephemeral: false,
+      );
+      final newUrl = (up?['url'] as String?) ?? '';
+      return newUrl.isNotEmpty ? newUrl : rel;
+    } catch (_) {
+      return rel;
+    }
+  }
+
   /// Keep [msg] into Our Space as a PinnedMoment, mapping the bubble type to a
   /// moment kind: text→note, photo→photo, voice→voice, song→song.
   Future<void> _keepsakeMessage(Map<String, dynamic> msg) async {
@@ -434,6 +475,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       if (note == null || !mounted) return; // cancelled
       final t = note.trim();
       caption = t.isEmpty ? null : t;
+      // Durable, moment-owned copy (see _durableMediaRef) so the photo / voice
+      // / song never breaks after the chat media is purged.
+      final mime = (msg['media_mime'] as String?) ?? '';
+      final durable = await _durableMediaRef(
+          rel, mime.isNotEmpty ? mime : (type == 'image' ? 'image/jpeg' : ''));
+      if (!mounted) return;
+      ref = (kind == 'song')
+          ? jsonEncode({'title': _songTitleOf(msg), 'ref': durable})
+          : durable;
     }
     final res = await ApiService()
         .addMoment(sid, kind: kind, ref: ref, caption: caption);

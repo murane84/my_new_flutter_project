@@ -422,7 +422,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   final GlobalKey _kPlaylist = GlobalKey();
   final GlobalKey _kMoments = GlobalKey();
   final GlobalKey _kDiary = GlobalKey();
-  final GlobalKey _kDedications = GlobalKey();
   final GlobalKey _kSong = GlobalKey();
 
   // A feature opens as a FULL PAGE below the Our Space header (the header +
@@ -1250,7 +1249,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         (_space[key] as num?)?.toInt() ?? fallback;
     final playlistCount = countOf(
         'playlist_count', ((_space['playlist'] as List?) ?? const []).length);
-    final momentsCount = countOf('moment_count', moments.length);
+    final dedicationsCount =
+        ((_space['dedications'] as List?) ?? const []).length;
+    // The moments wall now also carries dedications, so the badge counts both.
+    final momentsCount =
+        countOf('moment_count', moments.length) + dedicationsCount;
     final diaryCount = countOf('diary_count', _diary.length);
     final tiles = <Widget>[
       if (_partnerId != null)
@@ -1276,19 +1279,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             count: diaryCount,
             subtitle: 'Memories & plans ahead',
             onTap: () => _openDiary(_globalCenter(_kDiary))),
-      if (_partnerId != null)
-        _featureTile(scheme,
-            tileKey: _kDedications,
-            icon: Icons.favorite_border_rounded,
-            label: 'Dedications',
-            count: countOf(
-                'dedication_unopened',
-                ((_space['dedications'] as List?) ?? const [])
-                    .where((x) =>
-                        x is Map && x['mine'] != true && x['opened'] != true)
-                    .length),
-            subtitle: 'A song as a feeling',
-            onTap: () => _openDedications(_globalCenter(_kDedications))),
       _featureTile(scheme,
           tileKey: _kSong,
           icon: Icons.auto_awesome_rounded,
@@ -1588,8 +1578,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       if (pair) ('playlist', Icons.queue_music_rounded, 'Our Playlist'),
       ('moments', Icons.favorite_rounded, 'Pinned moments'),
       if (pair) ('diary', Icons.menu_book_rounded, 'Our Diary'),
-      if (pair)
-        ('dedications', Icons.favorite_border_rounded, 'Dedications'),
       ('song', Icons.auto_awesome_rounded, 'Song & milestones'),
     ];
   }
@@ -1962,15 +1950,38 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             .whereType<Map>()
             .map((m) => Map<String, dynamic>.from(m))
             .toList();
+        final dedications = ((_space['dedications'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((d) => Map<String, dynamic>.from(d))
+            .toList();
+        // One warm feed: pinned moments + dedications together, newest first.
+        final feed = <Map<String, dynamic>>[
+          for (final m in moments)
+            {'_t': 'moment', '_d': m, '_ts': (m['created_at'] ?? '').toString()},
+          for (final d in dedications)
+            {
+              '_t': 'dedication',
+              '_d': d,
+              '_ts': (d['created_at'] ?? '').toString()
+            },
+        ]..sort((a, b) =>
+            (b['_ts'] as String).compareTo(a['_ts'] as String));
         return _sectionPanel(
           scheme,
           Icons.favorite_rounded,
           'Pinned moments',
           onMenu: onMenu,
-          body: moments.isEmpty
+          body: feed.isEmpty
               ? _momentsEmpty(scheme)
               : Column(
-                  children: [for (final m in moments) _momentCard(scheme, m)]),
+                  children: [
+                    for (final item in feed)
+                      item['_t'] == 'dedication'
+                          ? _dedicationCard(
+                              scheme, item['_d'] as Map<String, dynamic>)
+                          : _momentCard(
+                              scheme, item['_d'] as Map<String, dynamic>),
+                  ]),
           footer: SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
@@ -3589,7 +3600,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   }
 
   // ── Dedications (an in-body section, like the other tiles) ────────────────
-  void _openDedications([Offset? origin]) => _goSection('dedications');
 
   Future<void> _composeDedication() async {
     final created = await showModalBottomSheet<bool>(

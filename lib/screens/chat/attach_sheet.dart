@@ -18,6 +18,7 @@ class AttachSheet extends StatefulWidget {
     super.key,
     required this.isMobile,
     required this.onGallery,
+    required this.onVideo,
     required this.onCamera,
     required this.onLocation,
     required this.onContact,
@@ -30,6 +31,7 @@ class AttachSheet extends StatefulWidget {
   final bool isMobile;
 
   final VoidCallback onGallery;
+  final VoidCallback onVideo;
   final VoidCallback onCamera;
   final VoidCallback onLocation;
   final VoidCallback onContact;
@@ -170,6 +172,8 @@ class _AttachSheetState extends State<AttachSheet> {
     final options = <_Opt>[
       _Opt(Icons.photo_library_rounded, 'Gallery', const Color(0xFF7C4DFF),
           widget.onGallery),
+      _Opt(Icons.videocam_rounded, 'Video', const Color(0xFFAB47BC),
+          widget.onVideo),
       _Opt(Icons.photo_camera_rounded, 'Camera', const Color(0xFFEC407A),
           widget.onCamera),
       _Opt(Icons.location_on_rounded, 'Location', const Color(0xFF26A69A),

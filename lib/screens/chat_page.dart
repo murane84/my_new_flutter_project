@@ -7397,7 +7397,7 @@ class _KeepSideButton extends StatelessWidget {
   const _KeepSideButton(
       {required this.isPhone, required this.starsOn, required this.onKeep});
   final bool isPhone;
-  final ValueListenable<bool> starsOn;
+  final ValueNotifier<bool> starsOn;
   final VoidCallback onKeep;
 
   @override

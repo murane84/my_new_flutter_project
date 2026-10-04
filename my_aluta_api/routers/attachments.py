@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import (
     User, MediaAsset, Message, Conversation, ConversationMember,
+    PinnedMoment, SpaceMember,
 )
 from .users import get_current_user
 from auth import get_current_user_flexible
@@ -175,6 +176,31 @@ def _can_access(
             is not None
         )
         if is_member:
+            return True
+
+    # OUR SPACE moments: a member of the space that pinned a moment referencing
+    # this asset may view it. A moment can be kept from a chat the viewer was
+    # never part of (a friend's DM, a group), so SPACE membership — not chat
+    # membership — is the authorization, and it covers both partners (each owns
+    # a mirror Space whose members are the two of them).
+    mom_space_ids = [
+        r[0]
+        for r in db.query(PinnedMoment.space_id)
+        .filter(PinnedMoment.ref.contains(fragment, autoescape=True))
+        .all()
+        if r[0] is not None
+    ]
+    if mom_space_ids:
+        in_space = (
+            db.query(SpaceMember.user_id)
+            .filter(
+                SpaceMember.space_id.in_(mom_space_ids),
+                SpaceMember.user_id == user_id,
+            )
+            .first()
+            is not None
+        )
+        if in_space:
             return True
 
     if not allow_avatar:

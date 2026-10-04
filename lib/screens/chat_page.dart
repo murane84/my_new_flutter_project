@@ -266,6 +266,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _mySpaces = const [];
   bool get _canHarmony => _mySpaces.isNotEmpty;
 
+  // Ambient quick-stars: hidden while reading/scrolling, revealed by a genuine
+  // tap for a few seconds, then they gently dissolve. Driven by a notifier so
+  // only the little star buttons repaint — not the whole message list.
+  final ValueNotifier<bool> _quickStarsOn = ValueNotifier<bool>(false);
+  Timer? _starTimer;
+  Offset? _starDownPos;
+
   /// Load the caller's own bonded Our Spaces so the bubble menu can offer to
   /// keep content into one of them from ANY chat. Silent + best-effort: on
   /// failure the Harmony actions simply stay hidden. Runs for DMs AND groups.
@@ -949,6 +956,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _scrollCtrl.dispose();
     _pickerScrollCtrl.dispose();
     _viewerPageCtrl?.dispose();
+    _starTimer?.cancel();
+    _quickStarsOn.dispose();
     _ws.close();
     super.dispose();
   }
@@ -2189,10 +2198,33 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   // ── Scroll ────────────────────────────────────────────────────────────────
 
   void _onScroll() {
+    // Scrolling / swiping dissolves the quick stars.
+    if (_quickStarsOn.value) _quickStarsOn.value = false;
+    _starTimer?.cancel();
     final atBottom = _scrollCtrl.offset <=
         _scrollCtrl.position.minScrollExtent + 40;
     setState(() => _isAtBottom = atBottom);
     if (atBottom && _hasNewMsg) setState(() => _hasNewMsg = false);
+  }
+
+  /// A genuine tap on the thread reveals the quick stars for a few seconds,
+  /// then they fade away on their own (idle).
+  void _pokeStars() {
+    _quickStarsOn.value = true;
+    _starTimer?.cancel();
+    _starTimer = Timer(const Duration(milliseconds: 2600), () {
+      _quickStarsOn.value = false;
+    });
+  }
+
+  void _onChatPointerDown(PointerDownEvent e) => _starDownPos = e.position;
+
+  void _onChatPointerUp(PointerUpEvent e) {
+    final d = _starDownPos;
+    _starDownPos = null;
+    if (d == null) return;
+    // A tap (finger barely moved) reveals; a scroll / swipe does not.
+    if ((e.position - d).distance < 14) _pokeStars();
   }
 
   void _scrollToBottom() {
@@ -3521,6 +3553,49 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         child: Text('${i + 1} of ${imgs.length}',
                             style: const TextStyle(
                                 color: Colors.white, fontSize: 13)),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            // Pinned Keepsake "star" — always visible (ignores the chrome
+            // toggle) so you can keep the photo you're admiring straight to
+            // Our Space without leaving full-screen.
+            if (_canHarmony && msg != null)
+              Positioned(
+                right: 14,
+                bottom: imgs.length > 1 ? 46 : 16,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _keepsakeMessage(msg),
+                    borderRadius: BorderRadius.circular(24),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: 0.92),
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.auto_awesome_rounded,
+                              size: 16, color: Colors.white),
+                          SizedBox(width: 6),
+                          Text('Keep',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13)),
+                        ],
                       ),
                     ),
                   ),
@@ -5500,6 +5575,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                 if (isMe && _canHarmony && _isQuickKeepBubble(msg)) ...[
                   _KeepSideButton(
                     isPhone: MediaQuery.of(context).size.width < 640,
+                    starsOn: _quickStarsOn,
                     onKeep: () => _keepsakeMessage(msg),
                   ),
                   const SizedBox(width: 3),
@@ -5729,6 +5805,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   const SizedBox(width: 3),
                   _KeepSideButton(
                     isPhone: MediaQuery.of(context).size.width < 640,
+                    starsOn: _quickStarsOn,
                     onKeep: () => _keepsakeMessage(msg),
                   ),
                 ],
@@ -6488,7 +6565,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                       },
                       child: ValueListenableBuilder<int>(
                         valueListenable: bubbleThemeRevision,
-                        builder: (_, _, _) => ListView.builder(
+                        builder: (_, _, _) => Listener(
+                          onPointerDown: _onChatPointerDown,
+                          onPointerUp: _onChatPointerUp,
+                          child: ListView.builder(
                         controller: _scrollCtrl,
                         reverse: true,
                         padding: const EdgeInsets.symmetric(
@@ -6550,6 +6630,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             ],
                           );
                         },
+                      ),
                       ),
                       ),
                     ),
@@ -7012,14 +7093,15 @@ class _HoverScope extends InheritedWidget {
 /// WhatsApp-forward style. Only inserted when the user has a bond; it reserves
 /// its slot so the bubble never shifts when it fades in.
 class _KeepSideButton extends StatelessWidget {
-  const _KeepSideButton({required this.isPhone, required this.onKeep});
+  const _KeepSideButton(
+      {required this.isPhone, required this.starsOn, required this.onKeep});
   final bool isPhone;
+  final ValueListenable<bool> starsOn;
   final VoidCallback onKeep;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final visible = isPhone || _HoverScope.of(context);
     final btn = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onKeep,
@@ -7043,10 +7125,19 @@ class _KeepSideButton extends StatelessWidget {
         ),
       ),
     );
-    return AnimatedOpacity(
-      opacity: visible ? 1 : 0,
-      duration: const Duration(milliseconds: 120),
-      child: IgnorePointer(ignoring: !visible, child: btn),
+    return ValueListenableBuilder<bool>(
+      valueListenable: starsOn,
+      builder: (context, on, _) {
+        // Visible when the ambient stars are "on" (a recent tap) or on desktop
+        // hover — a gentle, transitional dissolve, never a snap.
+        final visible = on || _HoverScope.of(context);
+        return AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+          child: IgnorePointer(ignoring: !visible, child: btn),
+        );
+      },
     );
   }
 }

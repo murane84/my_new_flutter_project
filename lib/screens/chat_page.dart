@@ -256,23 +256,116 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   int _recordMs = 0;
   String _apiBase = ''; // resolved server base for building attachment URLs
 
-  // The caller's own Our Space id for the bond with this DM partner (null when
-  // not bonded). Resolved once on open; gates the bubble "Keepsake" action and
-  // the Harmony menu group (Dedicate / Add to Our Playlist).
-  int? _ourSpaceId;
+  // The caller's own bonded Our Spaces (active bonds). Keepsake / Dedicate /
+  // Add-to-Playlist bring a bubble from ANY chat — a non-bonded friend's DM or
+  // a group — into one of THESE, the user's own couple space, for the two of
+  // them to react to privately. The destination is the user's bond, never this
+  // chat's partner; when this chat IS a bonded partner's DM that space is the
+  // natural default in the picker.
+  List<Map<String, dynamic>> _mySpaces = const [];
+  bool get _canHarmony => _mySpaces.isNotEmpty;
 
-  /// Look up whether this DM partner and I share an Our Space, so the bubble
-  /// menu can offer to keep moments there. Silent + best-effort: on failure the
-  /// Harmony actions simply stay hidden and the quick slot falls back to Copy.
-  Future<void> _resolveBond() async {
-    if (widget.isGroup || widget.friendId <= 0) return;
+  /// Load the caller's own bonded Our Spaces so the bubble menu can offer to
+  /// keep content into one of them from ANY chat. Silent + best-effort: on
+  /// failure the Harmony actions simply stay hidden. Runs for DMs AND groups.
+  Future<void> _loadMySpaces() async {
     try {
-      final r = await ApiService().getBondWith(widget.friendId);
-      final sid = (r?['space_id'] as num?)?.toInt();
-      if (mounted && sid != null) setState(() => _ourSpaceId = sid);
+      final spaces = await ApiService().listSpaces();
+      final bonds = spaces
+          .where((s) => (s['status'] ?? 'active').toString() == 'active')
+          .toList();
+      if (mounted) setState(() => _mySpaces = bonds);
     } catch (_) {
-      // Leave _ourSpaceId null — Keepsake just won't show.
+      // Leave _mySpaces empty — the Harmony actions just won't show.
     }
+  }
+
+  /// The bonded space to pre-select, if this DM happens to be with one of my
+  /// bonded partners (so keeping from your partner's own chat is one tap).
+  int? get _defaultKeepSpaceId {
+    if (widget.isGroup || widget.friendId <= 0) return null;
+    for (final s in _mySpaces) {
+      final members = (s['members'] as List?) ?? const [];
+      final hasPartner = members.any(
+          (m) => m is Map && (m['id'] as num?)?.toInt() == widget.friendId);
+      if (hasPartner) return (s['id'] as num?)?.toInt();
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? _otherMember(Map<String, dynamic> s) {
+    final members = (s['members'] as List?) ?? const [];
+    for (final m in members) {
+      if (m is Map && (m['id']).toString() != _myId) {
+        return Map<String, dynamic>.from(m);
+      }
+    }
+    return null;
+  }
+
+  String _spaceTitle(Map<String, dynamic> s) {
+    final name = (s['name'] ?? '').toString().trim();
+    if (name.isNotEmpty) return name;
+    final who = (_otherMember(s)?['username'] ?? '').toString().trim();
+    return who.isNotEmpty ? 'You & $who' : 'Our Space';
+  }
+
+  String _spacePartnerName(Map<String, dynamic> s) {
+    final who = (_otherMember(s)?['username'] ?? '').toString().trim();
+    return who.isNotEmpty ? who : 'your partner';
+  }
+
+  /// Choose which bonded space to keep into. Auto when there's just one; a small
+  /// sheet (partner's space pre-marked) when there are several. Null = cancel.
+  Future<Map<String, dynamic>?> _pickKeepSpace() async {
+    if (_mySpaces.isEmpty) return null;
+    if (_mySpaces.length == 1) return _mySpaces.first;
+    final def = _defaultKeepSpaceId;
+    final chosenId = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      builder: (bctx) {
+        final scheme = Theme.of(bctx).colorScheme;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 2, 20, 8),
+                child: Text('Keep to\u2026',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface)),
+              ),
+              for (final s in _mySpaces)
+                ListTile(
+                  leading: CircleAvatar(
+                    radius: 20,
+                    backgroundColor: scheme.primaryContainer,
+                    child: Icon(Icons.favorite_rounded,
+                        size: 18, color: scheme.primary),
+                  ),
+                  title: Text(_spaceTitle(s)),
+                  trailing: (s['id'] as num?)?.toInt() == def
+                      ? Icon(Icons.star_rounded,
+                          size: 18, color: scheme.primary)
+                      : null,
+                  onTap: () =>
+                      Navigator.pop(bctx, (s['id'] as num?)?.toInt()),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (chosenId == null) return null;
+    for (final s in _mySpaces) {
+      if ((s['id'] as num?)?.toInt() == chosenId) return s;
+    }
+    return null;
   }
 
   // ── Harmony / Our Space actions from a chat bubble ──────────────────────────
@@ -288,8 +381,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   /// Keep [msg] into Our Space as a PinnedMoment, mapping the bubble type to a
   /// moment kind: text→note, photo→photo, voice→voice, song→song.
   Future<void> _keepsakeMessage(Map<String, dynamic> msg) async {
-    final sid = _ourSpaceId;
-    if (sid == null) return;
+    final space = await _pickKeepSpace();
+    if (space == null || !mounted) return;
+    final sid = (space['id'] as num).toInt();
     final type = (msg['message_type'] as String?) ?? 'text';
     final rel = (msg['media_url'] as String?) ?? '';
     final text = _stripQuote((msg['content'] as String?) ?? '').trim();
@@ -343,8 +437,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   /// Pin a shared song into the couple's Our Playlist (Soundtrack of Us).
   Future<void> _addSongToPlaylist(Map<String, dynamic> msg) async {
-    final sid = _ourSpaceId;
-    if (sid == null) return;
+    final space = await _pickKeepSpace();
+    if (space == null || !mounted) return;
+    final sid = (space['id'] as num).toInt();
     final rel = (msg['media_url'] as String?) ?? '';
     final res = await ApiService().addTrack(sid,
         title: _songTitleOf(msg), ref: rel, source: 'share');
@@ -358,8 +453,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   /// Dedicate a shared song to the partner — a one-line note turns it into a
   /// feeling. Reuses the dedication flow already in Our Space.
   Future<void> _dedicateSong(Map<String, dynamic> msg) async {
-    final sid = _ourSpaceId;
-    if (sid == null) return;
+    final space = await _pickKeepSpace();
+    if (space == null || !mounted) return;
+    final sid = (space['id'] as num).toInt();
     final rel = (msg['media_url'] as String?) ?? '';
     final title = _songTitleOf(msg);
     final note = await _promptDedicationNote(title);
@@ -371,7 +467,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     showToast(
         context,
         res != null
-            ? 'Dedicated to ${widget.friendName} 💫'
+            ? 'Dedicated to ${_spacePartnerName(space)} 💫'
             : 'Could not dedicate',
         type: res != null ? ToastType.success : ToastType.error);
   }
@@ -448,7 +544,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _isUserOffline = !ConnectionStatus.instance.isOnline;
     ConnectionStatus.instance.online.addListener(_onConnStatusChanged);
     _initChat();
-    _resolveBond();
+    _loadMySpaces();
 
     _statusTimer = Timer.periodic(
       const Duration(seconds: 10),
@@ -3439,10 +3535,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       // Harmony / Our Space actions sit at the TOP of the menu (only when the
       // two are bonded), with the usual chat actions below. A song can also be
       // dedicated or pinned into the shared playlist straight from its bubble.
-      final bonded = _ourSpaceId != null;
+      final canKeep = _canHarmony;
       final isSong = (msg['message_type'] ?? 'text') == 'song';
       final harmony = <_MenuAction>[];
-      if (bonded && !deleted) {
+      if (canKeep && !deleted) {
         harmony.add(_MenuAction('keepsake', Icons.auto_awesome_rounded,
             'Keepsake', () {
           Navigator.pop(ctx);

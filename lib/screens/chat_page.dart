@@ -5363,6 +5363,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   ),
                 if (!isMe) const SizedBox(width: 4),
 
+                // Keepsake quick icon — hugs the bubble's inner side (left for
+                // my bubbles): hover-revealed on desktop, persistent on phone.
+                if (isMe && _canHarmony) ...[
+                  _KeepSideButton(
+                    isPhone: MediaQuery.of(context).size.width < 640,
+                    onKeep: () => _keepsakeMessage(msg),
+                  ),
+                  const SizedBox(width: 3),
+                ],
+
                 // ── Emoji-only: no bubble, just big emoji ─────────────
                 if (emojiOnly)
                   Text(
@@ -5583,6 +5593,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     ),
                   ),
                 ),
+                if (!isMe && _canHarmony) ...[
+                  const SizedBox(width: 3),
+                  _KeepSideButton(
+                    isPhone: MediaQuery.of(context).size.width < 640,
+                    onKeep: () => _keepsakeMessage(msg),
+                  ),
+                ],
               ],
             ),
             )),
@@ -6807,7 +6824,7 @@ class _HoverChevronState extends State<_HoverChevron> {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          widget.child,
+          _HoverScope(hovering: _hover, child: widget.child),
           if (_hover)
             Positioned(
               top: -6,
@@ -6838,6 +6855,69 @@ class _HoverChevronState extends State<_HoverChevron> {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Publishes a bubble's hover state (from [_HoverChevron]) to descendants, so
+/// the in-row Keepsake side button can reveal on hover without the bubble
+/// jumping. Absent on touch builds — hover simply stays false there.
+class _HoverScope extends InheritedWidget {
+  const _HoverScope({required this.hovering, required super.child});
+  final bool hovering;
+
+  static bool of(BuildContext context) {
+    final s = context.dependOnInheritedWidgetOfExactType<_HoverScope>();
+    return s?.hovering ?? false;
+  }
+
+  @override
+  bool updateShouldNotify(_HoverScope old) => old.hovering != hovering;
+}
+
+/// A small circular "keep to Our Space" button that floats on a bubble's inner
+/// side — revealed on hover on desktop, persistent (a touch subtler) on mobile,
+/// WhatsApp-forward style. Only inserted when the user has a bond; it reserves
+/// its slot so the bubble never shifts when it fades in.
+class _KeepSideButton extends StatelessWidget {
+  const _KeepSideButton({required this.isPhone, required this.onKeep});
+  final bool isPhone;
+  final VoidCallback onKeep;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final visible = isPhone || _HoverScope.of(context);
+    final btn = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onKeep,
+      child: Tooltip(
+        message: 'Keep in Our Space',
+        child: Container(
+          width: 26,
+          height: 26,
+          decoration: BoxDecoration(
+            color: scheme.surface.withValues(alpha: isPhone ? 0.72 : 1.0),
+            shape: BoxShape.circle,
+            border: Border.all(
+                color: scheme.outlineVariant.withValues(alpha: 0.6)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.14),
+                blurRadius: 5,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Icon(Icons.auto_awesome_rounded,
+              size: 15, color: scheme.primary),
+        ),
+      ),
+    );
+    return AnimatedOpacity(
+      opacity: visible ? 1 : 0,
+      duration: const Duration(milliseconds: 120),
+      child: IgnorePointer(ignoring: !visible, child: btn),
     );
   }
 }

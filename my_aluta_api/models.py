@@ -619,8 +619,31 @@ class MomentReaction(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint('moment_id', 'user_id', name='_moment_react_uc'),
+        UniqueConstraint('moment_id', 'user_id', 'emoji',
+                         name='_moment_react_emoji_uc'),
     )
+
+
+class MomentComment(Base):
+    """A comment under a pinned moment — the growing conversation about a kept
+    moment, mirroring Our Diary's threads. Shared across the bond; oldest-first.
+    Auto-created; no ALTER."""
+    __tablename__ = "moment_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    moment_id = Column(
+        Integer, ForeignKey("pinned_moments.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    author_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    body = Column(Text, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    author = relationship("User", foreign_keys=[author_id], passive_deletes=True)
 
 
 class SharedListenDay(Base):

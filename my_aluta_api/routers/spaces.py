@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from database import get_db
 from models import (
     User, RelationshipSpace, SpaceMember, PinnedMoment, MomentReaction,
+    MomentComment,
     PlaylistTrack, BondRequest, DiaryEntry, DiaryReaction, DiaryComment,
     MediaAsset, DailyPrompt, DailyPromptAnswer, Dedication,
 )
@@ -417,10 +418,22 @@ def _moment_dict(db: Session, m: PinnedMoment, current_user_id: int) -> dict:
     author = m.author or (
         db.query(User).filter(User.id == m.author_id).first() if m.author_id else None
     )
-    reactions = db.query(MomentReaction).filter(
+    reacts = db.query(MomentReaction).filter(
         MomentReaction.moment_id == m.id).all()
-    mine = next((r.emoji for r in reactions
-                 if r.user_id == current_user_id and r.emoji), None)
+    counts: dict = {}
+    mine: list = []
+    for r in reacts:
+        if not r.emoji:
+            continue
+        counts[r.emoji] = counts.get(r.emoji, 0) + 1
+        if r.user_id == current_user_id and r.emoji not in mine:
+            mine.append(r.emoji)
+    comments = (
+        db.query(MomentComment)
+        .filter(MomentComment.moment_id == m.id)
+        .order_by(MomentComment.id.asc())
+        .all()
+    )
     return {
         "id": m.id,
         "kind": m.kind,
@@ -433,11 +446,12 @@ def _moment_dict(db: Session, m: PinnedMoment, current_user_id: int) -> dict:
             "avatar_url": author.avatar_url,
         } if author else None,
         "created_at": m.created_at.isoformat() if m.created_at else None,
-        "reactions": [
-            {"user_id": r.user_id, "emoji": r.emoji}
-            for r in reactions if r.emoji
-        ],
-        "my_reaction": mine,
+        # Slack-style multi-emoji reactions (like Our Diary): [{emoji, count}]
+        # plus the caller's own emojis, for highlight/toggle.
+        "reactions": [{"emoji": k, "count": v} for k, v in counts.items()],
+        "my_reactions": mine,
+        "comment_count": len(comments),
+        "comments": [_comment_dict(db, c, current_user_id) for c in comments],
         "mine": m.author_id == current_user_id,
     }
 
@@ -1147,20 +1161,17 @@ def react_moment(
         raise HTTPException(status_code=403, detail="Not part of this space")
 
     emoji = (payload.emoji or "").strip()
+    if not emoji or len(emoji) > 16:
+        raise HTTPException(status_code=400, detail="A reaction needs an emoji")
+    # Multi-emoji toggle (like the diary): the same emoji again removes it; a
+    # person may hold several distinct emojis.
     existing = db.query(MomentReaction).filter(
         MomentReaction.moment_id == moment_id,
         MomentReaction.user_id == current_user.id,
+        MomentReaction.emoji == emoji,
     ).first()
-
-    # Empty emoji, or the same one again → toggle off.
-    if not emoji or (existing and existing.emoji == emoji):
-        if existing:
-            db.delete(existing)
-            db.commit()
-        return {"ok": True, "my_reaction": None}
-
     if existing:
-        existing.emoji = emoji
+        db.delete(existing)
     else:
         db.add(MomentReaction(
             moment_id=moment_id, user_id=current_user.id, emoji=emoji))
@@ -1181,7 +1192,146 @@ def react_moment(
             })
         except Exception:
             pass
-    return {"ok": True, "my_reaction": emoji}
+    db.refresh(moment)
+    return _moment_dict(db, moment, current_user.id)
+
+
+# ── Pinned-moment comments (mirror Our Diary's threads) ───────────────────────
+def _moment_for_member_or_404(db: Session, moment_id: int,
+                              user_id: int) -> PinnedMoment:
+    moment = db.query(PinnedMoment).filter(
+        PinnedMoment.id == moment_id).first()
+    if not moment:
+        raise HTTPException(status_code=404, detail="Moment not found")
+    member = db.query(SpaceMember).filter(
+        SpaceMember.space_id == moment.space_id,
+        SpaceMember.user_id == user_id,
+    ).first()
+    if not member:
+        raise HTTPException(status_code=403, detail="Not part of this space")
+    return moment
+
+
+def _notify_moment_comment(db: Session, moment: PinnedMoment,
+                           current_user: User) -> None:
+    who = current_user.username or "Someone"
+    line = f"{who} commented on a moment"
+    members = db.query(SpaceMember).filter(
+        SpaceMember.space_id == moment.space_id).all()
+    for mm in members:
+        if mm.user_id == current_user.id:
+            continue
+        try:
+            safe_notify_user(mm.user_id, {
+                "type": "space_moment_comment",
+                "data": {
+                    "space_id": moment.space_id,
+                    "moment_id": moment.id,
+                    "from_id": current_user.id,
+                    "from_username": who,
+                    "line": line,
+                },
+            })
+        except Exception:
+            pass
+        if send_push_to_user is not None:
+            try:
+                send_push_to_user(mm.user_id, {
+                    "type": "space_moment_comment",
+                    "title": "Our Space 💬",
+                    "body": line,
+                })
+            except Exception:
+                pass
+
+
+@router.get("/{space_id}/moments/{moment_id}/comments")
+def get_moment_comments(
+    space_id: int,
+    moment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    moment = _moment_for_member_or_404(db, moment_id, current_user.id)
+    rows = (
+        db.query(MomentComment)
+        .filter(MomentComment.moment_id == moment.id)
+        .order_by(MomentComment.id.asc())
+        .all()
+    )
+    return [_comment_dict(db, c, current_user.id) for c in rows]
+
+
+@router.post("/{space_id}/moments/{moment_id}/comments")
+def add_moment_comment(
+    space_id: int,
+    moment_id: int,
+    payload: _DiaryCommentBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    moment = _moment_for_member_or_404(db, moment_id, current_user.id)
+    body = (payload.body or "").strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="A comment needs some text")
+    comment = MomentComment(
+        moment_id=moment.id, author_id=current_user.id, body=body[:2000])
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    _notify_moment_comment(db, moment, current_user)
+    return _comment_dict(db, comment, current_user.id)
+
+
+@router.delete("/{space_id}/moments/{moment_id}/comments/{comment_id}")
+def delete_moment_comment(
+    space_id: int,
+    moment_id: int,
+    comment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    moment = _moment_for_member_or_404(db, moment_id, current_user.id)
+    comment = db.query(MomentComment).filter(
+        MomentComment.id == comment_id,
+        MomentComment.moment_id == moment.id,
+    ).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if comment.author_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="You can only delete your own comment")
+    db.delete(comment)
+    db.commit()
+    return {"ok": True}
+
+
+@router.patch("/{space_id}/moments/{moment_id}/comments/{comment_id}")
+def edit_moment_comment(
+    space_id: int,
+    moment_id: int,
+    comment_id: int,
+    payload: _DiaryCommentBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    moment = _moment_for_member_or_404(db, moment_id, current_user.id)
+    comment = db.query(MomentComment).filter(
+        MomentComment.id == comment_id,
+        MomentComment.moment_id == moment.id,
+    ).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if comment.author_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="You can only edit your own comment")
+    body = (payload.body or "").strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="A comment needs some text")
+    comment.body = body[:2000]
+    db.commit()
+    db.refresh(comment)
+    return _comment_dict(db, comment, current_user.id)
 
 
 @router.post("/{space_id}/nudge")

@@ -2095,6 +2095,61 @@ def delete_moment(
     return {"ok": True}
 
 
+# ── Keep a chat moment into Our Space (resolve the bond by partner) ───────────
+# The chat screen knows the partner's user id but not the Space id, so these two
+# endpoints resolve the caller's owned bond Space with that partner. They let a
+# message be "kept" as a PinnedMoment straight from a chat bubble without the
+# client having to load the Space first.
+@router.get("/with/{partner_id}")
+def bond_with(
+    partner_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Is the caller bonded (Our Space) with `partner_id`? Returns the caller's
+    own Space id for that bond so the chat can deep-link and keep moments."""
+    space = _space_owned_with(db, current_user.id, partner_id)
+    return {
+        "bonded": space is not None,
+        "space_id": space.id if space else None,
+        "space_name": space.name if space else None,
+    }
+
+
+@router.post("/with/{partner_id}/moments")
+def add_moment_with(
+    partner_id: int,
+    payload: schemas.MomentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Keep a chat message as a PinnedMoment in the caller's bond Space with
+    `partner_id`. 409 when the two aren't bonded yet (nothing to keep it in)."""
+    space = _space_owned_with(db, current_user.id, partner_id)
+    if space is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Bond in Our Space first to keep moments together.",
+        )
+    kind = (payload.kind or "").strip().lower()
+    if kind not in _VALID_MOMENT_KINDS:
+        raise HTTPException(status_code=400, detail="Unknown moment kind")
+    moment = PinnedMoment(
+        space_id=space.id,
+        author_id=current_user.id,
+        kind=kind,
+        ref=(payload.ref or None),
+        caption=(payload.caption or None),
+    )
+    db.add(moment)
+    db.commit()
+    db.refresh(moment)
+    _notify_partner_moment(db, space, current_user, moment)
+    out = _moment_dict(db, moment, current_user.id)
+    out["space_id"] = space.id
+    return out
+
+
 def current_user_plan(user: User) -> str:
     """The user's plan tier ('free' | 'together'), read from the entitlement on
     the User row. A dev/trial toggle (routers/plan.py) sets it today; a real

@@ -394,12 +394,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       case 'image':
         kind = 'photo';
         ref = rel;
-        caption = text.isNotEmpty ? text : null;
         break;
       case 'audio':
         kind = 'voice';
         ref = rel;
-        caption = text.isNotEmpty ? text : null;
         break;
       case 'song':
         kind = 'song';
@@ -410,8 +408,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           showToast(context, 'Nothing to keep here', type: ToastType.info);
           return;
         }
-        // Notes carry their text in `caption` (that's what the moment card
-        // renders), so a kept line reads correctly in Our Space.
+        // A kept line IS its own words, so it keeps in one tap; the text lands
+        // in `caption`, which is what the moment card renders.
         kind = 'note';
         caption = text;
         break;
@@ -426,6 +424,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         kind = 'note';
         caption = label;
     }
+    // For photo / voice / song, let the keeper add an optional one-line note —
+    // warmth about the two of them ("so you"), never where it came from, so the
+    // moment stays pointed at the couple rather than a third person. The
+    // original chat caption is deliberately NOT carried across.
+    if (kind == 'photo' || kind == 'voice' || kind == 'song') {
+      final note = await _keepsakeNoteSheet(msg, type);
+      if (note == null || !mounted) return; // cancelled
+      final t = note.trim();
+      caption = t.isEmpty ? null : t;
+    }
     final res = await ApiService()
         .addMoment(sid, kind: kind, ref: ref, caption: caption);
     if (!mounted) return;
@@ -433,6 +441,115 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         context,
         res != null ? 'Kept in Our Space 💛' : 'Could not keep that',
         type: res != null ? ToastType.success : ToastType.error);
+  }
+
+  /// A small sheet shown when keeping a photo / voice / song: a preview of what
+  /// is being kept plus an OPTIONAL one-line note. Returns the note text
+  /// (possibly empty) on Keep, or null if cancelled. The note is warmth for the
+  /// two of them — it never records where the content came from.
+  Future<String?> _keepsakeNoteSheet(Map<String, dynamic> msg, String type) {
+    final ctrl = TextEditingController();
+    final rel = (msg['media_url'] as String?) ?? '';
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (bctx) {
+        final scheme = Theme.of(bctx).colorScheme;
+        Widget preview;
+        if (type == 'image' && rel.isNotEmpty) {
+          final url = fullMediaUrl(rel);
+          preview = ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 160),
+              child: authNetworkImage(
+                url: url,
+                headers: mediaAuthHeaders(url),
+                fit: BoxFit.cover,
+                width: double.infinity,
+                cacheWidth: 800,
+              ),
+            ),
+          );
+        } else {
+          final icon = type == 'song'
+              ? Icons.music_note_rounded
+              : (type == 'audio'
+                  ? Icons.mic_rounded
+                  : Icons.sticky_note_2_rounded);
+          final label = type == 'song'
+              ? _songTitleOf(msg)
+              : (type == 'audio' ? 'Voice message' : 'Moment');
+          preview = Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: scheme.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+          );
+        }
+        return Padding(
+          padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 2,
+              bottom: MediaQuery.of(bctx).viewInsets.bottom + 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Keep in Our Space',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurface)),
+              const SizedBox(height: 12),
+              preview,
+              const SizedBox(height: 14),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                minLines: 1,
+                maxLines: 3,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  hintText: 'Add a note for you two… (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(bctx, null),
+                      child: const Text('Cancel')),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: () => Navigator.pop(bctx, ctrl.text),
+                    icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                    label: const Text('Keep'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   /// Pin a shared song into the couple's Our Playlist (Soundtrack of Us).

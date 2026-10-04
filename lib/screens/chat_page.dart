@@ -3537,13 +3537,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               final barTop =
                   barAbove ? rect.top - gap - barH : rect.bottom + gap;
 
-              final barW = (sw - 32).clamp(0.0, 270.0);
-              double barLeft = rect.center.dx - barW / 2;
-              barLeft = barLeft.clamp(8.0, (sw - 8 - barW).clamp(8.0, sw));
-
               final menuW = (sw - 32).clamp(0.0, 270.0);
               double menuLeft = isMe ? rect.right - menuW : rect.left;
               menuLeft = menuLeft.clamp(8.0, (sw - 8 - menuW).clamp(8.0, sw));
+
+              // Reaction bar and action menu share the SAME width and left edge
+              // so they stack as one balanced column aligned to the bubble's
+              // side (matching the desktop dropdown), instead of the bar being
+              // centred on the bubble and drifting out of line with the menu.
+              final barW = menuW;
+              final barLeft = menuLeft;
 
               final menuBelow = belowRoom >= aboveRoom;
               final Widget menu = Transform.scale(

@@ -316,8 +316,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           showToast(context, 'Nothing to keep here', type: ToastType.info);
           return;
         }
+        // Notes carry their text in `caption` (that's what the moment card
+        // renders), so a kept line reads correctly in Our Space.
         kind = 'note';
-        ref = text;
+        caption = text;
         break;
       default:
         // call / live / location / contact / file — keep a friendly label.
@@ -328,7 +330,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           return;
         }
         kind = 'note';
-        ref = label;
+        caption = label;
     }
     final res = await ApiService()
         .addMoment(sid, kind: kind, ref: ref, caption: caption);

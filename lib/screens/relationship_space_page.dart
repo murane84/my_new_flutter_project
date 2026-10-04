@@ -4288,6 +4288,14 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                 ),
               ),
             ],
+            if (kind == 'photo' && _full(m['ref']) != null) ...[
+              const SizedBox(height: 12),
+              _momentPhoto(scheme, _full(m['ref'])!),
+            ],
+            if (kind == 'voice' && _full(m['ref']) != null) ...[
+              const SizedBox(height: 12),
+              _DedVoicePlayer(url: _full(m['ref'])!, accent: _accent),
+            ],
             if (caption.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(caption,
@@ -4361,6 +4369,59 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       }
     } catch (_) {}
     return null;
+  }
+
+  /// A kept photo thumbnail inside a moment card; tap opens a zoomable viewer.
+  Widget _momentPhoto(ColorScheme scheme, String url) {
+    return GestureDetector(
+      onTap: () => _openMomentPhoto(url),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 260),
+          child: authNetworkImage(
+            url: url,
+            headers: mediaAuthHeaders(url),
+            fit: BoxFit.cover,
+            width: double.infinity,
+            cacheWidth: 1000,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openMomentPhoto(String url) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.92),
+      builder: (dctx) => GestureDetector(
+        onTap: () => Navigator.pop(dctx),
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.8,
+                maxScale: 4,
+                child: authNetworkImage(
+                  url: url,
+                  headers: mediaAuthHeaders(url),
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            Positioned(
+              top: 40,
+              right: 16,
+              child: IconButton(
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+                onPressed: () => Navigator.pop(dctx),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   String _timeAgo(DateTime dt) {

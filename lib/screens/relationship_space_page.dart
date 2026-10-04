@@ -2424,65 +2424,87 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Compact clip of the kept moment — the diary is for the
+                      // STORY; the full media is one tap away on the wall. Show
+                      // the whole image (contain), kept small so text leads.
                       if (srcUrl != null && srcMomentId != null) ...[
                         Padding(
-                          padding: const EdgeInsets.only(bottom: 14),
+                          padding: const EdgeInsets.only(bottom: 12),
                           child: GestureDetector(
                             onTap: () => _jumpToMoment(srcMomentId),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(14),
-                              child: Stack(
+                            behavior: HitTestBehavior.opaque,
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: _accent.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(13),
+                                border: Border.all(
+                                    color: _accent.withValues(alpha: 0.28)),
+                              ),
+                              child: Row(
                                 children: [
-                                  ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                        maxHeight: 190,
-                                        minWidth: double.infinity),
-                                    child: authNetworkImage(
-                                      url: srcUrl,
-                                      headers: mediaAuthHeaders(srcUrl),
-                                      fit: BoxFit.cover,
-                                      cacheWidth: 800,
-                                    ),
-                                  ),
-                                  Positioned(
-                                    left: 0,
-                                    right: 0,
-                                    bottom: 0,
-                                    child: Container(
-                                      padding: const EdgeInsets.fromLTRB(
-                                          12, 20, 12, 9),
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          begin: Alignment.bottomCenter,
-                                          end: Alignment.topCenter,
-                                          colors: [
-                                            Colors.black
-                                                .withValues(alpha: 0.62),
-                                            Colors.black.withValues(alpha: 0.0),
-                                          ],
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(9),
+                                    child: SizedBox(
+                                      width: 54,
+                                      height: 54,
+                                      child: ColoredBox(
+                                        color: (isDark
+                                                ? Colors.white
+                                                : Colors.black)
+                                            .withValues(alpha: 0.06),
+                                        child: authNetworkImage(
+                                          url: srcUrl,
+                                          headers: mediaAuthHeaders(srcUrl),
+                                          fit: BoxFit.contain,
+                                          cacheWidth: 200,
                                         ),
                                       ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(Icons.push_pin_rounded,
-                                              size: 13, color: Colors.white),
-                                          const SizedBox(width: 6),
-                                          Flexible(
-                                            child: Text(
-                                              'From a pinned moment · tap to revisit',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 11.5,
-                                                  fontWeight: FontWeight.w700),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
                                     ),
                                   ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(Icons.push_pin_rounded,
+                                                size: 12, color: _accent),
+                                            const SizedBox(width: 5),
+                                            Flexible(
+                                              child: Text(
+                                                'From a pinned moment',
+                                                maxLines: 1,
+                                                overflow:
+                                                    TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight:
+                                                        FontWeight.w700,
+                                                    color: _accent),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Tap to revisit it on the wall',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              color: ink.withValues(
+                                                  alpha: 0.55)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Icon(Icons.chevron_right_rounded,
+                                      size: 18,
+                                      color: ink.withValues(alpha: 0.5)),
                                 ],
                               ),
                             ),

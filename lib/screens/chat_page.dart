@@ -383,6 +383,30 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         name.endsWith('.avi');
   }
 
+  /// Which bubbles get the subtle quick "keep to Our Space" star on their
+  /// side: real captured media — a photo, a video, a voice note / audio, or a
+  /// song. GIFs/stickers (image/gif), text, call/live logs and plain files
+  /// stay clean (they keep the press-and-hold menu, where Keepsake lives).
+  bool _isQuickKeepBubble(Map<String, dynamic> msg) {
+    if ((msg['media_url'] as String? ?? '').isEmpty) return false;
+    final type = (msg['message_type'] as String?) ?? 'text';
+    final mime = (msg['media_mime'] as String?)?.toLowerCase() ?? '';
+    final name = (msg['media_name'] as String?)?.toLowerCase() ?? '';
+    final isGif = mime.contains('gif') || name.endsWith('.gif');
+    switch (type) {
+      case 'audio': // voice note / audio
+        return true;
+      case 'song':
+        return true;
+      case 'image':
+        return !isGif; // real photos only — GIFs/stickers stay clean
+      case 'file':
+        return _isVideoMsg(msg);
+      default:
+        return false;
+    }
+  }
+
   // A friendly song title for a 'song' bubble (its spoken title lives in
   // `content`, falling back to the file name).
   String _songTitleOf(Map<String, dynamic> msg) {
@@ -5473,7 +5497,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
                 // Keepsake quick icon — hugs the bubble's inner side (left for
                 // my bubbles): hover-revealed on desktop, persistent on phone.
-                if (isMe && _canHarmony) ...[
+                if (isMe && _canHarmony && _isQuickKeepBubble(msg)) ...[
                   _KeepSideButton(
                     isPhone: MediaQuery.of(context).size.width < 640,
                     onKeep: () => _keepsakeMessage(msg),
@@ -5701,7 +5725,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     ),
                   ),
                 ),
-                if (!isMe && _canHarmony) ...[
+                if (!isMe && _canHarmony && _isQuickKeepBubble(msg)) ...[
                   const SizedBox(width: 3),
                   _KeepSideButton(
                     isPhone: MediaQuery.of(context).size.width < 640,
@@ -7002,23 +7026,20 @@ class _KeepSideButton extends StatelessWidget {
       child: Tooltip(
         message: 'Keep in Our Space',
         child: Container(
-          width: 26,
-          height: 26,
+          width: 28,
+          height: 28,
           decoration: BoxDecoration(
-            color: scheme.surface.withValues(alpha: isPhone ? 0.72 : 1.0),
+            // A near-transparent circle with a whisper-thin themed ring and a
+            // faint brand sparkle — subtle enough to never fight the bubble
+            // text, but easy to catch for a one-tap Keepsake.
+            color: scheme.primary.withValues(alpha: isPhone ? 0.07 : 0.09),
             shape: BoxShape.circle,
             border: Border.all(
-                color: scheme.outlineVariant.withValues(alpha: 0.6)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.14),
-                blurRadius: 5,
-                offset: const Offset(0, 2),
-              ),
-            ],
+                color: scheme.primary.withValues(alpha: 0.28), width: 1),
           ),
           child: Icon(Icons.auto_awesome_rounded,
-              size: 15, color: scheme.primary),
+              size: 15,
+              color: scheme.primary.withValues(alpha: 0.78)),
         ),
       ),
     );

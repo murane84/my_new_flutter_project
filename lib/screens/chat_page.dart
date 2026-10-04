@@ -3535,11 +3535,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               final barTop =
                   barAbove ? rect.top - gap - barH : rect.bottom + gap;
 
-              final barW = (sw - 32).clamp(0.0, 340.0);
+              final barW = (sw - 32).clamp(0.0, 296.0);
               double barLeft = rect.center.dx - barW / 2;
               barLeft = barLeft.clamp(8.0, (sw - 8 - barW).clamp(8.0, sw));
 
-              final menuW = (sw - 32).clamp(0.0, 300.0);
+              final menuW = (sw - 32).clamp(0.0, 270.0);
               double menuLeft = isMe ? rect.right - menuW : rect.left;
               menuLeft = menuLeft.clamp(8.0, (sw - 8 - menuW).clamp(8.0, sw));
 
@@ -6096,25 +6096,25 @@ class _MsgActionMenuState extends State<_MsgActionMenu> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(14),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+          padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 2),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 40,
-                height: 40,
+                width: 34,
+                height: 34,
                 decoration: BoxDecoration(
                   color: c.withValues(alpha: widget.isDark ? 0.22 : 0.14),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: c, size: 20),
+                child: Icon(icon, color: c, size: 18),
               ),
-              const SizedBox(height: 5),
+              const SizedBox(height: 4),
               Text(label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                      fontSize: 10.5,
+                      fontSize: 10,
                       fontWeight: FontWeight.w600,
                       color: scheme.onSurfaceVariant)),
             ],

@@ -1532,7 +1532,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     Future.delayed(const Duration(milliseconds: 320), () {
       if (!mounted) return;
       final ctx = _momentKeys[momentId]?.currentContext;
-      if (ctx != null) {
+      if (ctx != null && ctx.mounted) {
         Scrollable.ensureVisible(
           ctx,
           duration: const Duration(milliseconds: 450),

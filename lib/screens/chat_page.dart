@@ -3259,7 +3259,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       final isTextMsg = (msg['message_type'] ?? 'text') == 'text';
       final hasMedia = (msg['message_type'] ?? 'text') != 'text' &&
           (msg['media_url'] as String? ?? '').isNotEmpty;
-      final full = <_MenuAction>[
+      return <_MenuAction>[
         _MenuAction('reply', Icons.reply_rounded, 'Reply', () {
           Navigator.pop(ctx);
           setState(() => _replyTo = msg);

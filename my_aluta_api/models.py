@@ -901,3 +901,34 @@ class Dedication(Base):
 
     sender = relationship("User", foreign_keys=[from_user_id],
                           passive_deletes=True)
+
+
+class LoveCapsule(Base):
+    """A song + message locked until a chosen time — the long-distance power
+    move (§5.5). Both partners see a countdown; at unlock_at it opens, and a
+    'sync_listen' capsule invites a 'press play together'. Keyed by pair_key so
+    the bond owns it regardless of who created it. Auto-created; no ALTER."""
+    __tablename__ = "love_capsules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pair_key = Column(String, nullable=False, index=True)
+    created_by = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    track_title = Column(String, nullable=True)
+    track_artist = Column(String, nullable=True)
+    track_ref = Column(String, nullable=True)
+    message = Column(Text, nullable=True)
+    media_url = Column(String, nullable=True)
+    unlock_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    # 'message' (a letter + song) | 'sync_listen' (press play together at unlock)
+    mode = Column(String, nullable=False, default="message",
+                  server_default="message")
+    opened_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    creator = relationship("User", foreign_keys=[created_by],
+                           passive_deletes=True)

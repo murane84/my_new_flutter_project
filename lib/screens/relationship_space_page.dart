@@ -1230,12 +1230,15 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       _pendingPartnerBanner(scheme),
       _milestoneBanner(scheme),
       const SizedBox(height: 14),
+      // The lightest, most-used gesture sits right under the hero, above every
+      // card — a quick "I'm thinking of you" is the first thing in reach.
+      if (isPair) _quickPill(scheme),
+      if (isPair) const SizedBox(height: 14),
       _tuneInCard(scheme),
       if (isPair) const SizedBox(height: 12),
       if (isPair) _dailyQuestionCard(scheme),
       _upcomingPlanBanner(scheme),
-      if (isPair) _quickPill(scheme),
-      if (isPair) const SizedBox(height: 14),
+      const SizedBox(height: 14),
       _tilesSection(scheme, moments),
     ];
   }

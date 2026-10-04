@@ -18,7 +18,8 @@ router = APIRouter(tags=["Attachments"])
 
 # Max attachment size. Media is stored in Postgres, so keep this modest —
 # voice notes and compressed images are small; big files should be capped.
-MAX_BYTES = 15 * 1024 * 1024  # 15 MB
+MAX_BYTES = 15 * 1024 * 1024  # 15 MB (images / files / voice)
+VIDEO_MAX_BYTES = 64 * 1024 * 1024  # 64 MB (video — larger by nature)
 
 # Ephemeral shared songs are purged from the server this long after upload even
 # if the recipient never fetched them (the normal case purges on cache-ack, far
@@ -268,8 +269,13 @@ async def upload_media(
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="Empty file")
-    if len(data) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (max 15 MB)")
+    _mime = (file.content_type or "").lower()
+    _is_video = _mime.startswith("video/")
+    _cap = VIDEO_MAX_BYTES if _is_video else MAX_BYTES
+    if len(data) > _cap:
+        _mb = _cap // (1024 * 1024)
+        raise HTTPException(
+            status_code=413, detail=f"File too large (max {_mb} MB)")
 
     # Opportunistic housekeeping: every new upload sweeps out expired ephemeral
     # bytes so old shared songs don't accumulate even if no one re-fetched them.

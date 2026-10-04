@@ -10,6 +10,8 @@ import 'package:image/image.dart' as img;
 // (needed by the ShapeBorder overrides below).
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+import 'package:video_player/video_player.dart';
+import 'package:video_compress/video_compress.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:file_picker/file_picker.dart';
@@ -405,6 +407,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         return true;
       case 'song':
         return true;
+      case 'video':
+        return true;
       case 'image':
         return !isGif; // real photos only — GIFs/stickers stay clean
       case 'file':
@@ -488,6 +492,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       case 'song':
         kind = 'song';
         ref = jsonEncode({'title': _songTitleOf(msg), 'ref': rel});
+        break;
+      case 'video':
+        kind = 'video';
+        ref = rel;
         break;
       case 'file':
         if (_isVideoMsg(msg) && rel.isNotEmpty) {
@@ -2447,6 +2455,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               child: AttachSheet(
                 isMobile: _isMobile,
                 onGallery: () => act(() => _pickGalleryImages()),
+                onVideo: () => act(_pickVideo),
                 onCamera: () => act(() => _pickImage(ImageSource.camera)),
                 onLocation: () => act(_shareLocation),
                 onContact: () => act(_shareContact),
@@ -2680,6 +2689,77 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       await _previewAndSendImage(bytes, x.name, 'image/jpeg');
     } catch (_) {
       if (mounted) showToast(context, 'Could not pick image', type: ToastType.error);
+    }
+  }
+
+  /// Pick a video from the gallery and send it. Large clips are compressed
+  /// on-device (mobile only) so they fit the upload cap; desktop/web fall back
+  /// to the original and a clear message if it's still too big.
+  Future<void> _pickVideo() async {
+    try {
+      final x = await ImagePicker().pickVideo(source: ImageSource.gallery);
+      if (x == null) return;
+      final name0 = x.name;
+      final ext =
+          name0.contains('.') ? name0.split('.').last.toLowerCase() : 'mp4';
+      String mime = ext == 'mov'
+          ? 'video/quicktime'
+          : (ext == 'webm' ? 'video/webm' : 'video/mp4');
+      String filename = name0.isNotEmpty
+          ? name0
+          : 'video_${DateTime.now().millisecondsSinceEpoch}.mp4';
+
+      List<int> bytes = await x.readAsBytes();
+      if (bytes.isEmpty) {
+        if (mounted) {
+          showToast(context, 'Could not read video', type: ToastType.error);
+        }
+        return;
+      }
+      const cap = 64 * 1024 * 1024;
+      const compressAbove = 12 * 1024 * 1024;
+
+      // Large clips: shrink on-device so they fit the cap (mobile native only).
+      if (!kIsWeb && _isMobile && bytes.length > compressAbove) {
+        if (mounted) showToast(context, 'Compressing video…');
+        try {
+          final info = await VideoCompress.compressVideo(
+            x.path,
+            quality: VideoQuality.MediumQuality,
+            deleteOrigin: false,
+            includeAudio: true,
+          );
+          final cf = info?.file;
+          if (cf != null) {
+            final cb = await cf.readAsBytes();
+            if (cb.isNotEmpty && cb.length < bytes.length) {
+              bytes = cb;
+              mime = 'video/mp4';
+              final dot = filename.lastIndexOf('.');
+              filename =
+                  '${dot > 0 ? filename.substring(0, dot) : filename}.mp4';
+            }
+          }
+        } catch (_) {/* keep the original bytes on any failure */}
+      }
+
+      if (bytes.length > cap) {
+        if (mounted) {
+          showToast(context, 'Video is too large to send (max 64 MB).',
+              type: ToastType.error);
+        }
+        return;
+      }
+      await _uploadAndSend(
+          bytes: bytes, filename: filename, mime: mime, type: 'video');
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not pick video', type: ToastType.error);
+      }
+    } finally {
+      try {
+        await VideoCompress.deleteAllCache();
+      } catch (_) {}
     }
   }
 
@@ -3006,6 +3086,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           onColor: textColor,
           onDownload: () => _saveMediaToDevice(msg),
         );
+      case 'video':
+        return _videoBubble(url, msg, scheme);
       default:
         return _fileBubble(url, msg, textColor, scheme);
     }
@@ -3604,6 +3686,71 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           ],
         ),
       )),
+    );
+  }
+
+  Widget _videoBubble(
+      String url, Map<String, dynamic> msg, ColorScheme scheme) {
+    final secs = (msg['media_duration'] as num?)?.toInt() ?? 0;
+    String? dur;
+    if (secs > 0) {
+      final m = secs ~/ 60, sx = secs % 60;
+      dur = '$m:${sx.toString().padLeft(2, '0')}';
+    }
+    return GestureDetector(
+      onTap: () => _openVideo(url, msg),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 260),
+          child: AspectRatio(
+            aspectRatio: 16 / 10,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Container(color: Colors.black87),
+                Center(
+                  child: Container(
+                    width: 54,
+                    height: 54,
+                    decoration: const BoxDecoration(
+                        color: Colors.white24, shape: BoxShape.circle),
+                    child: const Icon(Icons.play_arrow_rounded,
+                        color: Colors.white, size: 32),
+                  ),
+                ),
+                Positioned(
+                  left: 8,
+                  bottom: 8,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.videocam_rounded,
+                          size: 14, color: Colors.white70),
+                      if (dur != null) ...[
+                        const SizedBox(width: 4),
+                        Text(dur,
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 11)),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openVideo(String url, Map<String, dynamic> msg) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black,
+      builder: (dctx) => _ChatVideoPlayer(
+        url: url,
+        onKeep: _canHarmony ? () => _keepsakeMessage(msg) : null,
+      ),
     );
   }
 
@@ -5950,6 +6097,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       switch (type) {
         case 'image':
           return '📷 Photo';
+        case 'video':
+          return '🎥 Video';
         case 'audio':
           return '🎤 Voice message';
         default:
@@ -5978,6 +6127,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         case 'image':
           typeIcon = Icons.photo_rounded;
           label = caption.isNotEmpty ? caption : 'Photo';
+          break;
+        case 'video':
+          typeIcon = Icons.videocam_rounded;
+          label = caption.isNotEmpty ? caption : 'Video';
           break;
         case 'audio':
           typeIcon = Icons.mic_rounded;
@@ -7086,6 +7239,145 @@ class _HoverScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(_HoverScope old) => old.hovering != hovering;
+}
+
+/// A full-screen in-app video player for chat videos — plays inline (tap to
+/// play/pause), with a close button and a PINNED Keepsake star while watching.
+class _ChatVideoPlayer extends StatefulWidget {
+  const _ChatVideoPlayer({required this.url, this.onKeep});
+  final String url;
+  final VoidCallback? onKeep;
+
+  @override
+  State<_ChatVideoPlayer> createState() => _ChatVideoPlayerState();
+}
+
+class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
+  VideoPlayerController? _c;
+  bool _error = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      final c = VideoPlayerController.networkUrl(
+        Uri.parse(widget.url),
+        httpHeaders: mediaAuthHeaders(widget.url),
+      );
+      await c.initialize();
+      if (!mounted) {
+        c.dispose();
+        return;
+      }
+      setState(() => _c = c);
+      c.setLooping(true);
+      c.play();
+    } catch (_) {
+      if (mounted) setState(() => _error = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _c?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _c;
+    final accent = Theme.of(context).colorScheme.primary;
+    return GestureDetector(
+      onTap: () {
+        if (c == null || !c.value.isInitialized) return;
+        if (c.value.isPlaying) {
+          c.pause();
+        } else {
+          c.play();
+        }
+        setState(() {});
+      },
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Container(color: Colors.black),
+          if (_error)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text("This video can't play on this device.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70)),
+              ),
+            )
+          else if (c == null || !c.value.isInitialized)
+            const Center(
+                child: CircularProgressIndicator(color: Colors.white))
+          else
+            Center(
+              child: AspectRatio(
+                aspectRatio:
+                    c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio,
+                child: VideoPlayer(c),
+              ),
+            ),
+          if (c != null &&
+              c.value.isInitialized &&
+              !c.value.isPlaying &&
+              !_error)
+            const Center(
+              child: Icon(Icons.play_arrow_rounded,
+                  color: Colors.white70, size: 64),
+            ),
+          Positioned(
+            top: 40,
+            right: 16,
+            child: IconButton(
+              icon: const Icon(Icons.close_rounded, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+          if (widget.onKeep != null)
+            Positioned(
+              right: 14,
+              bottom: 24,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: widget.onKeep,
+                  borderRadius: BorderRadius.circular(24),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.92),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.auto_awesome_rounded,
+                            size: 16, color: Colors.white),
+                        SizedBox(width: 6),
+                        Text('Keep',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 /// A small circular "keep to Our Space" button that floats on a bubble's inner

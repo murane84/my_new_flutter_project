@@ -111,6 +111,10 @@ dependencies:
   # Windows implementation; this federates one in so clips play on the desktop
   # app). Android/iOS/web/macOS already have their own implementations.
   video_player_win: ^3.1.1
+  # On-device video compression so large clips shrink to fit the upload cap
+  # before sending. Mobile-only (Android/iOS); desktop/web fall back to the
+  # original and a clear "too large" message.
+  video_compress: ^3.1.3
   # Camera capture for stories on web + desktop, where image_picker has no
   # camera (it would silently open a file picker). Mobile keeps image_picker's
   # camera. camera_windows adds the Windows backend (not endorsed by `camera`).

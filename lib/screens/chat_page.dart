@@ -256,6 +256,178 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   int _recordMs = 0;
   String _apiBase = ''; // resolved server base for building attachment URLs
 
+  // The caller's own Our Space id for the bond with this DM partner (null when
+  // not bonded). Resolved once on open; gates the bubble "Keepsake" action and
+  // the Harmony menu group (Dedicate / Add to Our Playlist).
+  int? _ourSpaceId;
+
+  /// Look up whether this DM partner and I share an Our Space, so the bubble
+  /// menu can offer to keep moments there. Silent + best-effort: on failure the
+  /// Harmony actions simply stay hidden and the quick slot falls back to Copy.
+  Future<void> _resolveBond() async {
+    if (widget.isGroup || widget.friendId <= 0) return;
+    try {
+      final r = await ApiService().getBondWith(widget.friendId);
+      final sid = (r?['space_id'] as num?)?.toInt();
+      if (mounted && sid != null) setState(() => _ourSpaceId = sid);
+    } catch (_) {
+      // Leave _ourSpaceId null — Keepsake just won't show.
+    }
+  }
+
+  // ── Harmony / Our Space actions from a chat bubble ──────────────────────────
+  // A friendly song title for a 'song' bubble (its spoken title lives in
+  // `content`, falling back to the file name).
+  String _songTitleOf(Map<String, dynamic> msg) {
+    final text = _stripQuote((msg['content'] as String?) ?? '').trim();
+    if (text.isNotEmpty) return text;
+    final name = (msg['media_name'] as String?)?.trim();
+    return (name != null && name.isNotEmpty) ? name : 'A song';
+  }
+
+  /// Keep [msg] into Our Space as a PinnedMoment, mapping the bubble type to a
+  /// moment kind: text→note, photo→photo, voice→voice, song→song.
+  Future<void> _keepsakeMessage(Map<String, dynamic> msg) async {
+    final sid = _ourSpaceId;
+    if (sid == null) return;
+    final type = (msg['message_type'] as String?) ?? 'text';
+    final rel = (msg['media_url'] as String?) ?? '';
+    final text = _stripQuote((msg['content'] as String?) ?? '').trim();
+    String kind;
+    String? ref;
+    String? caption;
+    switch (type) {
+      case 'image':
+        kind = 'photo';
+        ref = rel;
+        caption = text.isNotEmpty ? text : null;
+        break;
+      case 'audio':
+        kind = 'voice';
+        ref = rel;
+        caption = text.isNotEmpty ? text : null;
+        break;
+      case 'song':
+        kind = 'song';
+        ref = jsonEncode({'title': _songTitleOf(msg), 'ref': rel});
+        break;
+      case 'text':
+        if (text.isEmpty) {
+          showToast(context, 'Nothing to keep here', type: ToastType.info);
+          return;
+        }
+        kind = 'note';
+        ref = text;
+        break;
+      default:
+        // call / live / location / contact / file — keep a friendly label.
+        final label = _replyQuoteText(msg).trim();
+        if (label.isEmpty) {
+          showToast(context, 'This can only be kept from Our Space',
+              type: ToastType.info);
+          return;
+        }
+        kind = 'note';
+        ref = label;
+    }
+    final res = await ApiService()
+        .addMoment(sid, kind: kind, ref: ref, caption: caption);
+    if (!mounted) return;
+    showToast(
+        context,
+        res != null ? 'Kept in Our Space 💛' : 'Could not keep that',
+        type: res != null ? ToastType.success : ToastType.error);
+  }
+
+  /// Pin a shared song into the couple's Our Playlist (Soundtrack of Us).
+  Future<void> _addSongToPlaylist(Map<String, dynamic> msg) async {
+    final sid = _ourSpaceId;
+    if (sid == null) return;
+    final rel = (msg['media_url'] as String?) ?? '';
+    final res = await ApiService().addTrack(sid,
+        title: _songTitleOf(msg), ref: rel, source: 'share');
+    if (!mounted) return;
+    showToast(
+        context,
+        res != null ? 'Added to Our Playlist 🎵' : 'Could not add that',
+        type: res != null ? ToastType.success : ToastType.error);
+  }
+
+  /// Dedicate a shared song to the partner — a one-line note turns it into a
+  /// feeling. Reuses the dedication flow already in Our Space.
+  Future<void> _dedicateSong(Map<String, dynamic> msg) async {
+    final sid = _ourSpaceId;
+    if (sid == null) return;
+    final rel = (msg['media_url'] as String?) ?? '';
+    final title = _songTitleOf(msg);
+    final note = await _promptDedicationNote(title);
+    if (note == null) return; // cancelled
+    final trimmed = note.trim();
+    final res = await ApiService().createDedication(sid,
+        title: title, ref: rel, note: trimmed.isEmpty ? null : trimmed);
+    if (!mounted) return;
+    showToast(
+        context,
+        res != null
+            ? 'Dedicated to ${widget.friendName} 💫'
+            : 'Could not dedicate',
+        type: res != null ? ToastType.success : ToastType.error);
+  }
+
+  /// A small sheet to add an optional note when dedicating a song from a bubble.
+  /// Returns the note text (possibly empty) on confirm, or null if cancelled.
+  Future<String?> _promptDedicationNote(String title) {
+    final ctrl = TextEditingController();
+    return showDialog<String?>(
+      context: context,
+      builder: (dctx) {
+        final scheme = Theme.of(dctx).colorScheme;
+        return AlertDialog(
+          title: const Text('Dedicate this song'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.music_note_rounded,
+                      size: 18, color: scheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                minLines: 1,
+                maxLines: 3,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  hintText: 'Say why… (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dctx, null),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(dctx, ctrl.text),
+                child: const Text('Dedicate')),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -274,6 +446,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _isUserOffline = !ConnectionStatus.instance.isOnline;
     ConnectionStatus.instance.online.addListener(_onConnStatusChanged);
     _initChat();
+    _resolveBond();
 
     _statusTimer = Timer.periodic(
       const Duration(seconds: 10),
@@ -3261,7 +3434,32 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       final isTextMsg = (msg['message_type'] ?? 'text') == 'text';
       final hasMedia = (msg['message_type'] ?? 'text') != 'text' &&
           (msg['media_url'] as String? ?? '').isNotEmpty;
-      return <_MenuAction>[
+      // Harmony / Our Space actions sit at the TOP of the menu (only when the
+      // two are bonded), with the usual chat actions below. A song can also be
+      // dedicated or pinned into the shared playlist straight from its bubble.
+      final bonded = _ourSpaceId != null;
+      final isSong = (msg['message_type'] ?? 'text') == 'song';
+      final harmony = <_MenuAction>[];
+      if (bonded && !deleted) {
+        harmony.add(_MenuAction('keepsake', Icons.auto_awesome_rounded,
+            'Keepsake', () {
+          Navigator.pop(ctx);
+          _keepsakeMessage(msg);
+        }));
+        if (isSong) {
+          harmony.add(_MenuAction('dedicate', Icons.favorite_rounded,
+              'Dedicate', () {
+            Navigator.pop(ctx);
+            _dedicateSong(msg);
+          }, color: scheme.primary));
+          harmony.add(_MenuAction('addpl', Icons.playlist_add_rounded,
+              'Add to Our Playlist', () {
+            Navigator.pop(ctx);
+            _addSongToPlaylist(msg);
+          }));
+        }
+      }
+      final rest = <_MenuAction>[
         _MenuAction('reply', Icons.reply_rounded, 'Reply', () {
           Navigator.pop(ctx);
           setState(() => _replyTo = msg);
@@ -3317,6 +3515,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           }, color: scheme.error),
         ],
       ];
+      return <_MenuAction>[
+        ...harmony,
+        if (harmony.isNotEmpty)
+          _MenuAction('__div__', Icons.remove, '', () {}),
+        ...rest,
+      ];
     }
 
     Widget actionCard(BuildContext ctx) {
@@ -3327,7 +3531,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         }
         return null;
       }
-      final quick = [pick('reply'), pick('pin'), pick('forward'), pick('delme')]
+      final quick = [
+        pick('reply'),
+        pick('pin'),
+        pick('keepsake') ?? pick('copy'),
+        pick('delme'),
+      ]
           .whereType<_MenuAction>()
           .toList();
       return _MsgActionMenu(
@@ -6225,11 +6434,21 @@ class _FullMenuCardState extends State<_FullMenuCard> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 for (final a in widget.actions)
-                  _ActionTile(
-                      icon: a.icon,
-                      label: a.label,
-                      color: a.color,
-                      onTap: a.onTap),
+                  if (a.id == '__div__')
+                    Divider(
+                      height: 9,
+                      thickness: 1,
+                      indent: 14,
+                      endIndent: 14,
+                      color: widget.scheme.outlineVariant
+                          .withValues(alpha: widget.isDark ? 0.30 : 0.5),
+                    )
+                  else
+                    _ActionTile(
+                        icon: a.icon,
+                        label: a.label,
+                        color: a.color,
+                        onTap: a.onTap),
                 const SizedBox(height: 6),
               ],
             ),

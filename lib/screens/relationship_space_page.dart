@@ -422,7 +422,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   final GlobalKey _kPlaylist = GlobalKey();
   final GlobalKey _kMoments = GlobalKey();
   final GlobalKey _kDiary = GlobalKey();
-  final GlobalKey _kSong = GlobalKey();
 
   // A feature opens as a FULL PAGE below the Our Space header (the header +
   // minimize stay on top). null = the tile dashboard; otherwise one of
@@ -1280,13 +1279,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             count: diaryCount,
             subtitle: 'Memories & plans ahead',
             onTap: () => _openDiary(_globalCenter(_kDiary))),
-      _featureTile(scheme,
-          tileKey: _kSong,
-          icon: Icons.auto_awesome_rounded,
-          label: 'Song & milestones',
-          count: null,
-          subtitle: _songSubtitle(),
-          onTap: () => _openSongMilestones(_globalCenter(_kSong))),
     ];
     return LayoutBuilder(
       builder: (ctx, c) {
@@ -1466,11 +1458,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
-  String _songSubtitle() {
-    final song = (_space['stats'] as Map?)?['your_song'];
-    final title = (song is Map) ? (song['title'] ?? '').toString().trim() : '';
-    return title.isNotEmpty ? title : 'Your bond details';
-  }
 
   /// A quiet "thinking of you" pill — the lightest touch across the bond, kept
   /// as its own one-tap action (it has no details to open).
@@ -1562,7 +1549,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   }
 
   void _openMoments([Offset? origin]) => _goSection('moments');
-  void _openSongMilestones([Offset? origin]) => _goSection('song');
   void _openDiary([Offset? origin]) => _goSection('diary');
 
   void _goSection(String key) =>
@@ -1579,7 +1565,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       if (pair) ('playlist', Icons.queue_music_rounded, 'Our Playlist'),
       ('moments', Icons.favorite_rounded, 'Pinned moments'),
       if (pair) ('diary', Icons.menu_book_rounded, 'Our Diary'),
-      ('song', Icons.auto_awesome_rounded, 'Song & milestones'),
     ];
   }
 
@@ -1915,10 +1900,16 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           Icons.queue_music_rounded,
           'Our Playlist',
           onMenu: onMenu,
-          body: tracks.isEmpty
-              ? _playlistEmpty(scheme)
-              : Column(
-                  children: [for (final t in tracks) _trackRow(scheme, t)]),
+          body: Column(
+            children: [
+              _songMilestoneCard(scheme),
+              const SizedBox(height: 16),
+              if (tracks.isEmpty)
+                _playlistEmpty(scheme)
+              else
+                ...[for (final t in tracks) _trackRow(scheme, t)],
+            ],
+          ),
           footer: Row(
             children: [
               Expanded(
@@ -1936,6 +1927,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                 child: OutlinedButton.icon(
                   onPressed: _addToPlaylist,
                   style: OutlinedButton.styleFrom(
+                      backgroundColor: scheme.surfaceContainerHighest,
                       foregroundColor: _accent,
                       side:
                           BorderSide(color: _accent.withValues(alpha: 0.6))),
@@ -2009,57 +2001,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                   backgroundColor: _accent, foregroundColor: Colors.white),
               icon: const Icon(Icons.favorite_rounded, size: 18),
               label: const Text('Dedicate a song'),
-            ),
-          ),
-        );
-      case 'song':
-        final stats = (_space['stats'] as Map?) ?? const {};
-        final song = stats['your_song'];
-        final next = stats['next_milestone'];
-        final hasHint =
-            next is Map && ((next['remaining'] as num?)?.toInt() ?? 0) > 0;
-        final days = (stats['days_in_song'] as num?)?.toInt() ?? 0;
-        final streak = (stats['listen_streak'] as num?)?.toInt() ?? 0;
-        return _sectionPanel(
-          scheme,
-          Icons.auto_awesome_rounded,
-          'Song & milestones',
-          onMenu: onMenu,
-          body: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  _accent.withValues(alpha: 0.10),
-                  scheme.surfaceContainerHighest.withValues(alpha: 0.35),
-                ],
-              ),
-              border: Border.all(color: _accent.withValues(alpha: 0.18)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _yourSongInner(scheme, song),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                        child: _detailStat(scheme, '🎧', '$days',
-                            days == 1 ? 'day in a song' : 'days in a song')),
-                    const SizedBox(width: 10),
-                    Expanded(
-                        child: _detailStat(scheme, '🔥', '$streak',
-                            streak == 1 ? 'day streak' : 'day streak')),
-                  ],
-                ),
-                if (hasHint) ...[
-                  const SizedBox(height: 14),
-                  _nextMilestoneHint(scheme),
-                ],
-              ],
             ),
           ),
         );
@@ -3473,6 +3414,52 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
+
+  /// The "your song" + milestones card. Now shown at the top of Our Playlist
+  /// (the standalone Song & milestones section was merged in), and opaque so
+  /// the wallpaper never washes out the stats.
+  Widget _songMilestoneCard(ColorScheme scheme) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final stats = (_space['stats'] as Map?) ?? const {};
+    final song = stats['your_song'];
+    final next = stats['next_milestone'];
+    final hasHint =
+        next is Map && ((next['remaining'] as num?)?.toInt() ?? 0) > 0;
+    final days = (stats['days_in_song'] as num?)?.toInt() ?? 0;
+    final streak = (stats['listen_streak'] as num?)?.toInt() ?? 0;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        color: isDark
+            ? scheme.surfaceContainerHigh
+            : scheme.surfaceContainerHighest,
+        border: Border.all(color: _accent.withValues(alpha: 0.20)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _yourSongInner(scheme, song),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                  child: _detailStat(scheme, '🎧', '$days',
+                      days == 1 ? 'day in a song' : 'days in a song')),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: _detailStat(scheme, '🔥', '$streak',
+                      streak == 1 ? 'day streak' : 'day streak')),
+            ],
+          ),
+          if (hasHint) ...[
+            const SizedBox(height: 14),
+            _nextMilestoneHint(scheme),
+          ],
+        ],
+      ),
+    );
+  }
 
   Widget _yourSongInner(ColorScheme scheme, dynamic song) {
     final has = song is Map && (song['title'] ?? '').toString().trim().isNotEmpty;

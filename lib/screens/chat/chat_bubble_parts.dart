@@ -232,7 +232,7 @@ class _ReactionButtonState extends State<_ReactionButton> {
         curve: Curves.easeOut,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          child: Text(widget.emoji, style: const TextStyle(fontSize: 30)),
+          child: Text(widget.emoji, style: const TextStyle(fontSize: 25)),
         ),
       ),
     );

@@ -764,6 +764,14 @@ class DiaryEntry(Base):
     # memories carry their own 'hand', which both partners see, so the shared
     # notebook keeps each person's unique touch. Auto-created column; no ALTER.
     font = Column(String, nullable=True)
+    # When this memory grew out of a kept Pinned Moment ("Write about this in
+    # Our Diary"), link back to it: the source moment's id (for tap-to-navigate
+    # back to the moments wall) and a durable thumbnail ref (the moment's media),
+    # so the diary page shows the moment at its top. Null for a plain entry.
+    source_moment_id = Column(
+        Integer, ForeignKey("pinned_moments.id", ondelete="SET NULL"),
+        nullable=True, index=True)
+    source_thumb = Column(Text, nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

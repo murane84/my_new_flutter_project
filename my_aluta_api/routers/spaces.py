@@ -67,6 +67,10 @@ class _DiaryBody(BaseModel):
     pinned: Optional[bool] = False
     # The author's chosen typeface for this memory (client font key).
     font: Optional[str] = None
+    # When the entry is grown from a kept Pinned Moment: its id (navigate back)
+    # and a durable thumbnail ref (the moment's media) to show atop the page.
+    source_moment_id: Optional[int] = None
+    source_thumb: Optional[str] = None
 
 
 class _DiaryEditBody(BaseModel):
@@ -638,6 +642,8 @@ def _diary_dict(db: Session, e: DiaryEntry, current_user_id: int) -> dict:
         "plan_date": e.plan_date.isoformat() if e.plan_date else None,
         "pinned": bool(e.pinned),
         "font": e.font,
+        "source_moment_id": e.source_moment_id,
+        "source_thumb": e.source_thumb,
         "author_id": e.author_id,
         "author": {
             "id": author.id,
@@ -1917,6 +1923,32 @@ def add_diary_entry(
     title = (payload.title or "").strip() or None
     plan_date = _parse_plan_date(payload.plan_date) if kind == "plan" else None
     pinned = bool(payload.pinned) and kind == "plan"
+    # Optional link back to the kept moment this memory expands on. Only honour
+    # a source moment that actually belongs to this bond (same pair_key), so a
+    # client can't point a diary entry at someone else's moment.
+    src_id = payload.source_moment_id
+    src_thumb = (payload.source_thumb or "").strip() or None
+    if src_id is not None:
+        moment = (
+            db.query(PinnedMoment)
+            .filter(PinnedMoment.id == src_id)
+            .first()
+        )
+        same_bond = False
+        if moment is not None:
+            msp = (
+                db.query(RelationshipSpace)
+                .filter(RelationshipSpace.id == moment.space_id)
+                .first()
+            )
+            if msp is not None:
+                mpk, _ = _bond_pair_key(msp, msp.owner_id)
+                same_bond = mpk is not None and mpk == pk
+        if not same_bond:
+            src_id = None
+            src_thumb = None
+    else:
+        src_thumb = None
     entry = DiaryEntry(
         pair_key=pk,
         author_id=current_user.id,
@@ -1926,6 +1958,8 @@ def add_diary_entry(
         plan_date=plan_date,
         pinned=pinned,
         font=((payload.font or "").strip().lower()[:24] or None),
+        source_moment_id=src_id,
+        source_thumb=src_thumb[:1024] if src_thumb else None,
     )
     db.add(entry)
     db.commit()

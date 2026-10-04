@@ -1419,7 +1419,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     if (type == 'space_diary' ||
         type == 'space_diary_comment' ||
         type == 'space_diary_react' ||
-        type == 'space_moment_comment') {
+        type == 'space_moment_comment' ||
+        type == 'space_capsule') {
       final data = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
       final line = (data['line'] ?? '').toString();
       if (type != 'space_diary_react' && line.isNotEmpty && mounted) {

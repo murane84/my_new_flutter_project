@@ -1741,6 +1741,104 @@ class ApiService {
     }
   }
 
+  /// All love capsules in this bond (sealed + opened), soonest-unlock first.
+  Future<List<Map<String, dynamic>>> getCapsules(int spaceId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return const [];
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/capsules'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        final list = (data is Map ? data['capsules'] : data) as List?;
+        return (list ?? const [])
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+      return const [];
+    } catch (e) {
+      _logger.w('getCapsules failed: $e');
+      return const [];
+    }
+  }
+
+  /// Seal a love capsule to unlock at [unlockAtIso] (ISO-8601, future).
+  Future<Map<String, dynamic>?> createCapsule(
+    int spaceId, {
+    String? trackTitle,
+    String? trackArtist,
+    String? trackRef,
+    String? message,
+    String? mediaUrl,
+    required String unlockAtIso,
+    String mode = 'message',
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/capsules'),
+        headers: _authHeaders(token),
+        body: jsonEncode({
+          'track_title': ?trackTitle,
+          'track_artist': ?trackArtist,
+          'track_ref': ?trackRef,
+          'message': ?message,
+          'media_url': ?mediaUrl,
+          'unlock_at': unlockAtIso,
+          'mode': mode,
+        }),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final d = jsonDecode(resp.body);
+        if (d is Map<String, dynamic>) return d;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('createCapsule failed: $e');
+      return null;
+    }
+  }
+
+  /// Open a capsule once it has unlocked (server refuses while still sealed).
+  Future<Map<String, dynamic>?> openCapsule(int spaceId, int capsuleId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/capsules/$capsuleId/open'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final d = jsonDecode(resp.body);
+        if (d is Map<String, dynamic>) return d;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('openCapsule failed: $e');
+      return null;
+    }
+  }
+
+  /// Cancel a still-sealed capsule (creator only).
+  Future<bool> deleteCapsule(int spaceId, int capsuleId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.delete(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/capsules/$capsuleId'),
+        headers: _authHeaders(token),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.w('deleteCapsule failed: $e');
+      return false;
+    }
+  }
+
   /// All dedications in this bond (sent + received), newest first.
   Future<Map<String, dynamic>?> getDedications(int spaceId) async {
     try {

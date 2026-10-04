@@ -422,6 +422,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   final GlobalKey _kPlaylist = GlobalKey();
   final GlobalKey _kMoments = GlobalKey();
   final GlobalKey _kDiary = GlobalKey();
+  final GlobalKey _kCapsule = GlobalKey();
 
   // A feature opens as a FULL PAGE below the Our Space header (the header +
   // minimize stay on top). null = the tile dashboard; otherwise one of
@@ -1258,6 +1259,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final momentsCount =
         countOf('moment_count', moments.length) + dedicationsCount;
     final diaryCount = countOf('diary_count', _diary.length);
+    final capsulesWaiting = ((_space['capsules'] as List?) ?? const [])
+        .where((c) => c is Map && c['locked'] == true)
+        .length;
     final tiles = <Widget>[
       if (_partnerId != null)
         _featureTile(scheme,
@@ -1282,6 +1286,14 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             count: diaryCount,
             subtitle: 'Memories & plans ahead',
             onTap: () => _openDiary(_globalCenter(_kDiary))),
+      if (_partnerId != null)
+        _featureTile(scheme,
+            tileKey: _kCapsule,
+            icon: Icons.card_giftcard_rounded,
+            label: 'Love capsule',
+            count: capsulesWaiting > 0 ? capsulesWaiting : null,
+            subtitle: 'A song sealed for later',
+            onTap: () => _openCapsules(_globalCenter(_kCapsule))),
     ];
     return LayoutBuilder(
       builder: (ctx, c) {
@@ -1553,6 +1565,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   void _openMoments([Offset? origin]) => _goSection('moments');
   void _openDiary([Offset? origin]) => _goSection('diary');
+  void _openCapsules([Offset? origin]) => _goSection('capsule');
 
   void _goSection(String key) =>
       setState(() {
@@ -1568,6 +1581,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       if (pair) ('playlist', Icons.queue_music_rounded, 'Our Playlist'),
       ('moments', Icons.favorite_rounded, 'Pinned moments'),
       if (pair) ('diary', Icons.menu_book_rounded, 'Our Diary'),
+      if (pair) ('capsule', Icons.card_giftcard_rounded, 'Love capsule'),
     ];
   }
 
@@ -1796,6 +1810,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             ((_space['moments'] as List?) ?? const []).length;
       case 'diary':
         return (_space['diary_count'] as num?)?.toInt() ?? _diary.length;
+      case 'capsule':
+        final n = ((_space['capsules'] as List?) ?? const [])
+            .where((c) => c is Map && c['locked'] == true)
+            .length;
+        return n > 0 ? n : null;
       case 'dedications':
         return ((_space['dedications'] as List?) ?? const []).length;
       default:
@@ -2004,6 +2023,32 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                   backgroundColor: _accent, foregroundColor: Colors.white),
               icon: const Icon(Icons.favorite_rounded, size: 18),
               label: const Text('Dedicate a song'),
+            ),
+          ),
+        );
+      case 'capsule':
+        final capsules = ((_space['capsules'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((c) => Map<String, dynamic>.from(c))
+            .toList();
+        return _sectionPanel(
+          scheme,
+          Icons.card_giftcard_rounded,
+          'Love capsule',
+          onMenu: onMenu,
+          body: capsules.isEmpty
+              ? _capsuleEmpty(scheme)
+              : Column(children: [
+                  for (final c in capsules) _capsuleCard(scheme, c)
+                ]),
+          footer: SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _composeCapsule,
+              style: FilledButton.styleFrom(
+                  backgroundColor: _accent, foregroundColor: Colors.white),
+              icon: const Icon(Icons.schedule_send_rounded, size: 18),
+              label: const Text('Seal a capsule'),
             ),
           ),
         );
@@ -3601,6 +3646,307 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) => _DedicateComposeSheet(spaceId: _id, accent: _accent),
+    );
+    if (created == true && mounted) _load();
+  }
+
+  // ── Love capsule (§5.5) ──────────────────────────────────────────────────
+  Widget _capsuleEmpty(ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 30, 16, 20),
+      child: Column(
+        children: [
+          Icon(Icons.card_giftcard_rounded,
+              size: 40, color: _accent.withValues(alpha: 0.6)),
+          const SizedBox(height: 12),
+          Text('No capsules yet',
+              style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: scheme.onSurface)),
+          const SizedBox(height: 4),
+          Text(
+              'Seal a song + a message to unlock at a moment you choose — '
+              'a birthday, an anniversary, or just "9 PM tonight, together".',
+              textAlign: TextAlign.center,
+              style:
+                  TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+        ],
+      ),
+    );
+  }
+
+  String _capsuleCountdown(DateTime unlockLocal) {
+    final diff = unlockLocal.difference(DateTime.now());
+    if (diff.isNegative) return 'Unlocked';
+    if (diff.inDays >= 1) {
+      return 'Unlocks in ${diff.inDays}d ${diff.inHours % 24}h';
+    }
+    if (diff.inHours >= 1) {
+      return 'Unlocks in ${diff.inHours}h ${diff.inMinutes % 60}m';
+    }
+    if (diff.inMinutes >= 1) return 'Unlocks in ${diff.inMinutes}m';
+    return 'Unlocks any moment now';
+  }
+
+  Widget _capsuleCard(ColorScheme scheme, Map<String, dynamic> c) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final id = (c['id'] as num).toInt();
+    final locked = c['locked'] == true;
+    final mine = c['mine'] == true;
+    final opened = c['opened'] == true;
+    final mode = (c['mode'] ?? 'message').toString();
+    final creator = (c['creator'] as Map?)?.cast<String, dynamic>();
+    final who =
+        mine ? 'You' : ((creator?['username'] ?? 'Your partner').toString());
+    final unlockAt =
+        DateTime.tryParse((c['unlock_at'] ?? '').toString())?.toLocal();
+    final title = (c['track_title'] ?? '').toString();
+    final artist = (c['track_artist'] ?? '').toString();
+    final message = (c['message'] ?? '').toString();
+    final sync = mode == 'sync_listen';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 11),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark
+            ? scheme.surfaceContainerHigh
+            : scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+            color: _accent.withValues(alpha: locked ? 0.30 : 0.45),
+            width: locked ? 1 : 1.4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: _accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(
+                    locked
+                        ? Icons.lock_clock_rounded
+                        : Icons.card_giftcard_rounded,
+                    color: _accent,
+                    size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(mine ? 'Sealed by you' : 'A capsule from $who',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13.5,
+                            color: scheme.onSurface)),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(
+                            sync
+                                ? Icons.headphones_rounded
+                                : Icons.mail_rounded,
+                            size: 12,
+                            color: scheme.onSurfaceVariant),
+                        const SizedBox(width: 5),
+                        Text(sync ? 'Listen together' : 'A message',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: scheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (locked && mine)
+                IconButton(
+                  tooltip: 'Cancel',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(Icons.close_rounded,
+                      size: 18, color: scheme.onSurfaceVariant),
+                  onPressed: () => _cancelCapsule(id),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (locked) ...[
+            Container(
+              width: double.infinity,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              decoration: BoxDecoration(
+                color: _accent.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Text(unlockAt != null ? _capsuleCountdown(unlockAt) : 'Sealed',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          color: _accent)),
+                  if (unlockAt != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                        DateFormat('EEE, MMM d · h:mm a').format(unlockAt),
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            color: scheme.onSurfaceVariant)),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text('Sealed until then — the song & message stay a surprise 💌',
+                style: TextStyle(
+                    fontSize: 11.5, color: scheme.onSurfaceVariant)),
+          ] else if (!opened) ...[
+            Row(
+              children: [
+                const Text('🎁', style: TextStyle(fontSize: 22)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text('It\'s unlocked — ready to open',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => _openCapsule(id),
+                style: FilledButton.styleFrom(
+                    backgroundColor: _accent, foregroundColor: Colors.white),
+                icon: const Icon(Icons.lock_open_rounded, size: 18),
+                label: const Text('Open the capsule'),
+              ),
+            ),
+          ] else ...[
+            if (title.isNotEmpty)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: _accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.music_note_rounded, size: 16, color: _accent),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12.5,
+                                  color: scheme.onSurface)),
+                          if (artist.isNotEmpty)
+                            Text(artist,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: scheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (message.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(message,
+                  style: TextStyle(
+                      fontSize: 14, height: 1.4, color: scheme.onSurface)),
+            ],
+            if (sync) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _listenTogether,
+                  style: OutlinedButton.styleFrom(
+                      backgroundColor: scheme.surfaceContainerHighest,
+                      foregroundColor: _accent,
+                      side: BorderSide(
+                          color: _accent.withValues(alpha: 0.6))),
+                  icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                  label: const Text('Listen together'),
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openCapsule(int capsuleId) async {
+    final res = await ApiService().openCapsule(_id, capsuleId);
+    if (!mounted) return;
+    if (res != null) {
+      await _load();
+    } else {
+      showToast(context, 'Could not open it — try again',
+          type: ToastType.error);
+    }
+  }
+
+  Future<void> _cancelCapsule(int capsuleId) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel this capsule?'),
+        content: const Text(
+            'It will be deleted and never unlock. This can\'t be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Keep it')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Cancel capsule')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final done = await ApiService().deleteCapsule(_id, capsuleId);
+    if (!mounted) return;
+    if (done) {
+      showToast(context, 'Capsule cancelled', type: ToastType.info);
+      await _load();
+    } else {
+      showToast(context, 'Could not cancel it', type: ToastType.error);
+    }
+  }
+
+  Future<void> _composeCapsule() async {
+    final created = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _CapsuleComposeSheet(spaceId: _id, accent: _accent),
     );
     if (created == true && mounted) _load();
   }
@@ -8604,6 +8950,260 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
       children: mine
           ? [bubble, const SizedBox(width: 6), avatar]
           : [avatar, const SizedBox(width: 6), bubble],
+    );
+  }
+}
+
+/// Compose a love capsule: a song + message sealed until a chosen time. Returns
+/// true on a successful seal so the list refreshes.
+class _CapsuleComposeSheet extends StatefulWidget {
+  const _CapsuleComposeSheet({required this.spaceId, required this.accent});
+  final int spaceId;
+  final Color accent;
+
+  @override
+  State<_CapsuleComposeSheet> createState() => _CapsuleComposeSheetState();
+}
+
+class _CapsuleComposeSheetState extends State<_CapsuleComposeSheet> {
+  Map<String, dynamic>? _song;
+  final TextEditingController _msg = TextEditingController();
+  DateTime? _unlockAt;
+  String _mode = 'message'; // 'message' | 'sync_listen'
+  bool _sending = false;
+
+  @override
+  void dispose() {
+    _msg.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickSong() async {
+    final picked = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _PlaylistAddSheet(accent: widget.accent),
+    );
+    if (picked != null && mounted) setState(() => _song = picked);
+  }
+
+  Future<void> _pickWhen() async {
+    final now = DateTime.now();
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _unlockAt ?? now.add(const Duration(days: 1)),
+      firstDate: now,
+      lastDate: DateTime(now.year + 5),
+    );
+    if (d == null || !mounted) return;
+    final t = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(
+          _unlockAt ?? now.add(const Duration(hours: 1))),
+    );
+    if (t == null || !mounted) return;
+    setState(() =>
+        _unlockAt = DateTime(d.year, d.month, d.day, t.hour, t.minute));
+  }
+
+  Future<void> _seal() async {
+    final hasSong = _song != null;
+    final msg = _msg.text.trim();
+    if (!hasSong && msg.isEmpty) {
+      showToast(context, 'Add a song or a message.', type: ToastType.info);
+      return;
+    }
+    if (_unlockAt == null) {
+      showToast(context, 'Pick when it should unlock.', type: ToastType.info);
+      return;
+    }
+    if (!_unlockAt!.isAfter(DateTime.now())) {
+      showToast(context, 'Pick a time in the future.', type: ToastType.info);
+      return;
+    }
+    setState(() => _sending = true);
+    final res = await ApiService().createCapsule(
+      widget.spaceId,
+      trackTitle: _song?['title'] as String?,
+      trackArtist: _song?['artist'] as String?,
+      trackRef: _song?['ref'] as String?,
+      message: msg.isEmpty ? null : msg,
+      unlockAtIso: _unlockAt!.toUtc().toIso8601String(),
+      mode: _mode,
+    );
+    if (!mounted) return;
+    setState(() => _sending = false);
+    if (res != null) {
+      showToast(context, 'Capsule sealed 💌', type: ToastType.success);
+      Navigator.pop(context, true);
+    } else {
+      showToast(context, 'Could not seal the capsule', type: ToastType.error);
+    }
+  }
+
+  Widget _modeSeg(ColorScheme scheme, String m, IconData icon, String label) {
+    final sel = _mode == m;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _mode = m),
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          decoration: BoxDecoration(
+            color: sel ? widget.accent : Colors.transparent,
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon,
+                  size: 16,
+                  color: sel ? Colors.white : scheme.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: sel ? Colors.white : scheme.onSurface)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _pickTile(
+      ColorScheme scheme, IconData icon, String label, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: widget.accent.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: widget.accent, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: scheme.onSurface,
+                      fontWeight: FontWeight.w600)),
+            ),
+            Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final songLabel = _song == null
+        ? 'Add a song (optional)'
+        : (((_song!['artist'] ?? '').toString().isNotEmpty)
+            ? '${_song!['title']} — ${_song!['artist']}'
+            : (_song!['title'] ?? '').toString());
+    final whenLabel = _unlockAt == null
+        ? 'Choose unlock time'
+        : DateFormat('EEE, MMM d · h:mm a').format(_unlockAt!);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 16, 20, 16 + bottom),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 14),
+                decoration: BoxDecoration(
+                    color: scheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            Text('Seal a love capsule',
+                style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
+                    color: scheme.onSurface)),
+            const SizedBox(height: 4),
+            Text('A song + a message that stays sealed until the moment you '
+                'choose.',
+                style:
+                    TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+            const SizedBox(height: 14),
+            _pickTile(scheme, Icons.music_note_rounded, songLabel, _pickSong),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _msg,
+              maxLines: 3,
+              maxLength: 600,
+              decoration: InputDecoration(
+                hintText: 'Write the message they\'ll open…',
+                filled: true,
+                fillColor: scheme.surfaceContainerHighest,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            _pickTile(scheme, Icons.schedule_rounded, whenLabel, _pickWhen),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  _modeSeg(scheme, 'message', Icons.mail_rounded,
+                      'Just a message'),
+                  const SizedBox(width: 4),
+                  _modeSeg(scheme, 'sync_listen', Icons.headphones_rounded,
+                      'Listen together'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _sending ? null : _seal,
+                style: FilledButton.styleFrom(
+                    backgroundColor: widget.accent,
+                    foregroundColor: Colors.white),
+                icon: _sending
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.lock_clock_rounded, size: 18),
+                label: Text(_sending ? 'Sealing…' : 'Seal the capsule'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

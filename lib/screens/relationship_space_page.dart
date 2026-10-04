@@ -4272,6 +4272,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   Widget _momentCard(ColorScheme scheme, Map<String, dynamic> m) {
     final id = (m['id'] as num).toInt();
     final hot = _highlightMomentId == id;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final kind = (m['kind'] ?? 'note').toString();
     final caption = (m['caption'] ?? '').toString();
     final mine = m['mine'] == true;
@@ -4292,24 +4293,25 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         margin: const EdgeInsets.only(bottom: 11),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          // A soft, warm wash — a little more romance than a flat card.
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              _accent.withValues(alpha: hot ? 0.20 : 0.11),
-              scheme.surfaceContainerHighest.withValues(alpha: 0.93),
-            ],
-          ),
+          // SOLID & opaque — the wallpaper must never bleed through and wash out
+          // the content or the action buttons. Romance lives in the caption
+          // over the media, not in a translucent tint around it.
+          color: isDark
+              ? scheme.surfaceContainerHigh
+              : scheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-              color: _accent.withValues(alpha: hot ? 0.85 : 0.22),
+              color: hot
+                  ? _accent.withValues(alpha: 0.85)
+                  : scheme.outlineVariant.withValues(alpha: 0.5),
               width: hot ? 2 : 1),
           boxShadow: [
             BoxShadow(
-              color: _accent.withValues(alpha: hot ? 0.28 : 0.10),
-              blurRadius: hot ? 22 : 16,
-              offset: const Offset(0, 6),
+              color: hot
+                  ? _accent.withValues(alpha: 0.26)
+                  : Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
+              blurRadius: hot ? 20 : 12,
+              offset: const Offset(0, 5),
             ),
           ],
         ),
@@ -4560,9 +4562,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            color: _accent.withValues(alpha: 0.10),
+            color: _accent.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: _accent.withValues(alpha: 0.30)),
+            border: Border.all(
+                color: _accent.withValues(alpha: 0.55), width: 1.2),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -4587,10 +4590,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
         child: ColoredBox(
-          color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+          color: scheme.surfaceContainerHighest,
           child: ConstrainedBox(
-            // Show the WHOLE item (contain, not crop); letterboxed on a soft
-            // surface. Taller cap so portrait media still reads.
+            // Show the WHOLE item (contain, not crop); letterboxed on a solid,
+            // opaque surface. Taller cap so portrait media still reads.
             constraints: const BoxConstraints(
                 maxHeight: 300, minWidth: double.infinity),
             child: authNetworkImage(

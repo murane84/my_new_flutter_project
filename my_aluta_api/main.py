@@ -38,7 +38,13 @@ from sqlalchemy import text
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     websocket_manager.main_loop = asyncio.get_running_loop()
-    yield
+    # Fire love-capsule unlocks at their chosen time (push + socket to both).
+    from capsule_notifier import capsule_unlock_loop
+    _capsule_task = asyncio.create_task(capsule_unlock_loop())
+    try:
+        yield
+    finally:
+        _capsule_task.cancel()
 
 
 # ✅ Create FastAPI app ONCE
@@ -163,6 +169,10 @@ def ensure_media_schema():
         # diary_entries predates these columns.
         "ALTER TABLE diary_entries ADD COLUMN IF NOT EXISTS source_moment_id INTEGER",
         "ALTER TABLE diary_entries ADD COLUMN IF NOT EXISTS source_thumb TEXT",
+        # Love capsule: the one-time unlock ping timestamp (so the background
+        # notifier never double-fires). Added here in case love_capsules was
+        # created by slice 1 before this column existed.
+        "ALTER TABLE love_capsules ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ",
     ]
     try:
         with engine.begin() as conn:

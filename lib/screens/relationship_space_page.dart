@@ -3882,14 +3882,14 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: _listenTogether,
+                  onPressed: _pressPlayTogether,
                   style: OutlinedButton.styleFrom(
                       backgroundColor: scheme.surfaceContainerHighest,
                       foregroundColor: _accent,
                       side: BorderSide(
                           color: _accent.withValues(alpha: 0.6))),
                   icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                  label: const Text('Listen together'),
+                  label: const Text('Press play together'),
                 ),
               ),
             ],
@@ -3949,6 +3949,19 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       builder: (_) => _CapsuleComposeSheet(spaceId: _id, accent: _accent),
     );
     if (created == true && mounted) _load();
+  }
+
+  /// A sync-listen capsule's "press play together" — a shared 3-2-1 countdown,
+  /// then the synchronized listen-together session.
+  Future<void> _pressPlayTogether() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.72),
+      builder: (_) => _PressPlayCountdown(accent: _accent),
+    );
+    if (!mounted) return;
+    await _listenTogether();
   }
 
   Widget _dedicationsBody(ColorScheme scheme) {
@@ -8950,6 +8963,100 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
       children: mine
           ? [bubble, const SizedBox(width: 6), avatar]
           : [avatar, const SizedBox(width: 6), bubble],
+    );
+  }
+}
+
+/// A shared 3-2-1 "press play together" countdown for a sync-listen capsule —
+/// a small ritual before the synchronized session starts.
+class _PressPlayCountdown extends StatefulWidget {
+  const _PressPlayCountdown({required this.accent});
+  final Color accent;
+
+  @override
+  State<_PressPlayCountdown> createState() => _PressPlayCountdownState();
+}
+
+class _PressPlayCountdownState extends State<_PressPlayCountdown> {
+  int _n = 3;
+  Timer? _t;
+
+  @override
+  void initState() {
+    super.initState();
+    _t = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _n -= 1);
+      if (_n <= 0) {
+        _t?.cancel();
+        Navigator.of(context).maybePop();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _t?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('Press play together',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 18),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 280),
+            transitionBuilder: (child, anim) => ScaleTransition(
+              scale: anim,
+              child: FadeTransition(opacity: anim, child: child),
+            ),
+            child: Container(
+              key: ValueKey<int>(_n),
+              width: 120,
+              height: 120,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    widget.accent,
+                    widget.accent.withValues(alpha: 0.7),
+                  ],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                      color: widget.accent.withValues(alpha: 0.5),
+                      blurRadius: 30,
+                      spreadRadius: 2),
+                ],
+              ),
+              child: Text(
+                _n > 0 ? '$_n' : '♥',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 54,
+                    fontWeight: FontWeight.w900),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(_n > 0 ? 'Get ready…' : 'Together 💞',
+              style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.85), fontSize: 13)),
+        ],
+      ),
     );
   }
 }

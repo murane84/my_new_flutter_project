@@ -789,6 +789,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       builder: (_) => _MomentComposer(accent: _accent),
     );
     if (result == null) return;
+    if (!mounted) return;
     // "Dedicate" routes to the full dedication composer (song + mood + voice),
     // reachable from this one composer now.
     if (result['_dedicate'] == true) {
@@ -5485,7 +5486,6 @@ class _MomentComposerState extends State<_MomentComposer> {
       final res = await FilePicker.pickFiles(
         type: type,
         allowedExtensions: ext,
-        withData: true,
       );
       if (res == null || res.files.isEmpty) return;
       final f = res.files.first;
@@ -5683,6 +5683,7 @@ class _MomentComposerState extends State<_MomentComposer> {
       try {
         final b = await File(_voicePath!).readAsBytes();
         if (b.isEmpty) throw Exception('empty');
+        if (!mounted) return;
         Navigator.pop(context, {
           'kind': 'voice',
           '_bytes': b,

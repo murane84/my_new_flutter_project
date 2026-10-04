@@ -2541,9 +2541,15 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                     ],
                   ),
                 ),
-              // Footer: reactions + comment on one clean strip.
+              // Footer: reactions + comment on one clean strip. Reserve room
+              // on whichever side carries a dog-ear page-turn corner, so the
+              // reaction/comment pills never collide with the fold.
               Container(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                padding: EdgeInsets.fromLTRB(
+                    16 + (index > 0 ? 42 : 0),
+                    12,
+                    16 + (index < total - 1 ? 42 : 0),
+                    14),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
@@ -2796,14 +2802,42 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   Widget _diaryPlansStrip(ColorScheme scheme) {
     final plans = _plans;
     if (plans.isEmpty) return const SizedBox.shrink();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Align(
       alignment: Alignment.centerLeft,
-      child: TextButton.icon(
-        onPressed: () => _showPlansSheet(scheme),
-        icon: const Text('🗓️', style: TextStyle(fontSize: 14)),
-        label: Text('Plans ahead (${plans.length})',
-            style: TextStyle(
-                color: _accent, fontWeight: FontWeight.w600, fontSize: 13)),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 6, bottom: 2),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _showPlansSheet(scheme),
+            borderRadius: BorderRadius.circular(999),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                // Solid & opaque — the wallpaper must not show through.
+                color: isDark
+                    ? scheme.surfaceContainerHigh
+                    : scheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: _accent.withValues(alpha: 0.45)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('🗓️', style: TextStyle(fontSize: 14)),
+                  const SizedBox(width: 7),
+                  Text('Plans ahead (${plans.length})',
+                      style: TextStyle(
+                          color: _accent,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13)),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

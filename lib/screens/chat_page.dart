@@ -7415,14 +7415,14 @@ class _KeepSideButton extends StatelessWidget {
             // A near-transparent circle with a whisper-thin themed ring and a
             // faint brand sparkle — subtle enough to never fight the bubble
             // text, but easy to catch for a one-tap Keepsake.
-            color: scheme.primary.withValues(alpha: isPhone ? 0.07 : 0.09),
+            color: scheme.primary.withValues(alpha: isPhone ? 0.12 : 0.14),
             shape: BoxShape.circle,
             border: Border.all(
-                color: scheme.primary.withValues(alpha: 0.28), width: 1),
+                color: scheme.primary.withValues(alpha: 0.42), width: 1),
           ),
           child: Icon(Icons.auto_awesome_rounded,
               size: 15,
-              color: scheme.primary.withValues(alpha: 0.78)),
+              color: scheme.primary.withValues(alpha: 0.95)),
         ),
       ),
     );
@@ -7436,7 +7436,12 @@ class _KeepSideButton extends StatelessWidget {
           opacity: visible ? 1 : 0,
           duration: const Duration(milliseconds: 400),
           curve: Curves.easeInOut,
-          child: IgnorePointer(ignoring: !visible, child: btn),
+          child: AnimatedScale(
+            scale: visible ? 1 : 0.78,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOutBack,
+            child: IgnorePointer(ignoring: !visible, child: btn),
+          ),
         );
       },
     );

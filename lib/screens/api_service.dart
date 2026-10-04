@@ -1455,6 +1455,93 @@ class ApiService {
     }
   }
 
+  /// Comments on a pinned moment (mirrors the diary threads).
+  Future<List<Map<String, dynamic>>> getMomentComments(
+      int spaceId, int momentId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return const [];
+      final resp = await http.get(
+        Uri.parse(
+            '${await _baseUrl}/spaces/$spaceId/moments/$momentId/comments'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        final list = (data is Map ? data['comments'] : data) as List?;
+        return (list ?? const [])
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+      return const [];
+    } catch (e) {
+      _logger.w('getMomentComments failed: $e');
+      return const [];
+    }
+  }
+
+  Future<Map<String, dynamic>?> addMomentComment(
+      int spaceId, int momentId, String body) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse(
+            '${await _baseUrl}/spaces/$spaceId/moments/$momentId/comments'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'body': body}),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('addMomentComment failed: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> editMomentComment(
+      int spaceId, int momentId, int commentId, String body) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.patch(
+        Uri.parse(
+            '${await _baseUrl}/spaces/$spaceId/moments/$momentId/comments/$commentId'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'body': body}),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('editMomentComment failed: $e');
+      return null;
+    }
+  }
+
+  Future<bool> deleteMomentComment(
+      int spaceId, int momentId, int commentId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.delete(
+        Uri.parse(
+            '${await _baseUrl}/spaces/$spaceId/moments/$momentId/comments/$commentId'),
+        headers: _authHeaders(token),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.w('deleteMomentComment failed: $e');
+      return false;
+    }
+  }
+
   /// "Thinking of you" — a one-tap ping to the bond's partner (no payload).
   /// Returns true when the server accepted it (delivery beyond is best-effort).
   Future<bool> nudgePartner(int spaceId) async {

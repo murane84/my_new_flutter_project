@@ -1380,6 +1380,28 @@ class ApiService {
   }
 
   /// Pin a moment (dedication|voice|photo|song|note) into a Space.
+  /// Resolve whether the caller is bonded (Our Space) with [partnerId], and if
+  /// so the caller's own Space id for that bond — so a chat can gate the
+  /// "Keepsake" action and deep-link into Our Space. Returns null on failure.
+  Future<Map<String, dynamic>?> getBondWith(int partnerId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/spaces/with/$partnerId'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('getBondWith failed: $e');
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>?> addMoment(
     int spaceId, {
     required String kind,

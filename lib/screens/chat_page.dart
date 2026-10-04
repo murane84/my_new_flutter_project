@@ -37,6 +37,7 @@ import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'user_profile_sheet.dart';
 import 'home_page.dart' show playlistNotifier, playbackBus;
+import 'relationship_space_page.dart' show spaceEventBus;
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:record/record.dart';
@@ -437,6 +438,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final res = await ApiService()
         .addMoment(sid, kind: kind, ref: ref, caption: caption);
     if (!mounted) return;
+    if (res != null) spaceEventBus.value++;
     showToast(
         context,
         res != null ? 'Kept in Our Space 💛' : 'Could not keep that',
@@ -653,6 +655,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final res = await ApiService().addTrack(sid,
         title: _songTitleOf(msg), ref: rel, source: 'share');
     if (!mounted) return;
+    if (res != null) spaceEventBus.value++;
     showToast(
         context,
         res != null ? 'Added to Our Playlist 🎵' : 'Could not add that',
@@ -673,6 +676,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final res = await ApiService().createDedication(sid,
         title: title, ref: rel, note: trimmed.isEmpty ? null : trimmed);
     if (!mounted) return;
+    if (res != null) spaceEventBus.value++;
     showToast(
         context,
         res != null

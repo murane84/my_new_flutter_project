@@ -31,6 +31,7 @@ import '../widgets/wallpaper_gallery.dart';
 import '../utils/file_bytes.dart';
 import '../services/notif_service.dart'
     show syncDiaryReminders, cancelDiaryReminder, PlanReminder;
+import 'package:video_player/video_player.dart';
 
 /// "Our Space" — a bond rendered as a *place*, not a chat thread. Opening a
 /// pinned Space shows the story of that connection: who you are together, how
@@ -4296,6 +4297,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
               const SizedBox(height: 12),
               _DedVoicePlayer(url: _full(m['ref'])!, accent: _accent),
             ],
+            if (kind == 'video' && _full(m['ref']) != null) ...[
+              const SizedBox(height: 12),
+              _momentVideo(scheme, _full(m['ref'])!),
+            ],
             if (caption.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(caption,
@@ -4424,6 +4429,58 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
+  /// A kept video shows a dark poster with a play button; tap opens a
+  /// fullscreen player.
+  Widget _momentVideo(ColorScheme scheme, String url) {
+    return GestureDetector(
+      onTap: () => _openMomentVideo(url),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Container(color: Colors.black87),
+              Center(
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  decoration: const BoxDecoration(
+                    color: Colors.white24,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.play_arrow_rounded,
+                      color: Colors.white, size: 34),
+                ),
+              ),
+              const Positioned(
+                left: 10,
+                bottom: 8,
+                child: Row(
+                  children: [
+                    Icon(Icons.movie_rounded, size: 14, color: Colors.white70),
+                    SizedBox(width: 6),
+                    Text('Video',
+                        style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openMomentVideo(String url) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black,
+      builder: (dctx) => _MomentVideoPlayer(url: url),
+    );
+  }
+
   String _timeAgo(DateTime dt) {
     final d = DateTime.now().difference(dt.toLocal());
     if (d.inMinutes < 1) return 'just now';
@@ -4478,6 +4535,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         return Icons.mic_rounded;
       case 'photo':
         return Icons.photo_rounded;
+      case 'video':
+        return Icons.movie_rounded;
       default:
         return Icons.sticky_note_2_rounded;
     }
@@ -4493,6 +4552,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         return 'A voice note';
       case 'photo':
         return 'A photo';
+      case 'video':
+        return 'A video';
       default:
         return 'A note';
     }
@@ -7694,6 +7755,110 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
 }
 
 /// A tiny tap-to-play pill for a dedication's voice note (just_audio).
+class _MomentVideoPlayer extends StatefulWidget {
+  const _MomentVideoPlayer({required this.url});
+  final String url;
+
+  @override
+  State<_MomentVideoPlayer> createState() => _MomentVideoPlayerState();
+}
+
+class _MomentVideoPlayerState extends State<_MomentVideoPlayer> {
+  VideoPlayerController? _c;
+  bool _error = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      final c = VideoPlayerController.networkUrl(
+        Uri.parse(widget.url),
+        httpHeaders: mediaAuthHeaders(widget.url),
+      );
+      await c.initialize();
+      if (!mounted) {
+        c.dispose();
+        return;
+      }
+      setState(() => _c = c);
+      c.setLooping(true);
+      c.play();
+    } catch (_) {
+      if (mounted) setState(() => _error = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _c?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _c;
+    return GestureDetector(
+      onTap: () {
+        if (c == null || !c.value.isInitialized) return;
+        if (c.value.isPlaying) {
+          c.pause();
+        } else {
+          c.play();
+        }
+        setState(() {});
+      },
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Container(color: Colors.black),
+          if (_error)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  "This video can't play on this device.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ),
+            )
+          else if (c == null || !c.value.isInitialized)
+            const Center(
+                child: CircularProgressIndicator(color: Colors.white))
+          else
+            Center(
+              child: AspectRatio(
+                aspectRatio:
+                    c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio,
+                child: VideoPlayer(c),
+              ),
+            ),
+          if (c != null &&
+              c.value.isInitialized &&
+              !c.value.isPlaying &&
+              !_error)
+            const Center(
+              child: Icon(Icons.play_arrow_rounded,
+                  color: Colors.white70, size: 64),
+            ),
+          Positioned(
+            top: 40,
+            right: 16,
+            child: IconButton(
+              icon: const Icon(Icons.close_rounded, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DedVoicePlayer extends StatefulWidget {
   const _DedVoicePlayer({required this.url, required this.accent});
   final String url;

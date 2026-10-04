@@ -3220,6 +3220,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     Widget reactionBar(BuildContext ctx) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -3239,7 +3240,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           boxShadow: softShadow,
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             for (final e in reactions)
               _ReactionButton(
@@ -3535,7 +3537,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               final barTop =
                   barAbove ? rect.top - gap - barH : rect.bottom + gap;
 
-              final barW = (sw - 32).clamp(0.0, 296.0);
+              final barW = (sw - 32).clamp(0.0, 270.0);
               double barLeft = rect.center.dx - barW / 2;
               barLeft = barLeft.clamp(8.0, (sw - 8 - barW).clamp(8.0, sw));
 

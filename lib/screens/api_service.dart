@@ -1819,6 +1819,8 @@ class ApiService {
     String? planDate,
     bool pinned = false,
     String? font,
+    int? sourceMomentId,
+    String? sourceThumb,
   }) async {
     try {
       final token = await _getToken();
@@ -1833,6 +1835,8 @@ class ApiService {
           'plan_date': ?planDate,
           'pinned': pinned,
           'font': ?font,
+          'source_moment_id': ?sourceMomentId,
+          'source_thumb': ?sourceThumb,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {

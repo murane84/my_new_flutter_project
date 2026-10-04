@@ -430,6 +430,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   // 'playlist' | 'moments' | 'diary' | 'song'. On wide screens a left sidebar
   // lets you jump between sections without returning to the dashboard.
   String? _section;
+  // Per-moment keys so a diary entry can glide back to the exact Pinned moment
+  // it grew from; _highlightMomentId briefly glows that card on arrival.
+  final Map<int, GlobalKey> _momentKeys = {};
+  int? _highlightMomentId;
   // On narrow screens the section list lives in a left drawer that slides in
   // over the content; this tracks whether it's showing.
   bool _navDrawerOpen = false;
@@ -1516,6 +1520,33 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   // Feature tiles now open IN-BODY as sections (see _sectionScaffold), so a
   // sidebar/drawer can jump between them without returning to the dashboard.
   void _openPlaylist([Offset? origin]) => _goSection('playlist');
+  /// From a diary entry grown out of a kept moment: hop to the Pinned moments
+  /// wall and glide to that very moment, with a brief glow so it's easy to spot.
+  void _jumpToMoment(int momentId) {
+    setState(() {
+      _section = 'moments';
+      _navDrawerOpen = false;
+      _highlightMomentId = momentId;
+    });
+    // Wait out the section transition, then ensure the card is on screen.
+    Future.delayed(const Duration(milliseconds: 320), () {
+      final ctx = _momentKeys[momentId]?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeOutCubic,
+          alignment: 0.12,
+        );
+      }
+    });
+    Future.delayed(const Duration(milliseconds: 2800), () {
+      if (mounted && _highlightMomentId == momentId) {
+        setState(() => _highlightMomentId = null);
+      }
+    });
+  }
+
   void _openMoments([Offset? origin]) => _goSection('moments');
   void _openSongMilestones([Offset? origin]) => _goSection('song');
   void _openDiary([Offset? origin]) => _goSection('diary');
@@ -2327,6 +2358,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final signName = ((author?['username'] ?? '').toString().trim().isNotEmpty)
         ? (author!['username']).toString().trim()
         : (mine ? (widget.myName ?? '').trim() : '');
+    // If this memory grew from a kept Pinned Moment, show it at the top of the
+    // page, tappable to glide back to the moment on the wall.
+    final srcThumb = (e['source_thumb'] ?? '').toString().trim();
+    final srcMomentId = (e['source_moment_id'] as num?)?.toInt();
+    final srcUrl = srcThumb.isEmpty ? null : _full(srcThumb);
     void turn(int dir) {
       final target = index + dir;
       if (target < 0 || target >= total) return;
@@ -2387,6 +2423,71 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (srcUrl != null && srcMomentId != null) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: GestureDetector(
+                            onTap: () => _jumpToMoment(srcMomentId),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: Stack(
+                                children: [
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                        maxHeight: 190,
+                                        minWidth: double.infinity),
+                                    child: authNetworkImage(
+                                      url: srcUrl,
+                                      headers: mediaAuthHeaders(srcUrl),
+                                      fit: BoxFit.cover,
+                                      cacheWidth: 800,
+                                    ),
+                                  ),
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          12, 20, 12, 9),
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.bottomCenter,
+                                          end: Alignment.topCenter,
+                                          colors: [
+                                            Colors.black
+                                                .withValues(alpha: 0.62),
+                                            Colors.black.withValues(alpha: 0.0),
+                                          ],
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.push_pin_rounded,
+                                              size: 13, color: Colors.white),
+                                          const SizedBox(width: 6),
+                                          Flexible(
+                                            child: Text(
+                                              'From a pinned moment · tap to revisit',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 11.5,
+                                                  fontWeight: FontWeight.w700),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                       if (title.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
@@ -4169,6 +4270,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   // heart the other can tap.
   Widget _momentCard(ColorScheme scheme, Map<String, dynamic> m) {
     final id = (m['id'] as num).toInt();
+    final hot = _highlightMomentId == id;
     final kind = (m['kind'] ?? 'note').toString();
     final caption = (m['caption'] ?? '').toString();
     final mine = m['mine'] == true;
@@ -4181,19 +4283,32 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final displayName = authorName.isEmpty ? _momentLabel(kind) : authorName;
 
     return GestureDetector(
+      key: _momentKeys.putIfAbsent(id, () => GlobalKey()),
       onLongPress: mine ? () => _confirmDeleteMoment(id) : null,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+        margin: const EdgeInsets.only(bottom: 11),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: scheme.surfaceContainerHighest.withValues(alpha: 0.9),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: _accent.withValues(alpha: 0.16)),
+          // A soft, warm wash — a little more romance than a flat card.
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              _accent.withValues(alpha: hot ? 0.20 : 0.11),
+              scheme.surfaceContainerHighest.withValues(alpha: 0.93),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: _accent.withValues(alpha: hot ? 0.85 : 0.22),
+              width: hot ? 2 : 1),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 14,
-              offset: const Offset(0, 5),
+              color: _accent.withValues(alpha: hot ? 0.28 : 0.10),
+              blurRadius: hot ? 22 : 16,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
@@ -4291,27 +4406,38 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             ],
             if ((kind == 'photo' || kind == 'gif') &&
                 _full(m['ref']) != null) ...[
-              const SizedBox(height: 12),
-              _momentPhoto(scheme, _full(m['ref'])!),
+              const SizedBox(height: 10),
+              _mediaWithCaption(
+                  scheme, _momentPhoto(scheme, _full(m['ref'])!), caption),
             ],
             if (kind == 'voice' && _full(m['ref']) != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               _DedVoicePlayer(url: _full(m['ref'])!, accent: _accent),
             ],
             if (kind == 'video' && _full(m['ref']) != null) ...[
-              const SizedBox(height: 12),
-              _MomentVideoInline(
-                url: _full(m['ref'])!,
-                accent: _accent,
-                onFullscreen: () => _openMomentVideo(_full(m['ref'])!),
-              ),
+              const SizedBox(height: 10),
+              _mediaWithCaption(
+                  scheme,
+                  _MomentVideoInline(
+                    url: _full(m['ref'])!,
+                    accent: _accent,
+                    onFullscreen: () => _openMomentVideo(_full(m['ref'])!),
+                  ),
+                  caption),
             ],
-            if (caption.isNotEmpty) ...[
-              const SizedBox(height: 12),
+            // Non-media captions (note / song / voice) read beneath the content.
+            if (caption.isNotEmpty &&
+                kind != 'photo' &&
+                kind != 'gif' &&
+                kind != 'video') ...[
+              const SizedBox(height: 10),
               Text(caption,
                   style: TextStyle(
                       fontSize: 14.5, height: 1.4, color: scheme.onSurface)),
             ],
+            const SizedBox(height: 10),
+            // Gateway: expand this moment into a fuller Our Diary entry.
+            _momentDiaryGateway(scheme, m),
             const SizedBox(height: 12),
             // Reactions (multi-emoji) + comments — the same capability as Our
             // Diary: react with any emoji, and open a comment thread.
@@ -4360,6 +4486,100 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   }
 
   /// A kept photo thumbnail inside a moment card; tap opens a zoomable viewer.
+  /// Wrap a piece of media so its caption floats, bold and centred, over the
+  /// bottom of the image on a soft dark-to-clear scrim — with a tiny heart for
+  /// a little romance. Non-media kinds keep their caption beneath the content.
+  Widget _mediaWithCaption(ColorScheme scheme, Widget media, String caption) {
+    if (caption.trim().isEmpty) return media;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: Stack(
+        children: [
+          media,
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(14, 26, 14, 12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.66),
+                      Colors.black.withValues(alpha: 0.0),
+                    ],
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.favorite_rounded,
+                        size: 13,
+                        color: Colors.white.withValues(alpha: 0.92)),
+                    const SizedBox(height: 4),
+                    Text(
+                      caption,
+                      textAlign: TextAlign.center,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w800,
+                        height: 1.25,
+                        shadows: [
+                          Shadow(
+                              color: Colors.black54,
+                              blurRadius: 6,
+                              offset: Offset(0, 1)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// A gentle invitation to carry a pinned moment into Our Diary, where a
+  /// partner can write the fuller story behind it.
+  Widget _momentDiaryGateway(ColorScheme scheme, Map<String, dynamic> m) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _addDiaryEntry(fromMoment: m),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: _accent.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: _accent.withValues(alpha: 0.30)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.menu_book_rounded, size: 14, color: _accent),
+              const SizedBox(width: 6),
+              Text('Write about this in Our Diary',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: _accent)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _momentPhoto(ColorScheme scheme, String url) {
     return GestureDetector(
       onTap: () => _openMomentPhoto(url),
@@ -4371,7 +4591,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             // Show the WHOLE item (contain, not crop); letterboxed on a soft
             // surface. Taller cap so portrait media still reads.
             constraints: const BoxConstraints(
-                maxHeight: 420, minWidth: double.infinity),
+                maxHeight: 300, minWidth: double.infinity),
             child: authNetworkImage(
               url: url,
               headers: mediaAuthHeaders(url),
@@ -4895,7 +5115,24 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
-  Future<void> _addDiaryEntry() async {
+  Future<void> _addDiaryEntry({Map<String, dynamic>? fromMoment}) async {
+    String? seedTitle;
+    String? fromThumb;
+    String? fromLabel;
+    int? srcId;
+    String? srcRef; // the moment's raw media ref, stored for the diary thumb
+    if (fromMoment != null) {
+      final cap = (fromMoment['caption'] ?? '').toString().trim();
+      final k = (fromMoment['kind'] ?? 'note').toString();
+      seedTitle = cap.isEmpty ? null : cap;
+      fromLabel = 'From ${_momentLabel(k).toLowerCase()} you kept';
+      srcId = (fromMoment['id'] as num?)?.toInt();
+      if (k == 'photo' || k == 'gif' || k == 'video') {
+        srcRef = (fromMoment['ref'] ?? '').toString();
+        if (srcRef.isEmpty) srcRef = null;
+        fromThumb = srcRef == null ? null : _full(srcRef);
+      }
+    }
     final res = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
@@ -4903,7 +5140,13 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => _DiaryComposer(accent: _accent, myName: widget.myName),
+      builder: (_) => _DiaryComposer(
+        accent: _accent,
+        myName: widget.myName,
+        seedTitle: seedTitle,
+        fromMomentThumb: fromThumb,
+        fromMomentLabel: fromLabel,
+      ),
     );
     if (res == null) return;
     final saved = await ApiService().addDiaryEntry(
@@ -4914,10 +5157,17 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       planDate: res['plan_date'] as String?,
       pinned: res['pinned'] == true,
       font: res['font'] as String?,
+      sourceMomentId: srcId,
+      sourceThumb: srcRef,
     );
     if (!mounted) return;
     if (saved != null) {
-      showToast(context, 'Saved to your diary 📖', type: ToastType.success);
+      showToast(
+          context,
+          fromMoment != null
+              ? 'Added to Our Diary 📖 — tap its photo to revisit the moment'
+              : 'Saved to your diary 📖',
+          type: ToastType.success);
       await _load();
     } else {
       showToast(context, 'Could not save that entry', type: ToastType.error);
@@ -6296,7 +6546,17 @@ class _DiaryComposer extends StatefulWidget {
   final Color accent;
   final Map<String, dynamic>? existing; // non-null when editing
   final String? myName; // for the live signature preview
-  const _DiaryComposer({required this.accent, this.existing, this.myName});
+  final String? seedTitle; // prefill (e.g. a kept moment's caption)
+  final String? fromMomentThumb; // small preview of the moment being expanded
+  final String? fromMomentLabel; // banner label when seeded from a moment
+  const _DiaryComposer({
+    required this.accent,
+    this.existing,
+    this.myName,
+    this.seedTitle,
+    this.fromMomentThumb,
+    this.fromMomentLabel,
+  });
 
   @override
   State<_DiaryComposer> createState() => _DiaryComposerState();
@@ -6314,7 +6574,8 @@ class _DiaryComposerState extends State<_DiaryComposer> {
   void initState() {
     super.initState();
     final e = widget.existing;
-    _title = TextEditingController(text: (e?['title'] ?? '').toString());
+    _title = TextEditingController(
+        text: (e?['title'] ?? widget.seedTitle ?? '').toString());
     _body = TextEditingController(text: (e?['body'] ?? '').toString());
     _planMode = (e?['kind'] ?? 'memory').toString() == 'plan';
     _date = DateTime.tryParse((e?['plan_date'] ?? '').toString());
@@ -6595,6 +6856,70 @@ class _DiaryComposerState extends State<_DiaryComposer> {
                 ),
               ],
             ),
+            if (widget.fromMomentLabel != null) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: widget.accent.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: widget.accent.withValues(alpha: 0.24)),
+                ),
+                child: Row(
+                  children: [
+                    if (widget.fromMomentThumb != null) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(9),
+                        child: SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: authNetworkImage(
+                            url: widget.fromMomentThumb!,
+                            headers: mediaAuthHeaders(widget.fromMomentThumb!),
+                            fit: BoxFit.cover,
+                            cacheWidth: 140,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.push_pin_rounded,
+                                  size: 12, color: widget.accent),
+                              const SizedBox(width: 5),
+                              Flexible(
+                                child: Text(
+                                  widget.fromMomentLabel!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: widget.accent),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Tell the fuller story behind this moment 💞',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: scheme.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 18),
             Container(
               padding: const EdgeInsets.all(4),

@@ -158,6 +158,11 @@ def ensure_media_schema():
         # diary): drop the one-per-user unique so a person can hold several
         # distinct emojis. The endpoint prevents duplicate (moment,user,emoji).
         "ALTER TABLE moment_reactions DROP CONSTRAINT IF EXISTS _moment_react_uc",
+        # Our Diary entries can be grown from a kept Pinned Moment — link back
+        # to the source moment and carry its thumbnail. Added here in case
+        # diary_entries predates these columns.
+        "ALTER TABLE diary_entries ADD COLUMN IF NOT EXISTS source_moment_id INTEGER",
+        "ALTER TABLE diary_entries ADD COLUMN IF NOT EXISTS source_thumb TEXT",
     ]
     try:
         with engine.begin() as conn:

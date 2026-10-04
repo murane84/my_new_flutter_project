@@ -1530,6 +1530,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     });
     // Wait out the section transition, then ensure the card is on screen.
     Future.delayed(const Duration(milliseconds: 320), () {
+      if (!mounted) return;
       final ctx = _momentKeys[momentId]?.currentContext;
       if (ctx != null) {
         Scrollable.ensureVisible(

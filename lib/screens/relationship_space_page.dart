@@ -4527,7 +4527,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Material(
-        color: _accent.withValues(alpha: 0.10),
+        // Opaque (tint blended onto the surface) so the wallpaper never bleeds
+        // through this card, matching the other Our Space cards.
+        color: Color.alphaBlend(
+            _accent.withValues(alpha: 0.10), scheme.surface),
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           onTap: _openDiary,

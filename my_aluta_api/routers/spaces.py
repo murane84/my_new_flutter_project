@@ -24,7 +24,7 @@ from models import (
     User, RelationshipSpace, SpaceMember, PinnedMoment, MomentReaction,
     MomentComment,
     PlaylistTrack, BondRequest, DiaryEntry, DiaryReaction, DiaryComment,
-    MediaAsset, DailyPrompt, DailyPromptAnswer, Dedication,
+    MediaAsset, DailyPrompt, DailyPromptAnswer, Dedication, LoveCapsule,
 )
 import uuid as _uuid
 from datetime import date as _date
@@ -39,6 +39,17 @@ except Exception:  # pragma: no cover - push optional
     send_push_to_user = None
 
 router = APIRouter(prefix="/spaces", tags=["Our Space"])
+
+
+class _LoveCapsuleBody(BaseModel):
+    # A love capsule: a song + message locked until unlock_at.
+    track_title: Optional[str] = None
+    track_artist: Optional[str] = None
+    track_ref: Optional[str] = None
+    message: Optional[str] = None
+    media_url: Optional[str] = None
+    unlock_at: str  # ISO-8601, must be in the future
+    mode: Optional[str] = "message"  # 'message' | 'sync_listen'
 
 
 class _ReactBody(BaseModel):
@@ -773,6 +784,7 @@ def _space_full(db: Session, space: RelationshipSpace, current_user: User) -> di
         data["dedication_unopened"] = 0
     # "Our Diary" — the shared notebook (memories + upcoming plans) for the bond.
     data["diary"] = _diary_for(db, space, current_user.id)
+    data["capsules"] = _capsules_for(db, space, current_user.id)
     return data
 
 
@@ -1748,6 +1760,94 @@ class _DedicationBody(BaseModel):
     voice_note_url: Optional[str] = None
 
 
+_VALID_CAPSULE_MODES = {"message", "sync_listen"}
+
+
+def _capsule_dict(db: Session, c: LoveCapsule, current_user_id: int) -> dict:
+    """A love capsule. While locked (now < unlock_at) the CONTENT is withheld —
+    both partners see only the countdown, the mode and who sent it. Once the
+    unlock time passes the song + message + media are revealed."""
+    now = datetime.now(timezone.utc)
+    ua = c.unlock_at
+    # Treat a naive stored time as UTC so the comparison never throws.
+    if ua is not None and ua.tzinfo is None:
+        ua = ua.replace(tzinfo=timezone.utc)
+    locked = ua is not None and now < ua
+    creator = db.query(User).filter(User.id == c.created_by).first()
+    out = {
+        "id": c.id,
+        "created_by": c.created_by,
+        "creator": {
+            "username": creator.username if creator else None,
+            "avatar_url": creator.avatar_url if creator else None,
+        } if creator else None,
+        "mine": c.created_by == current_user_id,
+        "mode": c.mode,
+        "unlock_at": ua.isoformat() if ua else None,
+        "created_at": c.created_at.isoformat() if c.created_at else None,
+        "locked": bool(locked),
+        "opened": c.opened_at is not None,
+        "opened_at": c.opened_at.isoformat() if c.opened_at else None,
+    }
+    if not locked:
+        out.update({
+            "track_title": c.track_title,
+            "track_artist": c.track_artist,
+            "track_ref": c.track_ref,
+            "message": c.message,
+            "media_url": c.media_url,
+        })
+    return out
+
+
+def _capsules_for(db: Session, space: RelationshipSpace,
+                  current_user_id: int) -> list:
+    pk, _partner = _bond_pair_key(space, current_user_id)
+    if pk is None:
+        return []
+    rows = (
+        db.query(LoveCapsule)
+        .filter(LoveCapsule.pair_key == pk)
+        .order_by(LoveCapsule.unlock_at.asc())
+        .all()
+    )
+    return [_capsule_dict(db, c, current_user_id) for c in rows]
+
+
+def _notify_capsule(space: RelationshipSpace, from_user: User,
+                    partner_id: Optional[int], c: LoveCapsule) -> None:
+    """Tell the partner a capsule is waiting. The content stays sealed until it
+    unlocks — the ping just says a countdown has started."""
+    if not partner_id:
+        return
+    who = from_user.username or "Someone"
+    line = f"{who} sealed a love capsule for you 💌"
+    try:
+        safe_notify_user(partner_id, {
+            "type": "space_capsule",
+            "data": {
+                "space_id": space.id,
+                "capsule_id": c.id,
+                "from_id": from_user.id,
+                "from_username": who,
+                "mode": c.mode,
+                "unlock_at": c.unlock_at.isoformat() if c.unlock_at else None,
+                "line": line,
+            },
+        })
+    except Exception:
+        pass
+    if send_push_to_user is not None:
+        try:
+            send_push_to_user(partner_id, {
+                "type": "space_capsule",
+                "title": "A love capsule 💌",
+                "body": line,
+            })
+        except Exception:
+            pass
+
+
 def _dedication_dict(db: Session, d: Dedication, current_user_id: int) -> dict:
     sender = db.query(User).filter(User.id == d.from_user_id).first()
     return {
@@ -1885,6 +1985,132 @@ def open_dedication(
         db.commit()
         db.refresh(d)
     return _dedication_dict(db, d, current_user.id)
+
+
+@router.get("/{space_id}/capsules")
+def list_capsules(
+    space_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Every love capsule in this bond — locked (countdown) and opened."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    return {"capsules": _capsules_for(db, space, current_user.id)}
+
+
+@router.post("/{space_id}/capsules")
+def create_capsule(
+    space_id: int,
+    payload: _LoveCapsuleBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Seal a song + message to unlock at a chosen time. The partner gets one
+    gentle ping that a countdown has started; the content stays sealed until
+    unlock_at."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(
+            status_code=400, detail="This space has no partner yet")
+    try:
+        ua = datetime.fromisoformat(
+            (payload.unlock_at or "").replace("Z", "+00:00"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid unlock time")
+    if ua.tzinfo is None:
+        ua = ua.replace(tzinfo=timezone.utc)
+    if ua <= datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=400, detail="Unlock time must be in the future")
+    mode = (payload.mode or "message").strip().lower()
+    if mode not in _VALID_CAPSULE_MODES:
+        mode = "message"
+    title = (payload.track_title or "").strip() or None
+    message = (payload.message or "").strip() or None
+    if not title and not message:
+        raise HTTPException(
+            status_code=400, detail="A capsule needs a song or a message")
+    c = LoveCapsule(
+        pair_key=pk,
+        created_by=current_user.id,
+        track_title=(title[:200] if title else None),
+        track_artist=(((payload.track_artist or "").strip())[:200] or None),
+        track_ref=((payload.track_ref or "").strip() or None),
+        message=(message[:2000] if message else None),
+        media_url=((payload.media_url or "").strip() or None),
+        unlock_at=ua,
+        mode=mode,
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    _notify_capsule(space, current_user, partner, c)
+    return _capsule_dict(db, c, current_user.id)
+
+
+@router.post("/{space_id}/capsules/{capsule_id}/open")
+def open_capsule(
+    space_id: int,
+    capsule_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Open a capsule once it has unlocked. Refuses while still locked; stamps
+    opened_at on the first open."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, _partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(status_code=404, detail="Capsule not found")
+    c = db.query(LoveCapsule).filter(
+        LoveCapsule.id == capsule_id,
+        LoveCapsule.pair_key == pk,
+    ).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Capsule not found")
+    ua = c.unlock_at
+    if ua is not None and ua.tzinfo is None:
+        ua = ua.replace(tzinfo=timezone.utc)
+    if ua is not None and datetime.now(timezone.utc) < ua:
+        raise HTTPException(status_code=403, detail="This capsule is still sealed")
+    if c.opened_at is None:
+        c.opened_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(c)
+    return _capsule_dict(db, c, current_user.id)
+
+
+@router.delete("/{space_id}/capsules/{capsule_id}")
+def delete_capsule(
+    space_id: int,
+    capsule_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Cancel a capsule. Only the creator can, and only while it is still
+    sealed (once it has unlocked it belongs to the moment)."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, _partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(status_code=404, detail="Capsule not found")
+    c = db.query(LoveCapsule).filter(
+        LoveCapsule.id == capsule_id,
+        LoveCapsule.pair_key == pk,
+    ).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Capsule not found")
+    if c.created_by != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Only the sender can cancel a capsule")
+    ua = c.unlock_at
+    if ua is not None and ua.tzinfo is None:
+        ua = ua.replace(tzinfo=timezone.utc)
+    if ua is not None and datetime.now(timezone.utc) >= ua:
+        raise HTTPException(
+            status_code=400, detail="This capsule has already unlocked")
+    db.delete(c)
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/{space_id}/diary")

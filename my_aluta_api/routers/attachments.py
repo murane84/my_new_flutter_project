@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import (
     User, MediaAsset, Message, Conversation, ConversationMember,
-    PinnedMoment, SpaceMember,
+    PinnedMoment, SpaceMember, Dedication, PlaylistTrack,
 )
 from .users import get_current_user
 from auth import get_current_user_flexible
@@ -202,6 +202,30 @@ def _can_access(
         )
         if in_space:
             return True
+
+    # Dedications / Our Playlist tracks kept into a bond: a member of the pair
+    # may fetch the song/voice/video. These are keyed by pair_key ("lo:hi"), not
+    # a space id, so authorize by pair membership.
+    bond_pair_keys = set()
+    for (pk,) in (
+        db.query(Dedication.pair_key)
+        .filter(Dedication.track_ref.contains(fragment, autoescape=True))
+        .all()
+    ):
+        if pk:
+            bond_pair_keys.add(pk)
+    for (pk,) in (
+        db.query(PlaylistTrack.pair_key)
+        .filter(PlaylistTrack.ref.contains(fragment, autoescape=True))
+        .all()
+    ):
+        if pk:
+            bond_pair_keys.add(pk)
+    if bond_pair_keys:
+        uid_s = str(user_id)
+        for pk in bond_pair_keys:
+            if uid_s in str(pk).split(":"):
+                return True
 
     if not allow_avatar:
         return False

@@ -370,6 +370,19 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   // ── Harmony / Our Space actions from a chat bubble ──────────────────────────
+  /// A chat 'file' message that is actually a video (by mime or extension).
+  bool _isVideoMsg(Map<String, dynamic> msg) {
+    final mime = (msg['media_mime'] as String?)?.toLowerCase() ?? '';
+    if (mime.startsWith('video/')) return true;
+    final name = (msg['media_name'] as String?)?.toLowerCase() ?? '';
+    return name.endsWith('.mp4') ||
+        name.endsWith('.mov') ||
+        name.endsWith('.webm') ||
+        name.endsWith('.mkv') ||
+        name.endsWith('.m4v') ||
+        name.endsWith('.avi');
+  }
+
   // A friendly song title for a 'song' bubble (its spoken title lives in
   // `content`, falling back to the file name).
   String _songTitleOf(Map<String, dynamic> msg) {
@@ -445,6 +458,21 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         kind = 'song';
         ref = jsonEncode({'title': _songTitleOf(msg), 'ref': rel});
         break;
+      case 'file':
+        if (_isVideoMsg(msg) && rel.isNotEmpty) {
+          kind = 'video';
+          ref = rel;
+        } else {
+          final label = _replyQuoteText(msg).trim();
+          if (label.isEmpty) {
+            showToast(context, 'This can only be kept from Our Space',
+                type: ToastType.info);
+            return;
+          }
+          kind = 'note';
+          caption = label;
+        }
+        break;
       case 'text':
         if (text.isEmpty) {
           showToast(context, 'Nothing to keep here', type: ToastType.info);
@@ -470,7 +498,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     // warmth about the two of them ("so you"), never where it came from, so the
     // moment stays pointed at the couple rather than a third person. The
     // original chat caption is deliberately NOT carried across.
-    if (kind == 'photo' || kind == 'voice' || kind == 'song') {
+    if (kind == 'photo' ||
+        kind == 'voice' ||
+        kind == 'song' ||
+        kind == 'video') {
       final note = await _keepsakeNoteSheet(msg, type, space);
       if (note == null || !mounted) return; // cancelled
       final t = note.trim();
@@ -536,14 +567,21 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             ),
           );
         } else {
-          final icon = type == 'song'
-              ? Icons.music_note_rounded
-              : (type == 'audio'
-                  ? Icons.mic_rounded
-                  : Icons.sticky_note_2_rounded);
-          final label = type == 'song'
-              ? _songTitleOf(msg)
-              : (type == 'audio' ? 'Voice message' : 'Moment');
+          final isVid = _isVideoMsg(msg);
+          final icon = isVid
+              ? Icons.movie_rounded
+              : (type == 'song'
+                  ? Icons.music_note_rounded
+                  : (type == 'audio'
+                      ? Icons.mic_rounded
+                      : Icons.sticky_note_2_rounded));
+          final label = isVid
+              ? ((msg['media_name'] as String?)?.trim().isNotEmpty == true
+                  ? (msg['media_name'] as String).trim()
+                  : 'Video')
+              : (type == 'song'
+                  ? _songTitleOf(msg)
+                  : (type == 'audio' ? 'Voice message' : 'Moment'));
           preview = Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -702,8 +740,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     if (space == null || !mounted) return;
     final sid = (space['id'] as num).toInt();
     final rel = (msg['media_url'] as String?) ?? '';
+    final durable =
+        await _durableMediaRef(rel, (msg['media_mime'] as String?) ?? '');
+    if (!mounted) return;
     final res = await ApiService().addTrack(sid,
-        title: _songTitleOf(msg), ref: rel, source: 'share');
+        title: _songTitleOf(msg), ref: durable, source: 'share');
     if (!mounted) return;
     if (res != null) spaceEventBus.value++;
     showToast(
@@ -723,8 +764,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final note = await _promptDedicationNote(title);
     if (note == null) return; // cancelled
     final trimmed = note.trim();
+    final durable =
+        await _durableMediaRef(rel, (msg['media_mime'] as String?) ?? '');
+    if (!mounted) return;
     final res = await ApiService().createDedication(sid,
-        title: title, ref: rel, note: trimmed.isEmpty ? null : trimmed);
+        title: title, ref: durable, note: trimmed.isEmpty ? null : trimmed);
     if (!mounted) return;
     if (res != null) spaceEventBus.value++;
     showToast(
@@ -2073,12 +2117,22 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     if (fidInt == null) return;
     final type = (msg['message_type'] as String?) ?? 'text';
     final content = _stripQuote((msg['content'] as String?) ?? '');
+    // Forward media as a FRESH copy (cache-first, re-uploaded): the new
+    // recipient was never a party to the original message, so re-uploading
+    // makes them the authorized recipient and survives the original's purge.
+    final rel = (msg['media_url'] as String?) ?? '';
+    String? outUrl = msg['media_url'] as String?;
+    if (rel.isNotEmpty) {
+      outUrl =
+          await _durableMediaRef(rel, (msg['media_mime'] as String?) ?? '');
+      if (!mounted) return;
+    }
     try {
       final sent = await ApiService().sendMessage(
         fidInt,
         content,
         messageType: type,
-        mediaUrl: msg['media_url'] as String?,
+        mediaUrl: outUrl,
         mediaName: msg['media_name'] as String?,
         mediaMime: msg['media_mime'] as String?,
         mediaSize: (msg['media_size'] as num?)?.toInt(),

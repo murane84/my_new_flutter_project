@@ -429,7 +429,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     // moment stays pointed at the couple rather than a third person. The
     // original chat caption is deliberately NOT carried across.
     if (kind == 'photo' || kind == 'voice' || kind == 'song') {
-      final note = await _keepsakeNoteSheet(msg, type);
+      final note = await _keepsakeNoteSheet(msg, type, space);
       if (note == null || !mounted) return; // cancelled
       final t = note.trim();
       caption = t.isEmpty ? null : t;
@@ -444,31 +444,42 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   /// A small sheet shown when keeping a photo / voice / song: a preview of what
-  /// is being kept plus an OPTIONAL one-line note. Returns the note text
-  /// (possibly empty) on Keep, or null if cancelled. The note is warmth for the
-  /// two of them — it never records where the content came from.
-  Future<String?> _keepsakeNoteSheet(Map<String, dynamic> msg, String type) {
+  /// is being kept, an OPTIONAL note (with emoji + quick warmth chips), and a
+  /// reminder of which space it lands in. Returns the note text (possibly empty)
+  /// on Keep, or null if cancelled. Warmth for the two of them — it never
+  /// records where the content came from.
+  Future<String?> _keepsakeNoteSheet(
+      Map<String, dynamic> msg, String type, Map<String, dynamic> space) {
     final ctrl = TextEditingController();
     final rel = (msg['media_url'] as String?) ?? '';
+    final dest = _spaceTitle(space);
+    const chips = <String>[
+      'so you 🥰',
+      'this made me smile',
+      'us 🥹',
+      'never forget this',
+      'my favourite',
+    ];
     return showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (bctx) {
         final scheme = Theme.of(bctx).colorScheme;
+        bool showEmoji = false;
         Widget preview;
         if (type == 'image' && rel.isNotEmpty) {
           final url = fullMediaUrl(rel);
           preview = ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 160),
+              constraints: const BoxConstraints(maxHeight: 180),
               child: authNetworkImage(
                 url: url,
                 headers: mediaAuthHeaders(url),
                 fit: BoxFit.cover,
                 width: double.infinity,
-                cacheWidth: 800,
+                cacheWidth: 900,
               ),
             ),
           );
@@ -482,10 +493,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               ? _songTitleOf(msg)
               : (type == 'audio' ? 'Voice message' : 'Moment');
           preview = Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(12),
+              color: Color.alphaBlend(
+                  scheme.primary.withValues(alpha: 0.08), scheme.surface),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.5)),
             ),
             child: Row(
               children: [
@@ -501,55 +515,133 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             ),
           );
         }
-        return Padding(
-          padding: EdgeInsets.only(
-              left: 20,
-              right: 20,
-              top: 2,
-              bottom: MediaQuery.of(bctx).viewInsets.bottom + 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Keep in Our Space',
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: scheme.onSurface)),
-              const SizedBox(height: 12),
-              preview,
-              const SizedBox(height: 14),
-              TextField(
-                controller: ctrl,
-                autofocus: true,
-                minLines: 1,
-                maxLines: 3,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  hintText: 'Add a note for you two… (optional)',
-                  border: OutlineInputBorder(),
+        return StatefulBuilder(
+          builder: (bctx, setSheet) {
+            return Padding(
+              padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 2,
+                  bottom: MediaQuery.of(bctx).viewInsets.bottom + 16),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.auto_awesome_rounded,
+                            size: 20, color: scheme.primary),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text('Keep in Our Space',
+                              style: TextStyle(
+                                  fontSize: 17, fontWeight: FontWeight.w700)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.lock_rounded,
+                            size: 13, color: scheme.onSurfaceVariant),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                              'Private to $dest — only you two see it',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: scheme.onSurfaceVariant)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    preview,
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: ctrl,
+                      autofocus: true,
+                      minLines: 1,
+                      maxLines: 3,
+                      textCapitalization: TextCapitalization.sentences,
+                      onTap: () {
+                        if (showEmoji) setSheet(() => showEmoji = false);
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Add a note for you two… (optional)',
+                        filled: true,
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        suffixIcon: IconButton(
+                          tooltip: showEmoji ? 'Keyboard' : 'Emoji',
+                          icon: Icon(
+                              showEmoji
+                                  ? Icons.keyboard_rounded
+                                  : Icons.emoji_emotions_outlined,
+                              color: scheme.primary),
+                          onPressed: () {
+                            if (!showEmoji) {
+                              FocusManager.instance.primaryFocus?.unfocus();
+                            }
+                            setSheet(() => showEmoji = !showEmoji);
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final c in chips)
+                          ActionChip(
+                            label: Text(c,
+                                style: const TextStyle(fontSize: 12.5)),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => _appendNote(ctrl, c),
+                          ),
+                      ],
+                    ),
+                    if (showEmoji) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 250,
+                        child: _emojiPickerFor(scheme, ctrl, height: 250),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                            onPressed: () => Navigator.pop(bctx, null),
+                            child: const Text('Cancel')),
+                        const SizedBox(width: 8),
+                        FilledButton.icon(
+                          onPressed: () => Navigator.pop(bctx, ctrl.text),
+                          icon: const Icon(Icons.auto_awesome_rounded,
+                              size: 18),
+                          label: const Text('Keep'),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 14),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(bctx, null),
-                      child: const Text('Cancel')),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    onPressed: () => Navigator.pop(bctx, ctrl.text),
-                    icon: const Icon(Icons.auto_awesome_rounded, size: 18),
-                    label: const Text('Keep'),
-                  ),
-                ],
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
+  }
+
+  /// Append a quick note suggestion / emoji to the keepsake note field.
+  void _appendNote(TextEditingController c, String text) {
+    final base = c.text.trimRight();
+    c.text = base.isEmpty ? text : '$base $text';
+    c.selection = TextSelection.collapsed(offset: c.text.length);
   }
 
   /// Pin a shared song into the couple's Our Playlist (Soundtrack of Us).
@@ -6134,15 +6226,19 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildEmojiPicker(ColorScheme scheme) {
+  Widget _buildEmojiPicker(ColorScheme scheme) =>
+      _emojiPickerFor(scheme, _ctrl);
+
+  Widget _emojiPickerFor(ColorScheme scheme, TextEditingController controller,
+      {double height = 262}) {
     return EmojiPicker(
                 // When `textEditingController` is provided, EmojiPicker already
                 // inserts the tapped emoji into it (at the cursor). Do NOT also
                 // append it here — doing both made every emoji appear twice.
                 onEmojiSelected: (_, _) {},
-                textEditingController: _ctrl,
+                textEditingController: controller,
                 config: Config(
-                  height: 262,
+                  height: height,
                   emojiViewConfig: EmojiViewConfig(
                     emojiSizeMax: 26,
                     columns: 8,

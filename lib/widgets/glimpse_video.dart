@@ -608,7 +608,7 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    child: _controlBar(c!),
+                    child: _controlBar(c),
                   ),
                 if (_glimpsing)
                   Positioned(

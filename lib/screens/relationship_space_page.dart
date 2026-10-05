@@ -5236,6 +5236,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                   accent: _accent,
                   aspectRatioFallback: 16 / 9,
                   caption: caption,
+                  posterUrl: '${_full(m['ref'])!}/thumb',
                   onFullscreen: () => _openMomentVideo(_full(m['ref'])!),
                 ),
               ),

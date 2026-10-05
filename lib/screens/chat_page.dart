@@ -3709,6 +3709,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       headers: mediaAuthHeaders(url),
       accent: scheme.primary,
       maxWidth: 260,
+      maxStageHeight: 280,
       aspectRatioFallback: 16 / 10,
       durationSecs: secs > 0 ? secs : null,
       onFullscreen: () => _openVideo(url, msg),
@@ -7236,10 +7237,27 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
 
   Future<void> _init() async {
     try {
-      final c = VideoPlayerController.networkUrl(
-        Uri.parse(widget.url),
-        httpHeaders: mediaAuthHeaders(widget.url),
-      );
+      VideoPlayerController c;
+      if (!kIsWeb) {
+        // Cache-first, exactly like the bubble: play from the device so the
+        // fullscreen view doesn't depend on streaming (which fails on some
+        // platforms with "can't play on this device"). Reuse the cached copy
+        // the bubble already downloaded, or fetch it once if missing.
+        File? f = await MediaStore.instance.cached(widget.url);
+        f ??= await MediaStore.instance
+            .getFile(widget.url, mediaAuthHeaders(widget.url));
+        c = f != null
+            ? VideoPlayerController.file(f)
+            : VideoPlayerController.networkUrl(
+                Uri.parse(widget.url),
+                httpHeaders: mediaAuthHeaders(widget.url),
+              );
+      } else {
+        c = VideoPlayerController.networkUrl(
+          Uri.parse(widget.url),
+          httpHeaders: mediaAuthHeaders(widget.url),
+        );
+      }
       await c.initialize();
       if (!mounted) {
         c.dispose();

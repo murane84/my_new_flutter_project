@@ -3679,37 +3679,33 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   /// A boxed stat used inside the Song & milestones card.
   Widget _detailStat(
       ColorScheme scheme, String emoji, String value, String label) {
+    // Compact inline stat so the milestone card stays short and leaves room
+    // for the track list below.
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+      padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 11),
       decoration: BoxDecoration(
         color: scheme.surface.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border:
             Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Container(
-            width: 34,
-            height: 34,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: _accent.withValues(alpha: 0.14),
-              shape: BoxShape.circle,
-            ),
-            child: Text(emoji, style: const TextStyle(fontSize: 16)),
-          ),
-          const SizedBox(height: 8),
+          Text(emoji, style: const TextStyle(fontSize: 15)),
+          const SizedBox(width: 8),
           Text(value,
               style: TextStyle(
                   fontWeight: FontWeight.w800,
-                  fontSize: 20,
-                  height: 1.0,
+                  fontSize: 16,
                   color: scheme.onSurface)),
-          const SizedBox(height: 3),
-          Text(label,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
+          ),
         ],
       ),
     );
@@ -3877,10 +3873,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       progress = ((target - remaining) / target).clamp(0.0, 1.0);
     }
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
       decoration: BoxDecoration(
         color: _accent.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: _accent.withValues(alpha: 0.28)),
       ),
       child: Column(
@@ -3903,12 +3899,12 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             ],
           ),
           if (progress != null) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: LinearProgressIndicator(
                 value: progress,
-                minHeight: 6,
+                minHeight: 5,
                 backgroundColor: _accent.withValues(alpha: 0.15),
                 valueColor: AlwaysStoppedAnimation<Color>(_accent),
               ),
@@ -3932,7 +3928,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final days = (stats['days_in_song'] as num?)?.toInt() ?? 0;
     final streak = (stats['listen_streak'] as num?)?.toInt() ?? 0;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
         color: isDark
@@ -3944,7 +3940,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _topSongsInner(scheme),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
@@ -3957,7 +3953,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             ],
           ),
           if (hasHint) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
             _nextMilestoneHint(scheme),
           ],
         ],

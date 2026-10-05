@@ -1464,10 +1464,16 @@ def remove_track(
         PlaylistTrack.id == track_id,
         PlaylistTrack.pair_key == pk,
     ).first()
+    # Idempotent: a track that's already gone is a successful delete, not a 404
+    # (avoids a spurious "could not remove" on a double-tap or stale list).
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
-    db.delete(track)
-    db.commit()
+        return {"ok": True, "already": True}
+    try:
+        db.delete(track)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Could not remove track")
     return {"ok": True}
 
 

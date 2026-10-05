@@ -977,12 +977,16 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   }
 
   Future<void> _removeTrackFromCrate(int trackId) async {
-    final done = await ApiService().removeTrack(_id, trackId);
+    final code = await ApiService().removeTrack(_id, trackId);
     if (!mounted) return;
-    if (done) {
+    // 2xx = removed; a 404 means it's already gone, which for a delete is also
+    // success — just refresh. Anything else surfaces the exact reason.
+    if ((code >= 200 && code < 300) || code == 404) {
       _load();
     } else {
-      showToast(context, 'Could not remove', type: ToastType.error);
+      showToast(context,
+          'Could not remove (${code == -1 ? 'network' : code})',
+          type: ToastType.error);
     }
   }
 

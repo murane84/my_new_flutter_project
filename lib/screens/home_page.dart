@@ -320,15 +320,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Screenshot / photo shared into Aluta → surface the "pick a chat to send"
     // banner and react if one arrives while Home is already open.
     ShareInbox.instance.addListener(_onSharePending);
-    // Phonebook name map: warmed for RETURNING users so their saved contact
-    // names show in the friend list. This is SILENT and permission-gated — a
-    // fresh install (contacts not granted yet) reads nothing and never prompts,
-    // so it can't cause the first-install stall. Deferred off the first frame so
-    // even a returning user's read never competes with cold-start render/audio.
+    // Phonebook name map so saved contact names show in the friend list.
+    // Deferred ~4s off the first frame (never competes with cold-start render/
+    // audio), and allowPrompt so it REQUESTS contacts permission if it isn't
+    // granted yet — requestPermission only shows a dialog when not already
+    // granted, so a user who already allowed contacts sees no prompt and their
+    // names just load. Without this, a device that never granted READ_CONTACTS
+    // would silently show every chat as a bare number.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(seconds: 4), () {
         if (!mounted) return;
-        ContactNames.instance.ensureLoaded().then((_) {
+        ContactNames.instance.ensureLoaded(allowPrompt: true).then((_) {
           if (mounted) setState(() {});
         });
       });

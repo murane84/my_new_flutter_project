@@ -432,6 +432,9 @@ class RelationshipSpacePage extends StatefulWidget {
 
 class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   late Map<String, dynamic> _space = Map<String, dynamic>.from(widget.space);
+  // Preset ids that ship a landscape (wide) companion — used to swap in the
+  // wide wallpaper on desktop/wide screens instead of tiling the portrait.
+  final Set<String> _wideWallpaperIds = {};
 
   int get _id => (_space['id'] as num).toInt();
   Color get _accent => spaceThemeColor(_space['theme'] as String?);
@@ -487,6 +490,21 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     // Reload when a bond action lands over the socket, so an action one partner
     // takes shows up on the other's open page without a manual refresh.
     spaceEventBus.addListener(_onSpaceEvent);
+    _loadWideWallpaperIds();
+  }
+
+  // Which gallery presets have a landscape companion, so a wide screen shows a
+  // real landscape wallpaper rather than a tiled portrait. Cheap + cached.
+  Future<void> _loadWideWallpaperIds() async {
+    try {
+      final presets = await WallpapersService.instance.load();
+      if (!mounted) return;
+      final ids = <String>{
+        for (final p in presets)
+          if ((p.wideUrl ?? '').isNotEmpty) p.id,
+      };
+      if (ids.isNotEmpty) setState(() => _wideWallpaperIds.addAll(ids));
+    } catch (_) {}
   }
 
   @override
@@ -1237,24 +1255,43 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     return _bgFuture!;
   }
 
+  // If [url] points at a gallery preset that has a landscape companion, the
+  // matching /wide URL; otherwise null.
+  String? _widePresetUrl(String url) {
+    final m = RegExp(r'/wallpapers/(w\d+)(?:/wide)?\$').firstMatch(url);
+    if (m == null) return null;
+    final id = m.group(1)!;
+    if (!_wideWallpaperIds.contains(id)) return null;
+    return url.replaceFirst(RegExp(r'/wallpapers/w\d+(?:/wide)?\$'),
+        '/wallpapers/$id/wide');
+  }
+
   Widget _photoBackdrop(ColorScheme scheme, String url) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final headers = mediaAuthHeaders(url);
     final veil = isDark ? Colors.black : Colors.white;
     return LayoutBuilder(
       builder: (ctx, c) {
         final wide = c.maxWidth > c.maxHeight;
-        final fit = wide ? BoxFit.fitHeight : BoxFit.cover;
-        final repeat = wide ? ImageRepeat.repeatX : ImageRepeat.noRepeat;
+        // On a wide screen, prefer a real landscape wallpaper (cover, no tiling)
+        // when this preset ships one; otherwise keep the portrait (tiled wide).
+        final widthUrl = wide ? _widePresetUrl(url) : null;
+        final effUrl = widthUrl ?? url;
+        final headers = mediaAuthHeaders(effUrl);
+        final fit = (wide && widthUrl != null)
+            ? BoxFit.cover
+            : (wide ? BoxFit.fitHeight : BoxFit.cover);
+        final repeat = (wide && widthUrl == null)
+            ? ImageRepeat.repeatX
+            : ImageRepeat.noRepeat;
         return FutureBuilder<File?>(
           // Prefer the on-device copy (survives offline / a desktop restart);
           // fall back to the network image on the first, online view while it
           // downloads + persists.
-          future: _bgFileFuture(url, headers),
+          future: _bgFileFuture(effUrl, headers),
           builder: (ctx, snap) {
             final ImageProvider provider = snap.data != null
                 ? FileImage(snap.data!)
-                : authNetworkImageProvider(url, headers);
+                : authNetworkImageProvider(effUrl, headers);
             return Stack(
               fit: StackFit.expand,
               children: [

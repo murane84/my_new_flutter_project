@@ -11,6 +11,7 @@ import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:video_player/video_player.dart';
+import '../widgets/glimpse_video.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -3701,54 +3702,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   Widget _videoBubble(
       String url, Map<String, dynamic> msg, ColorScheme scheme) {
     final secs = (msg['media_duration'] as num?)?.toInt() ?? 0;
-    String? dur;
-    if (secs > 0) {
-      final m = secs ~/ 60, sx = secs % 60;
-      dur = '$m:${sx.toString().padLeft(2, '0')}';
-    }
-    return GestureDetector(
-      onTap: () => _openVideo(url, msg),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 260),
-          child: AspectRatio(
-            aspectRatio: 16 / 10,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Container(color: Colors.black87),
-                Center(
-                  child: Container(
-                    width: 54,
-                    height: 54,
-                    decoration: const BoxDecoration(
-                        color: Colors.white24, shape: BoxShape.circle),
-                    child: const Icon(Icons.play_arrow_rounded,
-                        color: Colors.white, size: 32),
-                  ),
-                ),
-                Positioned(
-                  left: 8,
-                  bottom: 8,
-                  child: Row(
-                    children: [
-                      const Icon(Icons.videocam_rounded,
-                          size: 14, color: Colors.white70),
-                      if (dur != null) ...[
-                        const SizedBox(width: 4),
-                        Text(dur,
-                            style: const TextStyle(
-                                color: Colors.white70, fontSize: 11)),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    // Shared poster + silent dwell-glimpse + tap-to-play; fullscreen opens the
+    // existing in-app player. Same behaviour as Our Space moments.
+    return GlimpseVideo(
+      url: url,
+      headers: mediaAuthHeaders(url),
+      accent: scheme.primary,
+      maxWidth: 260,
+      aspectRatioFallback: 16 / 10,
+      durationSecs: secs > 0 ? secs : null,
+      onFullscreen: () => _openVideo(url, msg),
     );
   }
 

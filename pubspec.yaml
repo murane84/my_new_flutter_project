@@ -115,6 +115,10 @@ dependencies:
   # before sending. Mobile-only (Android/iOS); desktop/web fall back to the
   # original and a clear "too large" message.
   video_compress: ^3.1.3
+  # Dwell detection: lets a video card know when it is on screen (and how
+  # much), to show a poster and auto-play a short SILENT glimpse on dwell —
+  # the YouTube/feed behaviour — in Our Space moments and chat.
+  visibility_detector: ^0.4.0+2
   # Camera capture for stories on web + desktop, where image_picker has no
   # camera (it would silently open a file picker). Mobile keeps image_picker's
   # camera. camera_windows adds the Windows backend (not endorsed by `camera`).

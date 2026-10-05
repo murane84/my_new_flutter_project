@@ -23,6 +23,7 @@ import '../utils/avatar_widget.dart';
 import '../utils/popup_shell.dart';
 import '../utils/chat_background.dart';
 import '../utils/net_image.dart';
+import '../widgets/glimpse_video.dart';
 import '../utils/app_config.dart';
 import '../services/media_store.dart';
 import '../utils/romantic_pattern.dart';
@@ -5114,9 +5115,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
               const SizedBox(height: 10),
               _mediaWithCaption(
                   scheme,
-                  _MomentVideoInline(
+                  GlimpseVideo(
                     url: _full(m['ref'])!,
+                    headers: mediaAuthHeaders(_full(m['ref'])!),
                     accent: _accent,
+                    aspectRatioFallback: 16 / 9,
                     onFullscreen: () => _openMomentVideo(_full(m['ref'])!),
                   ),
                   caption),
@@ -9898,145 +9901,6 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
 }
 
 /// A tiny tap-to-play pill for a dedication's voice note (just_audio).
-class _MomentVideoInline extends StatefulWidget {
-  const _MomentVideoInline(
-      {required this.url, required this.accent, this.onFullscreen});
-  final String url;
-  final Color accent;
-  final VoidCallback? onFullscreen;
-
-  @override
-  State<_MomentVideoInline> createState() => _MomentVideoInlineState();
-}
-
-class _MomentVideoInlineState extends State<_MomentVideoInline> {
-  VideoPlayerController? _c;
-  bool _loading = false;
-  bool _error = false;
-
-  Future<void> _start() async {
-    if (_c != null || _loading) return;
-    setState(() => _loading = true);
-    try {
-      final c = VideoPlayerController.networkUrl(
-        Uri.parse(widget.url),
-        httpHeaders: mediaAuthHeaders(widget.url),
-      );
-      await c.initialize();
-      if (!mounted) {
-        c.dispose();
-        return;
-      }
-      setState(() {
-        _c = c;
-        _loading = false;
-      });
-      c.setLooping(true);
-      c.play();
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _error = true;
-          _loading = false;
-        });
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _c?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = _c;
-    final ready = c != null && c.value.isInitialized;
-    final ar = ready
-        ? (c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio)
-        : 16 / 9;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: AspectRatio(
-        aspectRatio: ar,
-        child: GestureDetector(
-          onTap: () {
-            if (_error) return;
-            if (!ready) {
-              _start();
-              return;
-            }
-            if (c.value.isPlaying) {
-              c.pause();
-            } else {
-              c.play();
-            }
-            setState(() {});
-          },
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Container(color: Colors.black87),
-              if (ready) Center(child: VideoPlayer(c)),
-              if (_error)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text(
-                      "Can't play here — tap the expand icon for full screen.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                  ),
-                ),
-              if (!ready && !_error)
-                Center(
-                  child: _loading
-                      ? const SizedBox(
-                          width: 34,
-                          height: 34,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : Container(
-                          width: 54,
-                          height: 54,
-                          decoration: const BoxDecoration(
-                              color: Colors.white24, shape: BoxShape.circle),
-                          child: const Icon(Icons.play_arrow_rounded,
-                              color: Colors.white, size: 32),
-                        ),
-                ),
-              if (ready && !c.value.isPlaying)
-                const Center(
-                  child: Icon(Icons.play_arrow_rounded,
-                      color: Colors.white70, size: 54),
-                ),
-              if (widget.onFullscreen != null)
-                Positioned(
-                  right: 8,
-                  bottom: 8,
-                  child: GestureDetector(
-                    onTap: widget.onFullscreen,
-                    child: Container(
-                      padding: const EdgeInsets.all(5),
-                      decoration: BoxDecoration(
-                        color: Colors.black38,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.fullscreen_rounded,
-                          color: Colors.white, size: 18),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _MomentVideoPlayer extends StatefulWidget {
   const _MomentVideoPlayer({required this.url});
   final String url;

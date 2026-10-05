@@ -1603,13 +1603,16 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           _section!,
           onMenu: wide ? null : () => setState(() => _navDrawerOpen = true),
         );
-        final content = (_guideOpen && _section != null)
-            ? Stack(children: [
-                rawContent,
-                Positioned.fill(
-                    child: _sectionGuideOverlay(scheme, _section!)),
-              ])
-            : rawContent;
+        // Keep rawContent as a STABLE first child of the Stack whether the
+        // guide is open or not — toggling only adds/removes the overlay layer.
+        // (Conditionally wrapping remounted the subtree, which broke the diary
+        // PageView and left a blank page after closing the guide.)
+        final content = Stack(children: [
+          rawContent,
+          if (_guideOpen && _section != null)
+            Positioned.fill(
+                child: _sectionGuideOverlay(scheme, _section!)),
+        ]);
         if (wide) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,

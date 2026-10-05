@@ -113,8 +113,15 @@ def bond_stats(db: Session, a: int, b: int,
         if t:
             counts[t] = counts.get(t, 0) + 1
     your_song = None
+    top_songs = []
     if counts:
-        title, cnt = max(counts.items(), key=lambda kv: kv[1])
+        # Most distinct shared-listen days first; ties broken by title so the
+        # order is stable. your_song stays the #1 for backward compatibility.
+        ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        top_songs = [
+            {"title": t, "artist": "", "count": c} for t, c in ranked[:3]
+        ]
+        title, cnt = ranked[0]
         your_song = {"title": title, "artist": "", "count": cnt}
 
     days_together = None
@@ -125,6 +132,7 @@ def bond_stats(db: Session, a: int, b: int,
         "days_in_song": days_in_song,
         "listen_streak": streak,
         "your_song": your_song,
+        "top_songs": top_songs,
         "next_milestone": _next_milestone(streak, days_together),
         "milestone_reached": _reached_milestone(streak, days_together),
     }

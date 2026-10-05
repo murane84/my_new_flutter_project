@@ -1385,6 +1385,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
       spaceEventBus.value++;
       return;
     }
+    // Your partner removed a song — keep the shared crate in sync by refreshing
+    // any open Our Space page (quietly, no toast).
+    if (type == 'space_playlist_remove') {
+      _loadSpaces();
+      spaceEventBus.value++;
+      return;
+    }
     // A dedication just arrived for you — warm toast + refresh the hub badge.
     if (type == 'dedication_received') {
       final data = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};

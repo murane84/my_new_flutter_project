@@ -1,4 +1,6 @@
 import os
+import subprocess
+import tempfile
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -31,6 +33,58 @@ EPHEMERAL_TTL = timedelta(days=7)
 # Root of on-disk media (legacy /media/audio/* voice notes). Resolved absolute
 # so we can reject path-traversal attempts.
 _MEDIA_DIR = os.path.abspath("media")
+
+# Cached video poster frames (lazily generated with ffmpeg, which is already
+# installed for Chromaprint). Disk cache; regenerates if wiped on redeploy.
+_THUMB_DIR = os.path.join(_MEDIA_DIR, "thumbs")
+
+
+def _thumb_path(asset_id: str) -> str:
+    return os.path.join(_THUMB_DIR, f"{asset_id}.jpg")
+
+
+def _generate_thumb(asset_id: str, data: bytes) -> str | None:
+    """Extract a single poster frame from video bytes and cache it as JPEG.
+    Best-effort: returns the path on success, else None (the client then shows
+    its own placeholder)."""
+    out = _thumb_path(asset_id)
+    if os.path.isfile(out) and os.path.getsize(out) > 0:
+        return out
+    try:
+        os.makedirs(_THUMB_DIR, exist_ok=True)
+    except Exception:
+        return None
+    tmp_in = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as tf:
+            tf.write(data)
+            tmp_in = tf.name
+        scale = "scale='min(720,iw)':-2"
+        # Seek ~0.5s in first (skips a possible black opening frame); fall back
+        # to the very first frame for very short clips.
+        for pre in (["-ss", "0.5"], []):
+            cmd = (
+                ["ffmpeg", "-y"] + pre
+                + ["-i", tmp_in, "-frames:v", "1", "-vf", scale, "-q:v", "4", out]
+            )
+            try:
+                subprocess.run(
+                    cmd, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL, timeout=20,
+                )
+            except Exception:
+                continue
+            if os.path.isfile(out) and os.path.getsize(out) > 0:
+                return out
+        return None
+    except Exception:
+        return None
+    finally:
+        if tmp_in:
+            try:
+                os.remove(tmp_in)
+            except Exception:
+                pass
 
 
 def purge_expired_ephemeral(db: Session) -> int:
@@ -378,6 +432,43 @@ def get_attachment(
     headers["Accept-Ranges"] = "bytes"
     headers["Content-Length"] = str(total)
     return Response(content=data, media_type=media_type, headers=headers)
+
+
+@router.get("/attachments/{asset_id}/thumb")
+def get_attachment_thumb(
+    asset_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_flexible),
+):
+    """Serve a video's poster frame (the true first frame) to anyone entitled to
+    the attachment. Generated lazily on first request and cached on disk. 404 if
+    the asset isn't a video or a frame can't be produced — the client falls back
+    to its own placeholder."""
+    asset = db.query(MediaAsset).filter(MediaAsset.id == asset_id).first()
+    if not asset:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    if not _can_access(
+        db, current_user.id, asset_id, asset.uploader_id, allow_avatar=True
+    ):
+        raise HTTPException(
+            status_code=403, detail="Not authorized to view this file")
+    out = _thumb_path(asset_id)
+    if not (os.path.isfile(out) and os.path.getsize(out) > 0):
+        if asset.data is None:
+            raise HTTPException(
+                status_code=410, detail="Attachment no longer on server")
+        if not (asset.mime or "").lower().startswith("video/"):
+            raise HTTPException(
+                status_code=415, detail="No thumbnail for this type")
+        out = _generate_thumb(asset_id, asset.data)
+        if not out:
+            raise HTTPException(
+                status_code=404, detail="Thumbnail unavailable")
+    return FileResponse(
+        out,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=31536000, immutable"},
+    )
 
 
 @router.post("/attachments/{asset_id}/cached")

@@ -3715,6 +3715,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       aspectRatioFallback: 16 / 10,
       durationSecs: secs > 0 ? secs : null,
       caption: caption,
+      posterUrl: '$url/thumb',
       onFullscreen: () => _openVideo(url, msg),
     );
   }

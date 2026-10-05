@@ -36,6 +36,7 @@ class GlimpseVideo extends StatefulWidget {
     this.aspectRatioFallback = 16 / 10,
     this.durationSecs,
     this.caption,
+    this.posterUrl,
   });
 
   final String url;
@@ -52,6 +53,9 @@ class GlimpseVideo extends StatefulWidget {
   // Optional overlaid caption; fades out while the clip is playing so it never
   // sits as noise over the moving video, and fades back when paused.
   final String? caption;
+  // Optional server-generated poster (the true first frame) shown before the
+  // clip is on the device and while a cached clip re-initialises on return.
+  final String? posterUrl;
 
   @override
   State<GlimpseVideo> createState() => _GlimpseVideoState();
@@ -308,6 +312,31 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
         decoration: BoxDecoration(shape: BoxShape.circle, color: color),
       );
 
+  // Before the clip is ready: show the real poster frame (server thumbnail)
+  // over a soft blur base, falling back to the blur alone if there's no poster
+  // or it fails to load. This is what shows the TRUE first frame.
+  Widget _notReadyBackdrop() {
+    final poster = widget.posterUrl ?? '';
+    if (poster.isEmpty) return _blurPlaceholder();
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _blurPlaceholder(),
+        Image.network(
+          poster,
+          headers: widget.headers,
+          fit: BoxFit.contain,
+          gaplessPlayback: true,
+          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          frameBuilder: (ctx, child, frame, wasSync) =>
+              (frame == null && !wasSync)
+                  ? const SizedBox.shrink()
+                  : child,
+        ),
+      ],
+    );
+  }
+
   // A soft, out-of-focus poster used before a clip is downloaded (and briefly
   // while a cached clip re-initialises on return) — a gentle accent-tinted blur
   // instead of a flat black rectangle.
@@ -466,7 +495,7 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
                 // while an already-cached clip re-initialises on return.
                 ready
                     ? const ColoredBox(color: Colors.black)
-                    : _blurPlaceholder(),
+                    : _notReadyBackdrop(),
                 if (ready)
                   Center(
                     child: FittedBox(

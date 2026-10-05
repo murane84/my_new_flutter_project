@@ -28,6 +28,10 @@ class ContactNames {
   bool _loaded = false;
   Future<void>? _loading;
   DateTime? _at; // when the persisted snapshot was built
+  // Signature (count + id/name hash) of the address book at the last full read.
+  // A cheap re-check against this lets a launch detect add/remove/rename and
+  // skip the heavy property read when nothing has changed.
+  String _sig = '';
   bool _servedPersisted = false; // only hit the saved snapshot once per session
   static const String _prefsKey = 'contact_names_cache_v1';
 
@@ -64,10 +68,12 @@ class ContactNames {
           _loaded = true;
           _loading = null;
           revision.value++;
-          // Always re-read the device in the background so newly saved or
-          // edited contacts appear within seconds — not only after a 6h window.
-          Future.delayed(const Duration(seconds: 3),
-              () => _readFromSource(allowPrompt: false));
+          // Detect-changes-only: a cheap signature check in the background;
+          // the heavy property read runs ONLY when contacts actually changed
+          // (new/removed/renamed) — so an update never re-reads the whole book
+          // for nothing, but a newly saved contact still shows within seconds.
+          Future.delayed(
+              const Duration(seconds: 3), () => _refreshIfChanged());
           return;
         }
       } catch (_) {}
@@ -122,6 +128,7 @@ class ContactNames {
           }
         }
       }
+      _sig = _signatureOf(contacts);
       _loaded = true;
       _persist();
       revision.value++;
@@ -138,6 +145,37 @@ class ContactNames {
     }
   }
 
+  // A cheap fingerprint of the address book (count + a rolling hash of each
+  // contact's id and display name). Changes when a contact is added, removed
+  // or renamed — the common cases we must detect.
+  String _signatureOf(List<Contact> contacts) {
+    int h = 17;
+    for (final c in contacts) {
+      h = 0x1fffffff & (h * 31 + c.id.hashCode);
+      h = 0x1fffffff & (h * 31 + c.displayName.hashCode);
+    }
+    return '${contacts.length}:$h';
+  }
+
+  // Background: only do the heavy (with-properties) read when the address book
+  // actually changed since the last full read. A light id+name read is enough
+  // to tell. A weekly backstop still refreshes to catch rare number-only edits
+  // (same name, changed number) that the name/count signature can't see.
+  Future<void> _refreshIfChanged() async {
+    if (!_mobile) return;
+    try {
+      final veryStale = _at == null ||
+          DateTime.now().difference(_at!) > const Duration(days: 7);
+      if (!veryStale && _sig.isNotEmpty) {
+        final light = await FlutterContacts.getContacts(); // ids + names only
+        if (_signatureOf(light) == _sig) return; // nothing changed — keep cache
+      }
+    } catch (_) {
+      // Couldn't check — fall through to a full read.
+    }
+    await _readFromSource(allowPrompt: false);
+  }
+
   Future<Map<String, String>?> _loadPersisted() async {
     try {
       final p = await SharedPreferences.getInstance();
@@ -146,6 +184,7 @@ class ContactNames {
       final obj = jsonDecode(raw) as Map<String, dynamic>;
       final atMs = (obj['at'] as num?)?.toInt();
       _at = atMs != null ? DateTime.fromMillisecondsSinceEpoch(atMs) : null;
+      _sig = (obj['sig'] as String?) ?? '';
       final src = (obj['map'] as Map?) ?? const {};
       return src.map((k, v) => MapEntry(k.toString(), v.toString()));
     } catch (_) {
@@ -158,6 +197,7 @@ class ContactNames {
       final p = await SharedPreferences.getInstance();
       final obj = <String, dynamic>{
         'at': DateTime.now().millisecondsSinceEpoch,
+        'sig': _sig,
         'map': _byKey,
       };
       await p.setString(_prefsKey, jsonEncode(obj));
@@ -169,6 +209,7 @@ class ContactNames {
   Future<void> refresh() {
     _loaded = false;
     _loading = null;
+    _sig = '';
     _byKey.clear();
     return ensureLoaded();
   }

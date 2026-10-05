@@ -249,6 +249,42 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 18),
+          _sectionLabel(scheme, 'THEME COLOUR STRENGTH'),
+          const SizedBox(height: 4),
+          ValueListenableBuilder<double>(
+            valueListenable: motifStrength,
+            builder: (_, v, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Text('Soft',
+                        style: TextStyle(
+                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                    Expanded(
+                      child: Slider(
+                        value: v,
+                        onChanged: (nv) => setMotifStrength(nv),
+                      ),
+                    ),
+                    Text('Bold',
+                        style: TextStyle(
+                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                  ],
+                ),
+                if (_showGuide)
+                  Text(
+                    'How concentrated the default theme-colour backdrop (the '
+                    'hearts-and-glow motif shown when a chat or Space has no '
+                    'photo wallpaper) appears. Slide toward Bold for richer '
+                    'colour — it is entirely your call.',
+                    style: TextStyle(
+                        fontSize: 12, color: scheme.onSurfaceVariant),
+                  ),
+              ],
+            ),
+          ),
           if (_showGuide) ...[
             const SizedBox(height: 18),
             Container(

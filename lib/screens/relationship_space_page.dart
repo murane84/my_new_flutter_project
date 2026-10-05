@@ -1199,43 +1199,55 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             ),
           ),
         );
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            _accent.withValues(alpha: 0.07),
-            _accent.withValues(alpha: 0.0),
-            _accent.withValues(alpha: 0.05),
-          ],
-          stops: const [0.0, 0.45, 1.0],
-        ),
-      ),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // DEFAULT theme: a dense, whisper-faint confetti of tiny hearts, music
-          // notes, cherry blossoms + sparkle-hearts across the WHOLE page. The
-          // motifs are plain shapes with no colour of their own — they INHERIT
-          // the Space's chosen colour (_accent) at a hair of opacity, so it just
-          // quietly fuels the romantic, music-y mood without fighting content.
-          Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(
-                painter: RomanticPatternPainter(
-                  color: _accent.withValues(
-                      alpha: Theme.of(context).brightness == Brightness.dark
-                          ? 0.06
-                          : 0.055),
-                ),
-              ),
+    // The whole motif scales with the user's chosen concentration (motifStrength)
+    // and repaints live when they move the slider.
+    return ValueListenableBuilder<double>(
+      valueListenable: motifStrength,
+      builder: (context, _, __) {
+        final patBase = Theme.of(context).brightness == Brightness.dark
+            ? 0.06
+            : 0.055;
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                _accent.withValues(alpha: motifAccentAlpha(0.07)),
+                _accent.withValues(alpha: 0.0),
+                _accent.withValues(alpha: motifAccentAlpha(0.05)),
+              ],
+              stops: const [0.0, 0.45, 1.0],
             ),
           ),
-          Positioned(top: -110, right: -90, child: glow(300, 0.12)),
-          Positioned(bottom: -140, left: -110, child: glow(340, 0.09)),
-        ],
-      ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // DEFAULT theme: a dense, whisper-faint confetti of tiny hearts,
+              // music notes, cherry blossoms + sparkle-hearts across the WHOLE
+              // page. The motifs inherit the Space's colour (_accent) at an
+              // opacity the user controls via motifStrength.
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: RomanticPatternPainter(
+                      color: _accent.withValues(alpha: motifAccentAlpha(patBase)),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                  top: -110,
+                  right: -90,
+                  child: glow(300, motifAccentAlpha(0.12))),
+              Positioned(
+                  bottom: -140,
+                  left: -110,
+                  child: glow(340, motifAccentAlpha(0.09))),
+            ],
+          ),
+        );
+      },
     );
   }
 

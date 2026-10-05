@@ -5193,16 +5193,18 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             ],
             if (kind == 'video' && _full(m['ref']) != null) ...[
               const SizedBox(height: 10),
-              _mediaWithCaption(
-                  scheme,
-                  GlimpseVideo(
-                    url: _full(m['ref'])!,
-                    headers: mediaAuthHeaders(_full(m['ref'])!),
-                    accent: _accent,
-                    aspectRatioFallback: 16 / 9,
-                    onFullscreen: () => _openMomentVideo(_full(m['ref'])!),
-                  ),
-                  caption),
+              // Centered in the card; the caption rides on the video itself
+              // (fades out while playing) instead of a separate overlay.
+              Center(
+                child: GlimpseVideo(
+                  url: _full(m['ref'])!,
+                  headers: mediaAuthHeaders(_full(m['ref'])!),
+                  accent: _accent,
+                  aspectRatioFallback: 16 / 9,
+                  caption: caption,
+                  onFullscreen: () => _openMomentVideo(_full(m['ref'])!),
+                ),
+              ),
             ],
             // Non-media captions (note / song / voice) read beneath the content.
             if (caption.isNotEmpty &&

@@ -808,6 +808,46 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       await _composeDedication();
       return;
     }
+    // Multi-photo: upload each image and pin one moment per photo, all sharing
+    // the same caption.
+    final items = result['_items'];
+    if (items is List && items.isNotEmpty) {
+      showToast(context, 'Uploading ${items.length} photo'
+          '${items.length == 1 ? '' : 's'}…', type: ToastType.info);
+      final caption = result['caption'] as String?;
+      var ok = 0;
+      for (final it in items) {
+        final m = it as Map;
+        final b = m['bytes'];
+        if (b is! List<int>) continue;
+        final up = await ApiService().uploadMedia(
+          bytes: b,
+          filename: (m['filename'] ?? 'photo').toString(),
+          mime: (m['mime'] ?? 'image/jpeg').toString(),
+        );
+        if (!mounted) return;
+        if (up == null || up['url'] == null) continue;
+        final saved = await ApiService().addMoment(
+          _id,
+          kind: 'photo',
+          ref: up['url'] as String,
+          caption: caption,
+        );
+        if (saved != null) ok++;
+      }
+      if (!mounted) return;
+      if (ok > 0) {
+        showToast(context,
+            ok == 1 ? 'Moment pinned 💛' : '$ok moments pinned 💛',
+            type: ToastType.success);
+        _load();
+        widget.onChanged?.call();
+      } else {
+        showToast(context, 'Could not save those photos',
+            type: ToastType.error);
+      }
+      return;
+    }
     String? ref = result['ref'] as String?;
     final bytes = result['_bytes'];
     if (bytes is List<int>) {
@@ -5991,6 +6031,11 @@ class _MomentComposerState extends State<_MomentComposer> {
   String? _mime;
   String _mediaKind = ''; // resolved moment kind for the picked bytes
 
+  // Photo mode can hold MULTIPLE images; each entry is {bytes, filename, mime}.
+  // (Other modes still use the single _bytes above.) They are pinned as one
+  // moment per photo, sharing the caption.
+  final List<Map<String, dynamic>> _photos = [];
+
   // Song moment.
   String? _songTitle;
   String? _songArtist;
@@ -6020,6 +6065,7 @@ class _MomentComposerState extends State<_MomentComposer> {
     _filename = null;
     _mime = null;
     _mediaKind = '';
+    _photos.clear();
     _songTitle = null;
     _songArtist = null;
     final p = _voicePath;
@@ -6085,6 +6131,61 @@ class _MomentComposerState extends State<_MomentComposer> {
     if (m.startsWith('video/')) return 'video';
     if (m.startsWith('audio/')) return 'voice';
     return '';
+  }
+
+  // Photo mode: pick one OR many images at once. They stack up as a set and
+  // are pinned as individual moments sharing the caption.
+  Future<void> _pickPhotos() async {
+    try {
+      final res = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp', 'heic', 'gif'],
+        allowMultiple: true, // ignore: deprecated_member_use
+      );
+      if (res == null || res.files.isEmpty) return;
+      final added = <Map<String, dynamic>>[];
+      var skipped = 0;
+      for (final f in res.files) {
+        final bytes = await f.readAsBytes();
+        if (bytes.isEmpty) {
+          skipped++;
+          continue;
+        }
+        final e = (f.extension ?? '').toLowerCase();
+        final mime = _mimeForExt(e);
+        final kind = _kindFromMedia(mime, e);
+        if (kind != 'photo' && kind != 'gif') {
+          skipped++;
+          continue;
+        }
+        if (bytes.length > 15 * 1024 * 1024) {
+          skipped++;
+          continue;
+        }
+        added.add({
+          'bytes': bytes,
+          'filename': f.name.isNotEmpty
+              ? f.name
+              : 'photo_${DateTime.now().millisecondsSinceEpoch}_${added.length}.jpg',
+          'mime': mime,
+        });
+      }
+      if (!mounted) return;
+      if (added.isEmpty) {
+        showToast(context, 'Could not add those photos',
+            type: ToastType.error);
+        return;
+      }
+      setState(() => _photos.addAll(added));
+      if (skipped > 0) {
+        showToast(context, '$skipped skipped (too large or unsupported).',
+            type: ToastType.info);
+      }
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not pick photos', type: ToastType.error);
+      }
+    }
   }
 
   Future<void> _pickMedia() async {
@@ -6318,7 +6419,20 @@ class _MomentComposerState extends State<_MomentComposer> {
       }
       return;
     }
-    // photo / video / file
+    // photo (one OR many)
+    if (_mode == 'photo') {
+      if (_photos.isEmpty) {
+        showToast(context, 'Pick at least one photo.', type: ToastType.info);
+        return;
+      }
+      Navigator.pop(context, {
+        'kind': 'photo',
+        '_items': _photos,
+        'caption': text.isEmpty ? null : text,
+      });
+      return;
+    }
+    // video / file
     if (_bytes == null || _mediaKind.isEmpty) {
       showToast(context, 'Pick something to pin first.', type: ToastType.info);
       return;
@@ -6365,6 +6479,170 @@ class _MomentComposerState extends State<_MomentComposer> {
                     color: sel ? widget.accent : scheme.onSurface)),
           ],
         ),
+      ),
+    );
+  }
+
+  // A horizontal strip of picked photos with remove (×) and an add-more tile.
+  Widget _photoStrip(ColorScheme scheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8, left: 2),
+          child: Text(
+            '${_photos.length} photo${_photos.length == 1 ? '' : 's'} selected',
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurfaceVariant),
+          ),
+        ),
+        SizedBox(
+          height: 84,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _photos.length + 1,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (ctx, i) {
+              if (i == _photos.length) {
+                return InkWell(
+                  onTap: _pickPhotos,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    width: 84,
+                    height: 84,
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: widget.accent.withValues(alpha: 0.4),
+                          width: 1.4),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add_rounded, color: widget.accent),
+                        const SizedBox(height: 2),
+                        Text('Add',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: widget.accent)),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              final bytes = _photos[i]['bytes'] as Uint8List;
+              return Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.memory(bytes,
+                        width: 84, height: 84, fit: BoxFit.cover),
+                  ),
+                  Positioned(
+                    top: 3,
+                    right: 3,
+                    child: GestureDetector(
+                      onTap: () => setState(() => _photos.removeAt(i)),
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: const BoxDecoration(
+                            color: Colors.black54, shape: BoxShape.circle),
+                        child: const Icon(Icons.close_rounded,
+                            size: 14, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  // The selected single media (video / file): thumbnail, name, kind·size, and a
+  // clear "Change" action on the right.
+  Widget _selectedMediaTile(ColorScheme scheme) {
+    final kb = _bytes!.length / 1024;
+    final sizeLabel = kb >= 1024
+        ? '${(kb / 1024).toStringAsFixed(1)} MB'
+        : '${kb.toStringAsFixed(0)} KB';
+    final kindLabel = _mediaKind == 'video' ? 'Video' : 'File';
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: widget.accent.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: 52,
+              height: 52,
+              child: ColoredBox(
+                color: widget.accent.withValues(alpha: 0.12),
+                child: Icon(
+                    _mediaKind == 'video'
+                        ? Icons.movie_rounded
+                        : Icons.insert_drive_file_rounded,
+                    color: widget.accent),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_filename ?? 'Selected',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface)),
+                const SizedBox(height: 2),
+                Text('$kindLabel · $sizeLabel',
+                    style: TextStyle(
+                        fontSize: 11.5, color: scheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Material(
+            color: widget.accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(20),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: _pickMedia,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.swap_horiz_rounded,
+                        size: 16, color: widget.accent),
+                    const SizedBox(width: 5),
+                    Text('Change',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: widget.accent)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -6450,71 +6728,22 @@ class _MomentComposerState extends State<_MomentComposer> {
       return _pickTile(scheme, Icons.mic_rounded, 'Tap to record a voice note',
           _toggleRecord);
     }
-    // photo / video / file
-    if (picked) {
-      final isImg = _mediaKind == 'photo' || _mediaKind == 'gif';
-      return GestureDetector(
-        onTap: _pickMedia,
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(12),
-            border:
-                Border.all(color: widget.accent.withValues(alpha: 0.25)),
-          ),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 52,
-                  height: 52,
-                  child: isImg
-                      ? Image.memory(_bytes!, fit: BoxFit.cover)
-                      : ColoredBox(
-                          color: widget.accent.withValues(alpha: 0.12),
-                          child: Icon(
-                              _mediaKind == 'video'
-                                  ? Icons.movie_rounded
-                                  : Icons.insert_drive_file_rounded,
-                              color: widget.accent),
-                        ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(_filename ?? 'Selected',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: scheme.onSurface)),
-                    const SizedBox(height: 2),
-                    Text('Tap to change',
-                        style: TextStyle(
-                            fontSize: 11.5,
-                            color: scheme.onSurfaceVariant)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+    // Photo mode: multi-image set (strip) or the initial pick tile.
+    if (_mode == 'photo') {
+      if (_photos.isEmpty) {
+        return _pickTile(
+            scheme, Icons.add_photo_alternate_rounded, 'Pick photos…',
+            _pickPhotos);
+      }
+      return _photoStrip(scheme);
     }
-    final label = _mode == 'photo'
-        ? 'Pick a photo…'
-        : (_mode == 'video' ? 'Pick a video…' : 'Pick a file…');
-    final icon = _mode == 'photo'
-        ? Icons.image_rounded
-        : (_mode == 'video'
-            ? Icons.movie_rounded
-            : Icons.attach_file_rounded);
+    // video / file — single item.
+    if (picked) {
+      return _selectedMediaTile(scheme);
+    }
+    final label = _mode == 'video' ? 'Pick a video…' : 'Pick a file…';
+    final icon =
+        _mode == 'video' ? Icons.movie_rounded : Icons.attach_file_rounded;
     return _pickTile(scheme, icon, label, _pickMedia);
   }
 

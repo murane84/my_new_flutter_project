@@ -31,6 +31,7 @@ class GlimpseVideo extends StatefulWidget {
     this.onFullscreen,
     this.borderRadius = 14,
     this.maxWidth,
+    this.maxStageHeight = 300,
     this.aspectRatioFallback = 16 / 10,
     this.durationSecs,
   });
@@ -41,6 +42,9 @@ class GlimpseVideo extends StatefulWidget {
   final VoidCallback? onFullscreen;
   final double borderRadius;
   final double? maxWidth;
+  // Hard ceiling on the video stage so a tall portrait clip stays a compact
+  // bubble instead of a full-height strip.
+  final double maxStageHeight;
   final double aspectRatioFallback;
   final int? durationSecs;
 
@@ -299,7 +303,7 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
     // clamped to a sane band so a tall portrait clip can't blow the card up, and
     // the video is letterboxed inside it (BoxFit.contain) rather than cropped —
     // portrait or landscape, the full frame is visible on the black stage.
-    final stageAr = ar.clamp(0.72, 16 / 9).toDouble();
+    final stageAr = ar.clamp(0.8, 16 / 9).toDouble();
     final playing = ready && c.value.isPlaying;
     final durLabel = _durLabel();
 
@@ -460,12 +464,13 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
       ),
     );
 
-    if (widget.maxWidth != null) {
-      stack = ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: widget.maxWidth!),
-        child: stack,
-      );
-    }
+    stack = ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: widget.maxWidth ?? double.infinity,
+        maxHeight: widget.maxStageHeight,
+      ),
+      child: stack,
+    );
     return stack;
   }
 }

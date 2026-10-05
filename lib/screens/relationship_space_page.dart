@@ -5183,6 +5183,40 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                 const SizedBox(width: 8),
                 Icon(Icons.push_pin_rounded,
                     size: 15, color: _accent.withValues(alpha: 0.55)),
+                // Visible options menu so the owner can delete on desktop
+                // (mouse) too — long-press still works on touch.
+                if (mine) ...[
+                  const SizedBox(width: 2),
+                  SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: PopupMenuButton<String>(
+                      tooltip: 'Moment options',
+                      padding: EdgeInsets.zero,
+                      icon: Icon(Icons.more_horiz_rounded,
+                          size: 19, color: scheme.onSurfaceVariant),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      onSelected: (v) {
+                        if (v == 'delete') _confirmDeleteMoment(id);
+                      },
+                      itemBuilder: (ctx) => [
+                        PopupMenuItem<String>(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_outline_rounded,
+                                  size: 18, color: scheme.error),
+                              const SizedBox(width: 10),
+                              Text('Delete moment',
+                                  style: TextStyle(color: scheme.error)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
             if (song != null) ...[

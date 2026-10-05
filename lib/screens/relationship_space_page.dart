@@ -2468,6 +2468,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                       fontSize: 16,
                       color: scheme.onSurface)),
               const Spacer(),
+              if (_plans.isNotEmpty) ...[
+                _diaryPlansStrip(scheme, compact: !isWide),
+                const SizedBox(width: 8),
+              ],
               _guideButton(scheme),
               // Page count is already shown by the dots below — no separate label.
             ],
@@ -2551,7 +2555,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
               ],
             ),
           ),
-        _diaryPlansStrip(scheme),
         // Raised 3D write button — full width on a phone, a centred pill capped
         // at a comfortable width on tablet/desktop so it never stretches edge to
         // edge on a big screen.
@@ -3175,42 +3178,44 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   /// A small chip that opens the couple's upcoming plans (kept out of the book
   /// so the pages stay about memories). Hidden when there are no plans.
-  Widget _diaryPlansStrip(ColorScheme scheme) {
+  // A prominent "Plans ahead" chip, now sitting in the diary header so it's
+  // always visible (it used to hide in the bottom-left corner). Opaque and
+  // accent-tinted; compact (icon + count) on a narrow phone so the header
+  // never crowds, full label on wider screens.
+  Widget _diaryPlansStrip(ColorScheme scheme, {bool compact = false}) {
     final plans = _plans;
     if (plans.isEmpty) return const SizedBox.shrink();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Padding(
-        padding: const EdgeInsets.only(top: 6, bottom: 2),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => _showPlansSheet(scheme),
-            borderRadius: BorderRadius.circular(999),
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                // Solid & opaque — the wallpaper must not show through.
-                color: isDark
-                    ? scheme.surfaceContainerHigh
-                    : scheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: _accent.withValues(alpha: 0.45)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('🗓️', style: TextStyle(fontSize: 14)),
-                  const SizedBox(width: 7),
-                  Text('Plans ahead (${plans.length})',
-                      style: TextStyle(
-                          color: _accent,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13)),
-                ],
-              ),
+    final base = isDark ? scheme.surfaceContainerHigh : scheme.surface;
+    final fill = Color.alphaBlend(_accent.withValues(alpha: 0.16), base);
+    return Tooltip(
+      message: 'Plans ahead',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showPlansSheet(scheme),
+          borderRadius: BorderRadius.circular(999),
+          child: Container(
+            padding: EdgeInsets.symmetric(
+                horizontal: compact ? 10 : 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: fill, // opaque — the wallpaper can't show through
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: _accent.withValues(alpha: 0.55)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.event_note_rounded, size: 15, color: _accent),
+                const SizedBox(width: 6),
+                Text(
+                  compact ? '${plans.length}' : 'Plans ahead (${plans.length})',
+                  style: TextStyle(
+                      color: _accent,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12.5),
+                ),
+              ],
             ),
           ),
         ),

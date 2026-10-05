@@ -689,6 +689,10 @@ class PlaylistTrack(Base):
     # The adder's local path / URL for the track (best-effort; may not resolve
     # on the partner's device). Reserved-roomy so no later migration is needed.
     ref = Column(String, nullable=True)
+    # Durable/ephemeral audio for cross-device play: when the adder uploads the
+    # song bytes, this holds the /attachments/<id> URL both partners cache so
+    # either can start a Listen Together from a local copy. NULL = title-only.
+    audio_url = Column(String, nullable=True)
     # How this track entered the soundtrack: manual | share | listen_together |
     # question | dedication. Drives the little source chip in the UI.
     source = Column(String, nullable=False, default="manual",

@@ -559,6 +559,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_fullCacheKey, jsonEncode(full));
       } catch (_) {}
+      // Cache any shared crate audio so Listen Together quick-starts.
+      _prefetchPlaylistAudio();
     }
     // Reconcile the device's pinned-plan reminders with the current diary.
     _syncReminders();
@@ -649,7 +651,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   /// Open a live session as host playing `path` for the partner in sync. Shared
   /// by the Listen-together button, the tune-in card, and the playlist rows.
-  Future<void> _hostSession(String path, int startPos) async {
+  Future<void> _hostSession(String path, int startPos,
+      {String? titleOverride}) async {
     final others = _others;
     if (others.isEmpty) return;
     final partner = others.first;
@@ -688,7 +691,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         myUserId: myUserId,
         receiverId: partnerId,
         audioBytes: bytes,
-        title: _songTitle(path),
+        title: titleOverride ?? _songTitle(path),
         peerName: partnerName,
         startPositionMs: startPos,
       ),
@@ -961,18 +964,70 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       builder: (_) => _PlaylistAddSheet(accent: _accent),
     );
     if (result == null) return;
+    final ref = (result['ref'] ?? '').toString();
+    String? audioUrl;
+    // If the adder has the actual file, upload its bytes (ephemeral) so the
+    // partner's device can cache it and EITHER of us can start a Listen
+    // Together from a local copy — no fresh byte-streaming per session.
+    if (!kIsWeb && ref.isNotEmpty) {
+      try {
+        final bytes = await readFileBytes(ref);
+        if (bytes.isNotEmpty) {
+          if (mounted) {
+            showToast(context, 'Sharing the song with your partner…',
+                type: ToastType.info);
+          }
+          final up = await ApiService().uploadMedia(
+            bytes: bytes,
+            filename: ref.split(RegExp(r'[\\/]+')).last,
+            mime: _audioMimeFor(ref),
+            ephemeral: true,
+          );
+          if (up != null && up['url'] != null) {
+            audioUrl = up['url'] as String;
+          }
+        }
+      } catch (_) {}
+    }
     final saved = await ApiService().addTrack(
       _id,
       title: (result['title'] ?? '').toString(),
       artist: result['artist'] as String?,
       ref: result['ref'] as String?,
+      audioUrl: audioUrl,
     );
     if (!mounted) return;
     if (saved != null) {
       showToast(context, 'Added to your playlist 🎶', type: ToastType.success);
       _load();
+      _prefetchPlaylistAudio();
     } else {
       showToast(context, 'Could not add that track', type: ToastType.error);
+    }
+  }
+
+  String _audioMimeFor(String path) {
+    final e = path.toLowerCase();
+    if (e.endsWith('.mp3')) return 'audio/mpeg';
+    if (e.endsWith('.m4a') || e.endsWith('.aac')) return 'audio/mp4';
+    if (e.endsWith('.wav')) return 'audio/wav';
+    if (e.endsWith('.ogg')) return 'audio/ogg';
+    if (e.endsWith('.flac')) return 'audio/flac';
+    return 'audio/mpeg';
+  }
+
+  // Cache every crate track that has shared audio, so a Listen Together can
+  // quick-start from the local copy on either partner's device.
+  void _prefetchPlaylistAudio() {
+    if (kIsWeb) return;
+    final tracks =
+        ((_space['playlist'] as List?) ?? const []).whereType<Map>();
+    for (final t in tracks) {
+      final au = (t['audio_url'] ?? '').toString().trim();
+      if (au.isEmpty) continue;
+      final full = resolveAvatarUrl(au, widget.apiBase) ?? au;
+      // Fire-and-forget: download + cache; ignore failures.
+      MediaStore.instance.getFile(full, mediaAuthHeaders(full));
     }
   }
 
@@ -994,9 +1049,25 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   /// (matched by title), host it in sync; otherwise nudge me to load it first.
   Future<void> _playCrateTrack(Map<String, dynamic> track) async {
     final title = (track['title'] ?? '').toString().trim();
+    final audioUrl = (track['audio_url'] ?? '').toString().trim();
+    // Shared durable audio: EITHER partner can start from the cached copy,
+    // whether or not they have the song in their own library.
+    if (!kIsWeb && audioUrl.isNotEmpty) {
+      final full = resolveAvatarUrl(audioUrl, widget.apiBase) ?? audioUrl;
+      if (mounted) {
+        showToast(context, 'Getting the song ready…', type: ToastType.info);
+      }
+      final f =
+          await MediaStore.instance.getFile(full, mediaAuthHeaders(full));
+      if (!mounted) return;
+      if (f != null) {
+        await _hostSession(f.path, 0,
+            titleOverride: title.isEmpty ? null : title);
+        return;
+      }
+    }
     final ref = (track['ref'] ?? '').toString().trim();
-    // Prefer the adder's exact path if it happens to exist in my library, else
-    // fall back to matching by title.
+    // Fall back to the adder's local path / a title match in my own library.
     final local = _localPathFor(ref, title);
     if (local == null) {
       showToast(

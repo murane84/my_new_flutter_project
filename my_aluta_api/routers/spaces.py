@@ -62,6 +62,7 @@ class _TrackBody(BaseModel):
     ref: Optional[str] = None
     memo: Optional[str] = None
     source: Optional[str] = None
+    audio_url: Optional[str] = None
 
 
 class _MemoBody(BaseModel):
@@ -529,6 +530,7 @@ def _track_dict(db: Session, t: PlaylistTrack, current_user_id: int) -> dict:
         "title": t.title,
         "artist": t.artist,
         "ref": t.ref,
+        "audio_url": t.audio_url,
         "added_by": t.added_by,
         "added_by_username": adder.username if adder else None,
         "mine": t.added_by == current_user_id,
@@ -571,6 +573,7 @@ def _notify_partner_playlist(db: Session, space: RelationshipSpace,
                 "from_username": who,
                 "title": track.title,
                 "artist": track.artist,
+                "audio_url": track.audio_url,
                 "memo": track.memo,
                 "source": track.source,
                 "line": line,
@@ -587,6 +590,29 @@ def _notify_partner_playlist(db: Session, space: RelationshipSpace,
             })
         except Exception:
             pass
+
+
+def _notify_partner_playlist_remove(db: Session, space: RelationshipSpace,
+                                    current_user: User, track_id: int,
+                                    title: str) -> None:
+    """Tell the partner a track left the shared crate so their open playlist
+    refreshes — the list stays in sync for both. Socket only (no push; a
+    removal is quiet). Best-effort."""
+    partner = _partner_id(space, current_user.id)
+    if not partner:
+        return
+    try:
+        safe_notify_user(partner, {
+            "type": "space_playlist_remove",
+            "data": {
+                "space_id": space.id,
+                "track_id": track_id,
+                "from_id": current_user.id,
+                "title": title,
+            },
+        })
+    except Exception:
+        pass
 
 
 _VALID_DIARY_KINDS = {"memory", "plan"}
@@ -1400,13 +1426,13 @@ _VALID_TRACK_SOURCES = {"manual", "share", "listen_together",
 
 def _upsert_soundtrack_track(db: Session, pk: str, user_id: int, title: str,
                              artist=None, ref=None, source="manual",
-                             memo=None):
+                             memo=None, audio_url=None):
     """Add a track to the bond's soundtrack, de-duping on title+artist. Thin
     wrapper over bonding.record_soundtrack_track so every feed (manual, share,
     listen-together, question, dedication) goes through one place."""
     src = source if source in _VALID_TRACK_SOURCES else "manual"
     return bonding.record_soundtrack_track(
-        db, pk, user_id, title, artist, ref, src, memo)
+        db, pk, user_id, title, artist, ref, src, memo, audio_url)
 
 @router.get("/{space_id}/playlist")
 def get_playlist(
@@ -1437,6 +1463,7 @@ def add_track(
     track, created = _upsert_soundtrack_track(
         db, pk, current_user.id, payload.title, payload.artist, payload.ref,
         source=(payload.source or "manual"), memo=payload.memo,
+        audio_url=payload.audio_url,
     )
     if track is None:
         raise HTTPException(status_code=400, detail="A track needs a title")
@@ -1468,12 +1495,14 @@ def remove_track(
     # (avoids a spurious "could not remove" on a double-tap or stale list).
     if not track:
         return {"ok": True, "already": True}
+    _title = track.title
     try:
         db.delete(track)
         db.commit()
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="Could not remove track")
+    _notify_partner_playlist_remove(db, space, current_user, track_id, _title)
     return {"ok": True}
 
 

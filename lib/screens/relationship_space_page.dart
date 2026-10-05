@@ -77,6 +77,29 @@ const Map<String, Color> kSpacePalette = {
   'neon_lime': Color(0xFFC6FF00),
   'neon_yellow': Color(0xFFFFE500),
   'neon_orange': Color(0xFFFF7A00),
+  // — appended batch: softer pastels + richer mids for more variety —
+  'crimson': Color(0xFFE11D48),
+  'punch': Color(0xFFF43F5E),
+  'blush': Color(0xFFFDA4AF),
+  'peach': Color(0xFFFFB4A2),
+  'apricot': Color(0xFFFFB877),
+  'marigold': Color(0xFFF6A609),
+  'honey': Color(0xFFFFD166),
+  'mint': Color(0xFF6EE7B7),
+  'sea': Color(0xFF2DD4BF),
+  'aqua': Color(0xFF22D3EE),
+  'azure': Color(0xFF3B82F6),
+  'denim': Color(0xFF4F6FE5),
+  'periwinkle': Color(0xFF9DA8FF),
+  'lavender': Color(0xFFC4B5FD),
+  'plum': Color(0xFF8B5CF6),
+  'mauve': Color(0xFFC084FC),
+  'bubblegum': Color(0xFFFF7AC6),
+  'flamingo': Color(0xFFFF6FA3),
+  'moss': Color(0xFF5FA14A),
+  'olive': Color(0xFF9EB23B),
+  'graphite': Color(0xFF475569),
+  'steel': Color(0xFF7C8AA0),
 };
 
 Color spaceThemeColor(String? key) => kSpacePalette[key] ?? const Color(0xFFFF5A5F);
@@ -7191,7 +7214,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                   duration: const Duration(milliseconds: 160),
                   clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
-                    color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                    color: scheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: selected
@@ -7322,6 +7345,37 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                 letterSpacing: 0.6,
                 color: scheme.onSurfaceVariant)),
       );
+
+  // An OPAQUE card colour so sections sit cleanly over the wallpaper backdrop
+  // (no translucent bleed). Slightly lifted in dark mode.
+  Color _cardColor(ColorScheme scheme) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return dark
+        ? Color.alphaBlend(Colors.white.withValues(alpha: 0.06), scheme.surface)
+        : scheme.surface;
+  }
+
+  // A modern grouped section: opaque fill, hairline border, soft shadow.
+  Widget _card(ColorScheme scheme, Widget child, {EdgeInsetsGeometry? padding}) {
+    return Container(
+      width: double.infinity,
+      padding: padding ?? const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _cardColor(scheme),
+        borderRadius: BorderRadius.circular(18),
+        border:
+            Border.all(color: scheme.outlineVariant.withValues(alpha: 0.35)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
 
   /// A theme swatch with a clean COLOURED halo (outer ring in the swatch's own
   /// colour + a white gap) when picked — softer and more premium than the old
@@ -7475,6 +7529,10 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+          _card(scheme, Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
           _label(scheme, 'NAME'),
           TextField(
             controller: _c,
@@ -7494,7 +7552,13 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
               ),
             ),
           ),
-          const SizedBox(height: 20),
+            ],
+          )),
+          const SizedBox(height: 14),
+          _card(scheme, Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
           _label(scheme, 'THEME'),
           Wrap(
             spacing: 14,
@@ -7503,7 +7567,13 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
               for (final entry in kSpacePalette.entries) _swatch(entry),
             ],
           ),
-          const SizedBox(height: 20),
+            ],
+          )),
+          const SizedBox(height: 14),
+          _card(scheme, Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
           Row(
             children: [
               _label(scheme, 'BACKGROUND'),
@@ -7576,16 +7646,14 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          // Hero row, grouped on a soft surface. Already-hero shows a clear
+            ],
+          )),
+          const SizedBox(height: 14),
+          // Hero row as its own opaque card. Already-hero shows a clear
           // "Leading" badge instead of a dead, greyed-out toggle.
-          Container(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Row(
+          _card(
+            scheme,
+            Row(
               children: [
                 Icon(Icons.workspace_premium_rounded, size: 20, color: accent),
                 const SizedBox(width: 12),
@@ -7667,17 +7735,18 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
           // Danger zone — Unpin set apart in a faint red panel so it reads as
           // the destructive action, not just another link.
           Material(
-            color: scheme.error.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(14),
+            color: _cardColor(scheme),
+            borderRadius: BorderRadius.circular(16),
             child: InkWell(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
               onTap: _busy ? null : () => Navigator.pop(context, 'unpin'),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
+                  color: scheme.error.withValues(alpha: 0.055),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                      color: scheme.error.withValues(alpha: 0.20)),
+                      color: scheme.error.withValues(alpha: 0.28)),
                 ),
                 child: Row(
                   children: [

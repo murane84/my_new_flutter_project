@@ -489,18 +489,26 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   String get _fullCacheKey => 'space_full_${_id}_v1';
 
-  Future<void> _load() async {
+  Future<void> _load({bool keepCurrent = false}) async {
     // Cache-first: paint the last full copy (diary, moments, playlist…)
     // instantly so the page never opens empty or waits on the server, then
     // refresh in the background. Local-first: the device holds the data.
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_fullCacheKey);
-      if (raw != null && mounted) {
-        final cached = (jsonDecode(raw) as Map).cast<String, dynamic>();
-        setState(() => _space = {..._space, ...cached});
-      }
-    } catch (_) {}
+    //
+    // keepCurrent: set right after saving settings. The page already shows the
+    // freshly-saved theme/wallpaper from the optimistic update, so we skip the
+    // cache-paint — repainting from the stale cached copy would flip the page
+    // back to the OLD theme/wallpaper for a moment until the network refresh
+    // lands (the "few seconds then it changes" delay). Go straight to refresh.
+    if (!keepCurrent) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final raw = prefs.getString(_fullCacheKey);
+        if (raw != null && mounted) {
+          final cached = (jsonDecode(raw) as Map).cast<String, dynamic>();
+          setState(() => _space = {..._space, ...cached});
+        }
+      } catch (_) {}
+    }
     final full = await ApiService().getSpace(_id);
     if (!mounted) return;
     if (full != null) {
@@ -940,14 +948,14 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         initialBackgroundUrl: _space['background_url'] as String?,
         apiBase: widget.apiBase,
         onSpaceUpdated: (m) {
-          if (mounted) setState(() => _space = m);
+          if (mounted) setState(() => _space = {..._space, ...m});
         },
       ),
       ),
     );
     if (!mounted) return;
     if (result == 'saved') {
-      await _load();
+      await _load(keepCurrent: true);
       widget.onChanged?.call();
     } else if (result == 'unpin') {
       // Unpin now lives inside settings; run the same confirm-and-remove flow.
@@ -6835,9 +6843,14 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
           ? widget.initialBackgroundUrl
           : null;
   bool _busy = false;
-  bool _bgBusy = false;
+  // A background change previews LOCALLY and only applies to the whole Our
+  // Space on Save. A freshly-picked photo is held as bytes until then.
+  Uint8List? _pendingBytes;
+  String? _pendingName;
+  String? _pendingMime;
+  bool _bgDirty = false;
 
-  Future<void> _pickBackground() async {
+  Future<void> _pickPhoto() async {
     FilePickerResult? res;
     try {
       res = await FilePicker.pickFiles(type: FileType.image);
@@ -6847,7 +6860,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     if (res == null || res.files.isEmpty) return;
     final f = res.files.single;
     final bytes = await f.readAsBytes();
-    if (bytes.isEmpty) return;
+    if (bytes.isEmpty || !mounted) return;
     final name = f.name;
     final ext = name.contains('.') ? name.split('.').last.toLowerCase() : 'jpg';
     final mime = ext == 'png'
@@ -6857,34 +6870,22 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
             : ext == 'gif'
                 ? 'image/gif'
                 : 'image/jpeg';
-    setState(() => _bgBusy = true);
-    final updated = await ApiService()
-        .uploadSpaceBackground(widget.spaceId, bytes, filename: name, mime: mime);
-    if (!mounted) return;
+    // Preview only — the photo is uploaded on Save.
     setState(() {
-      _bgBusy = false;
-      if (updated != null) {
-        _bgUrl = updated['background_url'] as String?;
-        if ((_bgUrl ?? '').startsWith('/attachments/')) _lastPhotoUrl = _bgUrl;
-      }
+      _pendingBytes = bytes;
+      _pendingName = name;
+      _pendingMime = mime;
+      _bgUrl = '__pending_photo__';
+      _bgDirty = true;
     });
-    if (updated != null) {
-      widget.onSpaceUpdated?.call(updated);
-    } else {
-      showToast(context, 'Could not set that background', type: ToastType.error);
-    }
   }
 
-  Future<void> _removeBackground() async {
-    if ((_bgUrl ?? '').isEmpty) return;
-    setState(() => _bgBusy = true);
-    final updated = await ApiService().clearSpaceBackground(widget.spaceId);
-    if (!mounted) return;
+  void _selectDefault() {
     setState(() {
-      _bgBusy = false;
-      if (updated != null) _bgUrl = updated['background_url'] as String?;
+      _bgUrl = null;
+      _pendingBytes = null;
+      _bgDirty = true;
     });
-    if (updated != null) widget.onSpaceUpdated?.call(updated);
   }
 
   Future<void> _openSpaceGallery() async {
@@ -6908,41 +6909,34 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     );
     if (!mounted || pickedId == null) return;
     if (pickedId == '__upload__') {
-      await _pickBackground();
+      await _pickPhoto();
       return;
     }
-    await _applyPreset(pickedId);
+    _selectPreset(pickedId);
   }
 
-  Future<void> _applyPreset(String id) async {
-    setState(() => _bgBusy = true);
-    final updated = await ApiService()
-        .updateSpace(widget.spaceId, backgroundUrl: '/wallpapers/$id');
-    if (!mounted) return;
+  void _selectPreset(String id) {
     setState(() {
-      _bgBusy = false;
-      if (updated != null) {
-        _bgUrl = updated['background_url'] as String?;
-        if ((_bgUrl ?? '').startsWith('/wallpapers/')) _lastGalleryUrl = _bgUrl;
-      }
+      _bgUrl = '/wallpapers/$id';
+      _lastGalleryUrl = _bgUrl;
+      _pendingBytes = null;
+      _bgDirty = true;
     });
-    if (updated != null) {
-      widget.onSpaceUpdated?.call(updated);
-    } else {
-      showToast(context, 'Could not set that wallpaper',
-          type: ToastType.error);
-    }
   }
 
   /// Instantly re-apply the last-used gallery wallpaper (a preset — allowed by
   /// the server without a re-upload). Falls back to opening the picker.
-  Future<void> _reapplyGallery() async {
+  void _selectLastGallery() {
     final url = _lastGalleryUrl;
     if (url == null || !url.startsWith('/wallpapers/')) {
-      await _openSpaceGallery();
+      _openSpaceGallery();
       return;
     }
-    await _applyPreset(url.split('/').last);
+    setState(() {
+      _bgUrl = url;
+      _pendingBytes = null;
+      _bgDirty = true;
+    });
   }
 
   Widget _bgOption(ColorScheme scheme,
@@ -7055,6 +7049,25 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
 
   Future<void> _save() async {
     setState(() => _busy = true);
+    // Apply the previewed background choice now — this is what makes it take
+    // effect on the whole Our Space page for this bond.
+    Map<String, dynamic>? bgUpdated;
+    if (_bgDirty) {
+      if (_pendingBytes != null) {
+        bgUpdated = await ApiService().uploadSpaceBackground(
+          widget.spaceId,
+          _pendingBytes!,
+          filename: _pendingName ?? 'background.jpg',
+          mime: _pendingMime ?? 'image/jpeg',
+        );
+      } else if ((_bgUrl ?? '').startsWith('/wallpapers/')) {
+        bgUpdated = await ApiService()
+            .updateSpace(widget.spaceId, backgroundUrl: _bgUrl);
+      } else if ((_bgUrl ?? '').isEmpty) {
+        bgUpdated = await ApiService().clearSpaceBackground(widget.spaceId);
+      }
+      if (!mounted) return;
+    }
     final ok = await ApiService().updateSpace(
       widget.spaceId,
       name: _c.text.trim(),
@@ -7064,7 +7077,10 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     );
     if (!mounted) return;
     setState(() => _busy = false);
-    Navigator.pop(context, ok != null ? 'saved' : null);
+    final updated = ok ?? bgUpdated;
+    if (updated != null) widget.onSpaceUpdated?.call(updated);
+    Navigator.pop(
+        context, (ok != null || bgUpdated != null) ? 'saved' : null);
   }
 
   Widget _label(ColorScheme scheme, String t) => Padding(
@@ -7122,11 +7138,17 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
   Widget _settingsBackdrop(ColorScheme scheme, Color accent) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final url = (_bgUrl ?? '').trim();
-    final isPhoto = url.startsWith('/wallpapers/') ||
+    final isPhotoUrl = url.startsWith('/wallpapers/') ||
         url.startsWith('/attachments/') ||
         url.startsWith('http');
-    if (isPhoto) {
+    ImageProvider? provider;
+    if (_pendingBytes != null) {
+      provider = MemoryImage(_pendingBytes!);
+    } else if (isPhotoUrl) {
       final full = resolveAvatarUrl(url, widget.apiBase) ?? url;
+      provider = authNetworkImageProvider(full, mediaAuthHeaders(full));
+    }
+    if (provider != null) {
       final veil = isDark ? Colors.black : Colors.white;
       return Stack(
         fit: StackFit.expand,
@@ -7135,8 +7157,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
           DecoratedBox(
             decoration: BoxDecoration(
               image: DecorationImage(
-                image:
-                    authNetworkImageProvider(full, mediaAuthHeaders(full)),
+                image: provider,
                 fit: BoxFit.cover,
                 onError: (Object e, StackTrace? st) {},
               ),
@@ -7256,7 +7277,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
           Row(
             children: [
               _label(scheme, 'BACKGROUND'),
-              if (_bgBusy) ...[
+              if (_busy) ...[
                 const SizedBox(width: 8),
                 const SizedBox(
                     width: 14,
@@ -7271,7 +7292,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
               _bgOption(
                 scheme,
                 selected: (_bgUrl ?? '').isEmpty,
-                onTap: _bgBusy ? null : _removeBackground,
+                onTap: _busy ? null : _selectDefault,
                 label: 'Default',
                 icon: Icons.auto_awesome_rounded,
               ),
@@ -7281,14 +7302,14 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                 selected: (_bgUrl ?? '').startsWith('/wallpapers/'),
                 // Tap re-applies the last wallpaper instantly; tap again while
                 // active (or when none is remembered yet) opens the picker.
-                onTap: _bgBusy
+                onTap: _busy
                     ? null
                     : () {
                         if ((_bgUrl ?? '').startsWith('/wallpapers/') ||
                             _lastGalleryUrl == null) {
                           _openSpaceGallery();
                         } else {
-                          _reapplyGallery();
+                          _selectLastGallery();
                         }
                       },
                 label: 'Gallery',
@@ -7302,21 +7323,26 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
               const SizedBox(width: 12),
               _bgOption(
                 scheme,
-                selected: (_bgUrl ?? '').startsWith('/attachments/'),
-                onTap: _bgBusy ? null : _pickBackground,
+                selected: _bgUrl == '__pending_photo__' ||
+                    (_bgUrl ?? '').startsWith('/attachments/'),
+                onTap: _busy ? null : _pickPhoto,
                 label: 'Your photo',
                 icon: Icons.add_photo_alternate_outlined,
-                thumbnail: (_lastPhotoUrl ?? '').isNotEmpty
-                    ? authNetworkImage(
-                        url: resolveAvatarUrl(_lastPhotoUrl, widget.apiBase) ??
-                            '',
-                        headers: mediaAuthHeaders(
-                            resolveAvatarUrl(_lastPhotoUrl, widget.apiBase) ??
+                thumbnail: _pendingBytes != null
+                    ? Image.memory(_pendingBytes!, fit: BoxFit.cover)
+                    : ((_lastPhotoUrl ?? '').isNotEmpty
+                        ? authNetworkImage(
+                            url: resolveAvatarUrl(
+                                    _lastPhotoUrl, widget.apiBase) ??
+                                '',
+                            headers: mediaAuthHeaders(resolveAvatarUrl(
+                                    _lastPhotoUrl, widget.apiBase) ??
                                 ''),
-                        fit: BoxFit.cover,
-                      )
-                    : null,
-                dim: !(_bgUrl ?? '').startsWith('/attachments/'),
+                            fit: BoxFit.cover,
+                          )
+                        : null),
+                dim: !(_bgUrl == '__pending_photo__' ||
+                    (_bgUrl ?? '').startsWith('/attachments/')),
               ),
             ],
           ),

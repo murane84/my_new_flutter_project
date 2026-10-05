@@ -7116,6 +7116,69 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     );
   }
 
+  /// The settings page wears the CURRENT background choice live — the chosen
+  /// wallpaper (or the theme colour's wash when on "Default") — with a veil so
+  /// the form stays readable, so you can see your pick take effect right here.
+  Widget _settingsBackdrop(ColorScheme scheme, Color accent) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final url = (_bgUrl ?? '').trim();
+    final isPhoto = url.startsWith('/wallpapers/') ||
+        url.startsWith('/attachments/') ||
+        url.startsWith('http');
+    if (isPhoto) {
+      final full = resolveAvatarUrl(url, widget.apiBase) ?? url;
+      final veil = isDark ? Colors.black : Colors.white;
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          ColoredBox(color: scheme.surface),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              image: DecorationImage(
+                image:
+                    authNetworkImageProvider(full, mediaAuthHeaders(full)),
+                fit: BoxFit.cover,
+                onError: (Object e, StackTrace? st) {},
+              ),
+            ),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  veil.withValues(alpha: isDark ? 0.52 : 0.64),
+                  veil.withValues(alpha: isDark ? 0.44 : 0.54),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ColoredBox(color: scheme.surface),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                accent.withValues(alpha: 0.12),
+                accent.withValues(alpha: 0.0),
+                accent.withValues(alpha: 0.08),
+              ],
+              stops: const [0.0, 0.5, 1.0],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -7123,10 +7186,13 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     // The settings preview the CHOSEN theme live: the picked swatch, the Save
     // button and the Hero switch all adopt this colour as you tap around.
     final accent = spaceThemeColor(_theme);
-    return Scaffold(
-      backgroundColor: scheme.surface,
+    return Stack(
+      children: [
+        Positioned.fill(child: _settingsBackdrop(scheme, accent)),
+        Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
-        backgroundColor: scheme.surface,
+        backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         titleSpacing: 0,
@@ -7391,6 +7457,8 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
           ),
         ),
       ),
+        ),
+      ],
     );
   }
 }

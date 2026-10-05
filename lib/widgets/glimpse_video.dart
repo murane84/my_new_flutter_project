@@ -295,6 +295,11 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
             ? widget.aspectRatioFallback
             : c.value.aspectRatio)
         : widget.aspectRatioFallback;
+    // Keep the card compact and always show the WHOLE frame. The stage ratio is
+    // clamped to a sane band so a tall portrait clip can't blow the card up, and
+    // the video is letterboxed inside it (BoxFit.contain) rather than cropped —
+    // portrait or landscape, the full frame is visible on the black stage.
+    final stageAr = ar.clamp(0.72, 16 / 9).toDouble();
     final playing = ready && c.value.isPlaying;
     final durLabel = _durLabel();
 
@@ -306,12 +311,23 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(widget.borderRadius),
           child: AspectRatio(
-            aspectRatio: ar,
+            aspectRatio: stageAr,
             child: Stack(
               fit: StackFit.expand,
               children: [
                 const ColoredBox(color: Colors.black),
-                if (ready) VideoPlayer(c),
+                if (ready)
+                  Center(
+                    child: FittedBox(
+                      fit: BoxFit.contain,
+                      child: SizedBox(
+                        width: c.value.size.width > 0 ? c.value.size.width : 16,
+                        height:
+                            c.value.size.height > 0 ? c.value.size.height : 9,
+                        child: VideoPlayer(c),
+                      ),
+                    ),
+                  ),
                 // Subtle video glyph on the placeholder (not yet on device).
                 if (!ready && !_downloading && !_error)
                   Center(

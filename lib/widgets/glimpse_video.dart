@@ -1,19 +1,27 @@
 import 'dart:async';
+import 'dart:io' show File;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-/// A video that NEVER shows a black box: it loads a real poster frame, and when
-/// it lingers in view it plays a SILENT glimpse — the first ~quarter, looped
-/// twice — then settles back to the poster (just like pausing your scroll on a
-/// social feed). Tapping plays it for real, WITH sound; the fullscreen button
-/// opens [onFullscreen]. Shared by Our Space moments AND chat so the behaviour
-/// is identical everywhere.
+import '../services/media_store.dart';
+
+/// A data-friendly video tile that plays from the DEVICE, never by live
+/// streaming. Behaviour:
 ///
-/// The poster + glimpse are intentionally always-on (they ignore any future
-/// "auto-download" media setting); only full, with-sound playback waits for a
-/// tap.
+///  * Not on the device yet → a tidy poster placeholder with a play button
+///    ("Tap to play") — nothing is downloaded, so scrolling past a video costs
+///    nothing.
+///  * Tap → downloads the clip once (cached via [MediaStore]) with a
+///    "Downloading…" state, then plays it from the local file WITH sound.
+///  * Once cached → a real poster frame, and when the tile lingers in view it
+///    plays a SILENT glimpse (first ~quarter, looped twice) straight from the
+///    device, then settles back to the poster.
+///
+/// On web (no device cache) it falls back to streaming on tap. Shared by Our
+/// Space moments and chat so the experience is identical.
 class GlimpseVideo extends StatefulWidget {
   const GlimpseVideo({
     super.key,
@@ -42,12 +50,14 @@ class GlimpseVideo extends StatefulWidget {
 
 class _GlimpseVideoState extends State<GlimpseVideo> {
   VideoPlayerController? _c;
-  // A stable, unique key for the visibility detector (per widget instance).
+  File? _file; // local cached copy (native)
   late final Key _visKey = Key('glimpse_${identityHashCode(this)}');
+  bool _checkedCache = false;
   bool _initing = false;
   bool _ready = false;
   bool _error = false;
-  bool _tapped = false; // the user tapped to play for real (with sound)
+  bool _downloading = false;
+  bool _tapped = false; // the user tapped to play with sound
   bool _glimpsing = false;
   int _glimpseLoops = 0;
   bool _lastPlaying = false;
@@ -55,9 +65,14 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
   Timer? _dwellTimer;
   double _frac = 0;
 
-  // How much of the clip the silent glimpse plays, and how many times.
   static const double _glimpseFraction = 0.25;
   static const int _maxGlimpseLoops = 2;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkCache();
+  }
 
   @override
   void dispose() {
@@ -70,22 +85,38 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
     super.dispose();
   }
 
+  // If the clip is ALREADY on the device, load the poster (+ enable glimpse)
+  // from it. Never downloads here — that only happens on an explicit tap.
+  Future<void> _checkCache() async {
+    if (_checkedCache || kIsWeb) return;
+    _checkedCache = true;
+    try {
+      final f = await MediaStore.instance.cached(widget.url);
+      if (f != null && mounted) {
+        _file = f;
+        await _ensureController();
+      }
+    } catch (_) {}
+  }
+
   Future<void> _ensureController() async {
     if (_c != null || _initing || _error) return;
+    if (!kIsWeb && _file == null) return; // native needs a local file first
     _initing = true;
-    final c = VideoPlayerController.networkUrl(
-      Uri.parse(widget.url),
-      httpHeaders: widget.headers,
-    );
+    final c = (!kIsWeb && _file != null)
+        ? VideoPlayerController.file(_file!)
+        : VideoPlayerController.networkUrl(
+            Uri.parse(widget.url),
+            httpHeaders: widget.headers,
+          );
     try {
-      await c.initialize();
+      await c.initialize().timeout(const Duration(seconds: 25));
       if (!mounted) {
         c.dispose();
         return;
       }
       await c.setVolume(0);
       await c.setLooping(false);
-      // Poster = a representative early frame (frame 0 is often black/fade-in).
       final durMs = c.value.duration.inMilliseconds;
       final posterMs =
           durMs > 0 ? (durMs * 0.1).clamp(300, 2000).round() : 1200;
@@ -101,8 +132,7 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
         _ready = true;
         _initing = false;
       });
-      // Already dwelling when it finished loading? Start the glimpse now.
-      if (_frac >= 0.8) _maybeStartGlimpse();
+      if (_frac >= 0.8 && !_tapped) _maybeStartGlimpse();
     } catch (_) {
       _initing = false;
       try {
@@ -115,7 +145,6 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
   void _tick() {
     final c = _c;
     if (c == null || !c.value.isInitialized) return;
-    // Loop the first quarter while glimpsing; stop after _maxGlimpseLoops.
     if (_glimpsing && c.value.isPlaying) {
       final durMs = c.value.duration.inMilliseconds;
       final quarterMs =
@@ -129,7 +158,6 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
         }
       }
     }
-    // Repaint only when play/pause actually flips (not every frame).
     final p = c.value.isPlaying;
     if (p != _lastPlaying) {
       _lastPlaying = p;
@@ -138,7 +166,10 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
   }
 
   void _maybeStartGlimpse() {
-    if (!_ready || _tapped || _glimpsing || _glimpseLoops >= _maxGlimpseLoops) {
+    if (!_ready ||
+        _tapped ||
+        _glimpsing ||
+        _glimpseLoops >= _maxGlimpseLoops) {
       return;
     }
     final c = _c;
@@ -162,15 +193,13 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
 
   void _onVisibility(double frac) {
     _frac = frac;
-    if (frac >= 0.5) {
-      _ensureController();
-    }
+    // Only ever glimpse something that's already on the device (or web stream
+    // that's already initialised). Never kick off a download from scrolling.
     if (frac >= 0.8 &&
         _ready &&
         !_tapped &&
         !_glimpsing &&
         _glimpseLoops < _maxGlimpseLoops) {
-      // A short dwell so a fast scroll past doesn't trigger a glimpse.
       _dwellTimer?.cancel();
       _dwellTimer = Timer(const Duration(milliseconds: 450), () {
         if (mounted && _frac >= 0.8) _maybeStartGlimpse();
@@ -180,12 +209,10 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
       final c = _c;
       if (c != null && c.value.isPlaying) {
         if (!_tapped) {
-          // Left the viewport mid-glimpse → settle back to the poster.
           _glimpsing = false;
           c.pause();
           c.seekTo(_posterPos);
         } else {
-          // User's real playback pauses when it scrolls away.
           c.pause();
         }
         if (mounted) setState(() {});
@@ -193,17 +220,11 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
     }
   }
 
-  Future<void> _onTap() async {
-    if (_error) {
-      widget.onFullscreen?.call();
-      return;
-    }
-    if (_c == null || !_ready) await _ensureController();
+  Future<void> _playWithSound() async {
     final c = _c;
     if (c == null) return;
     _dwellTimer?.cancel();
     if (!_tapped) {
-      // First real tap: play from the start, WITH sound.
       _tapped = true;
       _glimpsing = false;
       await c.setVolume(1);
@@ -215,6 +236,47 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
       await c.play();
     }
     if (mounted) setState(() {});
+  }
+
+  Future<void> _onTap() async {
+    if (_error) {
+      widget.onFullscreen?.call();
+      return;
+    }
+    if (_ready && _c != null) {
+      await _playWithSound();
+      return;
+    }
+    if (_downloading || _initing) return;
+    // Need to bring it onto the device first (web just streams).
+    if (kIsWeb) {
+      await _ensureController();
+      await _playWithSound();
+      return;
+    }
+    setState(() => _downloading = true);
+    try {
+      final f = await MediaStore.instance.getFile(widget.url, widget.headers);
+      if (!mounted) return;
+      if (f == null) {
+        setState(() {
+          _downloading = false;
+          _error = true;
+        });
+        return;
+      }
+      _file = f;
+      setState(() => _downloading = false);
+      await _ensureController();
+      await _playWithSound();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _downloading = false;
+          _error = true;
+        });
+      }
+    }
   }
 
   String? _durLabel() {
@@ -250,32 +312,39 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
               children: [
                 const ColoredBox(color: Colors.black),
                 if (ready) VideoPlayer(c),
-                if (!ready && !_error)
+                // Subtle video glyph on the placeholder (not yet on device).
+                if (!ready && !_downloading && !_error)
+                  Center(
+                    child: Icon(Icons.movie_creation_outlined,
+                        size: 34,
+                        color: Colors.white.withValues(alpha: 0.18)),
+                  ),
+                if (_downloading)
                   const Center(
                     child: SizedBox(
                       width: 30,
                       height: 30,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white54),
+                          strokeWidth: 2, color: Colors.white70),
                     ),
                   ),
                 if (_error)
                   const Center(
                     child: Padding(
                       padding: EdgeInsets.all(16),
-                      child: Text("Can't preview — tap to open",
+                      child: Text('Video unavailable — tap to open',
                           textAlign: TextAlign.center,
                           style:
                               TextStyle(color: Colors.white70, fontSize: 12)),
                     ),
                   ),
                 if (ready)
-                  Positioned(
+                  const Positioned(
                     left: 0,
                     right: 0,
                     bottom: 0,
                     height: 46,
-                    child: const IgnorePointer(
+                    child: IgnorePointer(
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
@@ -287,19 +356,31 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
                       ),
                     ),
                   ),
-                // Center play affordance — on the poster / when paused.
-                if (ready && !playing && !_glimpsing)
+                // Play affordance — on the poster, on the placeholder, or paused.
+                if (!_downloading && !_error && !_glimpsing && !playing)
                   Center(
-                    child: Container(
-                      width: 54,
-                      height: 54,
-                      decoration: const BoxDecoration(
-                          color: Colors.black38, shape: BoxShape.circle),
-                      child: const Icon(Icons.play_arrow_rounded,
-                          color: Colors.white, size: 32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 54,
+                          height: 54,
+                          decoration: const BoxDecoration(
+                              color: Colors.black45, shape: BoxShape.circle),
+                          child: const Icon(Icons.play_arrow_rounded,
+                              color: Colors.white, size: 32),
+                        ),
+                        if (!ready) ...[
+                          const SizedBox(height: 8),
+                          const Text('Tap to play',
+                              style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600)),
+                        ],
+                      ],
                     ),
                   ),
-                // Silent-preview chip while glimpsing.
                 if (_glimpsing)
                   Positioned(
                     right: 8,

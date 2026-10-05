@@ -2,7 +2,9 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Response
+from fastapi import (
+    APIRouter, UploadFile, File, Depends, HTTPException, Response, Request,
+)
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -307,6 +309,7 @@ async def upload_media(
 @router.get("/attachments/{asset_id}")
 def get_attachment(
     asset_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_flexible),
 ):
@@ -332,11 +335,49 @@ def get_attachment(
         # CDNs must not cache it; the client may.
         "Cache-Control": "private, max-age=31536000, immutable",
     }
-    return Response(
-        content=asset.data,
-        media_type=asset.mime or "application/octet-stream",
-        headers=headers,
-    )
+    # Serve with HTTP Range support so players (video especially) can start
+    # after the first chunk instead of downloading the whole file first, and
+    # can seek. Falls back to a full 200 when no Range header is present.
+    data = asset.data
+    total = len(data)
+    media_type = asset.mime or "application/octet-stream"
+    range_header = request.headers.get("range") or request.headers.get("Range")
+    if range_header and range_header.strip().lower().startswith("bytes="):
+        try:
+            spec = range_header.split("=", 1)[1].split(",")[0].strip()
+            start_s, _, end_s = spec.partition("-")
+            start = int(start_s) if start_s else 0
+            end = int(end_s) if end_s else total - 1
+            if start < 0:
+                start = 0
+            if end >= total:
+                end = total - 1
+            if start > end or start >= total:
+                return Response(
+                    status_code=416,
+                    headers={
+                        "Content-Range": f"bytes */{total}",
+                        "Accept-Ranges": "bytes",
+                    },
+                )
+            chunk = data[start:end + 1]
+            r_headers = dict(headers)
+            r_headers.update({
+                "Accept-Ranges": "bytes",
+                "Content-Range": f"bytes {start}-{end}/{total}",
+                "Content-Length": str(len(chunk)),
+            })
+            return Response(
+                content=chunk,
+                status_code=206,
+                media_type=media_type,
+                headers=r_headers,
+            )
+        except Exception:
+            pass
+    headers["Accept-Ranges"] = "bytes"
+    headers["Content-Length"] = str(total)
+    return Response(content=data, media_type=media_type, headers=headers)
 
 
 @router.post("/attachments/{asset_id}/cached")

@@ -4,6 +4,7 @@ import 'dart:io' show File;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
@@ -10018,10 +10019,27 @@ class _MomentVideoPlayerState extends State<_MomentVideoPlayer> {
 
   Future<void> _init() async {
     try {
-      final c = VideoPlayerController.networkUrl(
-        Uri.parse(widget.url),
-        httpHeaders: mediaAuthHeaders(widget.url),
-      );
+      VideoPlayerController c;
+      if (!kIsWeb) {
+        // Cache-first, same as the moment tile: play from the device so the
+        // fullscreen view doesn't depend on streaming (which fails on some
+        // platforms with "can't play on this device"). Reuse the cached copy
+        // the tile already downloaded, or fetch it once if missing.
+        File? f = await MediaStore.instance.cached(widget.url);
+        f ??= await MediaStore.instance
+            .getFile(widget.url, mediaAuthHeaders(widget.url));
+        c = f != null
+            ? VideoPlayerController.file(f)
+            : VideoPlayerController.networkUrl(
+                Uri.parse(widget.url),
+                httpHeaders: mediaAuthHeaders(widget.url),
+              );
+      } else {
+        c = VideoPlayerController.networkUrl(
+          Uri.parse(widget.url),
+          httpHeaders: mediaAuthHeaders(widget.url),
+        );
+      }
       await c.initialize();
       if (!mounted) {
         c.dispose();

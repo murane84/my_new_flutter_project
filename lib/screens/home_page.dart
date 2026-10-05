@@ -320,6 +320,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Screenshot / photo shared into Aluta → surface the "pick a chat to send"
     // banner and react if one arrives while Home is already open.
     ShareInbox.instance.addListener(_onSharePending);
+    // Repaint the friend list when the phone-book name map finishes a
+    // (re)read, so saved names appear the moment they load.
+    ContactNames.instance.revision.addListener(_onContactsChanged);
     // Phonebook name map so saved contact names show in the friend list.
     // Deferred ~4s off the first frame (never competes with cold-start render/
     // audio), and allowPrompt so it REQUESTS contacts permission if it isn't
@@ -529,6 +532,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     ConnectionStatus.instance.online.removeListener(_onGlobalConnChanged);
     SessionEvents.instance.expired.removeListener(_onSessionExpired);
     ShareInbox.instance.removeListener(_onSharePending);
+    ContactNames.instance.revision.removeListener(_onContactsChanged);
     playlistDrawerBus.isOpen.removeListener(_onPlaylistDrawerToggled);
     NowPlayingPresence.instance.removeListener(_onPresenceChanged);
     for (final t in _typingTimers.values) {
@@ -2070,6 +2074,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
     setState(() {});
   }
 
+  void _onContactsChanged() {
+    if (mounted) setState(() {});
+  }
+
   /// User tapped a recipient while a share is pending: grab the images, clear
   /// the inbox, and open that chat — it sends them via the preview flow.
   void _sendShareTo({Map<String, dynamic>? friend, Map<String, dynamic>? group}) {
@@ -2093,11 +2101,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// priority the group message headers use, now applied to the friend list and
   /// DMs so a person reads the same everywhere.
   String _contactDisplayName(String? phone, String username) {
+    // Resolve the saved phone-book name by the friend's phone; if that's not
+    // set, fall back to the username — for phone-registered users the username
+    // IS a number, so a saved contact still matches. nameFor ignores strings
+    // with too few digits, so a real-name username safely returns null.
     final p = (phone ?? '').trim();
-    if (p.isNotEmpty) {
-      final saved = ContactNames.instance.nameFor(p);
-      if (saved != null && saved.isNotEmpty) return saved;
-    }
+    final saved = ContactNames.instance.nameFor(p.isNotEmpty ? p : username);
+    if (saved != null && saved.isNotEmpty) return saved;
     return username;
   }
 

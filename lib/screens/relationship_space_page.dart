@@ -2021,27 +2021,14 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           footer: Row(
             children: [
               Expanded(
-                child: FilledButton.icon(
-                  onPressed: _listenTogether,
-                  style: FilledButton.styleFrom(
-                      backgroundColor: _accent,
-                      foregroundColor: Colors.white),
-                  icon: const Icon(Icons.play_arrow_rounded, size: 20),
-                  label: const Text('Listen together'),
-                ),
+                child: _footerPrimary(
+                    'Listen together', Icons.play_arrow_rounded,
+                    _listenTogether),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _addToPlaylist,
-                  style: OutlinedButton.styleFrom(
-                      backgroundColor: scheme.surfaceContainerHighest,
-                      foregroundColor: _accent,
-                      side:
-                          BorderSide(color: _accent.withValues(alpha: 0.6))),
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  label: const Text('Add song'),
-                ),
+                child: _footerSecondary(
+                    scheme, 'Add song', Icons.add_rounded, _addToPlaylist),
               ),
             ],
           ),
@@ -2083,16 +2070,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                           : _momentCard(
                               scheme, item['_d'] as Map<String, dynamic>),
                   ]),
-          footer: SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _sendMoment,
-              style: FilledButton.styleFrom(
-                  backgroundColor: _accent, foregroundColor: Colors.white),
-              icon: const Icon(Icons.favorite_border_rounded, size: 18),
-              label: const Text('Send a moment'),
-            ),
-          ),
+          footer: _footerPrimary(
+              'Send a moment', Icons.favorite_border_rounded, _sendMoment),
         );
       case 'dedications':
         return _sectionPanel(
@@ -2101,16 +2080,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           'Dedications',
           onMenu: onMenu,
           body: _dedicationsBody(scheme),
-          footer: SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _composeDedication,
-              style: FilledButton.styleFrom(
-                  backgroundColor: _accent, foregroundColor: Colors.white),
-              icon: const Icon(Icons.favorite_rounded, size: 18),
-              label: const Text('Dedicate a song'),
-            ),
-          ),
+          footer: _footerPrimary(
+              'Dedicate a song', Icons.favorite_rounded, _composeDedication),
         );
       case 'capsule':
         final capsules = ((_space['capsules'] as List?) ?? const [])
@@ -2127,16 +2098,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
               : Column(children: [
                   for (final c in capsules) _capsuleCard(scheme, c)
                 ]),
-          footer: SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _composeCapsule,
-              style: FilledButton.styleFrom(
-                  backgroundColor: _accent, foregroundColor: Colors.white),
-              icon: const Icon(Icons.schedule_send_rounded, size: 18),
-              label: const Text('Seal a capsule'),
-            ),
-          ),
+          footer: _footerPrimary(
+              'Seal a capsule', Icons.schedule_send_rounded, _composeCapsule),
         );
       default:
         return const SizedBox.shrink();
@@ -2427,12 +2390,103 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             child: body,
           ),
         ),
-        if (footer != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(0, 8, 0, 2),
-            child: footer,
-          ),
+        if (footer != null) _footerBar(footer),
       ],
+    );
+  }
+
+  // One consistent footer shell for every section: centered and capped to a
+  // comfortable width so the action never stretches edge-to-edge on desktop.
+  Widget _footerBar(Widget child) => Padding(
+        padding: const EdgeInsets.fromLTRB(0, 8, 0, 4),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: child,
+          ),
+        ),
+      );
+
+  // The primary footer action — the same cute raised, gradient pill everywhere.
+  Widget _footerPrimary(String label, IconData icon, VoidCallback onTap) {
+    return _PressableRaised(
+      onTap: onTap,
+      radius: 16,
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color.lerp(_accent, Colors.white, 0.14)!,
+          _accent,
+          Color.lerp(_accent, Colors.black, 0.20)!,
+        ],
+      ),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
+      shadows: [
+        BoxShadow(
+          color: _accent.withValues(alpha: 0.42),
+          blurRadius: 16,
+          offset: const Offset(0, 8),
+        ),
+        BoxShadow(
+          color: Colors.white.withValues(alpha: 0.22),
+          blurRadius: 1,
+          spreadRadius: -1,
+          offset: const Offset(0, -1),
+        ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 18, color: Colors.white),
+            const SizedBox(width: 8),
+            Text(label,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14.5)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // The secondary footer action (same height/shape, tonal) — e.g. "Add song".
+  Widget _footerSecondary(
+      ColorScheme scheme, String label, IconData icon, VoidCallback onTap) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final fill = dark
+        ? Color.alphaBlend(Colors.white.withValues(alpha: 0.06), scheme.surface)
+        : scheme.surface;
+    return _PressableRaised(
+      onTap: onTap,
+      radius: 16,
+      gradient: LinearGradient(colors: [fill, fill]),
+      border: Border.all(color: _accent.withValues(alpha: 0.5), width: 1.4),
+      shadows: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.06),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 18, color: _accent),
+            const SizedBox(width: 8),
+            Text(label,
+                style: TextStyle(
+                    color: _accent,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14.5)),
+          ],
+        ),
+      ),
     );
   }
 
@@ -2555,21 +2609,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
               ],
             ),
           ),
-        // Raised 3D write button — full width on a phone, a centred pill capped
-        // at a comfortable width on tablet/desktop so it never stretches edge to
-        // edge on a big screen.
-        Padding(
-          padding: const EdgeInsets.fromLTRB(0, 8, 0, 2),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
-              child: SizedBox(
-                width: double.infinity,
-                child: _diaryWriteButton(scheme),
-              ),
-            ),
-          ),
-        ),
+        // Consistent with every other section's footer action.
+        _footerBar(_footerPrimary(
+            'Write in our diary', Icons.edit_rounded, _addDiaryEntry)),
       ],
     );
   }
@@ -3013,51 +3055,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   /// Edit/Delete menu — only ever shown on the author's own memory.
   /// The raised 3D "Write in our diary" button (gradient body, down-shadow +
   /// top highlight, press-sink) — the app's depth language on the primary CTA.
-  Widget _diaryWriteButton(ColorScheme scheme) {
-    return _PressableRaised(
-      onTap: _addDiaryEntry,
-      radius: 16,
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Color.lerp(_accent, Colors.white, 0.14)!,
-          _accent,
-          Color.lerp(_accent, Colors.black, 0.20)!,
-        ],
-      ),
-      border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
-      shadows: [
-        BoxShadow(
-          color: _accent.withValues(alpha: 0.45),
-          blurRadius: 16,
-          offset: const Offset(0, 8),
-        ),
-        BoxShadow(
-          color: Colors.white.withValues(alpha: 0.22),
-          blurRadius: 1,
-          spreadRadius: -1,
-          offset: const Offset(0, -1),
-        ),
-      ],
-      child: const Padding(
-        padding: EdgeInsets.symmetric(vertical: 14),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.edit_rounded, size: 18, color: Colors.white),
-            SizedBox(width: 8),
-            Text('Write in our diary',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15)),
-          ],
-        ),
-      ),
-    );
-  }
-
   /// The raised 3D comment pill in a memory's footer.
   Widget _diaryCommentPill(
       ColorScheme scheme, int count, VoidCallback onTap,
@@ -5332,8 +5329,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   /// A gentle invitation to carry a pinned moment into Our Diary, where a
   /// partner can write the fuller story behind it.
   Widget _momentDiaryGateway(ColorScheme scheme, Map<String, dynamic> m) {
+    // Centered below the content on every screen size.
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: Alignment.center,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => _addDiaryEntry(fromMoment: m),

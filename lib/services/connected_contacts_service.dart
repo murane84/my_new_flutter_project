@@ -70,10 +70,24 @@ class ConnectedContactsService {
       if (!granted) return;
       final contacts = await FlutterContacts.getContacts(withProperties: true);
       final phones = <String>{};
+      // Digit-keys of numbers that ALREADY have a saved name in the phone book,
+      // so we never overwrite the user's own name for them (we only write a
+      // friend's registered name onto a number that isn't saved under a name).
+      final localNamed = <String>{};
+      String digits(String x) => x.replaceAll(RegExp(r'[^0-9]'), '');
       for (final c in contacts) {
+        final hasName = c.displayName.trim().isNotEmpty;
         for (final p in c.phones) {
           final n = p.number.trim();
-          if (n.length >= 6) phones.add(n);
+          if (n.length < 6) continue;
+          phones.add(n);
+          if (hasName) {
+            final d = digits(n);
+            if (d.length >= 6) {
+              localNamed.add(d);
+              if (d.length >= 9) localNamed.add(d.substring(d.length - 9));
+            }
+          }
         }
       }
       if (phones.isEmpty) return;
@@ -87,10 +101,16 @@ class ConnectedContactsService {
         final phone = (m['phone'] ?? '').toString().trim();
         if (id == null || phone.isEmpty) continue;
         final name = (m['username'] ?? '').toString();
+        final d = digits(phone);
+        final hasLocalName = localNamed.contains(d) ||
+            (d.length >= 9 && localNamed.contains(d.substring(d.length - 9)));
         list.add({
           'userId': id.toString(),
           'number': phone,
           'name': name.isEmpty ? 'Aluta user' : name,
+          // true → the user already named this number; native must NOT write a
+          // name onto it (and should strip any name an older build wrote).
+          'hasLocalName': hasLocalName,
         });
       }
       await _ch.invokeMethod('ensureAccount');

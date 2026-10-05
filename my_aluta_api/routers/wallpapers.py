@@ -70,6 +70,10 @@ _CATALOGUE = [
     ("w33", "Glow Fern"),
     ("w34", "Deep Blue"),
     ("w35", "Aurora Grain"),
+    ("w36", "Golden Moon Tide"),
+    ("w37", "Quiet Light"),
+    ("w38", "Soaring Free"),
+    ("w39", "Crescent Night"),
 ]
 
 _IDS = {wid for wid, _ in _CATALOGUE}

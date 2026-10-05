@@ -10351,6 +10351,7 @@ class _MomentVideoPlayerState extends State<_MomentVideoPlayer> {
         return;
       }
       setState(() => _c = c);
+      c.addListener(_onTick);
       c.setLooping(true);
       c.play();
     } catch (_) {
@@ -10358,8 +10359,94 @@ class _MomentVideoPlayerState extends State<_MomentVideoPlayer> {
     }
   }
 
+  void _onTick() {
+    if (mounted) setState(() {});
+  }
+
+  String _fmtDur(Duration d) {
+    final s = d.inSeconds;
+    return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+  }
+
+  // Fullscreen playback controls: play/pause, ticking time, draggable seek bar.
+  Widget _fsControls(VideoPlayerController c) {
+    final dur = c.value.duration;
+    final pos = c.value.position;
+    final totalMs =
+        dur.inMilliseconds <= 0 ? 1.0 : dur.inMilliseconds.toDouble();
+    final curMs = pos.inMilliseconds.toDouble().clamp(0.0, totalMs);
+    final accent = Theme.of(context).colorScheme.primary;
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+          12, 34, 12, 20 + MediaQuery.of(context).padding.bottom),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [Color(0xE6000000), Color(0x00000000)],
+        ),
+      ),
+      child: Row(
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              if (c.value.isPlaying) {
+                c.pause();
+              } else {
+                final pp = c.value.position;
+                final dd = c.value.duration;
+                if (dd > Duration.zero &&
+                    pp >= dd - const Duration(milliseconds: 250)) {
+                  c.seekTo(Duration.zero);
+                }
+                c.play();
+              }
+              setState(() {});
+            },
+            child: Icon(
+                c.value.isPlaying
+                    ? Icons.pause_rounded
+                    : Icons.play_arrow_rounded,
+                color: Colors.white,
+                size: 30),
+          ),
+          const SizedBox(width: 8),
+          Text(_fmtDur(pos),
+              style: const TextStyle(color: Colors.white, fontSize: 12)),
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3,
+                activeTrackColor: accent,
+                inactiveTrackColor: Colors.white24,
+                thumbColor: Colors.white,
+                overlayColor: accent.withValues(alpha: 0.2),
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                overlayShape:
+                    const RoundSliderOverlayShape(overlayRadius: 14),
+              ),
+              child: Slider(
+                min: 0,
+                max: totalMs,
+                value: curMs,
+                onChanged: (v) {
+                  c.seekTo(Duration(milliseconds: v.round()));
+                  setState(() {});
+                },
+              ),
+            ),
+          ),
+          Text(_fmtDur(dur),
+              style: const TextStyle(color: Colors.white, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
+    _c?.removeListener(_onTick);
     _c?.dispose();
     super.dispose();
   }
@@ -10410,6 +10497,13 @@ class _MomentVideoPlayerState extends State<_MomentVideoPlayer> {
             const Center(
               child: Icon(Icons.play_arrow_rounded,
                   color: Colors.white70, size: 64),
+            ),
+          if (c != null && c.value.isInitialized && !_error)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _fsControls(c),
             ),
           Positioned(
             top: 40,

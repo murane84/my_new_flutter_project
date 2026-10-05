@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io' show File;
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -167,10 +168,10 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
       }
     }
     final p = c.value.isPlaying;
-    if (p != _lastPlaying) {
-      _lastPlaying = p;
-      if (mounted) setState(() {});
-    }
+    final changed = p != _lastPlaying;
+    if (changed) _lastPlaying = p;
+    // Repaint for the scrubber + ticking time while the user is watching.
+    if (mounted && (changed || _tapped)) setState(() {});
   }
 
   void _maybeStartGlimpse() {
@@ -241,6 +242,13 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
     } else if (c.value.isPlaying) {
       await c.pause();
     } else {
+      // Replay from the start if we're sitting at the end.
+      final pos = c.value.position;
+      final dur = c.value.duration;
+      if (dur > Duration.zero &&
+          pos >= dur - const Duration(milliseconds: 250)) {
+        await c.seekTo(Duration.zero);
+      }
       await c.play();
     }
     if (mounted) setState(() {});
@@ -287,6 +295,136 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
     }
   }
 
+  String _fmt(Duration d) {
+    final s = d.inSeconds;
+    final m = s ~/ 60;
+    final ss = (s % 60).toString().padLeft(2, '0');
+    return '$m:$ss';
+  }
+
+  Widget _blob(Color color, double size) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+      );
+
+  // A soft, out-of-focus poster used before a clip is downloaded (and briefly
+  // while a cached clip re-initialises on return) — a gentle accent-tinted blur
+  // instead of a flat black rectangle.
+  Widget _blurPlaceholder() {
+    final a = widget.accent;
+    const base = Color(0xFF15131B);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.alphaBlend(a.withValues(alpha: 0.30), base),
+            base,
+            Color.alphaBlend(
+                a.withValues(alpha: 0.18), const Color(0xFF0C0B10)),
+          ],
+        ),
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned(
+              top: -24,
+              left: -16,
+              child: _blob(a.withValues(alpha: 0.45), 130)),
+          Positioned(
+              bottom: -30,
+              right: -20,
+              child: _blob(a.withValues(alpha: 0.30), 160)),
+          Positioned(
+              top: 28,
+              right: 8,
+              child: _blob(Colors.white.withValues(alpha: 0.06), 90)),
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 34, sigmaY: 34),
+            child: const SizedBox.expand(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // The playback control bar shown once the user taps to watch: play/pause, a
+  // ticking current time, a draggable progress slider, total time, fullscreen.
+  Widget _controlBar(VideoPlayerController c) {
+    final dur = c.value.duration;
+    final pos = c.value.position;
+    final totalMs =
+        dur.inMilliseconds <= 0 ? 1.0 : dur.inMilliseconds.toDouble();
+    final curMs = pos.inMilliseconds.toDouble().clamp(0.0, totalMs);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(6, 20, 6, 4),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [Color(0xCC000000), Color(0x00000000)],
+        ),
+      ),
+      child: Row(
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _playWithSound,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Icon(
+                  c.value.isPlaying
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: 26),
+            ),
+          ),
+          Text(_fmt(pos),
+              style: const TextStyle(color: Colors.white, fontSize: 10.5)),
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 2.5,
+                activeTrackColor: widget.accent,
+                inactiveTrackColor: Colors.white.withValues(alpha: 0.28),
+                thumbColor: Colors.white,
+                overlayColor: widget.accent.withValues(alpha: 0.2),
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape:
+                    const RoundSliderOverlayShape(overlayRadius: 12),
+              ),
+              child: Slider(
+                min: 0,
+                max: totalMs,
+                value: curMs,
+                onChanged: (v) {
+                  c.seekTo(Duration(milliseconds: v.round()));
+                  if (mounted) setState(() {});
+                },
+              ),
+            ),
+          ),
+          Text(_fmt(dur),
+              style: const TextStyle(color: Colors.white, fontSize: 10.5)),
+          if (widget.onFullscreen != null)
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onFullscreen,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4),
+                child: Icon(Icons.fullscreen_rounded,
+                    color: Colors.white, size: 20),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   String? _durLabel() {
     final s = widget.durationSecs ?? 0;
     if (s <= 0) return null;
@@ -323,7 +461,12 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                const ColoredBox(color: Colors.black),
+                // Letterbox base when playing; a soft out-of-focus poster
+                // (not a flat black void) before the clip is on the device and
+                // while an already-cached clip re-initialises on return.
+                ready
+                    ? const ColoredBox(color: Colors.black)
+                    : _blurPlaceholder(),
                 if (ready)
                   Center(
                     child: FittedBox(
@@ -389,7 +532,7 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
                       child: AnimatedOpacity(
                         duration: const Duration(milliseconds: 240),
                         curve: Curves.easeOut,
-                        opacity: playing ? 0.0 : 1.0,
+                        opacity: (_tapped || playing) ? 0.0 : 1.0,
                         child: Container(
                           padding: const EdgeInsets.fromLTRB(14, 28, 14, 12),
                           decoration: const BoxDecoration(
@@ -430,8 +573,13 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
                       ),
                     ),
                   ),
-                // Play affordance — on the poster, on the placeholder, or paused.
-                if (!_downloading && !_error && !_glimpsing && !playing)
+                // Centre play affordance — only on the poster (before the
+                // user engages). Once tapped, the control bar owns play/pause.
+                if (!_tapped &&
+                    !_downloading &&
+                    !_error &&
+                    !_glimpsing &&
+                    !playing)
                   Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -454,6 +602,13 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
                         ],
                       ],
                     ),
+                  ),
+                if (ready && _tapped)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: _controlBar(c!),
                   ),
                 if (_glimpsing)
                   Positioned(
@@ -480,7 +635,7 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
                       ),
                     ),
                   ),
-                if (durLabel != null && !_glimpsing)
+                if (durLabel != null && !_glimpsing && !_tapped)
                   Positioned(
                     left: 8,
                     bottom: 8,
@@ -495,7 +650,7 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
                       ],
                     ),
                   ),
-                if (widget.onFullscreen != null)
+                if (widget.onFullscreen != null && !_tapped)
                   Positioned(
                     right: 8,
                     bottom: 8,

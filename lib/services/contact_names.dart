@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../screens/api_service.dart';
 
@@ -86,19 +85,27 @@ class ContactNames {
         _persist();
         return;
       }
-      bool granted;
       if (allowPrompt) {
-        granted = await FlutterContacts.requestPermission(readonly: true);
-      } else {
-        granted = await Permission.contacts.isGranted;
+        final granted =
+            await FlutterContacts.requestPermission(readonly: true);
+        if (!granted) {
+          // Leave _loaded false — a later ensureLoaded can retry.
+          _loading = null;
+          return;
+        }
       }
-      if (!granted) {
-        // Leave _loaded false when we couldn't read yet (permission may be
-        // granted later); a subsequent ensureLoaded can retry.
-        _loading = null;
+      // Read the address book. getContacts needs only READ_CONTACTS; if that
+      // isn't granted the plugin throws and we leave the map empty for a later
+      // retry. We deliberately do NOT gate on the contacts permission GROUP
+      // status — a declared WRITE_CONTACTS can report the group as "denied"
+      // even when READ is granted, which would silently blank every name.
+      final List<Contact> contacts;
+      try {
+        contacts = await FlutterContacts.getContacts(withProperties: true);
+      } catch (_) {
+        _loading = null; // not granted yet — retry later
         return;
       }
-      final contacts = await FlutterContacts.getContacts(withProperties: true);
       for (final c in contacts) {
         final name = c.displayName.trim();
         if (name.isEmpty) continue;

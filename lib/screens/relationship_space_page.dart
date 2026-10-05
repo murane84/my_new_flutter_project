@@ -2251,7 +2251,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                       shrinkWrap: true,
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                       itemCount: steps.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      separatorBuilder: (_, _) => const SizedBox(height: 12),
                       itemBuilder: (ctx, i) {
                         final (icon, head, body) = steps[i];
                         return Row(

@@ -229,11 +229,11 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
     final c = _c;
     final ready = _ready && c != null && c.value.isInitialized;
     final ar = ready
-        ? (c!.value.aspectRatio == 0
+        ? (c.value.aspectRatio == 0
             ? widget.aspectRatioFallback
             : c.value.aspectRatio)
         : widget.aspectRatioFallback;
-    final playing = ready && c!.value.isPlaying;
+    final playing = ready && c.value.isPlaying;
     final durLabel = _durLabel();
 
     Widget stack = VisibilityDetector(
@@ -249,7 +249,7 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
               fit: StackFit.expand,
               children: [
                 const ColoredBox(color: Colors.black),
-                if (ready) VideoPlayer(c!),
+                if (ready) VideoPlayer(c),
                 if (!ready && !_error)
                   const Center(
                     child: SizedBox(

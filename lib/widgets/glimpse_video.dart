@@ -34,6 +34,7 @@ class GlimpseVideo extends StatefulWidget {
     this.maxStageHeight = 300,
     this.aspectRatioFallback = 16 / 10,
     this.durationSecs,
+    this.caption,
   });
 
   final String url;
@@ -47,6 +48,9 @@ class GlimpseVideo extends StatefulWidget {
   final double maxStageHeight;
   final double aspectRatioFallback;
   final int? durationSecs;
+  // Optional overlaid caption; fades out while the clip is playing so it never
+  // sits as noise over the moving video, and fades back when paused.
+  final String? caption;
 
   @override
   State<GlimpseVideo> createState() => _GlimpseVideoState();
@@ -371,6 +375,56 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                             colors: [Colors.black54, Colors.transparent],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if ((widget.caption ?? '').trim().isNotEmpty)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: IgnorePointer(
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 240),
+                        curve: Curves.easeOut,
+                        opacity: playing ? 0.0 : 1.0,
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(14, 28, 14, 12),
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end: Alignment.topCenter,
+                              colors: [Color(0xA6000000), Color(0x00000000)],
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.favorite_rounded,
+                                  size: 13,
+                                  color: Colors.white.withValues(alpha: 0.92)),
+                              const SizedBox(height: 4),
+                              Text(
+                                widget.caption!.trim(),
+                                textAlign: TextAlign.center,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15.5,
+                                  fontWeight: FontWeight.w800,
+                                  height: 1.25,
+                                  shadows: [
+                                    Shadow(
+                                        color: Colors.black54,
+                                        blurRadius: 6,
+                                        offset: Offset(0, 1)),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),

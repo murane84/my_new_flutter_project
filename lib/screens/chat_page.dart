@@ -3070,7 +3070,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   // ── Media message rendering ─────────────────────────────────────────────
   Widget _mediaContent(String type, String rel, Map<String, dynamic> msg,
-      bool isMe, Color textColor, ColorScheme scheme) {
+      bool isMe, Color textColor, ColorScheme scheme, {String? caption}) {
     final url = fullMediaUrl(rel);
     switch (type) {
       case 'image':
@@ -3097,7 +3097,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           onDownload: () => _saveMediaToDevice(msg),
         );
       case 'video':
-        return _videoBubble(url, msg, scheme);
+        return _videoBubble(url, msg, scheme, caption: caption);
       default:
         return _fileBubble(url, msg, textColor, scheme);
     }
@@ -3700,10 +3700,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   Widget _videoBubble(
-      String url, Map<String, dynamic> msg, ColorScheme scheme) {
+      String url, Map<String, dynamic> msg, ColorScheme scheme,
+      {String? caption}) {
     final secs = (msg['media_duration'] as num?)?.toInt() ?? 0;
     // Shared poster + silent dwell-glimpse + tap-to-play; fullscreen opens the
-    // existing in-app player. Same behaviour as Our Space moments.
+    // existing in-app player. Same behaviour as Our Space moments. The caption
+    // rides on the video and fades out while it plays.
     return GlimpseVideo(
       url: url,
       headers: mediaAuthHeaders(url),
@@ -3712,6 +3714,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       maxStageHeight: 280,
       aspectRatioFallback: 16 / 10,
       durationSecs: secs > 0 ? secs : null,
+      caption: caption,
       onFullscreen: () => _openVideo(url, msg),
     );
   }
@@ -5854,7 +5857,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                           _contactContent(msg, isMe, textColor, scheme),
                         if (isMedia && !imgCap)
                           _mediaContent(
-                              msgType, mediaRel, msg, isMe, textColor, scheme),
+                              msgType, mediaRel, msg, isMe, textColor, scheme,
+                              caption: msgType == 'video' ? mainText : null),
                         if (imgCap)
                           _imageCaption(fullMediaUrl(mediaRel), mainText,
                               textColor, linkColor),
@@ -5867,6 +5871,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             msgType != 'live' &&
                             msgType != 'location' &&
                             msgType != 'contact' &&
+                            msgType != 'video' &&
                             !imgCap &&
                             mainText.trim().isNotEmpty)
                           Padding(

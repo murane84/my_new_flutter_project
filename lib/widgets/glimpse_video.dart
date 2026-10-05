@@ -327,7 +327,7 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
           headers: widget.headers,
           fit: BoxFit.contain,
           gaplessPlayback: true,
-          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
           frameBuilder: (ctx, child, frame, wasSync) =>
               (frame == null && !wasSync)
                   ? const SizedBox.shrink()

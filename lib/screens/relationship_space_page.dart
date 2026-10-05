@@ -1203,7 +1203,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     // and repaints live when they move the slider.
     return ValueListenableBuilder<double>(
       valueListenable: motifStrength,
-      builder: (context, _, __) {
+      builder: (context, _, _) {
         final patBase = Theme.of(context).brightness == Brightness.dark
             ? 0.06
             : 0.055;

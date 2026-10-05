@@ -65,6 +65,32 @@ Future<void> setWallpaperClarity(double v) async {
   } catch (_) {}
 }
 
+/// How concentrated the DEFAULT theme-colour backdrop (the "motif": the ambient
+/// wash + hearts/notes pattern + corner glows shown when there's no photo
+/// wallpaper) appears, 0..1. The default (0.6) is already noticeably richer than
+/// the old pale look; the user can push it further or dial it back. No upper
+/// cap on the user's freedom beyond keeping it a tasteful wash. Persisted.
+final ValueNotifier<double> motifStrength = ValueNotifier<double>(0.6);
+const String _kMotif = 'motif_strength_v1';
+
+/// Scale a motif base alpha by the chosen concentration. At 0.6 (default) a base
+/// is ~2x the old value; 1.0 is ~3x (vivid); 0.0 fades it right back.
+double motifAccentAlpha(double base) {
+  final s = motifStrength.value.clamp(0.0, 1.0);
+  final factor = 0.5 + s * 2.5; // 0 -> .5x, .6 -> 2x, 1 -> 3x
+  return (base * factor).clamp(0.0, 0.9);
+}
+
+/// Persist + broadcast a new motif concentration (0..1).
+Future<void> setMotifStrength(double v) async {
+  v = v.clamp(0.0, 1.0);
+  motifStrength.value = v;
+  try {
+    final p = await SharedPreferences.getInstance();
+    await p.setDouble(_kMotif, v);
+  } catch (_) {}
+}
+
 /// Legacy single notifier, kept mirroring the all-chats default so any old
 /// reference keeps working. New code calls [chatBackgroundFor].
 final ValueNotifier<ChatBg> chatBackground =
@@ -137,6 +163,8 @@ Future<void> loadChatBackground() async {
     chatBackground.value = _all;
     wallpaperClarity.value =
         (p.getDouble(_kClarity) ?? 0.5).clamp(0.0, 1.0).toDouble();
+    motifStrength.value =
+        (p.getDouble(_kMotif) ?? 0.6).clamp(0.0, 1.0).toDouble();
     chatBgRevision.value++;
   } catch (_) {}
 }

@@ -1195,14 +1195,19 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   Widget _chatMotifWallpaper(ColorScheme scheme, bool isDark) {
-    return DecoratedBox(
-      decoration: BoxDecoration(color: scheme.surface),
-      child: CustomPaint(
-        painter: RomanticPatternPainter(
-          color: (isDark ? Colors.white : scheme.primary)
-              .withValues(alpha: isDark ? 0.06 : 0.055),
+    final motifColor = isDark ? Colors.white : scheme.primary;
+    // Concentration follows the user's motif-strength setting, live.
+    return ValueListenableBuilder<double>(
+      valueListenable: motifStrength,
+      builder: (_, _, _) => DecoratedBox(
+        decoration: BoxDecoration(color: scheme.surface),
+        child: CustomPaint(
+          painter: RomanticPatternPainter(
+            color: motifColor
+                .withValues(alpha: motifAccentAlpha(isDark ? 0.06 : 0.055)),
+          ),
+          child: const SizedBox.expand(),
         ),
-        child: const SizedBox.expand(),
       ),
     );
   }

@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart'
-    show kIsWeb, defaultTargetPlatform, TargetPlatform;
+    show kIsWeb, defaultTargetPlatform, TargetPlatform, ValueNotifier;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 
@@ -21,6 +21,10 @@ class ContactNames {
   static final ContactNames instance = ContactNames._();
 
   final Map<String, String> _byKey = {};
+  // Bumped whenever the name map changes, so the UI can repaint when a
+  // background read finishes (a newly saved contact shows up without a manual
+  // refresh).
+  final ValueNotifier<int> revision = ValueNotifier<int>(0);
   bool _loaded = false;
   Future<void>? _loading;
   DateTime? _at; // when the persisted snapshot was built
@@ -59,12 +63,11 @@ class ContactNames {
             ..addAll(cached);
           _loaded = true;
           _loading = null;
-          final stale = _at == null ||
-              DateTime.now().difference(_at!) > const Duration(hours: 6);
-          if (stale) {
-            Future.delayed(const Duration(seconds: 3),
-                () => _readFromSource(allowPrompt: false));
-          }
+          revision.value++;
+          // Always re-read the device in the background so newly saved or
+          // edited contacts appear within seconds — not only after a 6h window.
+          Future.delayed(const Duration(seconds: 3),
+              () => _readFromSource(allowPrompt: false));
           return;
         }
       } catch (_) {}
@@ -83,6 +86,7 @@ class ContactNames {
           ..addAll(m);
         _loaded = true;
         _persist();
+        revision.value++;
         return;
       }
       if (allowPrompt) {
@@ -120,6 +124,7 @@ class ContactNames {
       }
       _loaded = true;
       _persist();
+      revision.value++;
       // Best-effort: push the map to the server so the DESKTOP app can show
       // these saved names too (the whole point of the QR-linked account).
       if (_byKey.isNotEmpty) {

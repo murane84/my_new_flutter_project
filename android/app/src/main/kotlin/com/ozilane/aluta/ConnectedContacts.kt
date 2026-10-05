@@ -76,13 +76,25 @@ object ConnectedContacts {
         } catch (_: Exception) {
         }
 
-        // Insert the ones we don't have yet.
+        // Insert the ones we don't have yet; repair the ones we already do.
         for (m in matches) {
             val userId = m["userId"]?.toString() ?: continue
             val number = m["number"]?.toString()?.trim() ?: continue
-            if (number.isEmpty() || existing.containsKey(userId)) continue
+            if (number.isEmpty()) continue
+            // The user already has their OWN saved name for this number → we must
+            // NEVER put a name on it (that's what was overwriting / locking the
+            // phone-book name). We only name a number that isn't saved yet.
+            val hasLocalName = (m["hasLocalName"] as? Boolean) ?: false
             val name = m["name"]?.toString()?.takeIf { it.isNotBlank() } ?: "Aluta user"
-            insertRaw(cr, userId, number, name)
+            val existingRawId = existing[userId]
+            if (existingRawId != null) {
+                // Already have our raw contact for this friend. If the user now
+                // has their own name/edit for this number, strip any name an
+                // older build wrote so THEIR name wins (inherit the user edit).
+                if (hasLocalName) stripName(cr, existingRawId)
+                continue
+            }
+            insertRaw(cr, userId, number, name, writeName = !hasLocalName)
         }
 
         // Remove the ones that are no longer registered friends.
@@ -98,7 +110,10 @@ object ConnectedContacts {
         return true
     }
 
-    private fun insertRaw(cr: ContentResolver, userId: String, number: String, name: String) {
+    private fun insertRaw(
+        cr: ContentResolver, userId: String, number: String, name: String,
+        writeName: Boolean
+    ) {
         val ops = ArrayList<ContentProviderOperation>()
         val raw = 0
         ops.add(
@@ -108,13 +123,19 @@ object ConnectedContacts {
                 .withValue(RawContacts.SOURCE_ID, userId)
                 .build()
         )
-        ops.add(
-            ContentProviderOperation.newInsert(syncUri(Data.CONTENT_URI))
-                .withValueBackReference(Data.RAW_CONTACT_ID, raw)
-                .withValue(Data.MIMETYPE, StructuredName.CONTENT_ITEM_TYPE)
-                .withValue(StructuredName.DISPLAY_NAME, name)
-                .build()
-        )
+        // Only give the raw contact a name when the number ISN'T already saved
+        // under a name in the phone book. For a number the user already named,
+        // we attach no StructuredName at all, so Android keeps THEIR name and
+        // the contact stays freely editable (never locked, never overwritten).
+        if (writeName) {
+            ops.add(
+                ContentProviderOperation.newInsert(syncUri(Data.CONTENT_URI))
+                    .withValueBackReference(Data.RAW_CONTACT_ID, raw)
+                    .withValue(Data.MIMETYPE, StructuredName.CONTENT_ITEM_TYPE)
+                    .withValue(StructuredName.DISPLAY_NAME, name)
+                    .build()
+            )
+        }
         // A Phone row with the matched number is what makes Android aggregate
         // this raw contact into the existing phone-book contact.
         ops.add(
@@ -129,6 +150,20 @@ object ConnectedContacts {
         ops.add(customRow(raw, MIME_MESSAGE, number, userId, "Aluta", "Message on Aluta"))
         try {
             cr.applyBatch(ContactsContract.AUTHORITY, ops)
+        } catch (_: Exception) {
+        }
+    }
+
+    /** Remove any StructuredName we wrote onto our raw contact, so the user's
+     *  own phone-book name (or their edit) is the one that shows. Repairs
+     *  contacts an older build renamed. */
+    private fun stripName(cr: ContentResolver, rawId: Long) {
+        try {
+            cr.delete(
+                syncUri(Data.CONTENT_URI),
+                "${Data.RAW_CONTACT_ID}=? AND ${Data.MIMETYPE}=?",
+                arrayOf(rawId.toString(), StructuredName.CONTENT_ITEM_TYPE)
+            )
         } catch (_: Exception) {
         }
     }

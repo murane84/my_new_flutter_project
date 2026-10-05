@@ -3851,7 +3851,6 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   Widget _songMilestoneCard(ColorScheme scheme) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final stats = (_space['stats'] as Map?) ?? const {};
-    final song = stats['your_song'];
     final next = stats['next_milestone'];
     final hasHint =
         next is Map && ((next['remaining'] as num?)?.toInt() ?? 0) > 0;
@@ -3869,7 +3868,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _yourSongInner(scheme, song),
+          _topSongsInner(scheme),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -3891,45 +3890,99 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
-  Widget _yourSongInner(ColorScheme scheme, dynamic song) {
-    final has = song is Map && (song['title'] ?? '').toString().trim().isNotEmpty;
+  // The couple's most-played tracks (top 3 by shared-listen days), ranked.
+  Widget _topSongsInner(ColorScheme scheme) {
+    final stats = (_space['stats'] as Map?) ?? const {};
+    final songs = ((stats['top_songs'] as List?) ?? const [])
+        .whereType<Map>()
+        .where((m) => (m['title'] ?? '').toString().trim().isNotEmpty)
+        .take(3)
+        .toList();
+    final multi = songs.length > 1;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: _accent.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(Icons.music_note_rounded, color: _accent, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Text(multi ? 'YOUR TOP SONGS' : 'YOUR SONG',
+                style: TextStyle(
+                    fontSize: 9.5,
+                    letterSpacing: 0.8,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onSurfaceVariant)),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (songs.isEmpty)
+          Text(
+            'The tracks you two play most show here as you listen together.',
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          )
+        else
+          for (int i = 0; i < songs.length; i++)
+            Padding(
+              padding: EdgeInsets.only(bottom: i == songs.length - 1 ? 0 : 8),
+              child: _topSongRow(scheme, i, songs[i]),
+            ),
+      ],
+    );
+  }
+
+  Widget _topSongRow(ColorScheme scheme, int i, Map song) {
+    final title = (song['title'] ?? '').toString();
+    final count = (song['count'] as num?)?.toInt() ?? 0;
+    final lead = i == 0;
     return Row(
       children: [
         Container(
-          width: 40,
-          height: 40,
+          width: 22,
+          height: 22,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: _accent.withValues(alpha: 0.18),
-            borderRadius: BorderRadius.circular(11),
+            color: lead ? _accent : _accent.withValues(alpha: 0.14),
+            shape: BoxShape.circle,
           ),
-          child: Icon(Icons.music_note_rounded, color: _accent, size: 20),
+          child: Text('${i + 1}',
+              style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  color: lead ? Colors.white : _accent)),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('YOUR SONG',
-                  style: TextStyle(
-                      fontSize: 9.5,
-                      letterSpacing: 0.8,
-                      fontWeight: FontWeight.w700,
-                      color: scheme.onSurfaceVariant)),
-              const SizedBox(height: 2),
-              Text(
-                has
-                    ? '${song['title']}'
-                    : 'The track you two play most shows here as you listen together.',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontWeight: has ? FontWeight.w700 : FontWeight.w400,
-                    fontSize: has ? 14 : 12,
-                    color: has ? scheme.onSurface : scheme.onSurfaceVariant),
-              ),
-            ],
-          ),
+          child: Text(title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontWeight: lead ? FontWeight.w700 : FontWeight.w600,
+                  fontSize: lead ? 14 : 13,
+                  color: scheme.onSurface)),
         ),
+        if (count > 0) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: _accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(count == 1 ? '1 day' : '$count days',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: _accent)),
+          ),
+        ],
       ],
     );
   }

@@ -756,6 +756,7 @@ def _space_full(db: Session, space: RelationshipSpace, current_user: User) -> di
         st = bonding.bond_stats(db, current_user.id, partner, close_since_date)
     else:
         st = {"days_in_song": 0, "listen_streak": 0, "your_song": None,
+              "top_songs": [],
               "next_milestone": None, "milestone_reached": None}
     data["stats"] = {"close_since": data["close_since"], **st}
     # Moments are shared across BOTH partners' mirror Spaces, newest first.

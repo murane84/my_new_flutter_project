@@ -6838,7 +6838,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
       (widget.initialBackgroundUrl ?? '').startsWith('/wallpapers/')
           ? widget.initialBackgroundUrl
           : null;
-  final String? _lastPhotoUrl =
+  late final String? _lastPhotoUrl =
       (widget.initialBackgroundUrl ?? '').startsWith('/attachments/')
           ? widget.initialBackgroundUrl
           : null;

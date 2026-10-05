@@ -74,6 +74,9 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
   bool _glimpsing = false;
   int _glimpseLoops = 0;
   bool _lastPlaying = false;
+  // Once the player is ready AND has had a moment to paint, the poster overlay
+  // is removed. Until then it stays on top (fading) so there's no black snap.
+  bool _posterFaded = false;
   Duration _posterPos = const Duration(milliseconds: 1200);
   Timer? _dwellTimer;
   double _frac = 0;
@@ -144,6 +147,10 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
         _c = c;
         _ready = true;
         _initing = false;
+      });
+      // Let the video texture paint, then retire the poster overlay.
+      Future.delayed(const Duration(milliseconds: 320), () {
+        if (mounted) setState(() => _posterFaded = true);
       });
       if (_frac >= 0.8 && !_tapped) _maybeStartGlimpse();
     } catch (_) {
@@ -490,12 +497,8 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Letterbox base when playing; a soft out-of-focus poster
-                // (not a flat black void) before the clip is on the device and
-                // while an already-cached clip re-initialises on return.
-                ready
-                    ? const ColoredBox(color: Colors.black)
-                    : _notReadyBackdrop(),
+                // Letterbox base.
+                const ColoredBox(color: Colors.black),
                 if (ready)
                   Center(
                     child: FittedBox(
@@ -508,8 +511,25 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
                       ),
                     ),
                   ),
-                // Subtle video glyph on the placeholder (not yet on device).
-                if (!ready && !_downloading && !_error)
+                // The poster (the true first frame) sits ABOVE the video and
+                // fades out only once the player is ready and painting — so
+                // landing on the page, or returning to it, crossfades into the
+                // video instead of snapping through a blank/black frame.
+                if (!_posterFaded)
+                  IgnorePointer(
+                    child: AnimatedOpacity(
+                      opacity: ready ? 0.0 : 1.0,
+                      duration: const Duration(milliseconds: 280),
+                      curve: Curves.easeOut,
+                      child: _notReadyBackdrop(),
+                    ),
+                  ),
+                // Subtle video glyph on the placeholder — only when there's
+                // no real poster frame to show.
+                if (!ready &&
+                    !_downloading &&
+                    !_error &&
+                    (widget.posterUrl ?? '').isEmpty)
                   Center(
                     child: Icon(Icons.movie_creation_outlined,
                         size: 34,

@@ -1595,18 +1595,21 @@ class ApiService {
   }
 
   /// Remove a track from the shared crate.
-  Future<bool> removeTrack(int spaceId, int trackId) async {
+  /// Remove a crate track. Returns the HTTP status code (or -1 on a network/
+  /// exception) so the caller can surface a precise reason.
+  Future<int> removeTrack(int spaceId, int trackId) async {
     try {
       final token = await _getToken();
-      if (token == null) return false;
+      if (token == null) return 401;
       final resp = await http.delete(
         Uri.parse('${await _baseUrl}/spaces/$spaceId/playlist/$trackId'),
         headers: _authHeaders(token),
       );
-      return resp.statusCode >= 200 && resp.statusCode < 300;
+      _logger.w('removeTrack status ${resp.statusCode}: ${resp.body}');
+      return resp.statusCode;
     } catch (e) {
       _logger.w('removeTrack failed: $e');
-      return false;
+      return -1;
     }
   }
 

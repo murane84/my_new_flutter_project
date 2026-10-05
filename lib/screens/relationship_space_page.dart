@@ -5107,6 +5107,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     return GestureDetector(
       key: _momentKeys.putIfAbsent(id, () => GlobalKey()),
       onLongPress: mine ? () => _confirmDeleteMoment(id) : null,
+      // Right-click on desktop opens the same delete, matching comments.
+      onSecondaryTap: mine ? () => _confirmDeleteMoment(id) : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,

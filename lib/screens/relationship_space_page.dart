@@ -436,6 +436,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   // On narrow screens the section list lives in a left drawer that slides in
   // over the content; this tracks whether it's showing.
   bool _navDrawerOpen = false;
+  // The in-page "how this works" guide for the OPEN section (one at a time).
+  bool _guideOpen = false;
   // Drives the book's page-turn between memories (adjacent pages peek like a
   // real book at viewportFraction < 1).
   final PageController _diaryPageCtrl = PageController(viewportFraction: 0.92);
@@ -1571,6 +1573,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       setState(() {
         _section = key;
         _navDrawerOpen = false;
+        _guideOpen = false;
       });
 
   // ── Section navigation (master–detail) ────────────────────────────────────
@@ -1593,12 +1596,19 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     return LayoutBuilder(
       builder: (ctx, c) {
         final wide = c.maxWidth >= 720;
-        final content = _sectionContent(
+        final rawContent = _sectionContent(
           scheme,
           wide,
           _section!,
           onMenu: wide ? null : () => setState(() => _navDrawerOpen = true),
         );
+        final content = (_guideOpen && _section != null)
+            ? Stack(children: [
+                rawContent,
+                Positioned.fill(
+                    child: _sectionGuideOverlay(scheme, _section!)),
+              ])
+            : rawContent;
         if (wide) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2059,6 +2069,249 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   /// A section's chrome: header (optional list button + back to dashboard +
   /// icon + title), a scrolling body, and an optional footer bar.
+  /// The little "?" in a section header that opens that section's in-page guide.
+  Widget _guideButton(ColorScheme scheme) {
+    return IconButton(
+      tooltip: 'How this works',
+      visualDensity: VisualDensity.compact,
+      icon: Icon(Icons.help_outline_rounded, size: 20, color: _accent),
+      onPressed: () => setState(() => _guideOpen = true),
+    );
+  }
+
+  /// Per-section guide copy: (title, tagline, steps[icon, head, body]). Add a
+  /// case here whenever a new feature section is introduced — the "?" button and
+  /// the overlay come for free from _sectionPanel / _sectionScaffold.
+  (String, String, List<(IconData, String, String)>) _sectionGuideData(
+      String section) {
+    switch (section) {
+      case 'playlist':
+        return (
+          'Our Playlist',
+          'Your shared soundtrack — and a way to listen as one.',
+          [
+            (Icons.auto_awesome_rounded, 'Your song, up top',
+                'The card at the top shows your current song, days-in-a-song and your streak — the heartbeat of the bond.'),
+            (Icons.add_rounded, 'Add songs together',
+                'Tap “Add song” to drop a track into your shared crate. Both of you see everything that lands here.'),
+            (Icons.play_arrow_rounded, 'Listen together',
+                'Tap “Listen together” to play a song in sync — the other person hears it too, and either of you can pause or skip.'),
+            (Icons.favorite_rounded, 'It grows on its own',
+                'Songs you dedicate or keep from a chat quietly flow in here, memo’d with the moment.'),
+          ],
+        );
+      case 'moments':
+        return (
+          'Pinned moments',
+          'A private wall for the little things worth keeping.',
+          [
+            (Icons.add_a_photo_rounded, 'Pin anything',
+                'Tap “Send a moment” to pin a photo, video, voice note, file, song or a note — just the two of you.'),
+            (Icons.emoji_emotions_rounded, 'React & comment',
+                'React with any emoji and leave comments on a moment, exactly like the diary.'),
+            (Icons.title_rounded, 'Captions sit on the media',
+                'Add a line and it floats, bold, over the bottom of the photo or video.'),
+            (Icons.menu_book_rounded, 'Carry it to the diary',
+                'Tap “Write about this in Our Diary” to grow a moment into a full memory — its photo links back here.'),
+            (Icons.card_giftcard_rounded, 'Dedications live here',
+                'A dedication (a song + a mood + a voice note) shows up right in this same feed.'),
+          ],
+        );
+      case 'diary':
+        return (
+          'Our Diary',
+          'A shared notebook — memories behind you, plans ahead.',
+          [
+            (Icons.edit_rounded, 'Write a memory or a plan',
+                'Tap “Write in our diary”. A plan can carry a date and a gentle reminder.'),
+            (Icons.brush_rounded, 'Your own handwriting',
+                'Pick a font for your memories — each person’s entries keep their own hand on the shared page.'),
+            (Icons.swipe_rounded, 'Turn the pages',
+                'Swipe, or tap the folded dog-ear corner, to move between memories.'),
+            (Icons.forum_rounded, 'React & discuss',
+                'Both of you can react and comment on any entry.'),
+            (Icons.push_pin_rounded, 'Kept from a moment',
+                'A memory grown from a pinned moment shows its photo at the top — tap it to jump back to the moment.'),
+          ],
+        );
+      case 'capsule':
+        return (
+          'Love capsule',
+          'A song + a message, sealed until a moment you choose.',
+          [
+            (Icons.schedule_send_rounded, 'Seal a surprise',
+                'Tap “Seal a capsule”: pick a song, write a message, and choose the date and time it unlocks.'),
+            (Icons.headphones_rounded, 'Two modes',
+                '“Just a message”, or “Listen together” — which opens into a 3-2-1 press-play when it unlocks.'),
+            (Icons.lock_clock_rounded, 'Sealed until then',
+                'The song and message stay hidden — both of you only see a countdown.'),
+            (Icons.notifications_active_rounded, 'Opens right on time',
+                'You both get a ping the moment it unlocks. Then tap “Open the capsule”.'),
+            (Icons.close_rounded, 'Change your mind',
+                'The sender can cancel a capsule any time before it unlocks.'),
+          ],
+        );
+      default:
+        return (
+          'This section',
+          'A quick guide to getting the most from it.',
+          const [],
+        );
+    }
+  }
+
+  /// The in-page guide overlay for [section]: a card over the section body with
+  /// a title + close (X); dismiss by the X, tapping the dimmed backdrop, or a
+  /// swipe DOWN (mobile). Reused by every section via _sectionScaffold.
+  Widget _sectionGuideOverlay(ColorScheme scheme, String section) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final (title, tagline, steps) = _sectionGuideData(section);
+    void close() => setState(() => _guideOpen = false);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: close, // tap the dimmed backdrop to dismiss
+      child: Container(
+        color: Colors.black.withValues(alpha: 0.45),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(14),
+        child: GestureDetector(
+          onTap: () {}, // swallow taps inside the card
+          onVerticalDragEnd: (d) {
+            if ((d.primaryVelocity ?? 0) > 180) close(); // swipe down to close
+          },
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 520,
+              maxHeight: MediaQuery.of(context).size.height * 0.74,
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDark
+                    ? scheme.surfaceContainerHigh
+                    : scheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: _accent.withValues(alpha: 0.30)),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.28),
+                      blurRadius: 24,
+                      offset: const Offset(0, 10)),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Drag handle (also a swipe-down affordance on mobile).
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                          color: scheme.outlineVariant,
+                          borderRadius: BorderRadius.circular(2)),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
+                    child: Row(
+                      children: [
+                        Icon(Icons.lightbulb_rounded,
+                            size: 20, color: _accent),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(title,
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 16.5,
+                                      color: scheme.onSurface)),
+                              const SizedBox(height: 1),
+                              Text(tagline,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: scheme.onSurfaceVariant)),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Close',
+                          icon: Icon(Icons.close_rounded,
+                              color: scheme.onSurfaceVariant),
+                          onPressed: close,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(height: 1, color: scheme.outlineVariant),
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                      itemCount: steps.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (ctx, i) {
+                        final (icon, head, body) = steps[i];
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: _accent.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(icon, size: 18, color: _accent),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(head,
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13.5,
+                                          color: scheme.onSurface)),
+                                  const SizedBox(height: 2),
+                                  Text(body,
+                                      style: TextStyle(
+                                          fontSize: 12.5,
+                                          height: 1.35,
+                                          color: scheme.onSurfaceVariant)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                            backgroundColor: _accent,
+                            foregroundColor: Colors.white),
+                        onPressed: close,
+                        child: const Text('Got it'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _sectionPanel(
     ColorScheme scheme,
     IconData icon,
@@ -2088,6 +2341,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                         fontSize: 16,
                         color: scheme.onSurface)),
               ),
+              _guideButton(scheme),
             ],
           ),
         ),
@@ -2138,6 +2392,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                       fontSize: 16,
                       color: scheme.onSurface)),
               const Spacer(),
+              _guideButton(scheme),
               // Page count is already shown by the dots below — no separate label.
             ],
           ),

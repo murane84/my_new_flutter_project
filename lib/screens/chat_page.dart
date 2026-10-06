@@ -3736,6 +3736,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final av = avRel.isEmpty
         ? ''
         : (avRel.startsWith('http') ? avRel : fullMediaUrl(avRel));
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final stageColor = isDark ? Colors.black : Colors.white;
     void toggle() => setState(() => _viewerChrome = !_viewerChrome);
     return Positioned.fill(
       child: GestureDetector(
@@ -3745,20 +3747,21 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           if ((d.primaryVelocity ?? 0) > 300) _closeViewer();
         },
         child: ColoredBox(
-        color: Colors.black,
+        color: stageColor,
         child: Stack(
           children: [
             PhotoViewGallery.builder(
               pageController: _viewerPageCtrl,
               itemCount: imgs.length,
               onPageChanged: (p) => setState(() => _viewerIndex = p),
-              backgroundDecoration: const BoxDecoration(color: Colors.black),
-              loadingBuilder: (_, _) => const Center(
+              backgroundDecoration: BoxDecoration(color: stageColor),
+              loadingBuilder: (_, _) => Center(
                 child: SizedBox(
                   width: 28,
                   height: 28,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
+                      strokeWidth: 2,
+                      color: isDark ? Colors.white : accent),
                 ),
               ),
               builder: (ctx2, p) => PhotoViewGalleryPageOptions(
@@ -3908,14 +3911,19 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   ),
                 ),
               ),
-            // Pinned Keepsake "star" — always visible (ignores the chrome
-            // toggle) so you can keep the photo you're admiring straight to
-            // Our Space without leaving full-screen.
+            // Pinned Keepsake "Keep" chip — follows the chrome toggle so it
+            // clears away with the top bar when you tap to admire the photo
+            // unobstructed, and returns with the rest of the controls.
             if (_canHarmony && msg != null)
               Positioned(
                 right: 14,
                 bottom: imgs.length > 1 ? 46 : 16,
-                child: Material(
+                child: IgnorePointer(
+                  ignoring: !_viewerChrome,
+                  child: AnimatedOpacity(
+                    opacity: _viewerChrome ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Material(
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: () => _keepsakeMessage(msg),
@@ -3950,6 +3958,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     ),
                   ),
                 ),
+                  ),
+                ),
               ),
           ],
         ),
@@ -3979,9 +3989,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   void _openVideo(String url, Map<String, dynamic> msg) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     showDialog<void>(
       context: context,
-      barrierColor: Colors.black,
+      barrierColor: isDark ? Colors.black : Colors.white,
       builder: (dctx) => _ChatVideoPlayer(
         url: url,
         onKeep: _canHarmony ? () => _keepsakeMessage(msg) : null,
@@ -7641,6 +7652,9 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
   Widget build(BuildContext context) {
     final c = _c;
     final accent = Theme.of(context).colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final stageColor = isDark ? Colors.black : Colors.white;
+    final onStage = isDark ? Colors.white70 : Colors.black54;
     return GestureDetector(
       onTap: () {
         if (c == null || !c.value.isInitialized) return;
@@ -7654,19 +7668,20 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          Container(color: Colors.black),
+          Container(color: stageColor),
           if (_error)
-            const Center(
+            Center(
               child: Padding(
-                padding: EdgeInsets.all(24),
+                padding: const EdgeInsets.all(24),
                 child: Text("This video can't play on this device.",
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70)),
+                    style: TextStyle(color: onStage)),
               ),
             )
           else if (c == null || !c.value.isInitialized)
-            const Center(
-                child: CircularProgressIndicator(color: Colors.white))
+            Center(
+                child: CircularProgressIndicator(
+                    color: isDark ? Colors.white : accent))
           else
             Center(
               child: AspectRatio(
@@ -7679,9 +7694,9 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
               c.value.isInitialized &&
               !c.value.isPlaying &&
               !_error)
-            const Center(
+            Center(
               child: Icon(Icons.play_arrow_rounded,
-                  color: Colors.white70, size: 64),
+                  color: onStage, size: 64),
             ),
           if (c != null && c.value.isInitialized && !_error)
             Positioned(
@@ -7694,11 +7709,12 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
             top: 40,
             right: 16,
             child: IconButton(
-              icon: const Icon(Icons.close_rounded, color: Colors.white),
+              icon: Icon(Icons.close_rounded,
+                  color: isDark ? Colors.white : Colors.black87),
               onPressed: () => Navigator.pop(context),
             ),
           ),
-          if (widget.onKeep != null)
+          if (widget.onKeep != null && !(c?.value.isPlaying ?? false))
             Positioned(
               right: 14,
               bottom: 96,

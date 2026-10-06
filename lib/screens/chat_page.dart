@@ -29,6 +29,7 @@ import 'live_session_screen.dart';
 import 'gif_picker.dart';
 import '../services/call_service.dart';
 import '../services/contact_names.dart';
+import '../services/web_paste.dart' as webpaste;
 import '../utils/net_image.dart';
 import '../utils/chat_background.dart';
 import '../utils/bubble_theme.dart';
@@ -893,6 +894,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    // Web: files pasted (Ctrl/Cmd+V) arrive through the browser paste event.
+    if (kIsWeb) webpaste.registerClipboardPaste(_onWebPaste);
     // Seed the friend's avatar from the caller (which already knows it, e.g.
     // the friend list / header) so the per-message bubble avatars show the DP
     // immediately; the /status poll may later refresh it.
@@ -970,6 +973,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (kIsWeb) webpaste.unregisterClipboardPaste();
     // Release any in-flight caption request so its awaiter unwinds.
     if (_captionCompleter != null && !_captionCompleter!.isCompleted) {
       _captionCompleter!.complete(null);
@@ -3468,6 +3472,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   // Ctrl/Cmd+V: first try FILES copied from a file manager (APK, PDF, Excel,
   // ...), then an image, then fall through to the default text paste.
   Future<void> _tryPasteAttachment() async {
+    // On web, clipboard files arrive via the DOM paste listener instead
+    // (browsers don't expose them to the key handler / pasteboard).
+    if (kIsWeb) return;
     try {
       final paths = await Pasteboard.files();
       if (paths.isNotEmpty) {
@@ -3525,6 +3532,54 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         // Large files ride as ephemeral: the server purges the bytes once the
         // recipient caches them (or after the TTL), so a 200 MB file never
         // lives on the server long-term.
+        ephemeral: bytes.length > ephemeralOver,
+      );
+    }
+  }
+
+  // Web: files pasted via the browser paste event arrive here already as
+  // bytes (no file paths on the web). Routes them the same way as a native
+  // file paste: images go through the preview, other files through the caption
+  // bar + upload, with only the first file prompting for a caption.
+  Future<void> _onWebPaste(List<webpaste.PastedFile> files) async {
+    if (!mounted || files.isEmpty) return;
+    const imgExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    const fileCap = 200 * 1024 * 1024;
+    const ephemeralOver = 15 * 1024 * 1024;
+    for (var i = 0; i < files.length; i++) {
+      if (!mounted) return;
+      final f = files[i];
+      final bytes = f.bytes;
+      if (bytes.isEmpty) continue;
+      final name = f.name;
+      final ext =
+          name.contains('.') ? name.split('.').last.toLowerCase() : '';
+      final isImage =
+          f.mime.startsWith('image/') || imgExt.contains(ext);
+      if (isImage) {
+        final mime = f.mime.isNotEmpty ? f.mime : _mimeForExt(ext);
+        await _previewAndSendImage(bytes, name, mime);
+        continue;
+      }
+      if (bytes.length > fileCap) {
+        if (mounted) {
+          showToast(context, '"$name" is too large to send (max 200 MB).',
+              type: ToastType.error);
+        }
+        continue;
+      }
+      String? caption = '';
+      if (i == 0) {
+        caption = await _askFileCaption(name);
+        if (caption == null) return; // cancelled the whole paste
+      }
+      final mime = f.mime.isNotEmpty ? f.mime : _mimeForExt(ext);
+      await _uploadAndSend(
+        bytes: bytes,
+        filename: name,
+        mime: mime,
+        type: 'file',
+        caption: caption,
         ephemeral: bytes.length > ephemeralOver,
       );
     }

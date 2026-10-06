@@ -224,6 +224,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   TextEditingController? _captionCtrl;
   Completer<String?>? _captionCompleter;
 
+  // Outbox for optimistic sends: tempId -> a closure that (re)attempts the
+  // send. Kept until the send succeeds so a failed bubble can retry.
+  final Map<String, Future<void> Function()> _outbox = {};
+
   // edit-in-place: the message currently being edited, plus any reply-quote
   // prefix to preserve when saving.
   Map<String, dynamic>? _editing;
@@ -264,7 +268,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   // ── Media sharing / voice recording ─────────────────────────────────
   final _recorder = AudioRecorder();
   bool _isRecording = false;
-  bool _uploadingMedia = false;
   Timer? _recordTimer;
   int _recordMs = 0;
   String _apiBase = ''; // resolved server base for building attachment URLs
@@ -1272,7 +1275,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           stored = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
         } catch (_) {}
       }
-      final full = _merge(stored, _messages);
+      // Pending (optimistic) messages are transient and carry non-JSON local
+      // bytes — never persist them.
+      final live = _messages.where((m) => m['__pending'] != true).toList();
+      final full = _merge(stored, live);
       final toCache = full.length > 3000 ? full.take(3000).toList() : full;
       await prefs.setString(_cacheKey, jsonEncode(toCache));
       // We now durably hold this history locally → let the server purge its
@@ -2373,31 +2379,88 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _markActivity();
     _ctrl.clear();
     setState(() => _replyTo = null);
-    _scrollToBottom();
 
-    try {
-      final sent = await appBusy.run(() => ApiService().sendMessage(
-          widget.friendId, content,
-          conversationId: widget.conversationId));
-      if (sent == null) {
-        if (mounted) {
-          _showErrorSnack('Message failed to send. Tap to retry.');
+    final tempId = _newTempId();
+    _insertOptimistic(_optimisticMsg(tempId, 'text', content));
+
+    Future<void> attempt() async {
+      try {
+        final sent = await appBusy.run(() => ApiService().sendMessage(
+            widget.friendId, content,
+            conversationId: widget.conversationId));
+        _replaceOptimistic(tempId, sent);
+        if (sent == null && mounted) {
+          _showErrorSnack('Message failed — tap the ! to retry.');
         }
-        return;
+      } catch (_) {
+        _replaceOptimistic(tempId, null);
+        if (mounted) _showErrorSnack('Failed to send — tap the ! to retry.');
       }
-      if (!mounted) return;
-      setState(() {
-        if (!_messages.any((m) => m['id'] == sent['id'])) {
-          _messages.insert(0, sent);
-        }
-      });
-    } catch (e) {
-      if (mounted) _showErrorSnack('Failed to send: $e');
     }
+
+    _outbox[tempId] = attempt;
+    unawaited(attempt());
   }
 
   void _showErrorSnack(String msg) =>
       showToast(context, msg, type: ToastType.error);
+
+  // ── Optimistic send ───────────────────────────────────────────────────────
+  // A message shows in the thread the instant it's sent, with a spinner in the
+  // tick slot, while its upload/send runs in the background. This keeps the
+  // composer free (the user can fire off more while one is still in flight) and
+  // moves the "working" feedback onto the bubble itself.
+  String _newTempId() => 'tmp-${DateTime.now().microsecondsSinceEpoch}';
+
+  Map<String, dynamic> _optimisticMsg(String tempId, String type, String content) {
+    return {
+      'id': tempId,
+      'sender_id': _myId ?? '',
+      'content': content,
+      'message_type': type,
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'status': 'sending',
+      'delivered': false,
+      'is_read': false,
+      '__pending': true,
+    };
+  }
+
+  void _insertOptimistic(Map<String, dynamic> msg) {
+    if (!mounted) return;
+    setState(() => _messages.insert(0, msg));
+    _scrollToBottom();
+  }
+
+  // Swap a pending bubble for the real server message (success) or flag it
+  // failed (so the tick slot shows a tappable retry). Dedupes if a poll already
+  // pulled the real message in.
+  void _replaceOptimistic(String tempId, Map<String, dynamic>? sent) {
+    if (!mounted) return;
+    setState(() {
+      final idx = _messages.indexWhere((m) => m['id'] == tempId);
+      if (sent != null) {
+        _outbox.remove(tempId);
+        if (idx != -1) _messages.removeAt(idx);
+        if (!_messages.any((m) => m['id'] == sent['id'])) {
+          _messages.insert(0, sent);
+        }
+      } else if (idx != -1) {
+        _messages[idx]['status'] = 'failed';
+      }
+    });
+    if (sent != null) _saveMessagesCache();
+  }
+
+  // Re-run a failed send (tapped from the retry marker in the tick slot).
+  void _retrySend(Map<String, dynamic> msg) {
+    final tempId = msg['id']?.toString();
+    if (tempId == null) return;
+    final job = _outbox[tempId];
+    if (job == null) return;
+    setState(() => msg['status'] = 'sending');
+    unawaited(job());
+  }
 
   // ── Media sharing ───────────────────────────────────────────────────────
   /// Build a full URL from a relative attachment path (`/attachments/<id>`).
@@ -3038,67 +3101,98 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     bool hd = false,
     bool ephemeral = false,
   }) async {
-    setState(() => _uploadingMedia = true);
-    try {
-      // Compress images before upload to keep server storage + bandwidth down.
-      // This covers gallery/camera, document-picked and shared-in images
-      // (e.g. big screenshots). Skipped when HD is on (send the original) — but
-      // still forced if the original exceeds the 15 MB upload cap. GIFs and
-      // small images pass through untouched.
-      final tooBigForRaw = bytes.length > 15 * 1024 * 1024;
-      if (type == 'image' &&
-          mime != 'image/gif' &&
-          (!hd || tooBigForRaw) &&
-          bytes.length > 350 * 1024) {
-        try {
-          final compressed =
-              await compute(_compressChatImage, Uint8List.fromList(bytes));
-          if (compressed.isNotEmpty && compressed.length < bytes.length) {
-            bytes = compressed;
-            mime = 'image/jpeg';
-            final dot = filename.lastIndexOf('.');
-            filename =
-                '${dot > 0 ? filename.substring(0, dot) : filename}.jpg';
-            if (hd && tooBigForRaw && mounted) {
-              showToast(context, 'Original too large — sent compressed',
-                  type: ToastType.info);
-            }
-          }
-        } catch (_) {/* keep the original bytes on any failure */}
-      }
-      final up = await appBusy.run(() => ApiService().uploadMedia(
-          bytes: bytes, filename: filename, mime: mime, ephemeral: ephemeral));
-      if (up == null || up['url'] == null) {
-        if (mounted) showToast(context, 'Upload failed', type: ToastType.error);
-        return;
-      }
-      final sent = await appBusy.run(() => ApiService().sendMessage(
-            widget.friendId,
-            // Caption travels as the message content, so an image + text render
-            // in ONE bubble (the bubble shows the image, then this text below).
-            caption,
-            messageType: type,
-            mediaUrl: up['url'] as String,
-            mediaName: (up['name'] ?? filename) as String?,
-            mediaMime: (up['mime'] ?? mime) as String?,
-            mediaSize: (up['size'] as num?)?.toInt(),
-            mediaDuration: durationMs,
-            conversationId: widget.conversationId,
-          ));
-      if (sent != null && mounted) {
-        setState(() {
-          if (!_messages.any((m) => m['id'] == sent['id'])) {
-            _messages.insert(0, sent);
-          }
-        });
-        _scrollToBottom();
-        _saveMessagesCache();
-      } else if (mounted) {
-        showToast(context, 'Could not send', type: ToastType.error);
-      }
-    } finally {
-      if (mounted) setState(() => _uploadingMedia = false);
+    // Show the bubble immediately with a spinner in the tick slot; the upload +
+    // send run in the background so the composer never blocks. The original
+    // (uncompressed) bytes/mime/name are captured for the attempt so a retry
+    // starts clean.
+    final tempId = _newTempId();
+    final optimistic = _optimisticMsg(tempId, type, caption);
+    optimistic['media_name'] = filename;
+    optimistic['media_mime'] = mime;
+    optimistic['media_size'] = bytes.length;
+    optimistic['media_duration'] = durationMs;
+    if (type == 'image') {
+      // A local preview so the sent photo shows while it uploads.
+      optimistic['__localBytes'] = Uint8List.fromList(bytes);
     }
+    _insertOptimistic(optimistic);
+
+    final origBytes = bytes;
+    final origMime = mime;
+    final origName = filename;
+
+    Future<void> attempt() async {
+      var sendBytes = origBytes;
+      var sendMime = origMime;
+      var sendName = origName;
+      try {
+        // Compress images before upload to keep server storage + bandwidth
+        // down. Skipped when HD is on (send the original) — but still forced if
+        // the original exceeds the 15 MB upload cap. GIFs and small images pass
+        // through untouched.
+        final tooBigForRaw = sendBytes.length > 15 * 1024 * 1024;
+        if (type == 'image' &&
+            sendMime != 'image/gif' &&
+            (!hd || tooBigForRaw) &&
+            sendBytes.length > 350 * 1024) {
+          try {
+            final compressed = await compute(
+                _compressChatImage, Uint8List.fromList(sendBytes));
+            if (compressed.isNotEmpty && compressed.length < sendBytes.length) {
+              sendBytes = compressed;
+              sendMime = 'image/jpeg';
+              final dot = sendName.lastIndexOf('.');
+              sendName =
+                  '${dot > 0 ? sendName.substring(0, dot) : sendName}.jpg';
+              if (hd && tooBigForRaw && mounted) {
+                showToast(context, 'Original too large — sent compressed',
+                    type: ToastType.info);
+              }
+            }
+          } catch (_) {/* keep the original bytes on any failure */}
+        }
+        final up = await appBusy.run(() => ApiService().uploadMedia(
+            bytes: sendBytes,
+            filename: sendName,
+            mime: sendMime,
+            ephemeral: ephemeral));
+        if (up == null || up['url'] == null) {
+          _replaceOptimistic(tempId, null);
+          if (mounted) {
+            showToast(context, 'Upload failed — tap the ! to retry',
+                type: ToastType.error);
+          }
+          return;
+        }
+        final sent = await appBusy.run(() => ApiService().sendMessage(
+              widget.friendId,
+              // Caption travels as the message content, so an image + text
+              // render in ONE bubble (image, then this text below).
+              caption,
+              messageType: type,
+              mediaUrl: up['url'] as String,
+              mediaName: (up['name'] ?? sendName) as String?,
+              mediaMime: (up['mime'] ?? sendMime) as String?,
+              mediaSize: (up['size'] as num?)?.toInt(),
+              mediaDuration: durationMs,
+              conversationId: widget.conversationId,
+            ));
+        _replaceOptimistic(tempId, sent);
+        if (sent == null && mounted) {
+          showToast(context, 'Could not send — tap the ! to retry',
+              type: ToastType.error);
+        }
+      } catch (_) {
+        _replaceOptimistic(tempId, null);
+        if (mounted) {
+          showToast(context, 'Upload failed — tap the ! to retry',
+              type: ToastType.error);
+        }
+      }
+    }
+
+    _outbox[tempId] = attempt;
+    unawaited(attempt());
   }
 
   String _fmtBytes(int? n) {
@@ -3117,8 +3211,94 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
 
   // ── Media message rendering ─────────────────────────────────────────────
+  // Renders an optimistic (still-uploading) media bubble: the local photo for
+  // images, otherwise a compact "Uploading…" card with the right icon. The
+  // spinner lives in the tick slot, so this just shows what's on its way.
+  Widget _pendingMediaContent(
+      String type, Map<String, dynamic> msg, Color textColor) {
+    final local = msg['__localBytes'];
+    if (type == 'image' && local is Uint8List) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+              maxWidth: 240, maxHeight: 300, minWidth: 120, minHeight: 80),
+          child: Stack(
+            fit: StackFit.passthrough,
+            children: [
+              Image.memory(local, fit: BoxFit.cover),
+              Positioned.fill(
+                child: Container(color: Colors.black.withValues(alpha: 0.12)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    IconData ic;
+    String fallbackLabel;
+    switch (type) {
+      case 'video':
+        ic = Icons.videocam_rounded;
+        fallbackLabel = 'Video';
+        break;
+      case 'audio':
+        ic = Icons.mic_rounded;
+        fallbackLabel = 'Voice note';
+        break;
+      case 'song':
+        ic = Icons.music_note_rounded;
+        fallbackLabel = 'Song';
+        break;
+      default:
+        ic = Icons.insert_drive_file_rounded;
+        fallbackLabel = 'File';
+    }
+    final name = (msg['media_name'] as String?)?.trim();
+    final label = (name == null || name.isEmpty) ? fallbackLabel : name;
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 240),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: textColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(ic, size: 22, color: textColor.withValues(alpha: 0.85)),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: textColor,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13)),
+                const SizedBox(height: 2),
+                Text('Uploading\u2026',
+                    style: TextStyle(
+                        color: textColor.withValues(alpha: 0.7),
+                        fontSize: 11)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _mediaContent(String type, String rel, Map<String, dynamic> msg,
       bool isMe, Color textColor, ColorScheme scheme, {String? caption}) {
+    // Still uploading: show a local preview (images) or a compact placeholder.
+    if (msg['__pending'] == true) {
+      return _pendingMediaContent(type, msg, textColor);
+    }
     final url = fullMediaUrl(rel);
     switch (type) {
       case 'image':
@@ -5778,8 +5958,22 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   Widget _buildStatusIcon(Map<String, dynamic> msg,
       {required Color muted, required Color read}) {
     final status = msg['status']?.toString();
+    // Still uploading / sending: a small spinner sits in the tick slot — no
+    // single tick yet. The composer stays free so more messages can queue.
     if (status == 'sending') {
-      return Icon(Icons.access_time, size: 12, color: muted);
+      return SizedBox(
+        width: 11,
+        height: 11,
+        child: CircularProgressIndicator(strokeWidth: 1.6, color: muted),
+      );
+    }
+    // Send failed: a tappable retry marker in the tick slot.
+    if (status == 'failed') {
+      return GestureDetector(
+        onTap: () => _retrySend(msg),
+        child: Icon(Icons.error_outline_rounded,
+            size: 14, color: Colors.redAccent),
+      );
     }
     if (msg['is_read'] == true) {
       return Icon(Icons.done_all, size: 13, color: read);
@@ -5838,8 +6032,18 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     // Media attachment?
     final msgType = (msg['message_type'] as String?) ?? 'text';
     final mediaRel = msg['media_url'] as String?;
+    // A pending (optimistic) media message has no server URL yet, but it IS a
+    // media bubble — render it from its local preview / placeholder.
+    final pending = msg['__pending'] == true;
+    final pendingMedia = pending &&
+        (msgType == 'image' ||
+            msgType == 'video' ||
+            msgType == 'audio' ||
+            msgType == 'song' ||
+            msgType == 'file');
     final isMedia = !tomb &&
-        msgType != 'text' && mediaRel != null && mediaRel.isNotEmpty;
+        msgType != 'text' &&
+        ((mediaRel != null && mediaRel.isNotEmpty) || pendingMedia);
     // A call-log entry (auto-posted when an Aluta call ends).
     final isCall = !tomb && msgType == 'call';
     // A "listen together" log entry (posted when a live session ends/declines).
@@ -5854,8 +6058,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     // left, text beside then below) when the text is long enough to fill the
     // side, else stacked under the photo — so there is never a blank gap. Both
     // render text through FloatColumn/WrappableText for a consistent font.
-    final imgCap =
-        isMedia && msgType == 'image' && mainText.trim().isNotEmpty;
+    final imgCap = isMedia &&
+        !pending &&
+        msgType == 'image' &&
+        mainText.trim().isNotEmpty;
 
     // ── Bubble colours ──────────────────────────────────────────────────────
     // Sent messages use the brand red family (not WhatsApp green): a soft warm
@@ -6186,8 +6392,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         if (isContact)
                           _contactContent(msg, isMe, textColor, scheme),
                         if (isMedia && !imgCap)
-                          _mediaContent(
-                              msgType, mediaRel, msg, isMe, textColor, scheme,
+                          _mediaContent(msgType, mediaRel ?? '', msg, isMe,
+                              textColor, scheme,
                               caption: msgType == 'video' ? mainText : null),
                         if (imgCap)
                           _imageCaption(fullMediaUrl(mediaRel), mainText,
@@ -6213,7 +6419,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         // ── Time + delivery status ────────────────────
                         // Shown only on last message of group (showAvatar)
                         // or standalone, to reduce visual noise.
-                        if (showAvatar || isFirst)
+                        if (showAvatar || isFirst || (isMe && pending))
                           Padding(
                             padding: const EdgeInsets.only(top: 3),
                             child: Row(
@@ -6795,9 +7001,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                             tooltip: 'Listen together',
                                             icon: Icon(Icons.headphones_rounded,
                                                 color: scheme.primary),
-                                            onPressed: _uploadingMedia
-                                                ? null
-                                                : _startListenTogether,
+                                            onPressed: _startListenTogether,
                                             visualDensity:
                                                 VisualDensity.compact,
                                           ),
@@ -6805,9 +7009,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                             tooltip: 'Attach',
                                             icon: Icon(Icons.attach_file_rounded,
                                                 color: scheme.onSurfaceVariant),
-                                            onPressed: _uploadingMedia
-                                                ? null
-                                                : _openAttachSheet,
+                                            onPressed: _openAttachSheet,
                                             visualDensity:
                                                 VisualDensity.compact,
                                           ),
@@ -6815,10 +7017,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                             tooltip: 'Camera',
                                             icon: Icon(Icons.camera_alt_rounded,
                                                 color: scheme.onSurfaceVariant),
-                                            onPressed: _uploadingMedia
-                                                ? null
-                                                : () => _pickImage(
-                                                    ImageSource.camera),
+                                            onPressed: () =>
+                                                _pickImage(ImageSource.camera),
                                             visualDensity:
                                                 VisualDensity.compact,
                                           ),
@@ -6833,23 +7033,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      // Mic (idle) ↔ Send (typing). Uploading shows a spinner.
+                      // Mic (idle) ↔ Send (typing). Sends never block here —
+                      // per-bubble spinners show upload progress instead.
                       // Sized to match the input pill so the two read as one
                       // unit. The idle mic wears only a faint brand tint (soft
                       // pink fill + red icon) so it complements — rather than
                       // competes with — the solid-red player FAB in the footer.
                       // Send is an action, so it keeps the solid red for
                       // emphasis while the user is typing.
-                      _uploadingMedia
-                          ? const SizedBox(
-                              width: 42,
-                              height: 42,
-                              child: Padding(
-                                padding: EdgeInsets.all(11),
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                            )
-                          : Tooltip(
+                      Tooltip(
                               message: hasText
                                   ? (_editing != null ? 'Save edit' : 'Send')
                                   : 'Record voice note',

@@ -215,6 +215,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   // reply
   Map<String, dynamic>? _replyTo;
 
+  // Inline "add a caption" bar for a pasted/attached file. While a
+  // request is pending, the composer is replaced by a compact caption
+  // panel docked in the chat view (not a full-screen modal), so it stays
+  // within the conversation and never covers the mini player.
+  String? _captionFileName;
+  TextEditingController? _captionCtrl;
+  Completer<String?>? _captionCompleter;
+
   // edit-in-place: the message currently being edited, plus any reply-quote
   // prefix to preserve when saving.
   Map<String, dynamic>? _editing;
@@ -962,6 +970,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // Release any in-flight caption request so its awaiter unwinds.
+    if (_captionCompleter != null && !_captionCompleter!.isCompleted) {
+      _captionCompleter!.complete(null);
+    }
     ConnectionStatus.instance.online.removeListener(_onConnStatusChanged);
     _statusTimer?.cancel();
     _pollTimer?.cancel();
@@ -3515,101 +3527,156 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   // A compact sheet to add a caption before sending a pasted file. Returns the
   // caption (possibly empty) on Send, or null if cancelled/dismissed.
+  // Shows an inline caption bar inside the chat view and resolves once the
+  // user taps Send (returns the caption, possibly empty) or Cancel (null).
   Future<String?> _askFileCaption(String filename) async {
-    final scheme = Theme.of(context).colorScheme;
+    // Defensively resolve any previous pending request.
+    if (_captionCompleter != null && !_captionCompleter!.isCompleted) {
+      _captionCompleter!.complete(null);
+    }
     final ctrl = TextEditingController();
-    final result = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: scheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        final bottom = MediaQuery.of(ctx).viewInsets.bottom;
-        return Padding(
-          padding: EdgeInsets.fromLTRB(16, 12, 16, 14 + bottom),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 14),
+    final completer = Completer<String?>();
+    if (mounted) {
+      setState(() {
+        _captionFileName = filename;
+        _captionCtrl = ctrl;
+        _captionCompleter = completer;
+      });
+    }
+    final result = await completer.future;
+    if (mounted) {
+      setState(() {
+        _captionFileName = null;
+        _captionCtrl = null;
+        _captionCompleter = null;
+      });
+    }
+    ctrl.dispose();
+    return result;
+  }
+
+  void _submitFileCaption() {
+    final c = _captionCompleter;
+    if (c == null || c.isCompleted) return;
+    c.complete(_captionCtrl?.text ?? '');
+  }
+
+  void _cancelFileCaption() {
+    final c = _captionCompleter;
+    if (c == null || c.isCompleted) return;
+    c.complete(null);
+  }
+
+  // Compact caption panel (file chip + caption field + send) that stands in
+  // for the composer while a pasted file is awaiting its caption. WhatsApp-
+  // style: it lives in the conversation's input slot, not over the whole app.
+  Widget _buildFileCaptionBar(ColorScheme scheme) {
+    final name = _captionFileName ?? '';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  alignment: Alignment.center,
                   decoration: BoxDecoration(
-                      color: scheme.outlineVariant,
-                      borderRadius: BorderRadius.circular(2)),
+                    color: scheme.primary.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.insert_drive_file_rounded,
+                      color: scheme.primary, size: 20),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface)),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  color: scheme.onSurfaceVariant,
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Cancel',
+                  onPressed: _cancelFileCaption,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: scheme.surface,
+                    borderRadius: BorderRadius.circular(26),
+                    border: Border.all(
+                        color: scheme.outlineVariant.withValues(alpha: 0.5)),
+                  ),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                    child: Focus(
+                      onKeyEvent: (node, event) {
+                        if (event is KeyDownEvent &&
+                            event.logicalKey == LogicalKeyboardKey.enter &&
+                            !HardwareKeyboard.instance.isShiftPressed &&
+                            !HardwareKeyboard.instance.isControlPressed) {
+                          _submitFileCaption();
+                          return KeyEventResult.handled;
+                        }
+                        return KeyEventResult.ignored;
+                      },
+                      child: TextField(
+                        controller: _captionCtrl,
+                        autofocus: true,
+                        minLines: 1,
+                        maxLines: 4,
+                        textInputAction: TextInputAction.newline,
+                        keyboardType: TextInputType.multiline,
+                        decoration: const InputDecoration(
+                          hintText: 'Add a caption…',
+                          isDense: true,
+                          border: InputBorder.none,
+                          contentPadding:
+                              EdgeInsets.symmetric(vertical: 10, horizontal: 2),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: scheme.primary.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(11),
-                    ),
-                    child: Icon(Icons.insert_drive_file_rounded,
-                        color: scheme.primary, size: 20),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(filename,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: scheme.onSurface)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: ctrl,
-                autofocus: true,
-                minLines: 1,
-                maxLines: 4,
-                textInputAction: TextInputAction.newline,
-                decoration: InputDecoration(
-                  hintText: 'Add a caption…',
-                  filled: true,
-                  fillColor: scheme.surfaceContainerHighest,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
-                  ),
+              const SizedBox(width: 6),
+              Material(
+                color: scheme.primary,
+                shape: const CircleBorder(),
+                child: IconButton(
+                  icon: const Icon(Icons.send_rounded, color: Colors.white),
+                  onPressed: _submitFileCaption,
+                  tooltip: 'Send',
                 ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Cancel'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () => Navigator.pop(ctx, ctrl.text),
-                      icon: const Icon(Icons.send_rounded, size: 18),
-                      label: const Text('Send'),
-                    ),
-                  ),
-                ],
               ),
             ],
           ),
-        );
-      },
+        ],
+      ),
     );
-    ctrl.dispose();
-    return result;
   }
 
   String _viewerSenderName(int i) {
@@ -6427,6 +6494,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   Widget _buildInput(bool isDark) {
     final scheme = Theme.of(context).colorScheme;
+    // A pending file caption takes over the composer slot (only) with a
+    // compact caption panel, so it never covers the chat list or player.
+    if (_captionFileName != null) {
+      return SafeArea(
+        top: false,
+        bottom: widget.showAppBar,
+        child: _buildFileCaptionBar(scheme),
+      );
+    }
     final hasText = _ctrl.text.trim().isNotEmpty;
 
     return SafeArea(

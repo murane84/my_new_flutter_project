@@ -23,7 +23,7 @@ router = APIRouter(tags=["Attachments"])
 # Max attachment size. Media is stored in Postgres, so keep this modest —
 # voice notes and compressed images are small; big files should be capped.
 MAX_BYTES = 15 * 1024 * 1024  # 15 MB (images / voice)
-VIDEO_MAX_BYTES = 64 * 1024 * 1024  # 64 MB (video — larger by nature)
+VIDEO_MAX_BYTES = 200 * 1024 * 1024  # 200 MB (video — large; client sends big ones ephemeral)
 # Arbitrary files (APK, PDF, Excel, zip, …). Large, but uploaded ephemeral by
 # the client so the bytes are purged once the recipient caches them (or after
 # the TTL) — the server stays a relay, not a warehouse.

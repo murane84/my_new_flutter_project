@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 
 import 'api_service.dart';
 import 'token_helper.dart' show mediaAuthHeaders;
+import 'package:flutter_contacts/flutter_contacts.dart';
+
 import '../services/contact_names.dart';
 import '../utils/net_image.dart';
 import '../utils/time_utils.dart';
@@ -111,13 +113,40 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
     }
   }
 
+  // Opens the phone's native "new contact" screen pre-filled with this number
+  // (WhatsApp-style), then re-reads the address book so a newly saved name
+  // resolves. Mobile only — the "Add to contacts" tile is hidden on web, where
+  // names come through the existing web-linking mechanism instead.
+  Future<void> _addToContacts(String phone) async {
+    final ph = phone.trim();
+    if (ph.isEmpty) return;
+    try {
+      final contact = Contact()..phones = [Phone(ph)];
+      await FlutterContacts.openExternalInsert(contact);
+    } catch (_) {
+      if (mounted) {
+        showToast(context, "Couldn't open Contacts", type: ToastType.error);
+      }
+      return;
+    }
+    try {
+      await ContactNames.instance.refresh();
+    } catch (_) {}
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final ph = (_phone ?? '').trim();
-    final saved = ph.isNotEmpty ? ContactNames.instance.nameFor(ph) : null;
+    final hasRealName =
+        ph.isNotEmpty && ContactNames.instance.hasRealName(ph);
+    final saved = hasRealName ? ContactNames.instance.nameFor(ph) : null;
     final inPhonebook = saved != null && saved.isNotEmpty;
     final title = inPhonebook ? saved : widget.username;
+    // Offer "Add to contacts" when the number isn't saved under a real name.
+    final canAddContact =
+        ph.isNotEmpty && ContactNames.isSupported && !hasRealName;
     final initial = title.isNotEmpty ? title[0].toUpperCase() : '?';
     final avatarUrl = widget.avatarUrl;
     final hasAvatar = (avatarUrl ?? '').isNotEmpty;
@@ -246,6 +275,37 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
               Text('No phone number shared',
                   style: TextStyle(
                       fontSize: 12.5, color: scheme.onSurfaceVariant)),
+            if (canAddContact) ...[
+              const SizedBox(height: 10),
+              Material(
+                color: scheme.primary.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(14),
+                child: InkWell(
+                  onTap: () => _addToContacts(ph),
+                  borderRadius: BorderRadius.circular(14),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    child: Row(
+                      children: [
+                        Icon(Icons.person_add_alt_1_rounded,
+                            size: 20, color: scheme.primary),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text('Add to contacts',
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: scheme.onSurface)),
+                        ),
+                        Icon(Icons.chevron_right_rounded,
+                            size: 20, color: scheme.onSurfaceVariant),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             Row(
               children: [

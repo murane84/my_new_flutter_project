@@ -6775,7 +6775,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     if (_isGroup || widget.friendId <= 0) return false;
     if (_friendPhone.trim().isEmpty) return false;
     if (!ContactNames.isSupported) return false;
-    return ContactNames.instance.nameFor(_friendPhone) == null;
+    // Offer to save unless it's already under a real phone-book name (a contact
+    // saved as just the number doesn't count).
+    return !ContactNames.instance.hasRealName(_friendPhone);
   }
 
   // Opens the phone's native "new contact" screen pre-filled with this

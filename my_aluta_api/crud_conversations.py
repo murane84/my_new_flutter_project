@@ -265,13 +265,28 @@ def purge_cached_conversation(db: Session, conversation_id: int) -> int:
         if not rows:
             return 0
         from models import MediaAsset
+        purged = 0
         for m in rows:
-            if m.media_url:
-                frag = m.media_url.rsplit("/", 1)[-1]
-                if frag:
-                    db.query(MediaAsset).filter(MediaAsset.id == frag).update(
-                        {MediaAsset.data: None}, synchronize_session=False
-                    )
+            frag = m.media_url.rsplit("/", 1)[-1] if m.media_url else None
+            if frag:
+                asset = (
+                    db.query(MediaAsset)
+                    .filter(MediaAsset.id == frag)
+                    .first()
+                )
+                # Ephemeral media (files like APK/PDF/Excel, large videos,
+                # shared songs) is downloaded ON DEMAND and has its own
+                # lifecycle: the bytes are purged on the attachment-level
+                # /cached ack (recipient actually fetched it) or after the
+                # 7-day TTL. Nulling it here — triggered merely by the
+                # recipient caching the message METADATA when they open the
+                # chat — deletes the file before they ever tap download (the
+                # "file is no longer available" bug). Leave the whole message
+                # intact and let that lifecycle handle it.
+                if asset is not None and asset.ephemeral:
+                    continue
+                if asset is not None:
+                    asset.data = None
             m.content = None
             m.media_url = None
             m.media_name = None
@@ -279,8 +294,9 @@ def purge_cached_conversation(db: Session, conversation_id: int) -> int:
             m.media_size = None
             m.media_duration = None
             m.purged = True
+            purged += 1
         db.commit()
-        return len(rows)
+        return purged
     except Exception:
         db.rollback()
         return 0

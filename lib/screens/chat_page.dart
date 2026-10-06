@@ -2906,6 +2906,18 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         return 'audio/wav';
       case 'mp4':
         return 'video/mp4';
+      case 'apk':
+        return 'application/vnd.android.package-archive';
+      case 'xlsx':
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case 'xls':
+        return 'application/vnd.ms-excel';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'pptx':
+        return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+      case 'zip':
+        return 'application/zip';
       default:
         return 'application/octet-stream';
     }
@@ -3406,7 +3418,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             event.logicalKey == LogicalKeyboardKey.keyV &&
             (HardwareKeyboard.instance.isControlPressed ||
                 HardwareKeyboard.instance.isMetaPressed)) {
-          _tryPasteImage();
+          _tryPasteAttachment();
         }
         return KeyEventResult.ignored;
       },
@@ -3424,6 +3436,165 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       // No image on the clipboard (or unsupported) — the default text paste
       // already handled the keystroke.
     }
+  }
+
+  // Ctrl/Cmd+V: first try FILES copied from a file manager (APK, PDF, Excel,
+  // ...), then an image, then fall through to the default text paste.
+  Future<void> _tryPasteAttachment() async {
+    try {
+      final paths = await Pasteboard.files;
+      if (paths.isNotEmpty) {
+        await _pasteFilesFlow(paths);
+        return;
+      }
+    } catch (_) {/* no files on the clipboard */}
+    await _tryPasteImage();
+  }
+
+  Future<void> _pasteFilesFlow(List<String> paths) async {
+    const imgExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    const fileCap = 15 * 1024 * 1024; // server cap for non-video attachments
+    for (var i = 0; i < paths.length; i++) {
+      final path = paths[i];
+      List<int> bytes;
+      try {
+        bytes = await readFileBytes(path);
+      } catch (_) {
+        if (mounted) {
+          showToast(context, 'Could not read that file',
+              type: ToastType.error);
+        }
+        continue;
+      }
+      if (bytes.isEmpty) continue;
+      final name = path.split(RegExp(r'[\\/]+')).last;
+      final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
+      if (imgExt.contains(ext)) {
+        await _previewAndSendImage(
+            Uint8List.fromList(bytes), name, _mimeForExt(ext));
+        continue;
+      }
+      if (bytes.length > fileCap) {
+        if (mounted) {
+          showToast(context, '"$name" is too large to send (max 15 MB).',
+              type: ToastType.error);
+        }
+        continue;
+      }
+      // Only the FIRST file gets the caption sheet; extra files send plain so a
+      // multi-file paste isn't a caption gauntlet.
+      String? caption = '';
+      if (i == 0) {
+        caption = await _askFileCaption(name);
+        if (caption == null) return; // cancelled the whole paste
+      }
+      await _uploadAndSend(
+        bytes: bytes,
+        filename: name,
+        mime: _mimeForExt(ext),
+        type: 'file',
+        caption: caption ?? '',
+      );
+    }
+  }
+
+  // A compact sheet to add a caption before sending a pasted file. Returns the
+  // caption (possibly empty) on Send, or null if cancelled/dismissed.
+  Future<String?> _askFileCaption(String filename) async {
+    final scheme = Theme.of(context).colorScheme;
+    final ctrl = TextEditingController();
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final bottom = MediaQuery.of(ctx).viewInsets.bottom;
+        return Padding(
+          padding: EdgeInsets.fromLTRB(16, 12, 16, 14 + bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(
+                      color: scheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: Icon(Icons.insert_drive_file_rounded,
+                        color: scheme.primary, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(filename,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                minLines: 1,
+                maxLines: 4,
+                textInputAction: TextInputAction.newline,
+                decoration: InputDecoration(
+                  hintText: 'Add a caption…',
+                  filled: true,
+                  fillColor: scheme.surfaceContainerHighest,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => Navigator.pop(ctx, ctrl.text),
+                      icon: const Icon(Icons.send_rounded, size: 18),
+                      label: const Text('Send'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    ctrl.dispose();
+    return result;
   }
 
   String _viewerSenderName(int i) {

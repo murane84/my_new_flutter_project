@@ -2877,6 +2877,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           filename: f.name,
           mime: _mimeForExt(ext),
           type: 'file',
+          // Big files are purged from the server once cached (cache-then-purge).
+          ephemeral: bytes.length > 15 * 1024 * 1024,
         );
       }
     } catch (_) {
@@ -3006,6 +3008,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     int? durationMs,
     String caption = '',
     bool hd = false,
+    bool ephemeral = false,
   }) async {
     setState(() => _uploadingMedia = true);
     try {
@@ -3035,8 +3038,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           }
         } catch (_) {/* keep the original bytes on any failure */}
       }
-      final up = await appBusy.run(() =>
-          ApiService().uploadMedia(bytes: bytes, filename: filename, mime: mime));
+      final up = await appBusy.run(() => ApiService().uploadMedia(
+          bytes: bytes, filename: filename, mime: mime, ephemeral: ephemeral));
       if (up == null || up['url'] == null) {
         if (mounted) showToast(context, 'Upload failed', type: ToastType.error);
         return;
@@ -3453,7 +3456,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   Future<void> _pasteFilesFlow(List<String> paths) async {
     const imgExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-    const fileCap = 15 * 1024 * 1024; // server cap for non-video attachments
+    const fileCap = 200 * 1024 * 1024; // server cap for arbitrary files
+    const ephemeralOver = 15 * 1024 * 1024; // big files: cache-then-purge
     for (var i = 0; i < paths.length; i++) {
       final path = paths[i];
       List<int> bytes;
@@ -3476,7 +3480,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       }
       if (bytes.length > fileCap) {
         if (mounted) {
-          showToast(context, '"$name" is too large to send (max 15 MB).',
+          showToast(context, '"$name" is too large to send (max 200 MB).',
               type: ToastType.error);
         }
         continue;
@@ -3494,6 +3498,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         mime: _mimeForExt(ext),
         type: 'file',
         caption: caption ?? '',
+        // Large files ride as ephemeral: the server purges the bytes once the
+        // recipient caches them (or after the TTL), so a 200 MB file never
+        // lives on the server long-term.
+        ephemeral: bytes.length > ephemeralOver,
       );
     }
   }

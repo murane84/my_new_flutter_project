@@ -3452,7 +3452,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   // ...), then an image, then fall through to the default text paste.
   Future<void> _tryPasteAttachment() async {
     try {
-      final paths = await Pasteboard.files;
+      final paths = await Pasteboard.files();
       if (paths.isNotEmpty) {
         await _pasteFilesFlow(paths);
         return;
@@ -3504,7 +3504,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         filename: name,
         mime: _mimeForExt(ext),
         type: 'file',
-        caption: caption ?? '',
+        caption: caption,
         // Large files ride as ephemeral: the server purges the bytes once the
         // recipient caches them (or after the TTL), so a 200 MB file never
         // lives on the server long-term.

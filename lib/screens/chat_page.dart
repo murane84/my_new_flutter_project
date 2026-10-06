@@ -6396,7 +6396,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                               textColor, scheme,
                               caption: msgType == 'video' ? mainText : null),
                         if (imgCap)
-                          _imageCaption(fullMediaUrl(mediaRel), mainText,
+                          _imageCaption(fullMediaUrl(mediaRel ?? ''), mainText,
                               textColor, linkColor),
                         // A shared song shows its title inside the card, so skip
                         // the duplicate text line. Call/live logs store their

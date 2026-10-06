@@ -6466,13 +6466,13 @@ class _MomentComposerState extends State<_MomentComposer> {
         }
         return;
       }
-      final cap = kind == 'video' ? 64 * 1024 * 1024 : 15 * 1024 * 1024;
+      final cap = kind == 'video' ? 200 * 1024 * 1024 : 15 * 1024 * 1024;
       if (bytes.length > cap) {
         if (mounted) {
           showToast(
               context,
               kind == 'video'
-                  ? 'Video is too large (max 64 MB).'
+                  ? 'Video is too large (max 200 MB).'
                   : 'File is too large (max 15 MB).',
               type: ToastType.error);
         }

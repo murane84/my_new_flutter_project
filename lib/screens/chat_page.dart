@@ -2731,7 +2731,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         }
         return;
       }
-      const cap = 64 * 1024 * 1024;
+      const cap = 200 * 1024 * 1024;
       const compressAbove = 12 * 1024 * 1024;
 
       // Large clips: shrink on-device so they fit the cap (mobile native only).
@@ -2760,13 +2760,20 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
       if (bytes.length > cap) {
         if (mounted) {
-          showToast(context, 'Video is too large to send (max 64 MB).',
+          showToast(context, 'Video is too large to send (max 200 MB).',
               type: ToastType.error);
         }
         return;
       }
       await _uploadAndSend(
-          bytes: bytes, filename: filename, mime: mime, type: 'video');
+          bytes: bytes,
+          filename: filename,
+          mime: mime,
+          type: 'video',
+          // Big clips ride ephemeral: purged from the server once the
+          // recipient caches them (GlimpseVideo caches on play) or after the
+          // TTL, so a 200 MB video never lives on the server long-term.
+          ephemeral: bytes.length > 15 * 1024 * 1024);
     } catch (_) {
       if (mounted) {
         showToast(context, 'Could not pick video', type: ToastType.error);

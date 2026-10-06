@@ -229,4 +229,22 @@ class ContactNames {
     if (d.length >= 9) return _byKey[d.substring(d.length - 9)];
     return null;
   }
+
+  /// True only when this number is saved under a REAL phone-book name — not
+  /// missing, and not a contact whose "name" is just the number itself (saved
+  /// with no name). UI uses this to decide whether to offer "Add to contacts".
+  bool hasRealName(String phone) {
+    final n = nameFor(phone);
+    if (n == null || n.trim().isEmpty) return false;
+    final nameDigits = _digits(n);
+    if (nameDigits.isEmpty) return true; // a proper, non-numeric name
+    final phoneDigits = _digits(phone);
+    if (nameDigits == phoneDigits) return false;
+    if (phoneDigits.length >= 9 &&
+        nameDigits.endsWith(phoneDigits.substring(phoneDigits.length - 9))) {
+      return false;
+    }
+    // The "name" has some letters/content beyond the number — treat as real.
+    return RegExp(r'[^0-9+()\s-]').hasMatch(n);
+  }
 }

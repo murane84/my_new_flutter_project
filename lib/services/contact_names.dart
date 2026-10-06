@@ -42,6 +42,10 @@ class ContactNames {
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
+  /// Whether this platform can read the address book / add contacts
+  /// (mobile only). Exposed so UI can gate contact-save affordances.
+  static bool get isSupported => _mobile;
+
   static String _digits(String s) => s.replaceAll(RegExp(r'[^0-9]'), '');
 
   /// Build the number → saved-name map. By default this is SILENT: it only runs

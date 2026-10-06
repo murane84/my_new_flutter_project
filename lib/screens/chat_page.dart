@@ -1943,7 +1943,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     if (!mounted) return;
     final online = status['is_online'] ?? false;
     final lastSeen = status['last_seen'] ?? '';
-    _friendPhone = (status['phone'] as String?) ?? '';
+    final newPhone = (status['phone'] as String?) ?? '';
+    if (newPhone != _friendPhone) {
+      _friendPhone = newPhone;
+      // Rebuild so the "Add to contacts" prompt can appear/disappear.
+      if (mounted) setState(() {});
+    }
     final avatar = (status['avatar_url'] as String?) ?? '';
     // Only override the seeded avatar when /status actually returns one, so we
     // never blank out a DP the caller already supplied.
@@ -6503,6 +6508,81 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       );
   }
 
+  // True when we have this friend's phone number but no saved phone-book name
+  // for it, so we should offer to add them (one-to-one chats only).
+  bool get _needsContactSave {
+    if (_isGroup || widget.friendId <= 0) return false;
+    if (_friendPhone.trim().isEmpty) return false;
+    if (!ContactNames.isSupported) return false;
+    return ContactNames.instance.nameFor(_friendPhone) == null;
+  }
+
+  // Opens the phone's native "new contact" screen pre-filled with this
+  // friend's number (WhatsApp-style). After the user saves, re-read the
+  // address book so the name resolves across the app right away.
+  Future<void> _addFriendToContacts() async {
+    final phone = _friendPhone.trim();
+    if (phone.isEmpty) return;
+    try {
+      final contact = Contact()..phones = [Phone(phone)];
+      await FlutterContacts.openExternalInsert(contact);
+    } catch (e) {
+      if (mounted) {
+        showToast(context, "Couldn't open Contacts", type: ToastType.error);
+      }
+      return;
+    }
+    // Whether or not they saved, refresh so a new entry is picked up.
+    try {
+      await ContactNames.instance.refresh();
+    } catch (_) {}
+    if (mounted) setState(() {});
+  }
+
+  // Slim tappable banner inviting the user to save an unknown number.
+  Widget _buildSaveContactBanner() {
+    if (!_needsContactSave) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.primary.withValues(alpha: 0.10),
+      child: InkWell(
+        onTap: _addFriendToContacts,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              Icon(Icons.person_add_alt_1_rounded,
+                  size: 20, color: scheme.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Add to contacts',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13.5,
+                            color: scheme.onSurface)),
+                    Text(_friendPhone,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: scheme.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right_rounded,
+                  size: 20, color: scheme.onSurfaceVariant),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildInput(bool isDark) {
     final scheme = Theme.of(context).colorScheme;
     // A pending file caption takes over the composer slot (only) with a
@@ -6925,6 +7005,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       children: [
         // Pinned-message banner (empty widget when nothing is pinned).
         _buildPinnedBanner(),
+        // "Add to contacts" prompt when this friend's number isn't in the
+        // phone book yet (empty widget otherwise).
+        _buildSaveContactBanner(),
         // Message list
         Expanded(
           // Rounded, bordered conversation card — consistent with the app's

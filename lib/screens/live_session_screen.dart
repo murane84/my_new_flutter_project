@@ -14,7 +14,7 @@ import '../state/playback_state.dart';
 import '../utils/file_bytes.dart';
 import '../utils/toast_helper.dart';
 import 'music/player_disc_style.dart'
-    show PlayerDisc, PlayerStyleController, PlayerDiscStyle, showPlayerStyleSheet;
+    show PlayerDisc, PlayerStyleController, showPlayerStyleSheet;
 import 'relationship_space_page.dart' show pickDiaryReaction;
 import '../utils/marquee_text.dart';
 

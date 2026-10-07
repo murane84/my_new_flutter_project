@@ -215,6 +215,11 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   // the sender attached — the "People" + "Chat" regions of the hub.
   final List<_Participant> _participants = [];
   final List<_ReactionLog> _reactionFeed = [];
+  // The group-chat composer for the reactions column, and whether the "In the
+  // room" avatar strip is collapsed to give the feed more vertical room.
+  final TextEditingController _commentCtrl = TextEditingController();
+  final FocusNode _commentFocus = FocusNode();
+  bool _peopleCollapsed = false;
   // Save-this-session (host 1:1 only): when the set ends, offer to keep it as a
   // dated memory on the Our Space wall. Guarded so it's offered at most once.
   final DateTime _sessionStart = DateTime.now();
@@ -477,6 +482,11 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         final fromId = (e['from_id'] as num?)?.toInt();
         _spawnReaction(em, fromId: fromId);
         break;
+      case 'comment':
+        final txt = (e['text'] ?? '').toString();
+        final cFrom = (e['from_id'] as num?)?.toInt();
+        if (txt.trim().isNotEmpty) _logComment(txt, cFrom);
+        break;
       case 'session_roster':
         final people = ((e['data'] as Map?)?['people'] as List?) ?? const [];
         _setRoster(people);
@@ -623,6 +633,37 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       _reactionFeed.insert(0, _ReactionLog(name, emoji, DateTime.now()));
       if (_reactionFeed.length > 50) _reactionFeed.removeLast();
     });
+  }
+
+  // A typed chat line in the reactions column. [fromId] == my id (or mine)
+  // resolves to "You"; otherwise it's looked up in the roster.
+  void _logComment(String text, int? fromId, {bool mine = false}) {
+    if (!mounted) return;
+    String name;
+    if (mine || fromId == widget.myUserId) {
+      name = 'You';
+      mine = true;
+    } else {
+      final i =
+          fromId == null ? -1 : _participants.indexWhere((x) => x.id == fromId);
+      name = i == -1 ? 'Someone' : _participants[i].name;
+    }
+    setState(() {
+      _reactionFeed.insert(
+          0, _ReactionLog(name, '', DateTime.now(), text: text, mine: mine));
+      if (_reactionFeed.length > 80) _reactionFeed.removeLast();
+    });
+  }
+
+  // Send whatever is in the composer as a chat line, and echo it locally.
+  void _sendComment() {
+    final t = _commentCtrl.text.trim();
+    if (t.isEmpty) return;
+    _c.sendComment(t);
+    _commentCtrl.clear();
+    _logComment(t, widget.myUserId, mine: true);
+    // Keep the keyboard up for a back-and-forth, like a group chat.
+    _commentFocus.requestFocus();
   }
 
   void _removeFloat(int id) {
@@ -799,32 +840,45 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   // sees live too.
   Widget _reactionBar(ColorScheme scheme) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          for (final em in _quickReactions)
-            _ReactionButton(
-              emoji: em,
-              onTap: () => _spawnReaction(em, mine: true),
-              scheme: scheme,
-            ),
-          // "More" → the full emoji keyboard, so any reaction can be sent.
-          GestureDetector(
-            onTap: _pickMoreReaction,
-            child: Container(
-              width: 32,
-              height: 32,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: scheme.primary.withValues(alpha: 0.14),
-                shape: BoxShape.circle,
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 2),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHigh.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: scheme.outlineVariant.withAlpha(55)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            for (final em in _quickReactions)
+              _ReactionButton(
+                emoji: em,
+                onTap: () => _spawnReaction(em, mine: true),
+                scheme: scheme,
               ),
-              child: Icon(Icons.add_reaction_outlined,
-                  size: 17, color: scheme.primary),
+            // A slim divider, then "More" → the full emoji keyboard.
+            Container(
+              width: 1,
+              height: 20,
+              color: scheme.outlineVariant.withAlpha(70),
             ),
-          ),
-        ],
+            GestureDetector(
+              onTap: _pickMoreReaction,
+              child: Container(
+                width: 32,
+                height: 32,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: 0.14),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.add_reaction_outlined,
+                    size: 17, color: scheme.primary),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -872,6 +926,8 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   @override
   void dispose() {
     _discSpin.dispose();
+    _commentCtrl.dispose();
+    _commentFocus.dispose();
     // If we're just minimising, leave the session (controller, notifier,
     // activeLiveSession) fully intact — only detach this screen.
     if (!_minimizing) {
@@ -1022,24 +1078,41 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   // The player in the middle (wide) — disc + waveform only; controls live in
   // the bottom bar there.
   Widget _centerPlayer(ThemeData theme, ColorScheme scheme) {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          const SizedBox(height: 16),
-          _discHero(theme, scheme, side: 150),
-          const SizedBox(height: 14),
-          if (_lostConnection)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-              child: _buildReconnect(scheme),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 28),
-              child: _buildSeekBar(),
-            ),
-          const SizedBox(height: 10),
-        ],
+    // A soft ambient glow behind the disc gives the centre stage a little
+    // "concert" depth and balances the visual weight of the two side columns.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: RadialGradient(
+          center: const Alignment(0, -0.42),
+          radius: 0.9,
+          colors: [
+            scheme.primary.withValues(alpha: 0.09),
+            scheme.primary.withValues(alpha: 0.0),
+          ],
+        ),
+      ),
+      child: Center(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 26),
+              _discHero(theme, scheme, side: 158),
+              const SizedBox(height: 18),
+              if (_lostConnection)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+                  child: _buildReconnect(scheme),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
+                  child: _buildSeekBar(),
+                ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1120,48 +1193,83 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
-          child: Row(
-            children: [
-              Icon(Icons.group_rounded, size: 16, color: scheme.primary),
-              const SizedBox(width: 6),
-              Text('In the room',
-                  style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w800,
-                      color: scheme.onSurface)),
-              const Spacer(),
-              Text('${people.length}',
-                  style: TextStyle(
-                      fontSize: 12, color: scheme.onSurfaceVariant)),
-            ],
+        // ── "In the room" header, with a hide/show toggle ──
+        InkWell(
+          onTap: () => setState(() => _peopleCollapsed = !_peopleCollapsed),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 10, 6),
+            child: Row(
+              children: [
+                Icon(Icons.group_rounded, size: 16, color: scheme.primary),
+                const SizedBox(width: 6),
+                Text('In the room',
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        color: scheme.onSurface)),
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text('${people.length}',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.primary)),
+                ),
+                const Spacer(),
+                // When collapsed, a compact stack of who's here so you still
+                // know the room at a glance.
+                if (_peopleCollapsed && people.isNotEmpty)
+                  _miniAvatarStack(scheme, people),
+                const SizedBox(width: 4),
+                Icon(
+                  _peopleCollapsed
+                      ? Icons.keyboard_arrow_down_rounded
+                      : Icons.keyboard_arrow_up_rounded,
+                  size: 20,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ],
+            ),
           ),
         ),
-        SizedBox(
-          height: 68,
-          child: people.isEmpty
-              ? Center(
-                  child: Text('Just you so far',
-                      style: TextStyle(
-                          fontSize: 12, color: scheme.onSurfaceVariant)))
-              : ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: people.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 10),
-                  itemBuilder: (_, i) => _personChip(scheme, people[i]),
+        // ── The avatar strip (hidden when collapsed) ──
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          child: _peopleCollapsed
+              ? const SizedBox(width: double.infinity)
+              : SizedBox(
+                  height: 70,
+                  child: people.isEmpty
+                      ? Center(
+                          child: Text('Just you so far',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: scheme.onSurfaceVariant)))
+                      : ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          itemCount: people.length,
+                          separatorBuilder: (_, _) => const SizedBox(width: 10),
+                          itemBuilder: (_, i) => _personChip(scheme, people[i]),
+                        ),
                 ),
         ),
         Divider(height: 12, color: scheme.outlineVariant.withAlpha(80)),
+        // ── Chat & reactions header ──
         Padding(
           padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
           child: Row(
             children: [
-              Icon(Icons.chat_bubble_outline_rounded,
-                  size: 15, color: scheme.primary),
+              Icon(Icons.forum_rounded, size: 15, color: scheme.primary),
               const SizedBox(width: 6),
-              Text('Reactions',
+              Text('Chat & reactions',
                   style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w800,
@@ -1169,24 +1277,117 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
             ],
           ),
         ),
+        // ── The live feed (newest at the bottom, like a group chat) ──
         Expanded(
           child: _reactionFeed.isEmpty
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Text('Tap a reaction to cheer \u{1F389}',
+                    child: Text(
+                        'Say something or tap a reaction \u{1F389}',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                             fontSize: 12.5, color: scheme.onSurfaceVariant)),
                   ),
                 )
               : ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  reverse: true,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
                   itemCount: _reactionFeed.length,
                   itemBuilder: (_, i) => _feedRow(scheme, _reactionFeed[i]),
                 ),
         ),
+        // ── The composer: type a line to everyone in the room ──
+        _commentComposer(scheme),
       ],
+    );
+  }
+
+  // A few overlapping initial-avatars shown in the collapsed header.
+  Widget _miniAvatarStack(ColorScheme scheme, List<_Participant> people) {
+    final shown = people.take(3).toList();
+    return SizedBox(
+      width: 20.0 + (shown.length - 1) * 13.0,
+      height: 24,
+      child: Stack(
+        children: [
+          for (var i = 0; i < shown.length; i++)
+            Positioned(
+              left: i * 13.0,
+              child: Container(
+                padding: const EdgeInsets.all(1.5),
+                decoration: BoxDecoration(
+                    color: scheme.surface, shape: BoxShape.circle),
+                child: CircleAvatar(
+                  radius: 9,
+                  backgroundColor: _nameColor(shown[i].name, scheme),
+                  child: Text(
+                      shown[i].name.isNotEmpty
+                          ? shown[i].name[0].toUpperCase()
+                          : '?',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // The group-chat composer at the foot of the reactions column.
+  Widget _commentComposer(ColorScheme scheme) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
+      decoration: BoxDecoration(
+        border: Border(
+            top: BorderSide(color: scheme.outlineVariant.withAlpha(70))),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _commentCtrl,
+              focusNode: _commentFocus,
+              textInputAction: TextInputAction.send,
+              minLines: 1,
+              maxLines: 3,
+              onSubmitted: (_) => _sendComment(),
+              style: const TextStyle(fontSize: 13.5),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Message the room…',
+                hintStyle: TextStyle(
+                    fontSize: 13, color: scheme.onSurfaceVariant),
+                filled: true,
+                fillColor: scheme.surfaceContainerHighest,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(22),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Material(
+            color: scheme.primary,
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: _sendComment,
+              child: Padding(
+                padding: const EdgeInsets.all(9),
+                child: Icon(Icons.send_rounded,
+                    size: 18, color: scheme.onPrimary),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1254,18 +1455,86 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   }
 
   Widget _feedRow(ColorScheme scheme, _ReactionLog r) {
+    // A typed comment → a group-chat bubble (mine tinted + right-aligned).
+    if (r.isComment) return _commentBubble(scheme, r);
+    // A reaction → a soft inline pill, "<emoji> <name> reacted".
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: Row(
         children: [
-          Text(r.emoji, style: const TextStyle(fontSize: 18)),
-          const SizedBox(width: 10),
+          Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Text(r.emoji, style: const TextStyle(fontSize: 16)),
+          ),
+          const SizedBox(width: 9),
           Expanded(
-            child: Text(r.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: 12.5, color: scheme.onSurface)),
+            child: RichText(
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              text: TextSpan(
+                style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
+                children: [
+                  TextSpan(
+                      text: r.name,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: r.mine
+                              ? scheme.primary
+                              : _nameColor(r.name, scheme))),
+                  const TextSpan(text: ' reacted'),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // A chat bubble for a typed comment — sender name, then the text, with
+  // my own lines tinted and pushed to the right like a messaging thread.
+  Widget _commentBubble(ColorScheme scheme, _ReactionLog r) {
+    final mine = r.mine;
+    final bubbleColor = mine
+        ? scheme.primary.withValues(alpha: 0.16)
+        : scheme.surfaceContainerHighest;
+    final nameColor = mine ? scheme.primary : _nameColor(r.name, scheme);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+      child: Column(
+        crossAxisAlignment:
+            mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          Text(r.name,
+              style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  color: nameColor)),
+          const SizedBox(height: 2),
+          Align(
+            alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 230),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+              decoration: BoxDecoration(
+                color: bubbleColor,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(14),
+                  topRight: const Radius.circular(14),
+                  bottomLeft: Radius.circular(mine ? 14 : 4),
+                  bottomRight: Radius.circular(mine ? 4 : 14),
+                ),
+              ),
+              child: Text(r.text ?? '',
+                  style: TextStyle(fontSize: 13, color: scheme.onSurface)),
+            ),
           ),
         ],
       ),
@@ -1590,6 +1859,12 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         final hasBy = by != null && by.isNotEmpty;
         return ListTile(
           dense: true,
+          tileColor:
+              isCurrent ? scheme.primary.withValues(alpha: 0.07) : null,
+          shape: isCurrent
+              ? RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10))
+              : null,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12),
           leading: Icon(
             isCurrent ? Icons.graphic_eq_rounded : Icons.music_note_rounded,
@@ -1659,14 +1934,29 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   Widget _buildQueueHeader(ColorScheme scheme) {
     final count = _isHost ? _c.queue.length : _c.remoteQueueTitles.length;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
+      padding: const EdgeInsets.fromLTRB(14, 10, 6, 0),
       child: Row(
         children: [
-          Icon(Icons.queue_music_rounded, size: 18, color: scheme.primary),
+          Icon(Icons.queue_music_rounded, size: 16, color: scheme.primary),
           const SizedBox(width: 6),
-          Text('Queue ($count)',
-              style:
-                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          Text('Up next',
+              style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12.5,
+                  color: scheme.onSurface)),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text('$count',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.primary)),
+          ),
           const Spacer(),
           // Host of a room: toggle whether guests may add songs (Stage C).
           if (widget.isRoom && _isHost) _guestToggle(scheme),
@@ -1739,6 +2029,12 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         final upcoming = i > _c.currentIndex;
         return ListTile(
           dense: true,
+          tileColor:
+              isCurrent ? scheme.primary.withValues(alpha: 0.07) : null,
+          shape: isCurrent
+              ? RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10))
+              : null,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12),
           leading: Icon(
             isCurrent ? Icons.graphic_eq_rounded : Icons.music_note_rounded,
@@ -2275,8 +2571,11 @@ class _Participant {
 }
 
 class _ReactionLog {
-  _ReactionLog(this.name, this.emoji, this.at);
+  _ReactionLog(this.name, this.emoji, this.at, {this.text, this.mine = false});
   final String name;
-  final String emoji;
+  final String emoji; // '' for a typed comment
+  final String? text; // non-null → this entry is a typed chat line
+  final bool mine; // sent by this device (align/colour differently)
   final DateTime at;
+  bool get isComment => text != null;
 }

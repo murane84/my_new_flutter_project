@@ -1955,6 +1955,15 @@ class LiveSessionController {
   void sendReaction(String emoji) => _sendControl(
       {'type': 'reaction', 'emoji': emoji, 'from_id': _myUserId});
 
+  /// Either participant → everyone: a typed chat line in the reactions column.
+  /// Relayed by the server like any control message (no `to`), so it just
+  /// appears in the other screens' live feed. Ephemeral — nothing is stored.
+  void sendComment(String text) {
+    final t = text.trim();
+    if (t.isEmpty) return;
+    _sendControl({'type': 'comment', 'text': t, 'from_id': _myUserId});
+  }
+
   // ---------------------------------------------------------------------------
   // TEARDOWN
   // ---------------------------------------------------------------------------

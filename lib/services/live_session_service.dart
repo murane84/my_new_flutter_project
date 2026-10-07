@@ -218,6 +218,20 @@ class LiveSessionController {
   RTCPeerConnection? _lpc; // listener side
   RTCDataChannel? _lchan;
   bool _lRemoteSet = false;
+
+  // ── ICE recovery ──────────────────────────────────────────────────────────
+  // A network switch (toggling data/WiFi, flight mode, a VPN flip) can kill the
+  // P2P media path while the signaling socket survives — without this nothing
+  // would re-establish the audio. We watch each peer connection's ICE state and
+  // renegotiate with FRESH TURN credentials when it fails (a new peer
+  // connection is a clean ICE restart), capped so a genuinely dead path doesn't
+  // loop forever. The host re-offers to the failing peer; the listener (which
+  // can't offer) asks the host to re-offer.
+  final Map<int, Timer> _peerRecoverTimers = {}; // host side, per peer
+  final Map<int, int> _peerRecoverAttempts = {}; // host side, per peer
+  Timer? _listenerRecoverTimer; // listener side
+  int _listenerRecoverAttempts = 0; // listener side
+  static const int _maxIceRecoverAttempts = 4;
   final List<RTCIceCandidate> _lPendingIce = [];
 
   // Listener-side in-memory buffer for the incoming song.
@@ -818,6 +832,8 @@ class LiveSessionController {
       };
       pc.onConnectionState =
           (s) => _log('host: pc($peerId) state → $s');
+      // Watch the media path; renegotiate with fresh TURN if it drops.
+      pc.onIceConnectionState = (s) => _onHostPeerIceState(peerId, s);
 
       final ch = await pc.createDataChannel(
         'audio',
@@ -848,6 +864,48 @@ class LiveSessionController {
       _log('host: connect-to-peer error: $e');
       onError?.call(e);
     }
+  }
+
+  // HOST: react to a peer connection's ICE lifecycle. A healthy connect clears
+  // any pending recovery; a failure (or a disconnect that doesn't self-heal)
+  // triggers a renegotiation with fresh TURN credentials.
+  void _onHostPeerIceState(int peerId, RTCIceConnectionState s) {
+    _log('host: ice($peerId) → $s');
+    if (s == RTCIceConnectionState.RTCIceConnectionStateConnected ||
+        s == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+      _peerRecoverAttempts.remove(peerId);
+      _peerRecoverTimers.remove(peerId)?.cancel();
+      return;
+    }
+    if (s == RTCIceConnectionState.RTCIceConnectionStateFailed) {
+      // A hard failure — restart almost immediately.
+      _scheduleHostIceRecovery(peerId, const Duration(milliseconds: 400));
+    } else if (s == RTCIceConnectionState.RTCIceConnectionStateDisconnected) {
+      // Often self-heals within a few seconds; give it a grace window before
+      // forcing a restart (the 'connected' branch above cancels the timer).
+      _scheduleHostIceRecovery(peerId, const Duration(seconds: 4));
+    }
+  }
+
+  void _scheduleHostIceRecovery(int peerId, Duration delay) {
+    if (role != LiveRole.host) return;
+    if (_peerRecoverTimers.containsKey(peerId)) return; // already pending
+    final attempts = _peerRecoverAttempts[peerId] ?? 0;
+    if (attempts >= _maxIceRecoverAttempts) {
+      _log('host: ICE recovery exhausted for $peerId');
+      return;
+    }
+    _peerRecoverTimers[peerId] = Timer(delay, () async {
+      _peerRecoverTimers.remove(peerId);
+      if (role != LiveRole.host) return;
+      if (!_peers.containsKey(peerId)) return; // peer left / torn down
+      _peerRecoverAttempts[peerId] = attempts + 1;
+      // Fetch fresh ICE/TURN — after a network change the old candidates (and
+      // any ephemeral TURN credentials) are stale.
+      IceConfig.instance.invalidate();
+      _log('host: ICE recovery #${attempts + 1} → renegotiating peer $peerId');
+      await _hostConnectToPeer(peerId);
+    });
   }
 
   /// Stream one track to a single peer over its data channel, self-delimited:
@@ -1178,6 +1236,12 @@ class LiveSessionController {
   }
 
   Future<void> _closePeer(int peerId) async {
+    // Cancel a pending ICE-recovery timer for this peer, but KEEP its attempt
+    // count: _hostConnectToPeer() calls this on its way to a fresh connection,
+    // and clearing the count here would defeat the recovery cap (infinite
+    // renegotiation loop on a truly dead path). The count is cleared on a
+    // healthy connect, on a genuine rejoin, on leave, and on full teardown.
+    _peerRecoverTimers.remove(peerId)?.cancel();
     final p = _peers.remove(peerId);
     if (p == null) return;
     try {
@@ -1214,6 +1278,9 @@ class LiveSessionController {
         });
       };
       pc.onConnectionState = (s) => _log('listener: pc state → $s');
+      // Watch the media path; if it drops (e.g. a network switch), ask the host
+      // to re-offer with fresh TURN. The listener can't offer, so it signals.
+      pc.onIceConnectionState = _onListenerIceState;
       pc.onDataChannel = (RTCDataChannel ch) => _bindListenerChannel(ch);
 
       await pc.setRemoteDescription(RTCSessionDescription(sdp, 'offer'));
@@ -1227,6 +1294,49 @@ class LiveSessionController {
       _log('listener: answer error: $e');
       onError?.call(e);
     }
+  }
+
+  // LISTENER: react to the media path's ICE lifecycle. On failure, ask the host
+  // to renegotiate (fresh TURN); if that doesn't take after a few tries, fall
+  // back to a full reconnect so the host re-streams from scratch.
+  void _onListenerIceState(RTCIceConnectionState s) {
+    _log('listener: ice → $s');
+    if (s == RTCIceConnectionState.RTCIceConnectionStateConnected ||
+        s == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+      _listenerRecoverAttempts = 0;
+      _listenerRecoverTimer?.cancel();
+      _listenerRecoverTimer = null;
+      return;
+    }
+    if (s == RTCIceConnectionState.RTCIceConnectionStateFailed) {
+      _scheduleListenerIceRecovery(const Duration(milliseconds: 600));
+    } else if (s == RTCIceConnectionState.RTCIceConnectionStateDisconnected) {
+      _scheduleListenerIceRecovery(const Duration(seconds: 4));
+    }
+  }
+
+  void _scheduleListenerIceRecovery(Duration delay) {
+    if (role != LiveRole.listener) return;
+    if (_listenerRecoverTimer != null) return; // already pending
+    _listenerRecoverTimer = Timer(delay, () {
+      _listenerRecoverTimer = null;
+      if (role != LiveRole.listener || _lpc == null) return;
+      _listenerRecoverAttempts++;
+      IceConfig.instance.invalidate();
+      if (_listenerRecoverAttempts > _maxIceRecoverAttempts) {
+        // The P2P path won't come back on its own. Fall back to a full
+        // reconnect: a new socket makes the server re-deliver `peer_joined`, so
+        // the host re-streams from scratch with fresh TURN.
+        _log('listener: ICE recovery exhausted → full reconnect');
+        _listenerRecoverAttempts = 0;
+        onEnded?.call('disconnected');
+        return;
+      }
+      _log('listener: ICE recovery #$_listenerRecoverAttempts → '
+          'asking host to renegotiate');
+      _sendControl(
+          {'type': 'ctl', 'action': 'renegotiate', 'from_id': _myUserId});
+    });
   }
 
   /// LISTENER: the host's audio data channel arrived — reset our buffer on
@@ -1383,6 +1493,8 @@ class LiveSessionController {
   }
 
   Future<void> _closeListenerPc() async {
+    _listenerRecoverTimer?.cancel();
+    _listenerRecoverTimer = null;
     try {
       await _lchan?.close();
     } catch (_) {}
@@ -1461,6 +1573,14 @@ class LiveSessionController {
     for (final id in _peers.keys.toList()) {
       await _closePeer(id);
     }
+    // Full teardown clears the recovery caps (per-peer timers were cancelled by
+    // _closePeer); a later session starts fresh.
+    for (final t in _peerRecoverTimers.values) {
+      t.cancel();
+    }
+    _peerRecoverTimers.clear();
+    _peerRecoverAttempts.clear();
+    _listenerRecoverAttempts = 0;
     await _closeListenerPc();
   }
 
@@ -1520,6 +1640,10 @@ class LiveSessionController {
       await _channel?.sink.close();
     } catch (_) {}
     _channel = null;
+    // A reconnect usually follows a network change — re-fetch ICE/TURN so the
+    // fresh negotiation uses current servers/credentials, not stale cache.
+    IceConfig.instance.invalidate();
+    _listenerRecoverAttempts = 0;
     // The old peer connection died with the socket; drop it so the host's
     // fresh offer (triggered by our rejoin) negotiates a clean one.
     await _closeListenerPc();
@@ -1559,6 +1683,9 @@ class LiveSessionController {
       await _channel?.sink.close();
     } catch (_) {}
     _channel = null;
+    // A reconnect usually follows a network change — re-fetch ICE/TURN so each
+    // renegotiated peer uses current servers/credentials, not stale cache.
+    IceConfig.instance.invalidate();
     // Drop stale peer connections; each still-present listener is renegotiated
     // from scratch when the server re-delivers its `peer_joined` on reconnect.
     await _closeAllPeers();
@@ -1746,6 +1873,8 @@ class LiveSessionController {
         // peer connection is negotiated each time).
         final peerId = _asInt((msg['data'] as Map?)?['user_id']);
         if (peerId != null) {
+          // A genuine (re)join is a clean slate for ICE recovery.
+          _peerRecoverAttempts.remove(peerId);
           unawaited(_hostConnectToPeer(peerId));
         }
         // Send the current queue so the freshly-joined listener sees it.
@@ -1798,6 +1927,17 @@ class LiveSessionController {
             // Listener toggled shuffle — apply authoritatively + re-broadcast.
             setShuffle(msg['on'] == true);
             break;
+          case 'renegotiate':
+            // A listener's media path died (likely a network switch) and it
+            // asked us to re-offer. Renegotiate that peer with fresh TURN.
+            final pid = _asInt(msg['from_id']);
+            if (pid != null) {
+              _peerRecoverAttempts.remove(pid);
+              IceConfig.instance.invalidate();
+              _log('host: listener $pid asked to renegotiate');
+              unawaited(_hostConnectToPeer(pid));
+            }
+            break;
         }
       } else if (type == 'leaving') {
         // The listener chose to leave (sent right before they close). Mark it
@@ -1818,7 +1958,10 @@ class LiveSessionController {
         _peerGraceful = false;
         // Tear down the dead peer connection; a rejoin negotiates a fresh one.
         final peerId = _asInt((msg['data'] as Map?)?['user_id']);
-        if (peerId != null) unawaited(_closePeer(peerId));
+        if (peerId != null) {
+          _peerRecoverAttempts.remove(peerId);
+          unawaited(_closePeer(peerId));
+        }
       }
       return;
     }

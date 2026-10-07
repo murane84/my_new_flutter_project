@@ -2003,6 +2003,170 @@ def get_streak(
     return _streak_state(db, space, current_user)
 
 
+# ── Monthly Mixtape recap (§5.8) ─────────────────────────────────────────────
+# A playable retrospective of a calendar month, not a stats dashboard: the
+# month's shared songs + its media highlights + warm numbers. Fully DERIVED —
+# computed on demand from the existing tables, no recap table and no cron. The
+# client shows "Our <Month> is ready" for the most recent finished month that
+# has anything in it, and opens a mixtape screen that plays the month's songs
+# over its photos/videos.
+def _month_bounds(year: int, month: int):
+    start = datetime(year, month, 1, tzinfo=timezone.utc)
+    if month == 12:
+        end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+    else:
+        end = datetime(year, month + 1, 1, tzinfo=timezone.utc)
+    return start, end
+
+
+def _parse_month(month: str):
+    try:
+        ys, ms = month.split("-")
+        y, m = int(ys), int(ms)
+        if not (1 <= m <= 12):
+            raise ValueError()
+        return y, m
+    except Exception:
+        raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+
+
+def _recap_for(db: Session, space: RelationshipSpace, current_user: User,
+               year: int, month: int, full: bool = True) -> dict:
+    """Assemble one month's recap. [full] builds the playable song dicts +
+    highlights; the list view passes full=False and keeps only the numbers +
+    cover (cheaper — skips the per-track user lookups)."""
+    start, end = _month_bounds(year, month)
+    out = {
+        "month": f"{year:04d}-{month:02d}",
+        "label": start.strftime("%B %Y"),
+        "theme": space.theme,
+        "cover_ref": None,
+        "numbers": {"songs": 0, "moments": 0, "photos": 0,
+                    "diary": 0, "listen_days": 0, "dedications": 0},
+        "songs": [],
+        "highlights": [],
+        "is_empty": True,
+    }
+    pk, _partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        return out
+    bond_ids = _bond_space_ids(db, space, current_user.id)
+
+    tracks = (
+        db.query(PlaylistTrack)
+        .filter(PlaylistTrack.pair_key == pk,
+                PlaylistTrack.created_at >= start,
+                PlaylistTrack.created_at < end)
+        .order_by(PlaylistTrack.created_at.asc())
+        .all()
+    )
+    moments = (
+        db.query(PinnedMoment)
+        .filter(PinnedMoment.space_id.in_(bond_ids),
+                PinnedMoment.created_at >= start,
+                PinnedMoment.created_at < end)
+        .order_by(PinnedMoment.created_at.asc())
+        .all()
+    )
+    media_kinds = {"photo", "video", "gif"}
+    photos = 0
+    cover = None
+    highlights = []
+    for m in moments:
+        if m.kind in media_kinds:
+            photos += 1
+            if m.ref:
+                if cover is None:
+                    cover = m.ref
+                if full:
+                    highlights.append({
+                        "kind": m.kind,
+                        "ref": m.ref,
+                        "caption": m.caption,
+                        "created_at": (m.created_at.isoformat()
+                                       if m.created_at else None),
+                    })
+    diary_n = (
+        db.query(DiaryEntry)
+        .filter(DiaryEntry.pair_key == pk,
+                DiaryEntry.created_at >= start,
+                DiaryEntry.created_at < end)
+        .count()
+    )
+    listen_days = (
+        db.query(SharedListenDay)
+        .filter(SharedListenDay.pair_key == pk,
+                SharedListenDay.day >= start.date(),
+                SharedListenDay.day < end.date())
+        .count()
+    )
+    ded_n = (
+        db.query(Dedication)
+        .filter(Dedication.pair_key == pk,
+                Dedication.created_at >= start,
+                Dedication.created_at < end)
+        .count()
+    )
+    out["numbers"] = {
+        "songs": len(tracks),
+        "moments": len(moments),
+        "photos": photos,
+        "diary": diary_n,
+        "listen_days": listen_days,
+        "dedications": ded_n,
+    }
+    out["cover_ref"] = cover
+    out["is_empty"] = not (tracks or moments or diary_n or listen_days or ded_n)
+    if full:
+        out["songs"] = [_track_dict(db, t, current_user.id) for t in tracks]
+        out["highlights"] = highlights[:12]
+    return out
+
+
+@router.get("/{space_id}/recap/{month}")
+def get_recap(
+    space_id: int,
+    month: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The full, playable recap for one calendar month (YYYY-MM)."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    y, m = _parse_month(month)
+    return _recap_for(db, space, current_user, y, m, full=True)
+
+
+@router.get("/{space_id}/recaps")
+def list_recaps(
+    space_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Months (last ~12) that have any shared content, newest first, plus
+    `latest_ready` = the most recent FINISHED month with content (what the
+    dashboard card offers to open)."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    now = datetime.now(timezone.utc)
+    cur_key = f"{now.year:04d}-{now.month:02d}"
+    recaps = []
+    y, m = now.year, now.month
+    for i in range(0, 13):
+        yy, mm = y, m - i
+        while mm <= 0:
+            mm += 12
+            yy -= 1
+        rec = _recap_for(db, space, current_user, yy, mm, full=False)
+        if not rec["is_empty"]:
+            recaps.append({
+                "month": rec["month"],
+                "label": rec["label"],
+                "cover_ref": rec["cover_ref"],
+                "numbers": rec["numbers"],
+            })
+    latest_ready = next((r for r in recaps if r["month"] != cur_key), None)
+    return {"recaps": recaps, "latest_ready": latest_ready}
+
+
 # ── Dedications — a song sent as a feeling ───────────────────────────────────
 class _DedicationBody(BaseModel):
     track_title: str

@@ -23,6 +23,7 @@ import 'music/player_disc_style.dart'
 import 'relationship_space_page.dart'
     show pickDiaryReaction, resolveAvatarUrl;
 import '../utils/marquee_text.dart';
+import '../widgets/animated_reaction.dart';
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
 /// Presented with `showDialog(...)` so it floats over the chat instead of
@@ -1798,7 +1799,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               ),
             ),
           )
-        : Text(r.emoji, style: const TextStyle(fontSize: 40));
+        : AnimatedReaction(emoji: r.emoji, size: 40);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       child: Row(

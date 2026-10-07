@@ -695,10 +695,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     // Stop the local player so the song isn't heard twice.
     playbackBus.onPause?.call();
 
-    showDialog<void>(
-      context: context,
-      useRootNavigator: true, // top-level so the live popup owns its own route
-      barrierDismissible: false,
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      fullscreenDialog: true,
       builder: (_) => LiveSessionScreen.host(
         token: token,
         myUserId: myUserId,
@@ -708,7 +706,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         peerName: partnerName,
         startPositionMs: startPos,
       ),
-    );
+    ));
   }
 
   String _songTitle(String path) {

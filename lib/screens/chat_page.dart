@@ -1702,9 +1702,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     playbackBus.onPause?.call();
 
     if (!mounted) return;
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      fullscreenDialog: true,
       builder: (_) => LiveSessionScreen.host(
         token: token,
         myUserId: myUserId,
@@ -1714,7 +1713,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         peerName: _livePeerLabel,
         startPositionMs: startPositionMs,
       ),
-    );
+    ));
   }
 
   /// Bottom-sheet picker over the player's loaded songs. Returns the chosen
@@ -1922,9 +1921,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       return;
     }
     if (!mounted) return;
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      fullscreenDialog: true,
       builder: (_) => LiveSessionScreen.host(
         token: token,
         myUserId: myUserId,
@@ -1933,7 +1931,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         title: picked.name,
         peerName: _livePeerLabel,
       ),
-    );
+    ));
   }
 
   /// Derive a clean display title from a file path (basename without extension).

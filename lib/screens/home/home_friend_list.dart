@@ -1922,9 +1922,8 @@ extension _HomeFriendListView on HomePageState {
     // Stop the local player so the song isn't also heard outside the room.
     playbackBus.onPause?.call();
 
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      fullscreenDialog: true,
       builder: (_) => LiveSessionScreen.roomHost(
         token: token,
         myUserId: myUserId,
@@ -1932,7 +1931,7 @@ extension _HomeFriendListView on HomePageState {
         title: _roomTitleFromPath(path!),
         startPositionMs: startPos,
       ),
-    );
+    ));
   }
 
   Future<String?> _pickRoomTrack() async {
@@ -1998,9 +1997,8 @@ extension _HomeFriendListView on HomePageState {
     final host = (room['host_username'] ?? 'Your friend').toString();
     final track =
         (room['track'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      fullscreenDialog: true,
       builder: (_) => LiveSessionScreen.listener(
         token: token,
         myUserId: myUserId,
@@ -2009,16 +2007,15 @@ extension _HomeFriendListView on HomePageState {
         peerName: host,
         myName: _username.isNotEmpty ? _username : null,
       ),
-    );
+    ));
   }
 
   void _openMyRoom() {
     if (activeLiveSession == null) return;
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      fullscreenDialog: true,
       builder: (_) => LiveSessionScreen.resume(),
-    );
+    ));
   }
 
   void _roomsSheet() {

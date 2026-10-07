@@ -1604,9 +1604,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final myUserId = _myUserId;
     if (token == null || myUserId == null || !mounted) return;
 
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      fullscreenDialog: true,
       builder: (_) => LiveSessionScreen.listener(
         token: token,
         myUserId: myUserId,
@@ -1615,7 +1614,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         peerName: hostName,
         myName: _username.isNotEmpty ? _username : null,
       ),
-    );
+    ));
   }
 
   /// Host side: a friend declined our Listen Together invite. Let the host
@@ -4061,11 +4060,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   void _reopenLiveSession() {
     if (activeLiveSession == null) return;
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      fullscreenDialog: true,
       builder: (_) => LiveSessionScreen.resume(),
-    );
+    ));
   }
 
   Future<void> _endLiveSession() async {

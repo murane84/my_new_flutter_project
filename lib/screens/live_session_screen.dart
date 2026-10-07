@@ -159,20 +159,44 @@ void _handleMinimizedEnd(String reason) {
   // A transport glitch while minimised should NOT kill the session — try to
   // reconnect quietly in the background (host keeps playing locally; a listener
   // rebuffers). Only a real end ('host_left' / 'host_ended' / 'ended') falls
-  // through to teardown. If the background reconnect fails, tear down then.
+  // through to teardown.
   if (s != null && reason == 'disconnected') {
-    final c = s.controller;
-    final Future<void> attempt = s.role == LiveRole.host
-        ? c.reconnectAsHost(myUserId: s.myUserId, token: s.token)
-        : c.reconnectAsListener(
-            sessionId: c.sessionId ?? '',
-            myUserId: s.myUserId,
-            token: s.token,
-          );
-    attempt.catchError((_) => _finalizeMinimizedEnd());
+    // IMPORTANT: a SINGLE failed attempt must not end the session. Backgrounding
+    // the app — e.g. opening the gallery/share picker to send a screenshot in a
+    // DM — briefly drops the socket, and the first reconnect fires while the
+    // app is still paused (no network), so it fails immediately. Retry with a
+    // short backoff instead; a later attempt lands once the app is foreground
+    // again, well within the server's host-grace window. Only give up after
+    // sustained failure.
+    _attemptMinimizedReconnect(s, 0);
     return;
   }
   _finalizeMinimizedEnd();
+}
+
+void _attemptMinimizedReconnect(ActiveLiveSession s, int attempt) {
+  // The session may have been ended or replaced between retries.
+  if (activeLiveSession != s) return;
+  final c = s.controller;
+  final Future<void> fut = s.role == LiveRole.host
+      ? c.reconnectAsHost(myUserId: s.myUserId, token: s.token)
+      : c.reconnectAsListener(
+          sessionId: c.sessionId ?? '',
+          myUserId: s.myUserId,
+          token: s.token,
+        );
+  fut.catchError((_) {
+    if (activeLiveSession != s) return;
+    if (attempt >= 5) {
+      // ~45s of retries elapsed (3+6+9+12+15s) — past a transient background
+      // blip and within the 180s host grace. Treat as a real end now.
+      _finalizeMinimizedEnd();
+      return;
+    }
+    Future.delayed(Duration(seconds: 3 * (attempt + 1)), () {
+      _attemptMinimizedReconnect(s, attempt + 1);
+    });
+  });
 }
 
 void _finalizeMinimizedEnd() {
@@ -1048,11 +1072,16 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
 
   // ── Narrow (phone) layout: player on top, [Queue · People] tabs below ───────
   Widget _narrowLayout(ThemeData theme, ColorScheme scheme) {
+    // When the keyboard is up (typing in the chat/reactions composer), the tall
+    // player hero would push the composer off-screen behind the keyboard.
+    // Collapse it to a slim now-playing strip so the feed + composer get the
+    // room they need.
+    final kbOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return DefaultTabController(
       length: 2,
       child: Column(
         children: [
-          _mobilePlayerTop(theme, scheme),
+          if (kbOpen) _miniNowPlaying(scheme) else _mobilePlayerTop(theme, scheme),
           TabBar(
             labelColor: scheme.primary,
             unselectedLabelColor: scheme.onSurfaceVariant,
@@ -1069,6 +1098,72 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                 _peoplePanel(scheme),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // A slim one-line now-playing strip for the phone layout while the keyboard
+  // is open — keeps the song visible without stealing the chat's vertical room.
+  Widget _miniNowPlaying(ColorScheme scheme) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 8, 10, 8),
+      decoration: BoxDecoration(
+        border: Border(
+            bottom: BorderSide(color: scheme.outlineVariant.withAlpha(60))),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: 0.16),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.graphic_eq_rounded,
+                size: 16, color: scheme.primary),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: MarqueeText(
+              text: _title.isEmpty ? 'Listen Together' : _title,
+              height: 18,
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: scheme.onSurface),
+            ),
+          ),
+          const SizedBox(width: 8),
+          StreamBuilder<PlayerState>(
+            stream: _c.player.playerStateStream,
+            builder: (context, snap) {
+              final playing = _isHost
+                  ? (snap.data?.playing ?? false)
+                  : _c.hostPlaying;
+              return IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(),
+                iconSize: 26,
+                color: scheme.primary,
+                onPressed: !_ready
+                    ? null
+                    : () {
+                        if (_isHost) {
+                          playing ? _c.player.pause() : _c.player.play();
+                        } else {
+                          _c.requestControl(playing ? 'pause' : 'play');
+                        }
+                      },
+                icon: Icon(playing
+                    ? Icons.pause_circle_filled_rounded
+                    : Icons.play_circle_fill_rounded),
+              );
+            },
           ),
         ],
       ),

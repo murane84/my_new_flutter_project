@@ -15,6 +15,9 @@ import 'web_fs/blob_url.dart';
 import '../utils/app_config.dart';
 import '../utils/app_reload.dart';
 import '../utils/toast_helper.dart';
+import '../utils/bounce_tap.dart' show Tactile;
+import '../services/track_title.dart'
+    show cleanDisplayName, splitTitleArtist;
 
 /// Web-only replacement for the native [MusicControls] panel.
 ///
@@ -65,6 +68,11 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   Uint8List? _currentBytes;
   String? _currentTitle;
   String? _blobUrl; // object URL of the track currently loaded (web)
+  // Volume is tap-to-reveal (mirrors the native player): the slider only
+  // appears when the user taps the volume icon, then auto-hides after a short
+  // idle — so it never looks like a second seek bar.
+  bool _showVolume = false;
+  Timer? _volumeHideTimer;
 
   @override
   void initState() {
@@ -103,6 +111,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   void dispose() {
     _psSub?.cancel();
     _sleepTimer?.cancel();
+    _volumeHideTimer?.cancel();
     if (_blobUrl != null) revokeBlobUrl(_blobUrl!);
     NowPlayingPresence.instance.reportManual(title: '', playing: false);
     // Release the bus handlers we registered (web has no other player).
@@ -116,9 +125,10 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     super.dispose();
   }
 
-  // A tidy display title: drop the file extension (e.g. ".mp3").
-  String _cleanTitle(String name) =>
-      name.replaceAll(RegExp(r'\.[^.]+$'), '').trim();
+  // A tidy display title: drop the file extension AND the downloader junk
+  // ("Downloaded from clipzag.com", skiza spam, "(Official Video)", bare
+  // domains …) so it matches how the native app shows the same song.
+  String _cleanTitle(String name) => cleanDisplayName(name);
 
   String _mimeFor(String name) {
     final n = name.toLowerCase();
@@ -608,38 +618,36 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   }
 
   Widget _seekBar(ThemeData theme) {
+    final accent = theme.colorScheme.primary;
+    // Stable bar pattern per track (survives shuffle/reorder) — keyed on the
+    // track name so the same song always draws the same waveform.
+    final seed = (_index >= 0 && _index < _queue.length)
+        ? _queue[_index].name.hashCode
+        : 0;
     return StreamBuilder<Duration>(
       stream: _player.positionStream,
       builder: (context, ps) {
         final pos = ps.data ?? Duration.zero;
         final dur = _player.duration ?? Duration.zero;
-        final maxMs = dur.inMilliseconds.toDouble();
+        final durMs = dur.inMilliseconds;
+        final frac =
+            durMs <= 0 ? 0.0 : (pos.inMilliseconds / durMs).clamp(0.0, 1.0);
         return Column(
           children: [
-            SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 3,
-                activeTrackColor: theme.colorScheme.primary,
-                inactiveTrackColor:
-                    theme.colorScheme.primary.withValues(alpha: 0.20),
-                thumbColor: theme.colorScheme.primary,
-                overlayColor:
-                    theme.colorScheme.primary.withValues(alpha: 0.14),
-                thumbShape:
-                    const RoundSliderThumbShape(enabledThumbRadius: 7),
-                overlayShape:
-                    const RoundSliderOverlayShape(overlayRadius: 14),
-              ),
-              child: Slider(
-                value: maxMs <= 0
-                    ? 0
-                    : pos.inMilliseconds
-                        .clamp(0, dur.inMilliseconds)
-                        .toDouble(),
-                max: maxMs <= 0 ? 1 : maxMs,
-                onChanged: maxMs <= 0
-                    ? null
-                    : (v) => _player.seek(Duration(milliseconds: v.round())),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              // A SoundCloud-style waveform that IS the seek control — the same
+              // look and feel as the native (Windows/Android) player.
+              child: _WebWaveformSeekBar(
+                fraction: frac,
+                accent: accent,
+                inactive: accent.withValues(alpha: 0.20),
+                enabled: durMs > 0,
+                seed: seed,
+                onSeek: (f) =>
+                    _player.seek(Duration(milliseconds: (f * durMs).round())),
+                labelFor: (f) =>
+                    _fmt(Duration(milliseconds: (f * durMs).round())),
               ),
             ),
             Padding(
@@ -667,56 +675,229 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       stream: _player.playerStateStream,
       builder: (context, snap) {
         final playing = snap.data?.playing ?? false;
-        final buffering = snap.data?.processingState == ProcessingState.loading ||
-            snap.data?.processingState == ProcessingState.buffering;
+        final buffering =
+            snap.data?.processingState == ProcessingState.loading ||
+                snap.data?.processingState == ProcessingState.buffering;
         return FittedBox(
           fit: BoxFit.scaleDown,
           child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            IconButton(
-              iconSize: 28,
-              onPressed: _queue.length > 1 ? _prev : null,
-              icon: const Icon(Icons.skip_previous_rounded),
-            ),
-            IconButton(
-              tooltip: 'Back 10s',
-              iconSize: 24,
-              onPressed: () => _seekBy(-10),
-              icon: const Icon(Icons.replay_10_rounded),
-            ),
-            const SizedBox(width: 2),
-            IconButton.filled(
-              iconSize: 34,
-              onPressed: buffering
-                  ? null
-                  : () => playing ? _player.pause() : _player.play(),
-              icon: buffering
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2.4),
-                    )
-                  : Icon(playing
-                      ? Icons.pause_rounded
-                      : Icons.play_arrow_rounded),
-            ),
-            const SizedBox(width: 2),
-            IconButton(
-              tooltip: 'Forward 10s',
-              iconSize: 24,
-              onPressed: () => _seekBy(10),
-              icon: const Icon(Icons.forward_10_rounded),
-            ),
-            IconButton(
-              iconSize: 28,
-              onPressed: _queue.length > 1 ? _next : null,
-              icon: const Icon(Icons.skip_next_rounded),
-            ),
-          ],
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _discBtn(
+                theme,
+                icon: Icons.skip_previous_rounded,
+                size: 26,
+                tooltip: 'Previous',
+                onTap: _queue.length > 1 ? _prev : null,
+              ),
+              const SizedBox(width: 8),
+              _discBtn(
+                theme,
+                icon: Icons.replay_10_rounded,
+                size: 22,
+                tooltip: 'Back 10s',
+                onTap: () => _seekBy(-10),
+              ),
+              const SizedBox(width: 12),
+              _playDisc(theme, playing: playing, buffering: buffering),
+              const SizedBox(width: 12),
+              _discBtn(
+                theme,
+                icon: Icons.forward_10_rounded,
+                size: 22,
+                tooltip: 'Forward 10s',
+                onTap: () => _seekBy(10),
+              ),
+              const SizedBox(width: 8),
+              _discBtn(
+                theme,
+                icon: Icons.skip_next_rounded,
+                size: 26,
+                tooltip: 'Next',
+                onTap: _queue.length > 1 ? _next : null,
+              ),
+            ],
           ),
         );
       },
+    );
+  }
+
+  // A raised, top-lit accent-tinted disc so bare transport icons read as 3D
+  // chips — the same treatment as the native (Windows/Android) player.
+  Widget _discBtn(
+    ThemeData theme, {
+    required IconData icon,
+    required double size,
+    required String tooltip,
+    VoidCallback? onTap,
+    bool active = false,
+    Color? activeColor,
+  }) {
+    final scheme = theme.colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final enabled = onTap != null;
+    final tint = active ? (activeColor ?? scheme.primary) : scheme.primary;
+    final iconColor = !enabled
+        ? scheme.onSurface.withValues(alpha: 0.30)
+        : active
+            ? tint
+            : scheme.onSurface;
+    return Tactile(
+      enabled: enabled,
+      child: Tooltip(
+        message: tooltip,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: enabled
+                  ? LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color.alphaBlend(
+                          tint.withValues(alpha: isDark ? 0.14 : 0.09),
+                          scheme.surface,
+                        ),
+                        Color.alphaBlend(
+                          tint.withValues(alpha: isDark ? 0.24 : 0.16),
+                          scheme.surfaceContainerHighest,
+                        ),
+                      ],
+                    )
+                  : null,
+              color: enabled
+                  ? null
+                  : scheme.surfaceContainerHighest.withValues(alpha: 0.30),
+              border: Border.all(
+                color: enabled
+                    ? tint.withValues(alpha: isDark ? 0.32 : 0.22)
+                    : scheme.outlineVariant.withValues(alpha: 0.30),
+                width: 1,
+              ),
+              boxShadow: enabled
+                  ? [
+                      BoxShadow(
+                        color: tint.withValues(alpha: isDark ? 0.22 : 0.14),
+                        blurRadius: 7,
+                        offset: const Offset(0, 3),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Icon(icon, size: size, color: iconColor),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // A small raised pill matching the disc buttons, showing playback speed.
+  Widget _speedPill(ThemeData theme, String label) {
+    final scheme = theme.colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final active = _speed != 1.0;
+    final tint = scheme.primary;
+    return Tactile(
+      child: Tooltip(
+        message: 'Playback speed',
+        child: GestureDetector(
+          onTap: _cycleSpeed,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color.alphaBlend(
+                    tint.withValues(alpha: isDark ? 0.14 : 0.09),
+                    scheme.surface,
+                  ),
+                  Color.alphaBlend(
+                    tint.withValues(alpha: isDark ? 0.24 : 0.16),
+                    scheme.surfaceContainerHighest,
+                  ),
+                ],
+              ),
+              border: Border.all(
+                color: tint.withValues(alpha: isDark ? 0.32 : 0.22),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: tint.withValues(alpha: isDark ? 0.22 : 0.14),
+                  blurRadius: 7,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: active ? tint : scheme.onSurface,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // The glossy primary play/pause disc — white-lit top-left → accent → a darker
+  // accent at the bottom-right, with an accent glow (brighter while playing).
+  Widget _playDisc(ThemeData theme,
+      {required bool playing, required bool buffering}) {
+    final accent = theme.colorScheme.primary;
+    return Tactile(
+      enabled: !buffering,
+      child: GestureDetector(
+        onTap: buffering
+            ? null
+            : () => playing ? _player.pause() : _player.play(),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color.lerp(accent, Colors.white, 0.22)!,
+                accent,
+                Color.lerp(accent, Colors.black, 0.14)!,
+              ],
+              stops: const [0.0, 0.55, 1.0],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: accent.withValues(alpha: playing ? 0.58 : 0.28),
+                blurRadius: playing ? 22 : 12,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: buffering
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2.5),
+                )
+              : Icon(
+                  playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                  size: 34,
+                  color: Colors.white,
+                ),
+        ),
+      ),
     );
   }
 
@@ -730,78 +911,121 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       default:
         repeatIcon = Icons.repeat_rounded;
     }
+    final speedLabel =
+        '${_speed.toStringAsFixed(_speed.truncateToDouble() == _speed ? 0 : 2)}x';
     return Row(
       children: [
-        IconButton(
+        _discBtn(
+          theme,
+          icon: Icons.shuffle_rounded,
+          size: 18,
           tooltip: 'Shuffle',
-          iconSize: 20,
-          onPressed: _queue.length > 1 ? _toggleShuffle : null,
-          color: _shuffle ? accent : theme.hintColor,
-          icon: const Icon(Icons.shuffle_rounded),
+          onTap: _queue.length > 1 ? _toggleShuffle : null,
+          active: _shuffle,
         ),
-        IconButton(
+        const SizedBox(width: 8),
+        _discBtn(
+          theme,
+          icon: repeatIcon,
+          size: 18,
           tooltip: _repeat == _repeatOne
               ? 'Repeat one'
               : _repeat == _repeatAll
                   ? 'Repeat all'
                   : 'Repeat off',
-          iconSize: 20,
-          onPressed: _toggleRepeat,
-          color: _repeat == _repeatOff ? theme.hintColor : accent,
-          icon: Icon(repeatIcon),
+          onTap: _toggleRepeat,
+          active: _repeat != _repeatOff,
         ),
-        // Playback speed — cycles 0.5x … 2x.
-        InkWell(
-          onTap: _cycleSpeed,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Text(
-              '${_speed.toStringAsFixed(_speed.truncateToDouble() == _speed ? 0 : 2)}x',
-              style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: _speed == 1.0 ? theme.hintColor : accent),
-            ),
-          ),
+        const SizedBox(width: 8),
+        // Playback speed — cycles 0.5x … 2x — as a raised 3D pill.
+        _speedPill(theme, speedLabel),
+        const Spacer(),
+        // Volume: a single icon. Tap it to slide out the slider (right→left),
+        // which fades/collapses away on its own after a short idle — so there
+        // is never a second always-on slider competing with the seek bar.
+        // Long-press / second tap behaviour: a plain tap reveals; the mute
+        // toggle lives on the icon only while the slider is hidden.
+        AnimatedSize(
+          duration: const Duration(milliseconds: 240),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.centerRight,
+          child: _showVolume
+              ? SizedBox(
+                  width: 128,
+                  child: AnimatedOpacity(
+                    opacity: _showVolume ? 1 : 0,
+                    duration: const Duration(milliseconds: 160),
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 3,
+                        activeTrackColor: accent,
+                        inactiveTrackColor: accent.withValues(alpha: 0.20),
+                        thumbColor: accent,
+                        overlayColor: accent.withValues(alpha: 0.14),
+                        thumbShape:
+                            const RoundSliderThumbShape(enabledThumbRadius: 6),
+                        overlayShape:
+                            const RoundSliderOverlayShape(overlayRadius: 12),
+                      ),
+                      child: Slider(
+                        value: _volume,
+                        onChanged: (v) {
+                          setState(() => _volume = v);
+                          _player.setVolume(v);
+                          _armVolumeHide();
+                        },
+                      ),
+                    ),
+                  ),
+                )
+              : const SizedBox.shrink(),
         ),
-        const SizedBox(width: 2),
-        IconButton(
-          tooltip: _volume <= 0 ? 'Unmute' : 'Mute',
-          iconSize: 18,
-          onPressed: _toggleMute,
-          color: theme.hintColor,
-          icon: Icon(
-            _volume <= 0
-                ? Icons.volume_off_rounded
-                : _volume < 0.5
-                    ? Icons.volume_down_rounded
-                    : Icons.volume_up_rounded,
-          ),
-        ),
-        Expanded(
-          child: SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 3,
-              activeTrackColor: theme.colorScheme.primary,
-              inactiveTrackColor:
-                  theme.colorScheme.primary.withValues(alpha: 0.20),
-              thumbColor: theme.colorScheme.primary,
-              overlayColor: theme.colorScheme.primary.withValues(alpha: 0.14),
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-            ),
-            child: Slider(
-              value: _volume,
-              onChanged: (v) {
-                setState(() => _volume = v);
-                _player.setVolume(v);
-              },
+        // Tap = reveal the slider; long-press = quick mute / unmute.
+        GestureDetector(
+          onLongPress: () {
+            _toggleMute();
+            _armVolumeHide();
+          },
+          child: IconButton(
+            tooltip: _showVolume
+                ? 'Volume  (hold to mute)'
+                : (_volume <= 0 ? 'Unmute' : 'Volume  (hold to mute)'),
+            iconSize: 18,
+            onPressed: _toggleVolume,
+            color: _showVolume ? accent : theme.hintColor,
+            icon: Icon(
+              _volume <= 0
+                  ? Icons.volume_off_rounded
+                  : _volume < 0.5
+                      ? Icons.volume_down_rounded
+                      : Icons.volume_up_rounded,
             ),
           ),
         ),
       ],
     );
+  }
+
+  // ── Volume popup (tap-to-reveal, auto-hide) ──────────────────────────────
+  void _toggleVolume() {
+    if (_showVolume) {
+      _closeVolume();
+    } else {
+      setState(() => _showVolume = true);
+      _armVolumeHide();
+    }
+  }
+
+  void _armVolumeHide() {
+    _volumeHideTimer?.cancel();
+    _volumeHideTimer =
+        Timer(const Duration(milliseconds: 1800), _closeVolume);
+  }
+
+  void _closeVolume() {
+    _volumeHideTimer?.cancel();
+    if (!mounted || !_showVolume) return;
+    setState(() => _showVolume = false);
   }
 
   Widget _queueHeader(ThemeData theme) {
@@ -866,50 +1090,406 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       // only exists on very recent channels.
       // ignore: deprecated_member_use
       onReorder: _reorder,
-      itemBuilder: (_, i) {
-            final current = i == _index;
-            return ListTile(
-              key: ValueKey(_queue[i]),
-              dense: true,
-              visualDensity: VisualDensity.compact,
-              leading: Icon(
-                current
-                    ? Icons.graphic_eq_rounded
-                    : Icons.music_note_rounded,
-                size: 18,
-                color: current ? theme.colorScheme.primary : theme.hintColor,
-              ),
-              title: Text(
-                _cleanTitle(_queue[i].name),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: current ? FontWeight.bold : FontWeight.normal,
-                  color: current
-                      ? theme.colorScheme.primary
-                      : widget.textColor,
-                ),
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    iconSize: 18,
-                    tooltip: 'Remove',
-                    onPressed: () => _removeAt(i),
-                    icon: const Icon(Icons.close_rounded),
+      itemBuilder: (_, i) => _queueRow(theme, i),
+    );
+  }
+
+  // One queue row, styled like the native playlist: a raised circular avatar
+  // (an animated equalizer while this row is the one playing, else a music
+  // note), a two-line clean title / artist, and remove + drag affordances.
+  Widget _queueRow(ThemeData theme, int i) {
+    final scheme = theme.colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final accent = scheme.primary;
+    final current = i == _index;
+    final ta = splitTitleArtist(_cleanTitle(_queue[i].name));
+    final title = ta.$1;
+    final artist = ta.$2;
+    return Padding(
+      key: ValueKey(_queue[i]),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      child: Material(
+        color: current
+            ? accent.withValues(alpha: isDark ? 0.10 : 0.07)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: current ? null : () => _playAt(i),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(
+              children: [
+                _queueAvatar(theme, current),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight:
+                              current ? FontWeight.w700 : FontWeight.w600,
+                          color: current ? accent : widget.textColor,
+                        ),
+                      ),
+                      if (artist != null && artist.isNotEmpty) ...[
+                        const SizedBox(height: 1),
+                        Text(
+                          artist,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: current
+                                ? accent.withValues(alpha: 0.75)
+                                : theme.hintColor,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  ReorderableDragStartListener(
-                    index: i,
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  iconSize: 17,
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Remove',
+                  onPressed: () => _removeAt(i),
+                  color: theme.hintColor,
+                  icon: const Icon(Icons.close_rounded),
+                ),
+                ReorderableDragStartListener(
+                  index: i,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 2, right: 2),
                     child: Icon(Icons.drag_handle_rounded,
                         size: 18, color: theme.hintColor),
                   ),
-                ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // The circular track avatar. Current row → a glossy accent disc (white-lit
+  // top-left → accent → darker) with a glow and a live mini-equalizer; other
+  // rows → a soft raised accent-tinted disc with a music note. Both read as 3D.
+  Widget _queueAvatar(ThemeData theme, bool current) {
+    final scheme = theme.colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final accent = scheme.primary;
+    const d = 42.0;
+    if (current) {
+      return Container(
+        width: d,
+        height: d,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.lerp(accent, Colors.white, 0.22)!,
+              accent,
+              Color.lerp(accent, Colors.black, 0.14)!,
+            ],
+            stops: const [0.0, 0.55, 1.0],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: accent.withValues(alpha: 0.45),
+              blurRadius: 12,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: const Center(child: _WebMiniEq(color: Colors.white)),
+      );
+    }
+    return Container(
+      width: d,
+      height: d,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.alphaBlend(
+              accent.withValues(alpha: isDark ? 0.16 : 0.10),
+              scheme.surface,
+            ),
+            Color.alphaBlend(
+              accent.withValues(alpha: isDark ? 0.26 : 0.18),
+              scheme.surfaceContainerHighest,
+            ),
+          ],
+        ),
+        border: Border.all(
+          color: accent.withValues(alpha: isDark ? 0.30 : 0.20),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: isDark ? 0.18 : 0.12),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Icon(Icons.music_note_rounded,
+          size: 19, color: accent.withValues(alpha: 0.95)),
+    );
+  }
+}
+
+// ─── Waveform seek bar (web) ──────────────────────────────────────────────────
+// A SoundCloud-style waveform that doubles as the seek control: a stable per-
+// track bar pattern fills with the accent up to the play head and is faint
+// beyond it; drag or tap anywhere to scrub, with a small time bubble following
+// the finger. Mirrors the native player's _WaveformSeekBar.
+class _WebWaveformSeekBar extends StatefulWidget {
+  final double fraction; // 0..1 played
+  final Color accent;
+  final Color inactive;
+  final bool enabled;
+  final int seed; // stable bar pattern per track
+  final ValueChanged<double> onSeek;
+  final String Function(double fraction) labelFor;
+
+  const _WebWaveformSeekBar({
+    required this.fraction,
+    required this.accent,
+    required this.inactive,
+    required this.enabled,
+    required this.seed,
+    required this.onSeek,
+    required this.labelFor,
+  });
+
+  @override
+  State<_WebWaveformSeekBar> createState() => _WebWaveformSeekBarState();
+}
+
+class _WebWaveformSeekBarState extends State<_WebWaveformSeekBar> {
+  static const int _bars = 48;
+  double? _dragFrac; // non-null while scrubbing
+  late List<double> _heights;
+
+  @override
+  void initState() {
+    super.initState();
+    _heights = _gen(widget.seed);
+  }
+
+  @override
+  void didUpdateWidget(covariant _WebWaveformSeekBar old) {
+    super.didUpdateWidget(old);
+    if (old.seed != widget.seed) _heights = _gen(widget.seed);
+  }
+
+  // Deterministic pseudo-random bar heights (0.26..1.0) for a stable look.
+  List<double> _gen(int seed) {
+    var x = (seed & 0x7fffffff) | 1;
+    final out = <double>[];
+    for (var i = 0; i < _bars; i++) {
+      x = (x * 1103515245 + 12345) & 0x7fffffff;
+      out.add(0.26 + (x % 1000) / 1000.0 * 0.74);
+    }
+    return out;
+  }
+
+  void _setFromDx(double dx, double w) {
+    if (w <= 0) return;
+    setState(() => _dragFrac = (dx / w).clamp(0.0, 1.0));
+  }
+
+  void _commit() {
+    final f = _dragFrac;
+    if (f != null) widget.onSeek(f);
+    setState(() => _dragFrac = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final frac = (_dragFrac ?? widget.fraction).clamp(0.0, 1.0);
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        final w = c.maxWidth;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown:
+              widget.enabled ? (d) => _setFromDx(d.localPosition.dx, w) : null,
+          onTapUp: widget.enabled ? (_) => _commit() : null,
+          onTapCancel:
+              widget.enabled ? () => setState(() => _dragFrac = null) : null,
+          onHorizontalDragStart:
+              widget.enabled ? (d) => _setFromDx(d.localPosition.dx, w) : null,
+          onHorizontalDragUpdate:
+              widget.enabled ? (d) => _setFromDx(d.localPosition.dx, w) : null,
+          onHorizontalDragEnd: widget.enabled ? (_) => _commit() : null,
+          child: SizedBox(
+            height: 36,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _WebWavePainter(
+                      heights: _heights,
+                      fraction: frac,
+                      accent: widget.accent,
+                      inactive: widget.inactive,
+                    ),
+                  ),
+                ),
+                if (_dragFrac != null)
+                  Positioned(
+                    left: (frac * w - 24).clamp(0.0, (w - 48).clamp(0.0, w)),
+                    top: -24,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: widget.accent,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        widget.labelFor(frac),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _WebWavePainter extends CustomPainter {
+  final List<double> heights;
+  final double fraction;
+  final Color accent;
+  final Color inactive;
+
+  _WebWavePainter({
+    required this.heights,
+    required this.fraction,
+    required this.accent,
+    required this.inactive,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final n = heights.length;
+    if (n == 0) return;
+    const gap = 2.0;
+    final barW = (size.width - gap * (n - 1)) / n;
+    if (barW <= 0) return;
+    final playedX = fraction * size.width;
+    final mid = size.height / 2;
+    final aPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = accent;
+    final iPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = inactive;
+    for (var i = 0; i < n; i++) {
+      final x = i * (barW + gap);
+      final h = (heights[i] * size.height).clamp(3.0, size.height);
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, mid - h / 2, barW, h),
+        Radius.circular(barW / 2),
+      );
+      canvas.drawRRect(rect, (x + barW) <= playedX ? aPaint : iPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _WebWavePainter old) =>
+      old.fraction != fraction ||
+      old.accent != accent ||
+      old.inactive != inactive ||
+      old.heights != heights;
+}
+
+// ─── Mini equalizer (web) ─────────────────────────────────────────────────────
+// A compact 4-bar equalizer that gently dances — used inside the now-playing
+// queue avatar, mirroring the native playlist's "this is playing" indicator.
+class _WebMiniEq extends StatefulWidget {
+  final Color color;
+  const _WebMiniEq({required this.color});
+
+  @override
+  State<_WebMiniEq> createState() => _WebMiniEqState();
+}
+
+class _WebMiniEqState extends State<_WebMiniEq>
+    with SingleTickerProviderStateMixin {
+  static const int _n = 4;
+  static const List<double> _phase = [0.0, 0.55, 0.25, 0.8];
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 900))
+    ..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  // Triangle wave 0..1 (no dart:math needed).
+  double _wave(double x) {
+    x = x - x.floorToDouble();
+    return x < 0.5 ? x * 2 : (1 - x) * 2;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) {
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            for (int i = 0; i < _n; i++) ...[
+              Container(
+                width: 3,
+                height: 6.0 + _wave(_c.value + _phase[i]) * 13.0,
+                decoration: BoxDecoration(
+                  color: widget.color,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-              onTap: current ? null : () => _playAt(i),
-            );
-          },
+              if (i < _n - 1) const SizedBox(width: 2.5),
+            ],
+          ],
+        );
+      },
     );
   }
 }

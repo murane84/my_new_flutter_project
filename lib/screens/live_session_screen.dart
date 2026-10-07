@@ -727,18 +727,16 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   // sees live too.
   Widget _reactionBar(ColorScheme scheme) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 2),
+      padding: const EdgeInsets.fromLTRB(28, 0, 28, 2),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          for (final em in _quickReactions) ...[
+          for (final em in _quickReactions)
             _ReactionButton(
               emoji: em,
               onTap: () => _spawnReaction(em, mine: true),
               scheme: scheme,
             ),
-            const SizedBox(width: 6),
-          ],
         ],
       ),
     );
@@ -948,17 +946,17 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: _buildSeekBar(),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 2),
                       if (_isHost)
                         _buildHostControls()
                       else
                         _buildListenerControls(),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       _reactionBar(scheme),
                       // Queue: fixed header + independently-scrolling list.
                       // Shown for BOTH roles now — the listener sees the same
                       // "up next" list the host queued (read-only).
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4),
                       _buildQueueHeader(scheme),
                       Flexible(
                         child: _isHost
@@ -1050,36 +1048,35 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     _c.setRepeatMode(next);
   }
 
-  // The shared shuffle + repeat controls shown to BOTH sides of the session.
-  Widget _sessionFlagControls(ColorScheme scheme) {
+  // Compact shuffle / repeat buttons — now ride at the ends of the single
+  // transport row (modernised, one line, so the queue keeps its height).
+  Widget _shuffleBtn(ColorScheme scheme) {
+    final on = _c.shuffle;
+    return IconButton(
+      iconSize: 20,
+      visualDensity: VisualDensity.compact,
+      color: on ? scheme.primary : scheme.onSurface.withAlpha(110),
+      tooltip: on ? 'Shuffle on' : 'Shuffle off',
+      onPressed: _ready ? () => _c.setShuffle(!on) : null,
+      icon: const Icon(Icons.shuffle_rounded),
+    );
+  }
+
+  Widget _repeatBtn(ColorScheme scheme) {
     final mode = _c.repeatMode;
-    final repeatOn = mode != 'off';
-    Color tint(bool on) =>
-        on ? scheme.primary : scheme.onSurface.withAlpha(120);
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        IconButton(
-          iconSize: 22,
-          color: tint(_c.shuffle),
-          tooltip: _c.shuffle ? 'Shuffle on' : 'Shuffle off',
-          onPressed: _ready ? () => _c.setShuffle(!_c.shuffle) : null,
-          icon: const Icon(Icons.shuffle_rounded),
-        ),
-        const SizedBox(width: 24),
-        IconButton(
-          iconSize: 22,
-          color: tint(repeatOn),
-          tooltip: mode == 'one'
-              ? 'Repeat one'
-              : mode == 'all'
-                  ? 'Repeat all'
-                  : 'Repeat off',
-          onPressed: _ready ? _cycleSessionRepeat : null,
-          icon: Icon(
-              mode == 'one' ? Icons.repeat_one_rounded : Icons.repeat_rounded),
-        ),
-      ],
+    final on = mode != 'off';
+    return IconButton(
+      iconSize: 20,
+      visualDensity: VisualDensity.compact,
+      color: on ? scheme.primary : scheme.onSurface.withAlpha(110),
+      tooltip: mode == 'one'
+          ? 'Repeat one'
+          : mode == 'all'
+              ? 'Repeat all'
+              : 'Repeat off',
+      onPressed: _ready ? _cycleSessionRepeat : null,
+      icon: Icon(
+          mode == 'one' ? Icons.repeat_one_rounded : Icons.repeat_rounded),
     );
   }
 
@@ -1091,45 +1088,43 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
       stream: _c.player.playerStateStream,
       builder: (context, snap) {
         final playing = snap.data?.playing ?? false;
-        Widget btn(IconData icon, VoidCallback? onTap, double size) => IconButton(
+        Widget btn(IconData icon, VoidCallback? onTap, double size) =>
+            IconButton(
               iconSize: size,
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.all(6),
+              constraints: const BoxConstraints(),
               color: onTap == null
                   ? scheme.onSurface.withAlpha(60)
                   : scheme.onSurface,
               onPressed: onTap,
               icon: Icon(icon),
             );
-        return Column(
-          mainAxisSize: MainAxisSize.min,
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Previous track in the queue
-                btn(
-                    Icons.skip_previous_rounded,
-                    (_ready && hasPrev)
-                        ? () => _c.playIndex(_c.currentIndex - 1)
-                        : null,
-                    30),
-                btn(Icons.replay_10_rounded,
-                    _ready ? () => _liveSeekBy(-10) : null, 26),
-                IconButton.filled(
-                  iconSize: 40,
-                  onPressed: !_ready
-                      ? null
-                      : () => playing ? _c.player.pause() : _c.player.play(),
-                  icon: Icon(
-                      playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                ),
-                btn(Icons.forward_10_rounded,
-                    _ready ? () => _liveSeekBy(10) : null, 26),
-                // Next track in the queue
-                btn(Icons.skip_next_rounded,
-                    (_ready && hasNext) ? _c.nextTrack : null, 30),
-              ],
+            _shuffleBtn(scheme),
+            btn(
+                Icons.skip_previous_rounded,
+                (_ready && hasPrev)
+                    ? () => _c.playIndex(_c.currentIndex - 1)
+                    : null,
+                28),
+            btn(Icons.replay_10_rounded,
+                _ready ? () => _liveSeekBy(-10) : null, 24),
+            IconButton.filled(
+              iconSize: 34,
+              onPressed: !_ready
+                  ? null
+                  : () => playing ? _c.player.pause() : _c.player.play(),
+              icon: Icon(
+                  playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
             ),
-            _sessionFlagControls(scheme),
+            btn(Icons.forward_10_rounded,
+                _ready ? () => _liveSeekBy(10) : null, 24),
+            btn(Icons.skip_next_rounded,
+                (_ready && hasNext) ? _c.nextTrack : null, 28),
+            _repeatBtn(scheme),
           ],
         );
       },
@@ -1160,6 +1155,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
         Widget btn(IconData icon, VoidCallback? onTap, double size) =>
             IconButton(
               iconSize: size,
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.all(6),
+              constraints: const BoxConstraints(),
               color: onTap == null
                   ? scheme.onSurface.withAlpha(60)
                   : scheme.onSurface,
@@ -1167,43 +1165,43 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
               icon: Icon(icon),
             );
         return Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
+                _shuffleBtn(scheme),
                 btn(
                     Icons.skip_previous_rounded,
                     (_ready && hasPrev)
                         ? () => _c.requestControl('prev')
                         : null,
-                    30),
+                    28),
                 btn(Icons.replay_10_rounded,
-                    _ready ? () => _listenerSeekBy(-10) : null, 26),
+                    _ready ? () => _listenerSeekBy(-10) : null, 24),
                 IconButton.filled(
-                  iconSize: 40,
+                  iconSize: 34,
                   onPressed:
                       !_ready ? null : () => _c.requestControl('playpause'),
                   icon: Icon(
                       playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
                 ),
                 btn(Icons.forward_10_rounded,
-                    _ready ? () => _listenerSeekBy(10) : null, 26),
+                    _ready ? () => _listenerSeekBy(10) : null, 24),
                 btn(
                     Icons.skip_next_rounded,
                     (_ready && hasNext)
                         ? () => _c.requestControl('next')
                         : null,
-                    30),
+                    28),
+                _repeatBtn(scheme),
               ],
             ),
-            _sessionFlagControls(scheme),
-            Padding(
-              padding: const EdgeInsets.only(top: 2, bottom: 2),
-              child: Text(
-                'Play, pause, or skip — the host hears it too 🎧',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-              ),
+            Text(
+              'You control the music — the host hears it too 🎧',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 10.5, color: scheme.onSurfaceVariant),
             ),
           ],
         );
@@ -1707,14 +1705,14 @@ class _ReactionButtonState extends State<_ReactionButton> {
         duration: const Duration(milliseconds: 120),
         curve: Curves.easeOut,
         child: Container(
-          width: 38,
-          height: 38,
+          width: 32,
+          height: 32,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: widget.scheme.surfaceContainerHighest.withValues(alpha: 0.6),
             shape: BoxShape.circle,
           ),
-          child: Text(widget.emoji, style: const TextStyle(fontSize: 18)),
+          child: Text(widget.emoji, style: const TextStyle(fontSize: 16)),
         ),
       ),
     );

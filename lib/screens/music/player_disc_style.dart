@@ -13,7 +13,12 @@ enum PlayerDiscStyle {
   cassette,
   halo,
   pulse,
+  // Earned: unlocked by a 30-day "In tune" streak in Our Space (§5.7).
+  anniversary,
 }
+
+/// The warm gold the Anniversary Vinyl disc wears.
+const Color kAnniversaryGold = Color(0xFFE6B84C);
 
 extension PlayerDiscStyleX on PlayerDiscStyle {
   String get id => switch (this) {
@@ -24,6 +29,7 @@ extension PlayerDiscStyleX on PlayerDiscStyle {
         PlayerDiscStyle.cassette => 'cassette',
         PlayerDiscStyle.halo => 'halo',
         PlayerDiscStyle.pulse => 'pulse',
+        PlayerDiscStyle.anniversary => 'anniversary_vinyl',
       };
 
   String get label => switch (this) {
@@ -34,12 +40,14 @@ extension PlayerDiscStyleX on PlayerDiscStyle {
         PlayerDiscStyle.cassette => 'Cassette',
         PlayerDiscStyle.halo => 'Halo',
         PlayerDiscStyle.pulse => 'Pulse',
+        PlayerDiscStyle.anniversary => 'Anniversary Vinyl',
       };
 
   /// Round styles get the circular progress ring; the cassette does not.
   bool get roundRing =>
       this != PlayerDiscStyle.cassette &&
-      this != PlayerDiscStyle.classicVinyl;
+      this != PlayerDiscStyle.classicVinyl &&
+      this != PlayerDiscStyle.anniversary;
 
   static PlayerDiscStyle fromId(String? s) => PlayerDiscStyle.values
       .firstWhere((e) => e.id == s, orElse: () => PlayerDiscStyle.orb);
@@ -52,13 +60,22 @@ class PlayerStyleController extends ChangeNotifier {
 
   static const _key = 'player_disc_style_v1';
   static const _dimKey = 'player_orb_dimmed_v1';
+  // Earned cosmetics (e.g. the Anniversary Vinyl disc) — unlocked by a bond's
+  // "In tune" streak and remembered on-device so the style stays available.
+  static const _annivKey = 'player_anniversary_unlocked_v1';
   PlayerDiscStyle _style = PlayerDiscStyle.orb;
   bool _orbDimmed = false;
+  bool _anniversaryUnlocked = false;
   bool _loaded = false;
 
   PlayerDiscStyle get style => _style;
   bool get orbDimmed => _orbDimmed;
   bool get loaded => _loaded;
+  bool get anniversaryUnlocked => _anniversaryUnlocked;
+
+  /// A style the user hasn't earned yet (shown locked in the picker).
+  bool isLocked(PlayerDiscStyle s) =>
+      s == PlayerDiscStyle.anniversary && !_anniversaryUnlocked;
 
   Future<void> load() async {
     if (_loaded) return;
@@ -66,6 +83,7 @@ class PlayerStyleController extends ChangeNotifier {
       final p = await SharedPreferences.getInstance();
       _style = PlayerDiscStyleX.fromId(p.getString(_key));
       _orbDimmed = p.getBool(_dimKey) ?? false;
+      _anniversaryUnlocked = p.getBool(_annivKey) ?? false;
     } catch (_) {
       // Keep the default on any read failure.
     }
@@ -73,8 +91,22 @@ class PlayerStyleController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Mark the Anniversary Vinyl disc as earned (via a 30-day streak). Idempotent.
+  Future<void> unlockAnniversary() async {
+    if (_anniversaryUnlocked) return;
+    _anniversaryUnlocked = true;
+    notifyListeners();
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setBool(_annivKey, true);
+    } catch (_) {
+      // Best-effort — unlock still applies this session.
+    }
+  }
+
   Future<void> setStyle(PlayerDiscStyle s) async {
     if (_style == s) return;
+    if (isLocked(s)) return; // can't pick what isn't earned yet
     _style = s;
     notifyListeners();
     try {
@@ -158,6 +190,15 @@ class PlayerDisc extends StatelessWidget {
           accent: accent,
           scheme: scheme,
           isDark: isDark,
+          playing: playing,
+          artBuilder: artBuilder,
+        ),
+      // A classic vinyl dressed in anniversary gold.
+      PlayerDiscStyle.anniversary => _ClassicVinyl(
+          side: side,
+          accent: kAnniversaryGold,
+          isDark: isDark,
+          spin: spin,
           playing: playing,
           artBuilder: artBuilder,
         ),
@@ -1197,8 +1238,19 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
   Widget _styleCard(PlayerDiscStyle st, bool selected, ColorScheme scheme,
       bool isDark) {
     final accent = widget.accent;
+    final locked = PlayerStyleController.instance.isLocked(st);
     return GestureDetector(
-      onTap: () => PlayerStyleController.instance.setStyle(st),
+      onTap: () {
+        if (locked) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Reach a 30-day streak in Our Space to unlock this disc 🔥'),
+            duration: Duration(seconds: 3),
+          ));
+          return;
+        }
+        PlayerStyleController.instance.setStyle(st);
+      },
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
@@ -1233,25 +1285,43 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
               child: Stack(
                 children: [
                   Center(
-                    child: SizedBox(
-                      width: 108,
-                      height: 108,
-                      child: PlayerDisc(
-                        style: st,
-                        side: 108,
-                        accent: accent,
-                        scheme: scheme,
-                        isDark: isDark,
-                        spin: const AlwaysStoppedAnimation<double>(0.0),
-                        playing: true,
-                        artBuilder: (d, [c]) => Center(
-                          child: Icon(Icons.music_note_rounded,
-                              size: d * 0.42,
-                              color: c ?? Colors.white.withValues(alpha: 0.9)),
+                    child: Opacity(
+                      opacity: locked ? 0.45 : 1.0,
+                      child: SizedBox(
+                        width: 108,
+                        height: 108,
+                        child: PlayerDisc(
+                          style: st,
+                          side: 108,
+                          accent: accent,
+                          scheme: scheme,
+                          isDark: isDark,
+                          spin: const AlwaysStoppedAnimation<double>(0.0),
+                          playing: true,
+                          artBuilder: (d, [c]) => Center(
+                            child: Icon(Icons.music_note_rounded,
+                                size: d * 0.42,
+                                color:
+                                    c ?? Colors.white.withValues(alpha: 0.9)),
+                          ),
                         ),
                       ),
                     ),
                   ),
+                  if (locked)
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: scheme.surface.withValues(alpha: 0.85),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.lock_rounded,
+                            size: 14, color: scheme.onSurfaceVariant),
+                      ),
+                    ),
                   if (selected)
                     Positioned(
                       top: 10,
@@ -1282,7 +1352,7 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.only(bottom: 12, top: 2),
+              padding: EdgeInsets.only(bottom: locked ? 6 : 12, top: 2),
               child: Text(
                 st.label,
                 style: TextStyle(
@@ -1291,6 +1361,14 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
                     color: scheme.onSurface),
               ),
             ),
+            if (locked)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text('30-day streak',
+                    style: TextStyle(
+                        fontSize: 10.5,
+                        color: scheme.onSurfaceVariant)),
+              ),
           ],
         ),
       ),

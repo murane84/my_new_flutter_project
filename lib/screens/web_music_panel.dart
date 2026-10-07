@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/live_session_service.dart' show BytesAudioSource;
 import '../services/now_playing_presence.dart';
+import 'web_fs/music_folder.dart';
 import '../utils/app_config.dart';
 import '../utils/app_reload.dart';
 import '../utils/toast_helper.dart';
@@ -30,9 +31,11 @@ class WebMusicPanel extends StatefulWidget {
 }
 
 class _WebTrack {
-  _WebTrack(this.name, this.bytes);
+  _WebTrack(this.name, this.load);
   final String name;
-  final Uint8List bytes;
+  // Lazy byte loader: picked files return their in-memory bytes; folder entries
+  // read from disk on demand, so a big library never all sits in memory.
+  final Future<Uint8List> Function() load;
 }
 
 // 0 = off, 1 = repeat all (wrap at the end), 2 = repeat one.
@@ -113,7 +116,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       final startEmpty = _queue.isEmpty;
       for (final f in result.files) {
         final bytes = await f.readAsBytes();
-        _queue.add(_WebTrack(f.name, bytes));
+        _queue.add(_WebTrack(f.name, () async => bytes));
       }
       if (!mounted) return;
       setState(() {});
@@ -127,14 +130,45 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     }
   }
 
+  /// Load every audio file in a chosen folder (web folder picker). Entries load
+  /// their bytes lazily, so a large library is cheap to list.
+  Future<void> _openFolder() async {
+    setState(() => _loading = true);
+    try {
+      final startEmpty = _queue.isEmpty;
+      final entries = await pickMusicFolder();
+      if (entries.isEmpty) return;
+      for (final e in entries) {
+        _queue.add(_WebTrack(e.name, e.load));
+      }
+      if (!mounted) return;
+      setState(() {});
+      if (startEmpty) await _playAt(0);
+      if (mounted) {
+        showToast(
+            context,
+            'Loaded ${entries.length} song${entries.length == 1 ? '' : 's'}',
+            type: ToastType.info);
+      }
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not load that folder',
+            type: ToastType.error);
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   Future<void> _playAt(int i) async {
     if (i < 0 || i >= _queue.length) return;
     _index = i;
     if (mounted) setState(() {});
     final t = _queue[i];
     try {
-      await _player
-          .setAudioSource(BytesAudioSource(t.bytes, contentType: _mimeFor(t.name)));
+      final bytes = await t.load();
+      await _player.setAudioSource(
+          BytesAudioSource(bytes, contentType: _mimeFor(t.name)));
       await _player.setVolume(_volume);
       await _player.setSpeed(_speed);
       await _player.play();
@@ -320,8 +354,10 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                       size: 48, color: theme.hintColor),
                   const SizedBox(height: 10),
                   Text(
-                    'The browser version is the lite one — your device music '
-                    'library and background playback need the full app.',
+                    'The browser version is the lite one — browsers can\'t scan '
+                    'your music library, so load songs to play here (pick '
+                    'several at once, or a whole folder). The full app adds your '
+                    'library + background playback.',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: widget.textColor),
@@ -329,13 +365,21 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                   const SizedBox(height: 14),
                   FilledButton.icon(
                     onPressed: _loading ? null : _openFiles,
-                    icon: const Icon(Icons.folder_open),
+                    icon: const Icon(Icons.library_add_rounded),
                     label: Text(_loading
                         ? 'Loading…'
                         : hasQueue
                             ? 'Add more songs'
-                            : 'Open files to play'),
+                            : 'Choose songs to play'),
                   ),
+                  if (folderPickSupported) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: _loading ? null : _openFolder,
+                      icon: const Icon(Icons.folder_copy_outlined),
+                      label: const Text('Load a music folder'),
+                    ),
+                  ],
                   if (hasQueue) ...[
                     const SizedBox(height: 18),
                     _nowPlaying(theme),

@@ -51,3 +51,23 @@ String displayTitleForPath(String path) {
   final out = t.trim();
   return out.isEmpty ? 'Live song' : out;
 }
+
+/// Strip a file extension then clean downloader junk from a raw file name,
+/// giving the nice display title the app shows for web-picked files.
+String cleanDisplayName(String fileName) {
+  final noExt = fileName.replaceAll(RegExp(r'\.[^.]+$'), '');
+  return cleanTrackName(noExt);
+}
+
+/// Splits a cleaned name into (title, artist) when it looks like
+/// "Title - Artist" (or "Title-Artist"). Mirrors the main music screen so the
+/// web queue reads the same two-line way as the native playlist.
+(String, String?) splitTitleArtist(String cleaned) {
+  final parts = cleaned
+      .split(RegExp(r'\s*-\s*'))
+      .map((p) => p.trim())
+      .where((p) => p.isNotEmpty)
+      .toList();
+  if (parts.length < 2) return (cleaned, null);
+  return (parts.first, parts.sublist(1).join(' · '));
+}

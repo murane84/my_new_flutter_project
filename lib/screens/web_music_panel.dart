@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/live_session_service.dart' show BytesAudioSource;
+import '../services/now_playing_presence.dart';
 import '../utils/app_config.dart';
 import '../utils/app_reload.dart';
 import '../utils/toast_helper.dart';
@@ -26,9 +29,32 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   final AudioPlayer _player = AudioPlayer();
   String? _title;
   bool _loading = false;
+  StreamSubscription<PlayerState>? _psSub;
+
+  @override
+  void initState() {
+    super.initState();
+    // Broadcast this web listener's now-playing to friends' "Listening now".
+    // Web has no audio_service handler, so we report playback state directly.
+    _psSub = _player.playerStateStream.listen((st) {
+      final t = _title;
+      if (t == null || t.isEmpty) return;
+      final playing =
+          st.playing && st.processingState != ProcessingState.completed;
+      NowPlayingPresence.instance
+          .reportManual(title: _cleanTitle(t), playing: playing);
+    });
+  }
+
+  // A tidy display title: drop the file extension (e.g. ".mp3").
+  String _cleanTitle(String name) =>
+      name.replaceAll(RegExp(r'\.[^.]+$'), '').trim();
 
   @override
   void dispose() {
+    _psSub?.cancel();
+    // Clear our presence so we don't linger in friends' "Listening now".
+    NowPlayingPresence.instance.reportManual(title: '', playing: false);
     _player.dispose();
     super.dispose();
   }

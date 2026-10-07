@@ -161,13 +161,17 @@ class NowPlayingPresence extends ChangeNotifier {
   String _lastKey = '';
 
   /// Begin watching local playback and emitting presence. Safe to call more
-  /// than once (idempotent) and a no-op until the audio handler exists.
+  /// than once (idempotent). When there is an audio handler (mobile/desktop) it
+  /// is observed directly; on web there is none, so presence is driven by
+  /// [reportManual] from the web player — either way the heartbeat keeps a live
+  /// play from expiring off friends' lists.
   void start() {
-    final h = audioHandler;
-    if (h == null) return;
     if (!_settingLoaded) loadShareSetting();
-    _miSub ??= h.mediaItem.listen((_) => _emit());
-    _psSub ??= h.playbackState.listen((_) => _emit());
+    final h = audioHandler;
+    if (h != null) {
+      _miSub ??= h.mediaItem.listen((_) => _emit());
+      _psSub ??= h.playbackState.listen((_) => _emit());
+    }
     // Refresh within the server's presence TTL so a long, uninterrupted play
     // never silently expires and drops us off friends' lists.
     _heartbeat ??= Timer.periodic(
@@ -177,6 +181,30 @@ class NowPlayingPresence extends ChangeNotifier {
       },
     );
     _emit();
+  }
+
+  // ── manual (web) now-playing source ─────────────────────────────────────────
+  // The web/lite build has no audio_service handler, so the normal emit has no
+  // track to read. The web player calls this directly on play / pause / track
+  // change so a web listener still appears in friends' "Listening now". Ignored
+  // where a real audioHandler exists (that path already drives presence).
+  bool _manualActive = false;
+  String _manualTitle = '';
+  String _manualArtist = '';
+  bool _manualPlaying = false;
+
+  void reportManual(
+      {required String title, String artist = '', required bool playing}) {
+    if (audioHandler != null) return; // handler-driven platforms ignore this
+    _manualActive = true;
+    _manualTitle = title.trim();
+    _manualArtist = artist.trim();
+    _manualPlaying = playing;
+    if (!_settingLoaded) {
+      loadShareSetting().then((_) => _emit());
+    } else {
+      _emit();
+    }
   }
 
   /// Stop emitting and announce we're no longer listening (e.g. on sign-out).
@@ -197,11 +225,25 @@ class NowPlayingPresence extends ChangeNotifier {
   void _emit({bool force = false}) {
     final h = audioHandler;
     final sink = emitSink;
-    if (h == null || sink == null) return;
+    if (sink == null) return;
     if (!_settingLoaded) return; // don't broadcast before the choice is known
-    final mi = h.mediaItem.value;
-    final title = (mi?.title ?? '').trim();
-    final artist = (mi?.artist ?? '').trim();
+    // Source the current track from the audio handler (mobile/desktop) or the
+    // manual web report. With neither, there's nothing to announce.
+    final String title;
+    final String artist;
+    final bool localPlaying;
+    if (h != null) {
+      final mi = h.mediaItem.value;
+      title = (mi?.title ?? '').trim();
+      artist = (mi?.artist ?? '').trim();
+      localPlaying = h.playbackState.value.playing;
+    } else if (_manualActive) {
+      title = _manualTitle;
+      artist = _manualArtist;
+      localPlaying = _manualPlaying;
+    } else {
+      return;
+    }
     // "Our Space" privacy: a Listen Together session is a sacred, PRIVATE space
     // between the two of you. While one is active, we do NOT broadcast the
     // now-playing to third-party friends — they should never see what the pair
@@ -211,7 +253,7 @@ class NowPlayingPresence extends ChangeNotifier {
     // 'Aluta' is the handler's placeholder when nothing real is loaded.
     final playing = _shareEnabled &&
         !inLiveSession &&
-        h.playbackState.value.playing &&
+        localPlaying &&
         title.isNotEmpty &&
         title != 'Aluta';
     final key = playing ? '$title|$artist' : '';

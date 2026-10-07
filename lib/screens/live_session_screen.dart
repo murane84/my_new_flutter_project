@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -196,6 +197,15 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   // Host side: the listener announced a deliberate 'leaving', so a following
   // 'peer_left' should NOT be relabelled as "lost connection".
   bool _peerGoneGraceful = false;
+  // ── Live reactions ("concert lighter") ─────────────────────────────────────
+  // Ephemeral floating emoji both partners see in real time (relayed over the
+  // session WS, nothing stored). _reactionCount tallies the session total for
+  // the save-this-session summary.
+  final List<_FloatReaction> _floats = [];
+  int _floatSeq = 0;
+  int _reactionCount = 0;
+  final math.Random _rand = math.Random();
+  static const List<String> _quickReactions = ['❤️', '🔥', '😍', '🎶', '👏', '🥹'];
   // The music panel also observes session repeat/shuffle. While this popup is
   // open it takes over those callbacks (so its own buttons rebuild on a synced
   // change) but CHAINS the panel's, and restores them on minimise so the
@@ -427,6 +437,10 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
           _lostConnection = false; // stream is flowing again after a reconnect
         });
         break;
+      case 'reaction':
+        final em = (e['emoji'] ?? '❤').toString();
+        _spawnReaction(em);
+        break;
       case 'play':
         setState(() => _status = 'Playing');
         break;
@@ -505,6 +519,67 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
         });
       }
     }
+  }
+
+  // Float a reaction locally. [mine] also sends it to the partner over the WS.
+  void _spawnReaction(String emoji, {bool mine = false}) {
+    if (!mounted) return;
+    if (mine) _c.sendReaction(emoji);
+    final id = _floatSeq++;
+    final dx = 0.12 + _rand.nextDouble() * 0.76;
+    setState(() {
+      _floats.add(_FloatReaction(id, emoji, dx));
+      _reactionCount++;
+    });
+  }
+
+  void _removeFloat(int id) {
+    if (!mounted) return;
+    setState(() => _floats.removeWhere((f) => f.id == id));
+  }
+
+  // The full-width floating layer (rising emoji) laid over the session sheet.
+  Widget _floatingLayer() {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: ClipRect(
+          child: Stack(
+            children: [
+              for (final f in _floats)
+                Positioned.fill(
+                  child: _RisingEmoji(
+                    key: ValueKey(f.id),
+                    emoji: f.emoji,
+                    dx: f.dx,
+                    onDone: () => _removeFloat(f.id),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // A compact quick-reaction bar — tap to float a lighter that your partner
+  // sees live too.
+  Widget _reactionBar(ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          for (final em in _quickReactions) ...[
+            _ReactionButton(
+              emoji: em,
+              onTap: () => _spawnReaction(em, mine: true),
+              scheme: scheme,
+            ),
+            const SizedBox(width: 6),
+          ],
+        ],
+      ),
+    );
   }
 
   void _snack(String m) {
@@ -592,7 +667,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
               ],
             ),
             clipBehavior: Clip.antiAlias,
-            child: Column(
+            child: Stack(
+              children: [
+                Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Grab handle — matches the playlist sheet.
@@ -700,6 +777,8 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
                         _buildHostControls()
                       else
                         _buildListenerControls(),
+                      const SizedBox(height: 4),
+                      _reactionBar(scheme),
                       // Queue: fixed header + independently-scrolling list.
                       // Shown for BOTH roles now — the listener sees the same
                       // "up next" list the host queued (read-only).
@@ -728,6 +807,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
               ),
             ],
           ),
+                _floatingLayer(),
+              ],
+            ),
             ),
         ),
       ),
@@ -1337,5 +1419,128 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$m:$s';
+  }
+}
+
+// ── Live reaction floats ("concert lighter") ─────────────────────────────────
+class _FloatReaction {
+  _FloatReaction(this.id, this.emoji, this.dx);
+  final int id;
+  final String emoji;
+  final double dx; // 0..1 horizontal position across the sheet
+}
+
+// A single emoji that rises and fades, then removes itself via [onDone].
+class _RisingEmoji extends StatefulWidget {
+  const _RisingEmoji({
+    super.key,
+    required this.emoji,
+    required this.dx,
+    required this.onDone,
+  });
+  final String emoji;
+  final double dx;
+  final VoidCallback onDone;
+
+  @override
+  State<_RisingEmoji> createState() => _RisingEmojiState();
+}
+
+class _RisingEmojiState extends State<_RisingEmoji>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ac = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1700),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _ac.addStatusListener((st) {
+      if (st == AnimationStatus.completed) widget.onDone();
+    });
+    _ac.forward();
+  }
+
+  @override
+  void dispose() {
+    _ac.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ac,
+      builder: (context, _) {
+        final t = _ac.value;
+        final rise = 150.0 * Curves.easeOut.transform(t);
+        final fade = t < 0.12 ? (t / 0.12) : (1.0 - (t - 0.12) / 0.88);
+        final scale = 0.7 + 0.5 * Curves.easeOutBack.transform(t.clamp(0.0, 1.0));
+        return Align(
+          // dx 0..1 → alignment -1..1 (left→right), anchored to the bottom.
+          alignment: Alignment(widget.dx * 2 - 1, 1.0),
+          child: Transform.translate(
+            offset: Offset(10.0 * math.sin(t * math.pi * 3), -(28 + rise)),
+            child: Opacity(
+              opacity: fade.clamp(0.0, 1.0),
+              child: Transform.scale(
+                scale: scale,
+                child: Text(widget.emoji, style: const TextStyle(fontSize: 28)),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// A tappable quick-reaction chip (emoji) with a tiny press bounce.
+class _ReactionButton extends StatefulWidget {
+  const _ReactionButton({
+    required this.emoji,
+    required this.onTap,
+    required this.scheme,
+  });
+  final String emoji;
+  final VoidCallback onTap;
+  final ColorScheme scheme;
+
+  @override
+  State<_ReactionButton> createState() => _ReactionButtonState();
+}
+
+class _ReactionButtonState extends State<_ReactionButton> {
+  double _scale = 1.0;
+
+  void _bounce() {
+    widget.onTap();
+    setState(() => _scale = 1.3);
+    Future.delayed(const Duration(milliseconds: 120), () {
+      if (mounted) setState(() => _scale = 1.0);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _bounce,
+      child: AnimatedScale(
+        scale: _scale,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: Container(
+          width: 38,
+          height: 38,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: widget.scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+            shape: BoxShape.circle,
+          ),
+          child: Text(widget.emoji, style: const TextStyle(fontSize: 18)),
+        ),
+      ),
+    );
   }
 }

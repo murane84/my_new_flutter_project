@@ -12,6 +12,7 @@ import 'package:intl/intl.dart' hide TextDirection;
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:video_player/video_player.dart';
 import '../widgets/glimpse_video.dart';
+import '../widgets/animated_reaction.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -6494,8 +6495,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         border: Border.all(
                             color: scheme.outlineVariant.withAlpha(80)),
                       ),
-                      child:
-                          Text(e, style: const TextStyle(fontSize: 14)),
+                      child: AnimatedReaction(emoji: e, size: 15),
                     ),
                   );
                 }).toList(),

@@ -468,19 +468,27 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     // so we auto-reconnect it silently; a listener stopped hearing audio, so we
     // surface a "Connection lost" state with a Reconnect button.
     if (reason == 'disconnected') {
-      if (_isHost) {
-        setState(() {
-          _ready = false;
-          _status = 'Reconnecting…';
-        });
-        _reconnect(); // auto-attempt; falls back to a manual button on failure
-      } else {
-        setState(() {
-          _lostConnection = true;
-          _ready = false;
-          _status = 'Connection lost';
-        });
-      }
+      // A transport drop (not an explicit end). Both roles auto-attempt a
+      // reconnect first — the host's local playback never stopped and the
+      // server keeps the session alive through the grace window, so a brief
+      // blip self-heals without the user doing anything. _reconnect() falls
+      // back to a manual Reconnect button only if the attempt fails.
+      setState(() {
+        _ready = false;
+        _status = 'Reconnecting…';
+        if (!_isHost) _lostConnection = false;
+      });
+      _reconnect();
+      return;
+    }
+    if (reason == 'session_gone') {
+      // The session no longer exists (the host ended it, or it was reaped after
+      // a long outage). Reconnecting to the same id would loop forever, so end
+      // cleanly here — the host can start a fresh room.
+      _snack(_isHost
+          ? 'Your session ended'
+          : '${widget.peerName}\'s session has ended');
+      _dismiss();
       return;
     }
     final msg = reason == 'host_left' || reason == 'host_ended'

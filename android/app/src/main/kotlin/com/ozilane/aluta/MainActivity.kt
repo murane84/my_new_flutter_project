@@ -19,7 +19,12 @@ import android.telecom.TelecomManager
 import com.ryanheise.audioservice.AudioServiceFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import android.content.ContentValues
+import android.os.Environment
+import android.provider.MediaStore
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 
 // Extends AudioServiceFragmentActivity (audio_service media buttons) which is a
 // FlutterFragmentActivity (needed by local_auth's BiometricPrompt).
@@ -28,6 +33,7 @@ class MainActivity : AudioServiceFragmentActivity() {
     private val audioCaptureChannel = "aluta/audiocapture"
     private val telecomChannel = "aluta/telecom"
     private val connectedContactsChannel = "aluta/connected_contacts"
+    private val downloadsChannel = "aluta/downloads"
 
     // Channel for the "Connected apps" (ContactsContract) integration, plus a
     // stash for an action tapped from the system Contacts app before Dart is
@@ -80,6 +86,28 @@ class MainActivity : AudioServiceFragmentActivity() {
                         result.success(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                     "capture" ->
                         startInternalCapture(call.argument<Int>("durationMs") ?: 9000, result)
+                    else -> result.notImplemented()
+                }
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, downloadsChannel)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    // Write a file straight into the public Downloads folder
+                    // (no "Save to" picker). Heavy I/O runs off the main thread.
+                    "saveToDownloads" -> {
+                        val srcPath = call.argument<String>("srcPath")
+                        val fileName = call.argument<String>("fileName") ?: "aluta_file"
+                        val mime = call.argument<String>("mimeType")
+                        Thread {
+                            val saved = try {
+                                saveToDownloads(srcPath, fileName, mime)
+                            } catch (e: Exception) {
+                                null
+                            }
+                            runOnUiThread { result.success(saved) }
+                        }.start()
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -320,6 +348,99 @@ class MainActivity : AudioServiceFragmentActivity() {
         } catch (e: Exception) {
             AudioCaptureService.onDone = null
             res.success(null)
+        }
+    }
+
+    // ── Save straight into the public Downloads folder ───────────────────────
+
+    // Streams [srcPath] into the device's Downloads directory and returns a
+    // human-readable location ("Download/<name>") on success, else null.
+    // Uses MediaStore on Android 10+ (scoped storage, no permission needed) and
+    // a direct file write on Android 9 and below.
+    private fun saveToDownloads(srcPath: String?, fileName: String, mime: String?): String? {
+        if (srcPath == null) return null
+        val src = File(srcPath)
+        if (!src.exists()) return null
+        val safeName = fileName.ifBlank { "aluta_file" }
+        val resolvedMime = mime ?: guessMime(safeName)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val resolver = contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, safeName)
+                if (resolvedMime != null) put(MediaStore.Downloads.MIME_TYPE, resolvedMime)
+                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val collection =
+                MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            // MediaStore auto-dedups the display name ("name (1).ext") when one
+            // already exists in Downloads, so no manual uniquing is needed here.
+            val uri = resolver.insert(collection, values) ?: return null
+            try {
+                resolver.openOutputStream(uri)?.use { out ->
+                    FileInputStream(src).use { input -> input.copyTo(out) }
+                } ?: run {
+                    resolver.delete(uri, null, null)
+                    return null
+                }
+            } catch (e: Exception) {
+                try { resolver.delete(uri, null, null) } catch (_: Exception) {}
+                return null
+            }
+            val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+            resolver.update(uri, done, null, null)
+            return "Download/$safeName"
+        }
+
+        // Android 9 and below: write directly into the public Downloads dir.
+        @Suppress("DEPRECATION")
+        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        if (!dir.exists()) dir.mkdirs()
+        val dest = uniqueFile(dir, safeName)
+        FileInputStream(src).use { input ->
+            FileOutputStream(dest).use { out -> input.copyTo(out) }
+        }
+        return dest.absolutePath
+    }
+
+    // "name.ext" → "name (1).ext", "name (2).ext" … until a free name is found.
+    private fun uniqueFile(dir: File, fileName: String): File {
+        var candidate = File(dir, fileName)
+        if (!candidate.exists()) return candidate
+        val dot = fileName.lastIndexOf('.')
+        val base = if (dot > 0) fileName.substring(0, dot) else fileName
+        val ext = if (dot > 0) fileName.substring(dot) else ""
+        var i = 1
+        while (candidate.exists()) {
+            candidate = File(dir, "$base ($i)$ext")
+            i++
+        }
+        return candidate
+    }
+
+    private fun guessMime(name: String): String {
+        val n = name.lowercase()
+        return when {
+            n.endsWith(".apk") -> "application/vnd.android.package-archive"
+            n.endsWith(".mp3") -> "audio/mpeg"
+            n.endsWith(".m4a") || n.endsWith(".aac") -> "audio/aac"
+            n.endsWith(".wav") -> "audio/wav"
+            n.endsWith(".ogg") -> "audio/ogg"
+            n.endsWith(".flac") -> "audio/flac"
+            n.endsWith(".mp4") -> "video/mp4"
+            n.endsWith(".mov") -> "video/quicktime"
+            n.endsWith(".jpg") || n.endsWith(".jpeg") -> "image/jpeg"
+            n.endsWith(".png") -> "image/png"
+            n.endsWith(".gif") -> "image/gif"
+            n.endsWith(".webp") -> "image/webp"
+            n.endsWith(".pdf") -> "application/pdf"
+            n.endsWith(".zip") -> "application/zip"
+            n.endsWith(".txt") -> "text/plain"
+            n.endsWith(".doc") -> "application/msword"
+            n.endsWith(".docx") ->
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            else -> "application/octet-stream"
         }
     }
 

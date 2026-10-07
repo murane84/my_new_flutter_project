@@ -13,6 +13,9 @@ import 'home_page.dart' show playbackBus, playlistNotifier;
 import '../state/playback_state.dart';
 import '../utils/file_bytes.dart';
 import '../utils/toast_helper.dart';
+import 'music/player_disc_style.dart'
+    show PlayerDisc, PlayerStyleController, PlayerDiscStyle, showPlayerStyleSheet;
+import 'relationship_space_page.dart' show pickDiaryReaction;
 import '../utils/marquee_text.dart';
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
@@ -179,7 +182,8 @@ void _finalizeMinimizedEnd() {
   s?.controller.dispose();
 }
 
-class _LiveSessionScreenState extends State<LiveSessionScreen> {
+class _LiveSessionScreenState extends State<LiveSessionScreen>
+    with SingleTickerProviderStateMixin {
   late LiveSessionController _c;
   // Song-picker hints: a track's content fingerprint cached by file path (so we
   // only ever read+hash a given file once per session), and whether the partner
@@ -261,6 +265,21 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     _c.onRepeatChanged = _prevRepeatCb;
     _c.onShuffleChanged = _prevShuffleCb;
     _c.onContribChanged = _prevContribCb;
+  }
+
+  // Drives the now-playing-style disc rotation (one slow turn), running while
+  // audio plays and paused otherwise — like the main Now Playing screen.
+  late final AnimationController _discSpin = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 10),
+  );
+
+  void _syncDiscSpin(bool playing) {
+    if (playing) {
+      if (!_discSpin.isAnimating) _discSpin.repeat();
+    } else {
+      if (_discSpin.isAnimating) _discSpin.stop();
+    }
   }
 
   @override
@@ -727,7 +746,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   // sees live too.
   Widget _reactionBar(ColorScheme scheme) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 0, 28, 2),
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -737,9 +756,29 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
               onTap: () => _spawnReaction(em, mine: true),
               scheme: scheme,
             ),
+          // "More" → the full emoji keyboard, so any reaction can be sent.
+          GestureDetector(
+            onTap: _pickMoreReaction,
+            child: Container(
+              width: 32,
+              height: 32,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: scheme.primary.withValues(alpha: 0.14),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.add_reaction_outlined,
+                  size: 17, color: scheme.primary),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _pickMoreReaction() async {
+    final em = await pickDiaryReaction(context, Theme.of(context).colorScheme.primary);
+    if (em != null && em.isNotEmpty) _spawnReaction(em, mine: true);
   }
 
   void _snack(String m, {ToastType type = ToastType.info}) {
@@ -779,6 +818,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
 
   @override
   void dispose() {
+    _discSpin.dispose();
     // If we're just minimising, leave the session (controller, notifier,
     // activeLiveSession) fully intact — only detach this screen.
     if (!_minimizing) {
@@ -793,200 +833,234 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    // Cap the sheet height so the queue becomes an independent scroll region
-    // once it grows past the visible space.
-    final maxSheetH = MediaQuery.of(context).size.height * 0.82;
+    // Full-page Listen Together hub (was a bottom sheet). Back/▾ minimises
+    // (keeps the session streaming); the ✕ ends/leaves.
     return PopScope(
-      // Back minimises (keeps the session running); use the ✕ to end/leave.
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        // Minimising is always safe (it just detaches this screen and keeps the
-        // session streaming). Available to host AND listener, ready or still
-        // connecting — so the listener can always tuck it away and keep chatting.
         if (activeLiveSession != null) {
           _minimize();
         } else {
           _leaveOrEnd();
         }
       },
-      child: Dialog(
-        // Bottom-anchored sheet styled like the playlist overlay. Add the
-        // system navigation-bar inset to the bottom so its controls never sit
-        // under the Android 3-button nav bar (~0 on gesture nav).
-        alignment: Alignment.bottomCenter,
-        insetPadding: EdgeInsets.fromLTRB(
-            8, 40, 8, 8 + MediaQuery.of(context).padding.bottom),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        // Drop the app-wide dialogTheme border here — this sheet draws its own
-        // (inner) card border, so the theme border was doubling it up.
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(20)),
-        ),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: 520, maxHeight: maxSheetH),
-          child: Container(
-            decoration: BoxDecoration(
-              color: scheme.surface,
-              borderRadius: BorderRadius.circular(20),
-              border:
-                  Border.all(color: scheme.primary.withAlpha(130)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withAlpha(50),
-                  blurRadius: 26,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Stack(
-              children: [
-                Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Grab handle — matches the playlist sheet.
-                Container(
-                  margin: const EdgeInsets.only(top: 8, bottom: 2),
-                  width: 44,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: scheme.onSurfaceVariant.withAlpha(90),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-              // ── Header bar with title + close (end/leave) ──────────────
-              Container(
-                padding: const EdgeInsets.fromLTRB(16, 8, 6, 8),
-                color: scheme.surfaceContainerHighest,
-                child: Row(
-                  children: [
-                    Icon(Icons.headphones_rounded,
-                        color: scheme.primary, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _isHost
-                            ? 'Listen Together · DJ'
-                            : 'Listen Together',
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Minimize — keep listening while you chat',
-                      icon: const Icon(Icons.remove_rounded),
-                      // Always minimisable (host or listener, even mid-connect).
-                      onPressed:
-                          activeLiveSession != null ? _minimize : null,
-                    ),
-                    IconButton(
-                      tooltip: _isHost ? 'End session' : 'Leave',
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: _leaveOrEnd,
-                    ),
-                  ],
-                ),
-              ),
-              // ── Body (compact; only the queue scrolls) ────────────────
-              Flexible(
+      child: Scaffold(
+        backgroundColor: scheme.surface,
+        appBar: AppBar(
+          backgroundColor: scheme.surfaceContainerHighest,
+          elevation: 0,
+          leading: IconButton(
+            tooltip: 'Minimize — keep listening while you chat',
+            icon: const Icon(Icons.keyboard_arrow_down_rounded),
+            onPressed: activeLiveSession != null ? _minimize : _leaveOrEnd,
+          ),
+          titleSpacing: 0,
+          title: Row(
+            children: [
+              Icon(Icons.headphones_rounded, color: scheme.primary, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Compact now-playing header — small avatar + info on one
-                    // left-aligned row (was a big centred block).
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 22,
-                            backgroundColor: scheme.primaryContainer,
-                            child: Icon(Icons.headphones_rounded,
-                                size: 22, color: scheme.onPrimaryContainer),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                MarqueeText(
-                                  text: _title,
-                                  height: 20,
-                                  style: (theme.textTheme.titleSmall ??
-                                          const TextStyle(fontSize: 14))
-                                      .copyWith(fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  _isHost
-                                      ? 'Sharing with ${widget.peerName} · $_status'
-                                      : 'Hosted by ${widget.peerName} · $_status',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodySmall
-                                      ?.copyWith(color: theme.hintColor),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (_lostConnection)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                        child: _buildReconnect(scheme),
-                      )
-                    else ...[
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: _buildSeekBar(),
-                      ),
-                      const SizedBox(height: 2),
-                      if (_isHost)
-                        _buildHostControls()
-                      else
-                        _buildListenerControls(),
-                      const SizedBox(height: 2),
-                      _reactionBar(scheme),
-                      // Queue: fixed header + independently-scrolling list.
-                      // Shown for BOTH roles now — the listener sees the same
-                      // "up next" list the host queued (read-only).
-                      const SizedBox(height: 4),
-                      _buildQueueHeader(scheme),
-                      Flexible(
-                        child: _isHost
-                            ? _buildQueueList(scheme)
-                            : _buildRemoteQueueList(scheme),
-                      ),
-                    ],
-                    // Footer action (fixed).
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                      child: FilledButton.tonalIcon(
-                        onPressed:
-                            (_ready || _lostConnection) ? _leaveOrEnd : null,
-                        icon: Icon(_isHost
-                            ? Icons.stop_circle_outlined
-                            : Icons.logout),
-                        label: Text(_isHost ? 'End session' : 'Leave'),
-                      ),
+                    Text(_isHost ? 'Listen Together · DJ' : 'Listen Together',
+                        style: theme.textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.bold)),
+                    Text(
+                      _isHost
+                          ? 'Sharing with ${widget.peerName}'
+                          : 'Hosted by ${widget.peerName}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.hintColor),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-                _floatingLayer(),
-              ],
+          actions: [
+            IconButton(
+              tooltip: _isHost ? 'End session' : 'Leave',
+              icon: const Icon(Icons.close_rounded),
+              onPressed: _leaveOrEnd,
             ),
-            ),
+          ],
+        ),
+        body: SafeArea(
+          top: false,
+          child: Stack(
+            children: [
+              LayoutBuilder(
+                builder: (ctx, c) {
+                  // Desktop / wide: two columns — player on the left, queue on
+                  // the right — so the side space isn't wasted. Mobile: the
+                  // player sits on top and the queue fills the rest.
+                  final wide = c.maxWidth >= 760;
+                  if (wide) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          flex: 5,
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  child: _playerSection(theme, scheme),
+                                ),
+                              ),
+                              _leaveBar(scheme),
+                            ],
+                          ),
+                        ),
+                        VerticalDivider(
+                            width: 1,
+                            color: scheme.outlineVariant.withAlpha(90)),
+                        SizedBox(
+                          width: 380,
+                          child: _queueSection(scheme),
+                        ),
+                      ],
+                    );
+                  }
+                  return Column(
+                    children: [
+                      _playerSection(theme, scheme),
+                      Expanded(child: _queueSection(scheme)),
+                      _leaveBar(scheme),
+                    ],
+                  );
+                },
+              ),
+              _floatingLayer(),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  // The player half of the hub: the now-playing-style disc, the waveform, the
+  // transport controls and the quick-reaction row (or the reconnect prompt).
+  Widget _playerSection(ThemeData theme, ColorScheme scheme) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 10),
+        _discHero(theme, scheme),
+        const SizedBox(height: 10),
+        if (_lostConnection)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: _buildReconnect(scheme),
+          )
+        else ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: _buildSeekBar(),
+          ),
+          const SizedBox(height: 4),
+          if (_isHost) _buildHostControls() else _buildListenerControls(),
+          const SizedBox(height: 8),
+          _reactionBar(scheme),
+          const SizedBox(height: 6),
+        ],
+      ],
+    );
+  }
+
+  // The queue half: a fixed header + the independently-scrolling up-next list.
+  Widget _queueSection(ColorScheme scheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildQueueHeader(scheme),
+        Expanded(
+          child:
+              _isHost ? _buildQueueList(scheme) : _buildRemoteQueueList(scheme),
+        ),
+      ],
+    );
+  }
+
+  Widget _leaveBar(ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      child: FilledButton.tonalIcon(
+        onPressed: (_ready || _lostConnection) ? _leaveOrEnd : null,
+        icon: Icon(_isHost ? Icons.stop_circle_outlined : Icons.logout),
+        label: Text(_isHost ? 'End session' : 'Leave'),
+      ),
+    );
+  }
+
+  // Now-Playing-style disc hero: the user's chosen player style, spinning while
+  // audio plays, tap to restyle — plus the track title and who you're with.
+  Widget _discHero(ThemeData theme, ColorScheme scheme) {
+    final isDark = scheme.brightness == Brightness.dark;
+    final accent = scheme.primary;
+    return StreamBuilder<PlayerState>(
+      stream: _c.player.playerStateStream,
+      builder: (ctx, snap) {
+        final playing = snap.data?.playing ?? false;
+        _syncDiscSpin(playing);
+        return AnimatedBuilder(
+          animation: PlayerStyleController.instance,
+          builder: (ctx2, _) {
+            final style = PlayerStyleController.instance.style;
+            return Column(
+              children: [
+                GestureDetector(
+                  onTap: () => showPlayerStyleSheet(context, accent: accent),
+                  child: SizedBox(
+                    width: 132,
+                    height: 132,
+                    child: PlayerDisc(
+                      style: style,
+                      side: 132,
+                      accent: accent,
+                      scheme: scheme,
+                      isDark: isDark,
+                      spin: _discSpin,
+                      playing: playing,
+                      dimmed: PlayerStyleController.instance.orbDimmed,
+                      artBuilder: (d, [col]) => Center(
+                        child: Icon(Icons.music_note_rounded,
+                            size: d * 0.4,
+                            color: col ?? Colors.white.withValues(alpha: 0.9)),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: MarqueeText(
+                    text: _title,
+                    height: 24,
+                    style: (theme.textTheme.titleMedium ??
+                            const TextStyle(fontSize: 16))
+                        .copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _isHost ? 'You’re the DJ · $_status' : _status,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.hintColor),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1001,28 +1075,40 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
         final value = max <= 0
             ? 0.0
             : pos.inMilliseconds.clamp(0, dur.inMilliseconds).toDouble();
+        final scheme = Theme.of(context).colorScheme;
+        final frac = max <= 0 ? 0.0 : (value / max).clamp(0.0, 1.0);
+        void seekTo(double f) {
+          final ms = (f * max).round();
+          if (_isHost) {
+            _c.player.seek(Duration(milliseconds: ms));
+          } else {
+            // Listener scrub → ask the host; host seeks and the new position is
+            // broadcast back so everyone stays in sync.
+            _c.requestControl('seek', positionMs: ms);
+          }
+        }
+
         return Column(
           children: [
-            Slider(
-              value: value,
-              max: max <= 0 ? 1.0 : max,
-              onChanged: max <= 0
-                  ? null
-                  : (v) {
-                      if (_isHost) {
-                        _c.player.seek(Duration(milliseconds: v.round()));
-                      } else {
-                        // Listener scrub → ask the host; host seeks and the new
-                        // position is broadcast back so everyone stays in sync.
-                        _c.requestControl('seek', positionMs: v.round());
-                      }
-                    },
+            _LiveWaveformSeekBar(
+              fraction: frac,
+              accent: scheme.primary,
+              inactive: scheme.onSurface.withValues(alpha: 0.18),
+              enabled: max > 0,
+              seed: _title.hashCode,
+              onSeek: seekTo,
+              labelFor: (f) => _fmt(Duration(milliseconds: (f * max).round())),
             ),
+            const SizedBox(height: 2),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(_fmt(pos)),
-                Text(_fmt(dur)),
+                Text(_fmt(pos),
+                    style: TextStyle(
+                        fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                Text(_fmt(dur),
+                    style: TextStyle(
+                        fontSize: 11.5, color: scheme.onSurfaceVariant)),
               ],
             ),
           ],
@@ -1717,4 +1803,185 @@ class _ReactionButtonState extends State<_ReactionButton> {
       ),
     );
   }
+}
+
+// ── Waveform seek bar (Now-Playing style) ────────────────────────────────────
+// A scrubbable waveform matching the main player's look, wired to the session's
+// position fraction. Deterministic bar heights per track for a stable pattern.
+class _LiveWaveformSeekBar extends StatefulWidget {
+  final double fraction; // 0..1 played
+  final Color accent;
+  final Color inactive;
+  final bool enabled;
+  final int seed;
+  final ValueChanged<double> onSeek;
+  final String Function(double fraction) labelFor;
+
+  const _LiveWaveformSeekBar({
+    required this.fraction,
+    required this.accent,
+    required this.inactive,
+    required this.enabled,
+    required this.seed,
+    required this.onSeek,
+    required this.labelFor,
+  });
+
+  @override
+  State<_LiveWaveformSeekBar> createState() => _LiveWaveformSeekBarState();
+}
+
+class _LiveWaveformSeekBarState extends State<_LiveWaveformSeekBar> {
+  static const int _bars = 48;
+  double? _dragFrac;
+  late List<double> _heights;
+
+  @override
+  void initState() {
+    super.initState();
+    _heights = _gen(widget.seed);
+  }
+
+  @override
+  void didUpdateWidget(covariant _LiveWaveformSeekBar old) {
+    super.didUpdateWidget(old);
+    if (old.seed != widget.seed) _heights = _gen(widget.seed);
+  }
+
+  List<double> _gen(int seed) {
+    var x = (seed & 0x7fffffff) | 1;
+    final out = <double>[];
+    for (var i = 0; i < _bars; i++) {
+      x = (x * 1103515245 + 12345) & 0x7fffffff;
+      out.add(0.26 + (x % 1000) / 1000.0 * 0.74);
+    }
+    return out;
+  }
+
+  void _setFromDx(double dx, double w) {
+    if (w <= 0) return;
+    setState(() => _dragFrac = (dx / w).clamp(0.0, 1.0));
+  }
+
+  void _commit() {
+    final f = _dragFrac;
+    if (f != null) widget.onSeek(f);
+    setState(() => _dragFrac = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final frac = (_dragFrac ?? widget.fraction).clamp(0.0, 1.0);
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        final w = c.maxWidth;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown:
+              widget.enabled ? (d) => _setFromDx(d.localPosition.dx, w) : null,
+          onTapUp: widget.enabled ? (_) => _commit() : null,
+          onTapCancel:
+              widget.enabled ? () => setState(() => _dragFrac = null) : null,
+          onHorizontalDragStart:
+              widget.enabled ? (d) => _setFromDx(d.localPosition.dx, w) : null,
+          onHorizontalDragUpdate:
+              widget.enabled ? (d) => _setFromDx(d.localPosition.dx, w) : null,
+          onHorizontalDragEnd: widget.enabled ? (_) => _commit() : null,
+          child: SizedBox(
+            height: 38,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _LiveWavePainter(
+                      heights: _heights,
+                      fraction: frac,
+                      accent: widget.accent,
+                      inactive: widget.inactive,
+                    ),
+                  ),
+                ),
+                if (_dragFrac != null)
+                  Positioned(
+                    left: (frac * w - 24).clamp(0.0, (w - 48).clamp(0.0, w)),
+                    top: -24,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: widget.accent,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        widget.labelFor(frac),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _LiveWavePainter extends CustomPainter {
+  final List<double> heights;
+  final double fraction;
+  final Color accent;
+  final Color inactive;
+
+  _LiveWavePainter({
+    required this.heights,
+    required this.fraction,
+    required this.accent,
+    required this.inactive,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final n = heights.length;
+    if (n == 0) return;
+    const gap = 2.0;
+    final barW = (size.width - gap * (n - 1)) / n;
+    if (barW <= 0) return;
+    final playedX = fraction * size.width;
+    final mid = size.height / 2;
+    final aPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = accent;
+    final iPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = inactive;
+    for (var i = 0; i < n; i++) {
+      final x = i * (barW + gap);
+      final h = (heights[i] * size.height).clamp(3.0, size.height);
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, mid - h / 2, barW, h),
+        Radius.circular(barW / 2),
+      );
+      canvas.drawRRect(rect, (x + barW) <= playedX ? aPaint : iPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LiveWavePainter old) =>
+      old.fraction != fraction ||
+      old.accent != accent ||
+      old.inactive != inactive ||
+      old.heights != heights;
 }

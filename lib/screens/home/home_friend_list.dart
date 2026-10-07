@@ -1641,6 +1641,10 @@ extension _HomeFriendListView on HomePageState {
   // The "Live Room · Your Circle" slot, now real (C1). Three states: I'm hosting
   // a room, a friend is hosting one I can drop into, or nobody's live (start one).
   Widget _buildLiveRoomSlot(ColorScheme scheme) {
+    // Rebuild when the live-session state flips (dropped in / left / hosting),
+    // not just when the room registry changes — otherwise the card stays on
+    // "Drop in" after you've already joined the room it's advertising.
+    ref.watch(liveSessionProvider);
     return ListenableBuilder(
       listenable: LiveRoomsRegistry.instance,
       builder: (context, _) {
@@ -1651,6 +1655,14 @@ extension _HomeFriendListView on HomePageState {
         if (hostingRoom) {
           return _liveRoomShell(scheme, dark,
               child: _liveRoomHostingBody(scheme, active));
+        }
+        // Already in a live session (dropped into a room, or a 1:1 listen) —
+        // never invite a "drop in" on top of it; that produced the intermixed
+        // state where the card kept offering the very room you're in. Show an
+        // "open" affordance instead.
+        if (active != null) {
+          return _liveRoomShell(scheme, dark,
+              child: _liveRoomInSessionBody(scheme, active));
         }
         if (reg.hasRooms) {
           return _liveRoomShell(scheme, dark,
@@ -1826,6 +1838,39 @@ extension _HomeFriendListView on HomePageState {
           onPressed: _openMyRoom,
           icon: const Icon(Icons.open_in_full_rounded, size: 18),
           label: const Text('Open room'),
+          style: FilledButton.styleFrom(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
+        ),
+      ],
+    );
+  }
+
+  // Shown on the Live Room card when you're already IN a live session (a room
+  // drop-in or a 1:1 listen) — a quiet "you're listening" with a way back in,
+  // instead of inviting you to drop into the session you're already in.
+  Widget _liveRoomInSessionBody(ColorScheme scheme, ActiveLiveSession active) {
+    final sub = active.isRoom
+        ? "In ${active.peerName}'s room"
+        : "Listening with ${active.peerName}";
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text("You're listening",
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: scheme.onSurface)),
+        const SizedBox(height: 3),
+        Text(sub,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: _openMyRoom,
+          icon: const Icon(Icons.open_in_full_rounded, size: 18),
+          label: const Text('Open'),
           style: FilledButton.styleFrom(
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 10)),

@@ -245,6 +245,45 @@ def _authenticate_ws(token: Optional[str], user_id: int) -> Optional[User]:
     return user
 
 
+def _roster_payload(session) -> dict:
+    """Who is currently connected to this session — id, name, avatar, host flag —
+    so every client can render the 'people dropped in' panel. Looks names up in
+    its own short-lived DB session."""
+    ids = list(session.connections.keys())
+    people = []
+    if ids:
+        db = SessionLocal()
+        try:
+            rows = db.query(User).filter(User.id.in_(ids)).all()
+            umap = {u.id: u for u in rows}
+            for uid in ids:
+                u = umap.get(uid)
+                people.append({
+                    "id": uid,
+                    "username": (u.username if u else None) or "Someone",
+                    "avatar_url": (u.avatar_url if u else None),
+                    "is_host": uid == session.host_id,
+                })
+        finally:
+            db.close()
+    return {
+        "type": "session_roster",
+        "data": {"people": people, "host_id": session.host_id,
+                 "count": len(people)},
+    }
+
+
+async def _broadcast_roster(session_id: str) -> None:
+    """Send the current roster to everyone in the session. Best-effort."""
+    session = MANAGER.get(session_id)
+    if session is None:
+        return
+    try:
+        await MANAGER.broadcast_text(session_id, json.dumps(_roster_payload(session)))
+    except Exception:
+        pass
+
+
 @router.websocket("/ws/{session_id}")
 async def live_session_ws(websocket: WebSocket, session_id: str, token: str = "", user_id: int = 0):
     """
@@ -343,6 +382,9 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
     except Exception:
         pass
 
+    # Everyone gets the refreshed roster (who's now in the room).
+    await _broadcast_roster(session_id)
+
     try:
         while True:
             message = await websocket.receive()
@@ -397,6 +439,8 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
                     session_id, user.id,
                     json.dumps({"type": "peer_left", "data": {"user_id": user.id}}),
                 )
+            # Refresh the roster so the remaining people see who's left.
+            await _broadcast_roster(session_id)
 
 
 def _relay_target(text: str):

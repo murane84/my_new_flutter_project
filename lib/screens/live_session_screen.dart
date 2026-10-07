@@ -1779,7 +1779,12 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     return StreamBuilder<PlayerState>(
       stream: _c.player.playerStateStream,
       builder: (context, snap) {
-        final playing = snap.data?.playing ?? false;
+        // Reflect the HOST's authoritative play state, not our local player:
+        // after a reconnect our audio may still be buffering (local player
+        // paused) while the host keeps playing, and a blind toggle would then
+        // flip the host into pause. The stream just keeps this rebuilding; the
+        // play/pause control events also setState the screen.
+        final playing = _c.hostPlaying;
         Widget btn(IconData icon, VoidCallback? onTap, double size) =>
             IconButton(
               iconSize: size,
@@ -1809,8 +1814,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                     _ready ? () => _listenerSeekBy(-10) : null, 24),
                 IconButton.filled(
                   iconSize: 34,
-                  onPressed:
-                      !_ready ? null : () => _c.requestControl('playpause'),
+                  onPressed: !_ready
+                      ? null
+                      : () => _c.requestControl(playing ? 'pause' : 'play'),
                   icon: Icon(
                       playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
                 ),

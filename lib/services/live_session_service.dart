@@ -251,6 +251,12 @@ class LiveSessionController {
   // resume at the host's position and DON'T autoplay if the host is paused.
   bool _hostPlaying = true;
   int _hostPositionMs = 0;
+
+  /// The host's authoritative play/pause state as last broadcast. A listener's
+  /// transport UI should reflect THIS (not its own local player, which may lag
+  /// behind while audio re-buffers after a reconnect) and send explicit
+  /// play/pause against it rather than a blind toggle.
+  bool get hostPlaying => _hostPlaying;
   // Real-time (ms) that the FIRST byte of the listener's current buffer maps to.
   // 0 for a full-from-start transfer; >0 when the host trimmed the already-played
   // head and streamed only from its current position (MP3 fast-join, see

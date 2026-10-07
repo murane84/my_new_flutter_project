@@ -15,6 +15,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 
 import 'api_service.dart';
+import 'music/player_disc_style.dart' show PlayerStyleController;
 import 'home_page.dart' show playbackBus, playlistNotifier;
 import 'live_session_screen.dart';
 import 'token_helper.dart' show getToken, mediaAuthHeaders;
@@ -102,7 +103,14 @@ const Map<String, Color> kSpacePalette = {
   'steel': Color(0xFF7C8AA0),
 };
 
-Color spaceThemeColor(String? key) => kSpacePalette[key] ?? const Color(0xFFFF5A5F);
+// The earned "In tune" accent — a warm anniversary gold, surfaced as a theme
+// swatch once the bond crosses the 7-day streak (§5.7).
+const Color kInTuneAccent = Color(0xFFE6B84C);
+
+Color spaceThemeColor(String? key) {
+  if (key == 'in_tune') return kInTuneAccent;
+  return kSpacePalette[key] ?? const Color(0xFFFF5A5F);
+}
 
 // The matched fixed size of the two hero stat chips. Both share this exact size
 // so they read as a pair, and it's kept a touch under the avatar cluster's
@@ -1109,6 +1117,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         spaceId: _id,
         initialBackgroundUrl: _space['background_url'] as String?,
         apiBase: widget.apiBase,
+        inTuneUnlocked: _hasStreakUnlock('theme_in_tune'),
         onSpaceUpdated: (m) {
           if (mounted) setState(() => _space = {..._space, ...m});
         },
@@ -4669,8 +4678,18 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final s = await ApiService().getStreak(_id);
     if (!mounted || s == null) return;
     setState(() => _streak = s);
+    // Apply earned cosmetics: the Anniversary Vinyl disc becomes selectable in
+    // the player once the bond has reached the 30-day milestone.
+    if (_hasStreakUnlock('disc_anniversary')) {
+      PlayerStyleController.instance.unlockAnniversary();
+    }
     final nu = (s['new_unlocks'] as List?) ?? const [];
     if (nu.isNotEmpty) _showUnlockToast(nu);
+  }
+
+  bool _hasStreakUnlock(String kind) {
+    final u = (_streak?['unlocks'] as List?) ?? const [];
+    return u.map((e) => e.toString()).contains(kind);
   }
 
   void _showUnlockToast(List nu) {
@@ -7641,6 +7660,9 @@ class _EditSpaceSheet extends StatefulWidget {
   final String? initialBackgroundUrl;
   final String apiBase;
   final void Function(Map<String, dynamic>)? onSpaceUpdated;
+  // Whether the bond has earned the "In tune" shared theme (§5.7) — adds its
+  // swatch to the palette.
+  final bool inTuneUnlocked;
   const _EditSpaceSheet({
     required this.initialName,
     required this.initialTheme,
@@ -7649,6 +7671,7 @@ class _EditSpaceSheet extends StatefulWidget {
     this.initialBackgroundUrl,
     required this.apiBase,
     this.onSpaceUpdated,
+    this.inTuneUnlocked = false,
   });
 
   @override
@@ -8142,6 +8165,10 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
             runSpacing: 14,
             children: [
               for (final entry in kSpacePalette.entries) _swatch(entry),
+              // Earned shared theme — shown once the bond unlocks it (7-day
+              // streak), or if it's already the selected theme.
+              if (widget.inTuneUnlocked || _theme == 'in_tune')
+                _swatch(const MapEntry('in_tune', kInTuneAccent)),
             ],
           ),
             ],

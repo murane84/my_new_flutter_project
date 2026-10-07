@@ -11,6 +11,7 @@ import '../services/live_session_service.dart' show BytesAudioSource;
 import '../services/now_playing_presence.dart';
 import 'home_page.dart' show playbackBus;
 import 'web_fs/music_folder.dart';
+import 'web_fs/blob_url.dart';
 import '../utils/app_config.dart';
 import '../utils/app_reload.dart';
 import '../utils/toast_helper.dart';
@@ -63,6 +64,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   // "Start a room" / Listen Together can host it (web has no file paths).
   Uint8List? _currentBytes;
   String? _currentTitle;
+  String? _blobUrl; // object URL of the track currently loaded (web)
 
   @override
   void initState() {
@@ -97,6 +99,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   void dispose() {
     _psSub?.cancel();
     _sleepTimer?.cancel();
+    if (_blobUrl != null) revokeBlobUrl(_blobUrl!);
     NowPlayingPresence.instance.reportManual(title: '', playing: false);
     // Release the bus handlers we registered (web has no other player).
     playbackBus.currentBytes = null;
@@ -187,8 +190,23 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       final bytes = await t.load();
       _currentBytes = bytes;
       _currentTitle = _cleanTitle(t.name);
-      await _player.setAudioSource(
-          BytesAudioSource(bytes, contentType: _mimeFor(t.name)));
+      // Play from a fresh object URL. Switching a StreamAudioSource on
+      // just_audio_web doesn't reliably swap the audio element (you keep
+      // hearing the previous track), so each track gets its own blob URL and
+      // we revoke the previous one. Stop first to tear down the old element.
+      final prev = _blobUrl;
+      final url = makeBlobUrl(bytes, _mimeFor(t.name));
+      await _player.stop();
+      if (url.isNotEmpty) {
+        _blobUrl = url;
+        await _player.setUrl(url);
+      } else {
+        // Non-web fallback (the panel is web-only, but keep it safe).
+        _blobUrl = null;
+        await _player.setAudioSource(
+            BytesAudioSource(bytes, contentType: _mimeFor(t.name)));
+      }
+      if (prev != null) revokeBlobUrl(prev);
       await _player.setVolume(_volume);
       await _player.setSpeed(_speed);
       await _player.play();
@@ -302,6 +320,8 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       _queue.clear();
       _index = -1;
     });
+    if (_blobUrl != null) revokeBlobUrl(_blobUrl!);
+    _blobUrl = null;
     _currentBytes = null;
     _currentTitle = null;
     NowPlayingPresence.instance.reportManual(title: '', playing: false);

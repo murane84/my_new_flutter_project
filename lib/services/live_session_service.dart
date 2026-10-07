@@ -16,6 +16,7 @@ import '../screens/api_service.dart';
 import 'audio_handler.dart';
 import 'ice_config.dart';
 import 'live_audio_cache.dart';
+import '../screens/web_fs/blob_url.dart';
 
 /// "Listen together" live session client.
 ///
@@ -512,7 +513,7 @@ class LiveSessionController {
   }) async {
     await _openSocket(sessionId!, myUserId, token);
 
-    await player.setAudioSource(BytesAudioSource(audioBytes, contentType: mime));
+    await _setPlayerBytes(audioBytes, mime);
     if (startPositionMs > 0) {
       await player.seek(Duration(milliseconds: startPositionMs));
     }
@@ -720,8 +721,7 @@ class LiveSessionController {
       'track': {'title': t.title, 'mime': t.mime},
     };
     try {
-      await player.setAudioSource(
-          BytesAudioSource(t.bytes, contentType: t.mime));
+      await _setPlayerBytes(t.bytes, t.mime);
       // Tell the listener a new track is starting (UI title/clear "lost"), then
       // OFFER it by hash: a listener that already cached this exact song plays
       // it from its own copy instantly; only a miss triggers the byte stream.
@@ -1480,7 +1480,7 @@ class LiveSessionController {
       await player.stop();
     } catch (_) {}
     try {
-      await player.setAudioSource(BytesAudioSource(bytes, contentType: mime));
+      await _setPlayerBytes(bytes, mime);
       if (_hostPositionMs > 0) {
         await _listenerSeekReal(_hostPositionMs);
       }
@@ -1743,8 +1743,7 @@ class LiveSessionController {
     try {
       _log('listener: starting playback (${bytes.length} bytes, '
           '$_incomingMime, hostPlaying=$_hostPlaying)');
-      await player.setAudioSource(
-          BytesAudioSource(bytes, contentType: _incomingMime));
+      await _setPlayerBytes(bytes, _incomingMime);
       // Resume at the host's position, and only play if the host is playing — so
       // joining (or re-buffering after a reconnect) while the host is paused, or
       // mid-track, lands us in sync instead of blasting from 0:00. Translated
@@ -2083,6 +2082,31 @@ class LiveSessionController {
     }
   }
 
+  // Object URL of the track currently loaded into [player] on web, so we can
+  // revoke the previous one when the track changes.
+  String? _playerBlobUrl;
+
+  // Load bytes into the local [player]. On web, switching a StreamAudioSource
+  // doesn't reliably swap just_audio_web's audio element (the DJ keeps HEARING
+  // the previous track even though the UI and the streamed bytes moved on), so
+  // web plays from a fresh object URL via setUrl; native keeps BytesAudioSource.
+  Future<void> _setPlayerBytes(Uint8List bytes, String contentType) async {
+    if (kIsWeb) {
+      final url = makeBlobUrl(bytes, contentType);
+      if (url.isNotEmpty) {
+        final prev = _playerBlobUrl;
+        _playerBlobUrl = url;
+        try {
+          await player.stop();
+        } catch (_) {}
+        await player.setUrl(url);
+        if (prev != null) revokeBlobUrl(prev);
+        return;
+      }
+    }
+    await player.setAudioSource(BytesAudioSource(bytes, contentType: contentType));
+  }
+
   void _sendControl(Map<String, dynamic> data) {
     try {
       _channel?.sink.add(jsonEncode(data));
@@ -2160,6 +2184,10 @@ class LiveSessionController {
     try {
       await player.stop();
     } catch (_) {}
+    if (_playerBlobUrl != null) {
+      revokeBlobUrl(_playerBlobUrl!);
+      _playerBlobUrl = null;
+    }
   }
 
   Future<void> dispose() async {

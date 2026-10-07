@@ -4674,12 +4674,22 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
     Widget content;
     if (revealed) {
+      final myMood = (myAns?['mood'] ?? '').toString().trim();
+      final partnerMood = (partnerAns?['mood'] ?? '').toString().trim();
+      final moodMismatch = kind == 'mood' &&
+          myMood.isNotEmpty &&
+          partnerMood.isNotEmpty &&
+          myMood != partnerMood;
       content = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _answerBubble(scheme, 'You', myAns, kind),
           const SizedBox(height: 8),
           _answerBubble(scheme, partnerName, partnerAns, kind),
+          if (moodMismatch) ...[
+            const SizedBox(height: 10),
+            _moodRemedyRow(scheme),
+          ],
         ],
       );
     } else if (answered) {
@@ -4706,6 +4716,14 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           icon: const Icon(Icons.library_music_rounded, size: 18),
           label: const Text('Pick your song'),
         ),
+      );
+    } else if (kind == 'mood') {
+      content = Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final m in _kMoods) _moodChip(scheme, m[0], m[1]),
+        ],
       );
     } else {
       content = Row(
@@ -4762,7 +4780,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
               Icon(
                   kind == 'music'
                       ? Icons.music_note_rounded
-                      : Icons.favorite_rounded,
+                      : kind == 'mood'
+                          ? Icons.mood_rounded
+                          : Icons.favorite_rounded,
                   size: 16,
                   color: _accent),
               const SizedBox(width: 6),
@@ -4803,9 +4823,12 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final text = (ans?['answer_text'] ?? '').toString().trim();
     final tt = (ans?['track_title'] ?? '').toString().trim();
     final ta = (ans?['track_artist'] ?? '').toString().trim();
+    final mood = (ans?['mood'] ?? '').toString().trim();
     final display = kind == 'music'
         ? (tt.isEmpty ? '—' : (ta.isEmpty ? tt : '$tt — $ta'))
-        : (text.isEmpty ? '—' : text);
+        : kind == 'mood'
+            ? (mood.isEmpty ? '—' : mood)
+            : (text.isEmpty ? '—' : text);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -4831,7 +4854,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
               Expanded(
                 child: Text(display,
                     style: TextStyle(
-                        fontSize: 13, height: 1.3, color: scheme.onSurface)),
+                        fontSize: kind == 'mood' ? 15 : 13,
+                        fontWeight:
+                            kind == 'mood' ? FontWeight.w600 : FontWeight.w400,
+                        height: 1.3,
+                        color: scheme.onSurface)),
               ),
             ],
           ),
@@ -4867,11 +4894,111 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     );
   }
 
+  // Mood-variant options for the daily question (emoji + label). Stored as
+  // "<emoji> <label>" so both the picker and the reveal read the same string.
+  static const List<List<String>> _kMoods = [
+    ['🥰', 'loved'],
+    ['😊', 'happy'],
+    ['😌', 'calm'],
+    ['🤗', 'grateful'],
+    ['🥳', 'excited'],
+    ['🥺', 'missing you'],
+    ['😟', 'anxious'],
+    ['😔', 'low'],
+    ['😤', 'frustrated'],
+    ['😴', 'tired'],
+  ];
+
+  Widget _moodChip(ColorScheme scheme, String emoji, String label) {
+    return GestureDetector(
+      onTap: _qSubmitting ? null : () => _sendAnswer(mood: '$emoji $label'),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: _accent.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 16)),
+            const SizedBox(width: 6),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Shown on a mood reveal when the two of you picked different feelings — a
+  // gentle, one-tap way to close the gap (never an observation left hanging).
+  Widget _moodRemedyRow(ColorScheme scheme) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: _accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.favorite_rounded, size: 14, color: _accent),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                    'Feeling a little differently today — close the gap?',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurface)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _qSubmitting ? null : _listenTogether,
+                  icon: const Icon(Icons.headphones_rounded, size: 16),
+                  label: const Text('Listen together'),
+                  style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      foregroundColor: _accent,
+                      side: BorderSide(color: _accent.withValues(alpha: 0.5))),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _qSubmitting ? null : _composeDedication,
+                  icon: const Icon(Icons.favorite_rounded, size: 16),
+                  label: const Text('Dedicate'),
+                  style: FilledButton.styleFrom(
+                      backgroundColor: _accent,
+                      visualDensity: VisualDensity.compact),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _sendAnswer({
     String? answerText,
     String? trackTitle,
     String? trackArtist,
     String? trackRef,
+    String? mood,
   }) async {
     setState(() => _qSubmitting = true);
     final res = await ApiService().answerQuestion(
@@ -4880,6 +5007,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       trackTitle: trackTitle,
       trackArtist: trackArtist,
       trackRef: trackRef,
+      mood: mood,
     );
     if (!mounted) return;
     setState(() => _qSubmitting = false);

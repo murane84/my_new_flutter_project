@@ -1536,8 +1536,9 @@ def annotate_track(
 # ── Daily "Us" question ──────────────────────────────────────────────────────
 # One curated prompt per calendar day, the same for every couple. 'text' prompts
 # invite a few words; 'music' prompts ask for a song (both picks drop into the
-# soundtrack). Answers reveal to both partners only once BOTH have answered —
-# the simultaneous-reveal ritual.
+# soundtrack); 'mood' prompts ask each partner to pick how they feel, blind — on
+# the reveal a mismatch offers a one-tap remedy (client side). Answers reveal to
+# both partners only once BOTH have answered — the simultaneous-reveal ritual.
 _DAILY_PROMPTS = [
     ("text", "What made you smile today?"),
     ("music", "Pick a song for how you feel about us today."),
@@ -1563,6 +1564,9 @@ _DAILY_PROMPTS = [
     ("text", "When did you last laugh together, and at what?"),
     ("music", "A song for a long drive, just the two of you."),
     ("text", "What do you love that only the two of you share?"),
+    ("mood", "How are we feeling about us today?"),
+    ("mood", "What's your heart's weather right now?"),
+    ("mood", "In one feeling — how is your day?"),
 ]
 
 
@@ -1592,6 +1596,7 @@ def _answer_payload(a) -> Optional[dict]:
         "answer_text": a.answer_text,
         "track_title": a.track_title,
         "track_artist": a.track_artist,
+        "mood": a.mood,
         "created_at": a.created_at.isoformat() if a.created_at else None,
     }
 
@@ -1670,6 +1675,7 @@ class _AnswerBody(BaseModel):
     track_title: Optional[str] = None
     track_artist: Optional[str] = None
     track_ref: Optional[str] = None
+    mood: Optional[str] = None
 
 
 @router.get("/{space_id}/question")
@@ -1705,8 +1711,11 @@ def answer_question(
     title = (payload.track_title or "").strip() or None
     artist = (payload.track_artist or "").strip() or None
     ref = (payload.track_ref or "").strip() or None
+    mood = (payload.mood or "").strip() or None
     if prompt.kind == "music" and not title:
         raise HTTPException(status_code=400, detail="Pick a song to answer")
+    if prompt.kind == "mood" and not mood:
+        raise HTTPException(status_code=400, detail="Pick how you feel")
     if prompt.kind == "text" and not text_ans:
         raise HTTPException(status_code=400, detail="Write a short answer")
 
@@ -1723,6 +1732,7 @@ def answer_question(
     mine.track_title = title[:200] if title else None
     mine.track_artist = artist[:200] if artist else None
     mine.track_ref = ref
+    mine.mood = mood[:60] if mood else None
     db.commit()
     db.refresh(mine)
 

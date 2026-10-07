@@ -161,6 +161,8 @@ def ensure_media_schema():
         "ALTER TABLE playlist_tracks ADD COLUMN IF NOT EXISTS source VARCHAR DEFAULT 'manual'",
         "ALTER TABLE playlist_tracks ADD COLUMN IF NOT EXISTS memo TEXT",
         "ALTER TABLE playlist_tracks ADD COLUMN IF NOT EXISTS audio_url VARCHAR",
+        # Daily "Us" question — mood variant (an emoji + label answer).
+        "ALTER TABLE daily_prompt_answers ADD COLUMN IF NOT EXISTS mood VARCHAR",
         # Pinned-moment reactions become Slack-style multi-emoji (like the
         # diary): drop the one-per-user unique so a person can hold several
         # distinct emojis. The endpoint prevents duplicate (moment,user,emoji).

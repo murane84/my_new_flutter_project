@@ -1768,7 +1768,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               ),
             ),
           )
-        : Text(r.emoji, style: const TextStyle(fontSize: 30));
+        : Text(r.emoji, style: const TextStyle(fontSize: 40));
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       child: Row(
@@ -1778,7 +1778,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         children: mine
             ? [content]
             : [
-                _avatarRing(scheme, r.name, r.avatar),
+                _avatarRing(scheme, r.name, r.avatar, size: 24),
                 const SizedBox(width: 8),
                 Flexible(child: content),
               ],

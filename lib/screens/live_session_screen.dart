@@ -24,6 +24,7 @@ import 'relationship_space_page.dart'
     show pickDiaryReaction, resolveAvatarUrl;
 import '../utils/marquee_text.dart';
 import '../widgets/animated_reaction.dart';
+import '../services/track_title.dart' show displayTitleForPath;
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
 /// Presented with `showDialog(...)` so it floats over the chat instead of
@@ -2701,14 +2702,11 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     }
   }
 
-  String _titleFromPath(String path) {
-    var name = path;
-    final slash = name.lastIndexOf(RegExp(r'[\\/]'));
-    if (slash >= 0) name = name.substring(slash + 1);
-    final dot = name.lastIndexOf('.');
-    if (dot > 0) name = name.substring(0, dot);
-    return name.trim().isEmpty ? 'Live song' : name.trim();
-  }
+  // Native (Windows/Android) only: show the SAME title the app's own playlist
+  // shows — the user's manual rename when set (metadataStore), else the cleaned
+  // file name — instead of the raw downloader-junk file name. Web keeps its own
+  // queue titles via [_pickWebSong]/[_addWebSong].
+  String _titleFromPath(String path) => displayTitleForPath(path);
 
   String _fmt(Duration d) {
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');

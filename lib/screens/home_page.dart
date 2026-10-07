@@ -1604,6 +1604,25 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final myUserId = _myUserId;
     if (token == null || myUserId == null || !mounted) return;
 
+    // Guard against ending up with two listener controllers fighting over the
+    // same user socket. If a session is already active (e.g. a previous screen
+    // is stuck reconnecting after a network drop):
+    //   • same session → this is a re-invite for the room we're already in.
+    //     Just surface the existing screen; its own reconnect handles rejoining
+    //     — spinning up a second controller would make the two sockets duel
+    //     (empty queue, no audio).
+    //   • different session → leave the stale one cleanly first.
+    if (activeLiveSession != null) {
+      final already = activeLiveSession!.controller.sessionId;
+      if (already != null && already == sessionId) {
+        _reopenLiveSession();
+        return;
+      }
+      await endActiveLiveSession();
+      ref.read(liveSessionProvider.notifier).stop();
+      if (!mounted) return;
+    }
+
     Navigator.of(context).push(MaterialPageRoute<void>(
       fullscreenDialog: true,
       builder: (_) => LiveSessionScreen.listener(

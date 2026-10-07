@@ -1997,6 +1997,23 @@ extension _HomeFriendListView on HomePageState {
     final host = (room['host_username'] ?? 'Your friend').toString();
     final track =
         (room['track'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+    // Don't stack a second listener controller on top of an active session —
+    // two sockets for the same user duel and never settle (empty queue, no
+    // audio). Same room → just resume the screen we already have; a different
+    // one → leave the stale session cleanly first.
+    if (activeLiveSession != null) {
+      final already = activeLiveSession!.controller.sessionId;
+      if (already != null && already == sid) {
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          fullscreenDialog: true,
+          builder: (_) => LiveSessionScreen.resume(),
+        ));
+        return;
+      }
+      await endActiveLiveSession();
+      ref.read(liveSessionProvider.notifier).stop();
+      if (!mounted) return;
+    }
     Navigator.of(context).push(MaterialPageRoute<void>(
       fullscreenDialog: true,
       builder: (_) => LiveSessionScreen.listener(

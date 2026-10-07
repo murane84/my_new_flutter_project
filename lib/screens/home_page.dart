@@ -386,7 +386,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Live "Listening now": repaint tiles when a friend's playback changes, and
     // seed the current snapshot of who's playing right now.
     NowPlayingPresence.instance.addListener(_onPresenceChanged);
-    NowPlayingPresence.instance.loadSnapshot();
+    // Keep the "Listening now" zone fresh. On web, poll the snapshot as a
+    // safety net — live friend_now_playing events can be missed there, which
+    // left friends' listening status never appearing.
+    NowPlayingPresence.instance.startReceiving(poll: kIsWeb);
     // Seed any live "Listening Rooms" a friend is already hosting (events keep
     // this current afterwards).
     LiveRoomsRegistry.instance.loadSnapshot();
@@ -535,6 +538,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     ContactNames.instance.revision.removeListener(_onContactsChanged);
     playlistDrawerBus.isOpen.removeListener(_onPlaylistDrawerToggled);
     NowPlayingPresence.instance.removeListener(_onPresenceChanged);
+    NowPlayingPresence.instance.stopReceiving();
     for (final t in _typingTimers.values) {
       t.cancel();
     }
@@ -641,6 +645,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
       // Coming back from idle/background — re-check the server and go online.
       _discoverServer();
       _autoReconnect();
+      // Re-seed who's listening now (a live event may have been missed while
+      // backgrounded).
+      NowPlayingPresence.instance.loadSnapshot();
     }
   }
 

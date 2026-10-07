@@ -120,6 +120,33 @@ class NowPlayingPresence extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ── receive-side freshness (independent of local playback) ──────────────────
+  // The friends' "listening now" list is seeded by loadSnapshot() and kept live
+  // by `friend_now_playing` events. But those events can be MISSED (notably on
+  // web, where the socket is less reliable and audioHandler — hence the emit
+  // side — is null), leaving the zone permanently empty even while a friend is
+  // playing. This keeps it eventually-consistent by re-seeding the snapshot on
+  // a gentle timer. It does NOT depend on audioHandler, so it works on web.
+  Timer? _snapshotTimer;
+
+  /// Start keeping the friends-listening list fresh. [poll] adds a periodic
+  /// re-seed (used on web as a safety net); every platform still gets the
+  /// immediate seed + live events. Idempotent.
+  void startReceiving({bool poll = false}) {
+    loadSnapshot();
+    if (poll) {
+      _snapshotTimer ??= Timer.periodic(
+        const Duration(seconds: 30),
+        (_) => loadSnapshot(),
+      );
+    }
+  }
+
+  void stopReceiving() {
+    _snapshotTimer?.cancel();
+    _snapshotTimer = null;
+  }
+
   void clearAll() {
     if (_friends.isEmpty) return;
     _friends.clear();

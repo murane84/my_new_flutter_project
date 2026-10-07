@@ -4453,6 +4453,38 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
   }
 
+  // Native channel that writes a file straight into the public Downloads
+  // folder (Android only), bypassing the system "Save to" picker.
+  static const _downloadsCh = MethodChannel('aluta/downloads');
+
+  /// Android only: save [data] directly into the device's Downloads folder via
+  /// the native MediaStore channel. Returns a label like "Download/song.apk"
+  /// on success, or null if it couldn't (the caller then shows the Save
+  /// dialog). On iOS / desktop / web this returns null (no public Downloads).
+  Future<String?> _saveToDownloads(Uint8List data, String fname) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return null;
+    // MediaStore display names can't contain path separators.
+    final safe = fname.replaceAll(RegExp(r'[\\/]+'), '_').trim();
+    File? tmp;
+    try {
+      final dir = await getTemporaryDirectory();
+      tmp = File(
+          '${dir.path}/dl_${DateTime.now().millisecondsSinceEpoch}_$safe');
+      await tmp.writeAsBytes(data, flush: true);
+      return await _downloadsCh.invokeMethod<String>('saveToDownloads', {
+        'srcPath': tmp.path,
+        'fileName': safe.isEmpty ? 'aluta_file' : safe,
+        'mimeType': null, // let the native side infer from the extension
+      });
+    } catch (_) {
+      return null;
+    } finally {
+      try {
+        await tmp?.delete();
+      } catch (_) {}
+    }
+  }
+
   /// Present a real "Save As…" flow and write [bytes] there. `FilePicker.saveFile`
   /// (v12) shows a native Save dialog on desktop and the system "Save to"
   /// location picker on mobile, and — because `bytes` is passed — writes the
@@ -4476,6 +4508,17 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           return;
         }
       } catch (_) {/* fall through to the generic saver */}
+    }
+    // Android: drop the file straight into the public Downloads folder — no
+    // "Save to" picker. Falls through to the Save dialog only if that fails.
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      final where = await _saveToDownloads(data, fname);
+      if (where != null) {
+        if (mounted) {
+          showToast(context, 'Saved to Downloads', type: ToastType.success);
+        }
+        return;
+      }
     }
     try {
       final saved = await FilePicker.saveFile(

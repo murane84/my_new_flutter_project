@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -6,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../services/live_session_service.dart';
+import 'api_service.dart';
 import '../services/live_audio_cache.dart' show liveTrackFingerprint;
 import 'home_page.dart' show playbackBus, playlistNotifier;
 import '../state/playback_state.dart';
@@ -204,6 +206,10 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   final List<_FloatReaction> _floats = [];
   int _floatSeq = 0;
   int _reactionCount = 0;
+  // Save-this-session (host 1:1 only): when the set ends, offer to keep it as a
+  // dated memory on the Our Space wall. Guarded so it's offered at most once.
+  final DateTime _sessionStart = DateTime.now();
+  bool _saveOffered = false;
   final math.Random _rand = math.Random();
   static const List<String> _quickReactions = ['❤️', '🔥', '😍', '🎶', '👏', '🥹'];
   // The music panel also observes session repeat/shuffle. While this popup is
@@ -538,6 +544,76 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     setState(() => _floats.removeWhere((f) => f.id == id));
   }
 
+  // Build the warm one-line summary shown in the save prompt and on the card.
+  String _listenSummary(List<String> titles) {
+    final n = titles.length;
+    final songs = n == 1 ? '1 song' : '$n songs';
+    final r = _reactionCount;
+    return r > 0
+        ? 'Listened together · $songs · $r reaction${r == 1 ? '' : 's'}'
+        : 'Listened together · $songs';
+  }
+
+  // Host 1:1: offer to keep this session as a dated moment on the wall. The
+  // saved memory mirrors to both partners (pair bond), so the listener sees it
+  // too. Songs are listed by title + the live-reaction tally; no audio/refs are
+  // stored (the set streamed local files).
+  Future<void> _maybeOfferSave() async {
+    _saveOffered = true;
+    final partnerId = widget.receiverId;
+    if (partnerId == null) return;
+    final titles = <String>[];
+    for (final t in _c.queue) {
+      final tt = t.title.trim();
+      if (tt.isNotEmpty && !titles.contains(tt)) titles.add(tt);
+    }
+    if (titles.isEmpty) return;
+    final summary = _listenSummary(titles);
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final sc = Theme.of(ctx).colorScheme;
+        return AlertDialog(
+          title: const Text('Save this listen?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(summary,
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600, color: sc.onSurface)),
+              const SizedBox(height: 8),
+              Text(
+                  'Keep it as a memory on your Our Space wall — you can react and write about it later.',
+                  style: TextStyle(fontSize: 12.5, color: sc.onSurfaceVariant)),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Not now')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Save to Our Space')),
+          ],
+        );
+      },
+    );
+    if (save != true || !mounted) return;
+    final mins = DateTime.now().difference(_sessionStart).inMinutes;
+    final ref = jsonEncode({
+      'songs': titles,
+      'reactions': _reactionCount,
+      'minutes': mins,
+    });
+    final res = await ApiService()
+        .saveListenMoment(partnerId, caption: summary, ref: ref);
+    if (!mounted) return;
+    _snack(res != null
+        ? 'Saved to Our Space 💞'
+        : 'Could not save this listen');
+  }
+
   // The full-width floating layer (rising emoji) laid over the session sheet.
   Widget _floatingLayer() {
     return Positioned.fill(
@@ -588,6 +664,15 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   }
 
   Future<void> _leaveOrEnd() async {
+    // Host of a 1:1 bonded set: offer to save it as a memory before closing.
+    if (_isHost &&
+        !widget.isRoom &&
+        widget.receiverId != null &&
+        !_saveOffered &&
+        _c.queue.isNotEmpty) {
+      await _maybeOfferSave();
+      if (!mounted) return;
+    }
     // Close immediately so a slow network call can never trap the user in the
     // popup. Teardown of the controller happens in this State's dispose();
     // for the host we also best-effort tell the server the session is over.

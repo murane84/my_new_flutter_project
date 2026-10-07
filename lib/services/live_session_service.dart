@@ -1658,7 +1658,17 @@ class LiveSessionController {
     _socketSub = ch.stream.listen(
       _onSocketMessage,
       onError: (e) => onError?.call(e),
-      onDone: () => onEnded?.call('disconnected'),
+      // The server accepts the WS handshake first, THEN checks the session and
+      // membership — so a gone/forbidden session surfaces as a close code here,
+      // not as a failed connect. 4404 (no such session) / 4403 (not allowed) /
+      // 4401 (auth) are terminal: reconnecting to the same id would just loop,
+      // so report 'ended' and let the UI show a clear "session ended" state.
+      // Anything else (a real transport drop) stays 'disconnected' → reconnect.
+      onDone: () {
+        final code = ch.closeCode;
+        final terminal = code == 4404 || code == 4403 || code == 4401;
+        onEnded?.call(terminal ? 'session_gone' : 'disconnected');
+      },
       cancelOnError: false,
     );
   }

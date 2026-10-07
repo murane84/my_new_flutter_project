@@ -22,8 +22,11 @@ from fastapi import WebSocket
 # and end it for everyone. A brief network glitch (WiFi blip, cell handover)
 # should NOT kill a live session — the host reconnects within this window and
 # playback resumes. Only a genuinely-gone host (closed app, long outage) lets
-# the timer fire and ends the session.
-HOST_GRACE_SECONDS = 45
+# the timer fire and ends the session. Generous on purpose: a mobile handover
+# or a laptop sleep can take a couple of minutes, and reaping the session early
+# strands any listener on a session id that no longer exists (their Reconnect
+# then loops forever until the host starts a brand-new session).
+HOST_GRACE_SECONDS = 180
 
 
 class LiveSession:

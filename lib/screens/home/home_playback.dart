@@ -35,6 +35,11 @@ class PlaybackBus {
   // Together / room-host flow, which otherwise reads a path it can't produce.
   Uint8List Function()? currentBytes;
   String Function()? currentTitle;
+  // Web-only: the lite player's loaded queue (titles + lazy byte loaders), so
+  // the live-session "Add song" can offer the in-memory tracks — web has no
+  // device library or file paths to read from.
+  List<({String title, Future<Uint8List> Function() load})> Function()?
+      webQueue;
   // Toggle "favourite" on the currently-playing track (driven by the bar heart).
   VoidCallback? onToggleFavorite;
   // Share the currently-playing track to a chat (the quick action that used to

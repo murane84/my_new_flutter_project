@@ -76,6 +76,10 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     playbackBus.currentPositionMs = () => _player.position.inMilliseconds;
     playbackBus.isPlaying = () => _player.playing;
     playbackBus.onPause = () => _player.pause();
+    // Expose the loaded queue so a live session's "Add song" can offer these.
+    playbackBus.webQueue = () => _queue
+        .map((t) => (title: _cleanTitle(t.name), load: t.load))
+        .toList();
   }
 
   void _onPlayerState(PlayerState st) {
@@ -107,6 +111,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     playbackBus.currentPositionMs = null;
     playbackBus.isPlaying = null;
     playbackBus.onPause = null;
+    playbackBus.webQueue = null;
     _player.dispose();
     super.dispose();
   }

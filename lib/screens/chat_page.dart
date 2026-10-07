@@ -47,6 +47,7 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:http/http.dart' as http;
 import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart' as ja;
@@ -4467,6 +4468,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final safe = fname.replaceAll(RegExp(r'[\\/]+'), '_').trim();
     File? tmp;
     try {
+      // Android 10+ uses MediaStore (no permission). Android 9 and below write
+      // straight to the public Downloads dir, which needs WRITE_EXTERNAL_STORAGE
+      // — request it, and if the user declines, fall back to the Save dialog.
+      final sdk = await _downloadsCh.invokeMethod<int>('sdkInt') ?? 0;
+      if (sdk > 0 && sdk < 29) {
+        final st = await Permission.storage.request();
+        if (!st.isGranted) return null;
+      }
       final dir = await getTemporaryDirectory();
       tmp = File(
           '${dir.path}/dl_${DateTime.now().millisecondsSinceEpoch}_$safe');

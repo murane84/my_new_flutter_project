@@ -93,6 +93,9 @@ class MainActivity : AudioServiceFragmentActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, downloadsChannel)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    // The device's API level, so Dart can request the legacy
+                    // storage permission only on Android 9 and below.
+                    "sdkInt" -> result.success(Build.VERSION.SDK_INT)
                     // Write a file straight into the public Downloads folder
                     // (no "Save to" picker). Heavy I/O runs off the main thread.
                     "saveToDownloads" -> {

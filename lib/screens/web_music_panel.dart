@@ -619,6 +619,12 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
             SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 trackHeight: 3,
+                activeTrackColor: theme.colorScheme.primary,
+                inactiveTrackColor:
+                    theme.colorScheme.primary.withValues(alpha: 0.20),
+                thumbColor: theme.colorScheme.primary,
+                overlayColor:
+                    theme.colorScheme.primary.withValues(alpha: 0.14),
                 thumbShape:
                     const RoundSliderThumbShape(enabledThumbRadius: 7),
                 overlayShape:
@@ -777,6 +783,11 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           child: SliderTheme(
             data: SliderTheme.of(context).copyWith(
               trackHeight: 3,
+              activeTrackColor: theme.colorScheme.primary,
+              inactiveTrackColor:
+                  theme.colorScheme.primary.withValues(alpha: 0.20),
+              thumbColor: theme.colorScheme.primary,
+              overlayColor: theme.colorScheme.primary.withValues(alpha: 0.14),
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
               overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
             ),

@@ -12,7 +12,7 @@ real shared-listening surface (Listen-Together / Rooms) produces the events to
 populate them. We deliberately do NOT stand up an always-on listen-logging
 pipeline before a live surface needs it.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
@@ -25,6 +25,7 @@ from models import (
     MomentComment,
     PlaylistTrack, BondRequest, DiaryEntry, DiaryReaction, DiaryComment,
     MediaAsset, DailyPrompt, DailyPromptAnswer, Dedication, LoveCapsule,
+    SharedListenDay, CoupleStreak, CoupleUnlock,
 )
 import uuid as _uuid
 from datetime import date as _date
@@ -1794,6 +1795,212 @@ def question_archive(
             break
     return {"items": items}
 
+
+
+# ── "In tune" streak (§5.7) ──────────────────────────────────────────────────
+# Consecutive days with a MEANINGFUL act between the two — answered the daily
+# question, listened together, wrote in the diary, sent a dedication, or kept a
+# moment. A single missed day is forgiven once (grace); two in a row cools it.
+# The streak is "alive" (can still grow today) if they acted today or yesterday.
+_STREAK_MILESTONES = [3, 7, 14, 30]
+# (threshold_days, unlock_kind) — a cosmetic earned by reaching the streak.
+_STREAK_UNLOCKS = [(7, "theme_in_tune"), (30, "disc_anniversary")]
+
+
+def _streak_stage(days: int) -> str:
+    if days >= 30:
+        return "In tune"
+    if days >= 14:
+        return "Deeply connected"
+    if days >= 7:
+        return "Growing"
+    if days >= 3:
+        return "Connected"
+    return "New"
+
+
+def _next_streak_milestone(days: int):
+    for m in _STREAK_MILESTONES:
+        if days < m:
+            return m
+    return None
+
+
+def _streak_active_days(db: Session, pair_key: str, bond_ids: list) -> set:
+    """Calendar days (UTC) with at least one meaningful bond act."""
+    days: set = set()
+    try:
+        for (d,) in (db.query(DailyPromptAnswer.day)
+                     .filter(DailyPromptAnswer.pair_key == pair_key).distinct()):
+            if d:
+                days.add(d)
+        for (d,) in (db.query(SharedListenDay.day)
+                     .filter(SharedListenDay.pair_key == pair_key).distinct()):
+            if d:
+                days.add(d)
+        for (dt,) in (db.query(Dedication.created_at)
+                      .filter(Dedication.pair_key == pair_key)):
+            if dt:
+                days.add(dt.date())
+        for (dt,) in (db.query(DiaryEntry.created_at)
+                      .filter(DiaryEntry.pair_key == pair_key)):
+            if dt:
+                days.add(dt.date())
+        if bond_ids:
+            for (dt,) in (db.query(PinnedMoment.created_at)
+                          .filter(PinnedMoment.space_id.in_(bond_ids))):
+                if dt:
+                    days.add(dt.date())
+    except Exception:
+        pass
+    return days
+
+
+def _compute_streak(active: set):
+    """(current_days, longest_days, last_active_date, alive)."""
+    if not active:
+        return (0, 0, None, False)
+    today = _date.today()
+    ordered = sorted(active)
+    # Longest run of consecutive calendar days, ever.
+    longest = 1
+    run = 1
+    for i in range(1, len(ordered)):
+        if (ordered[i] - ordered[i - 1]).days == 1:
+            run += 1
+        else:
+            run = 1
+        if run > longest:
+            longest = run
+    last_active = ordered[-1]
+    # Current: alive only if acted today or yesterday. Walk back from the run's
+    # end, forgiving ONE single-day gap inside the run.
+    current = 0
+    alive = False
+    if last_active >= today - timedelta(days=1):
+        alive = True
+        end = today if today in active else last_active
+        grace = 1
+        d = end
+        while True:
+            if d in active:
+                current += 1
+                d = d - timedelta(days=1)
+            elif grace > 0:
+                grace -= 1
+                d = d - timedelta(days=1)
+            else:
+                break
+    if current > longest:
+        longest = current
+    return (current, longest, last_active, alive)
+
+
+def _grant_streak_unlocks(db: Session, pair_key: str, current_days: int) -> list:
+    """Ensure a CoupleUnlock row exists for every milestone the current streak
+    has reached. Returns the kinds newly granted this call (for the one-time
+    'you unlocked …' nudge)."""
+    newly: list = []
+    for threshold, kind in _STREAK_UNLOCKS:
+        if current_days < threshold:
+            continue
+        exists = (db.query(CoupleUnlock.id)
+                  .filter(CoupleUnlock.pair_key == pair_key,
+                          CoupleUnlock.kind == kind).first())
+        if exists is not None:
+            continue
+        try:
+            db.add(CoupleUnlock(pair_key=pair_key, kind=kind))
+            db.flush()
+            newly.append(kind)
+        except Exception:
+            db.rollback()
+    return newly
+
+
+_UNLOCK_LINES = {
+    "theme_in_tune": "You unlocked a shared theme \U0001F49E",
+    "disc_anniversary": "You unlocked the Anniversary Vinyl disc \U0001F4BF",
+}
+
+
+def _notify_streak_unlock(space: RelationshipSpace, user: User,
+                          partner_id, kind: str) -> None:
+    line = _UNLOCK_LINES.get(kind, "You earned a new reward together \U0001F3B5")
+    data = {"space_id": space.id, "kind": kind, "line": line}
+    for uid in {user.id, partner_id}:
+        if not uid:
+            continue
+        try:
+            safe_notify_user(uid, {"type": "space_streak_unlock", "data": data})
+        except Exception:
+            pass
+        try:
+            _push(uid, "In tune \U0001F3B5", line, "space_streak_unlock")
+        except Exception:
+            pass
+
+
+def _streak_state(db: Session, space: RelationshipSpace,
+                  current_user: User) -> dict:
+    pk, partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        return {
+            "bonded": False,
+            "current_days": 0, "longest_days": 0, "alive": False,
+            "stage": "New", "next_milestone": _STREAK_MILESTONES[0],
+            "days_to_next": _STREAK_MILESTONES[0], "unlocks": [],
+            "new_unlocks": [],
+        }
+    bond_ids = _bond_space_ids(db, space, current_user.id)
+    active = _streak_active_days(db, pk, bond_ids)
+    current, longest, last_active, alive = _compute_streak(active)
+
+    # Cache the roll-up so the hero/badges can read it cheaply elsewhere.
+    row = db.query(CoupleStreak).filter(CoupleStreak.pair_key == pk).first()
+    if row is None:
+        row = CoupleStreak(pair_key=pk)
+        db.add(row)
+    row.current_days = current
+    row.longest_days = max(longest, row.longest_days or 0)
+    row.last_active_date = last_active
+
+    new_unlocks = _grant_streak_unlocks(db, pk, current)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+    for kind in new_unlocks:
+        _notify_streak_unlock(space, current_user, partner, kind)
+
+    unlocks = [u.kind for u in
+               db.query(CoupleUnlock).filter(CoupleUnlock.pair_key == pk).all()]
+    nxt = _next_streak_milestone(current)
+    return {
+        "bonded": True,
+        "current_days": current,
+        "longest_days": row.longest_days,
+        "last_active_date": last_active.isoformat() if last_active else None,
+        "alive": alive,
+        "stage": _streak_stage(current),
+        "next_milestone": nxt,
+        "days_to_next": (nxt - current) if nxt is not None else None,
+        "unlocks": unlocks,
+        "new_unlocks": new_unlocks,
+    }
+
+
+@router.get("/{space_id}/streak")
+def get_streak(
+    space_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The bond's "In tune" streak: current/longest days, stage, next milestone,
+    and earned cosmetic unlocks. Computed from the meaningful-act tables and
+    cached; grants any newly-reached milestone (idempotent) and nudges both."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    return _streak_state(db, space, current_user)
 
 
 # ── Dedications — a song sent as a feeling ───────────────────────────────────

@@ -432,6 +432,8 @@ class RelationshipSpacePage extends StatefulWidget {
 
 class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   late Map<String, dynamic> _space = Map<String, dynamic>.from(widget.space);
+  // The bond's "In tune" streak (§5.7), fetched alongside the space.
+  Map<String, dynamic>? _streak;
   // Preset ids that ship a landscape (wide) companion — used to swap in the
   // wide wallpaper on desktop/wide screens instead of tiling the portrait.
   final Set<String> _wideWallpaperIds = {};
@@ -561,6 +563,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       } catch (_) {}
       // Cache any shared crate audio so Listen Together quick-starts.
       _prefetchPlaylistAudio();
+      // The "In tune" streak (separate endpoint) — refreshes the hub card and
+      // reveals any freshly-earned unlock.
+      if (_partnerId != null) _fetchStreak();
     }
     // Reconcile the device's pinned-plan reminders with the current diary.
     _syncReminders();
@@ -1437,6 +1442,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       _tuneInCard(scheme),
       if (isPair) const SizedBox(height: 12),
       if (isPair) _dailyQuestionCard(scheme),
+      if (isPair) _streakCard(scheme),
       _upcomingPlanBanner(scheme),
       const SizedBox(height: 14),
       _tilesSection(scheme, moments),
@@ -4658,6 +4664,133 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     if (mounted) _load();
   }
 
+  // ── "In tune" streak (§5.7) ───────────────────────────────────────────────
+  Future<void> _fetchStreak() async {
+    final s = await ApiService().getStreak(_id);
+    if (!mounted || s == null) return;
+    setState(() => _streak = s);
+    final nu = (s['new_unlocks'] as List?) ?? const [];
+    if (nu.isNotEmpty) _showUnlockToast(nu);
+  }
+
+  void _showUnlockToast(List nu) {
+    const lines = {
+      'theme_in_tune': 'You unlocked a shared theme 💞',
+      'disc_anniversary': 'You unlocked the Anniversary Vinyl disc 💿',
+    };
+    final first = nu.first.toString();
+    showToast(context, lines[first] ?? 'You earned a new reward together 🎵',
+        type: ToastType.success);
+  }
+
+  String _stageForMilestone(int m) {
+    if (m >= 30) return 'In tune';
+    if (m >= 14) return 'Deeply connected';
+    if (m >= 7) return 'Growing';
+    return 'Connected';
+  }
+
+  Widget _streakCard(ColorScheme scheme) {
+    final s = _streak;
+    if (s == null || s['bonded'] != true) return const SizedBox.shrink();
+    final current = (s['current_days'] as num?)?.toInt() ?? 0;
+    final longest = (s['longest_days'] as num?)?.toInt() ?? 0;
+    final stage = (s['stage'] ?? 'New').toString();
+    final alive = s['alive'] == true;
+    final next = (s['next_milestone'] as num?)?.toInt();
+    final toNext = (s['days_to_next'] as num?)?.toInt();
+    final on = current > 0;
+
+    String sub;
+    double progress;
+    if (next != null && toNext != null) {
+      sub = on
+          ? '$toNext day${toNext == 1 ? '' : 's'} to ${_stageForMilestone(next)}'
+          : 'Do something together today to begin';
+      progress = next > 0 ? (current / next).clamp(0.0, 1.0) : 0.0;
+    } else {
+      sub = 'In tune — your deepest run yet';
+      progress = 1.0;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Color.alphaBlend(_accent.withValues(alpha: 0.08), scheme.surface),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _accent.withValues(alpha: 0.22)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.local_fire_department_rounded,
+                  size: 20,
+                  color: on ? _accent : scheme.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  on
+                      ? '$current day${current == 1 ? '' : 's'} in tune'
+                      : 'Start your streak',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: scheme.onSurface),
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(stage,
+                    style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: _accent)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              backgroundColor: scheme.surfaceContainerHighest,
+              valueColor: AlwaysStoppedAnimation<Color>(_accent),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(sub,
+                    style: TextStyle(
+                        fontSize: 12, color: scheme.onSurfaceVariant)),
+              ),
+              if (on && !alive)
+                Text('Act today to keep it 🔥',
+                    style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: _accent))
+              else if (longest > current && longest > 0)
+                Text('Best: $longest',
+                    style: TextStyle(
+                        fontSize: 11.5, color: scheme.onSurfaceVariant)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Today's "Us" question (hub card) ──────────────────────────────────────
   Widget _dailyQuestionCard(ColorScheme scheme) {
     final q = (_space['question'] as Map?)?.cast<String, dynamic>();
@@ -5016,6 +5149,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         _space['question'] = res;
         _qAnswerCtrl.clear();
       });
+      // Answering is a meaningful act — refresh the streak so it reflects today.
+      if (_partnerId != null) _fetchStreak();
       showToast(
         context,
         res['revealed'] == true

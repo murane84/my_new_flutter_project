@@ -1330,26 +1330,63 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
 
   // Bottom controls bar (wide): quick reactions + transport, spanning.
   Widget _bottomControlsBar(ColorScheme scheme) {
-    return Container(
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        border: Border(
-            top: BorderSide(color: scheme.outlineVariant.withAlpha(70))),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: _reactionBar(scheme),
+    final isDark = scheme.brightness == Brightness.dark;
+    // A soft, floating console card — rounded, gently lit, lifted off the
+    // surface with a diffuse shadow, and centred so it reads as one piece.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 2, 18, 16),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color.alphaBlend(scheme.primary.withValues(alpha: 0.06),
+                      scheme.surfaceContainerHigh),
+                  scheme.surfaceContainerHighest,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.35)),
+              boxShadow: [
+                // A soft ambient lift.
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.40 : 0.12),
+                  blurRadius: 30,
+                  spreadRadius: -8,
+                  offset: const Offset(0, 14),
+                ),
+                // A faint accent halo so the console feels alive, not flat.
+                BoxShadow(
+                  color: scheme.primary.withValues(alpha: isDark ? 0.10 : 0.06),
+                  blurRadius: 24,
+                  spreadRadius: -10,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: _reactionBar(scheme),
+                ),
+                const SizedBox(height: 6),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 520),
+                  child:
+                      _isHost ? _buildHostControls() : _buildListenerControls(),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 2),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: _isHost ? _buildHostControls() : _buildListenerControls(),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -2018,13 +2055,27 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                 28),
             btn(Icons.replay_10_rounded,
                 _ready ? () => _liveSeekBy(-10) : null, 24),
-            IconButton.filled(
-              iconSize: 34,
-              onPressed: !_ready
-                  ? null
-                  : () => playing ? _c.player.pause() : _c.player.play(),
-              icon: Icon(
-                  playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: _ready
+                    ? [
+                        BoxShadow(
+                          color: scheme.primary.withValues(alpha: 0.45),
+                          blurRadius: 18,
+                          spreadRadius: -2,
+                        ),
+                      ]
+                    : null,
+              ),
+              child: IconButton.filled(
+                iconSize: 34,
+                onPressed: !_ready
+                    ? null
+                    : () => playing ? _c.player.pause() : _c.player.play(),
+                icon: Icon(
+                    playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+              ),
             ),
             btn(Icons.forward_10_rounded,
                 _ready ? () => _liveSeekBy(10) : null, 24),
@@ -2090,13 +2141,28 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                     28),
                 btn(Icons.replay_10_rounded,
                     _ready ? () => _listenerSeekBy(-10) : null, 24),
-                IconButton.filled(
-                  iconSize: 34,
-                  onPressed: !_ready
-                      ? null
-                      : () => _c.requestControl(playing ? 'pause' : 'play'),
-                  icon: Icon(
-                      playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: _ready
+                        ? [
+                            BoxShadow(
+                              color: scheme.primary.withValues(alpha: 0.45),
+                              blurRadius: 18,
+                              spreadRadius: -2,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: IconButton.filled(
+                    iconSize: 34,
+                    onPressed: !_ready
+                        ? null
+                        : () => _c.requestControl(playing ? 'pause' : 'play'),
+                    icon: Icon(playing
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded),
+                  ),
                 ),
                 btn(Icons.forward_10_rounded,
                     _ready ? () => _listenerSeekBy(10) : null, 24),

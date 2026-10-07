@@ -260,7 +260,10 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   // them (a room has no single partner). Empty for a listener / no bonds.
   List<Map<String, dynamic>> _hostSpaces = const [];
   final math.Random _rand = math.Random();
-  static const List<String> _quickReactions = ['❤️', '🔥', '😍', '🎶', '👏', '🥹'];
+  // Kept to emoji that render bright on BOTH light and dark — the old 🎶 is a
+  // dark-navy glyph that vanished on the dark tray, so a guitar 🎸 takes its
+  // music slot.
+  static const List<String> _quickReactions = ['❤️', '🔥', '😍', '🎸', '👏', '🥹'];
   // The music panel also observes session repeat/shuffle. While this popup is
   // open it takes over those callbacks (so its own buttons rebuild on a synced
   // change) but CHAINS the panel's, and restores them on minimise so the

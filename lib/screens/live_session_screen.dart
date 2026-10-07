@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:just_audio/just_audio.dart';
 
 import '../services/live_session_service.dart';
@@ -1409,9 +1410,17 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   // their latest reaction, then the live reactions/chat feed.
   Widget _peoplePanel(ColorScheme scheme) {
     final people = _participants;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Stack(
       children: [
+        // A faint music-doodle wallpaper in the theme accent, behind the feed.
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(painter: _ChatDoodlePainter(scheme.primary)),
+          ),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
         // ── "In the room" header, with a hide/show toggle ──
         InkWell(
           onTap: () => setState(() => _peopleCollapsed = !_peopleCollapsed),
@@ -1516,8 +1525,10 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                   itemBuilder: (_, i) => _feedRow(scheme, _reactionFeed[i]),
                 ),
         ),
-        // ── The composer: type a line to everyone in the room ──
-        _commentComposer(scheme),
+            // ── The composer: type a line to everyone in the room ──
+            _commentComposer(scheme),
+          ],
+        ),
       ],
     );
   }
@@ -2422,6 +2433,88 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   }
 
   /// Present the loaded music library and return the chosen path (or null).
+  // WEB: add a song to the live queue from the lite player's loaded tracks
+  // (titles + lazy byte loaders exposed on playbackBus) — web has no device
+  // library or file paths, so the normal picker finds nothing.
+  Future<void> _addWebSong({required bool toRoom}) async {
+    final items = playbackBus.webQueue?.call() ?? const [];
+    if (items.isEmpty) {
+      _snack('Load songs in your music player first');
+      return;
+    }
+    final picked = await _pickWebSong(
+        toRoom ? 'Add a song to the room' : 'Add to queue', items);
+    if (picked == null || !mounted) return;
+    try {
+      final bytes = await picked.load();
+      if (bytes.isEmpty) {
+        _snack('That track appears to be empty.');
+        return;
+      }
+      if (toRoom) {
+        if (bytes.length > 20 * 1024 * 1024) {
+          _snack('That song is too large to add to the room.');
+          return;
+        }
+        _snack('Sending to the room…');
+        final ok =
+            await _c.contributeTrack(bytes, picked.title, by: widget.myName);
+        if (!mounted) return;
+        _snack(ok ? 'Added to the room queue 🎶' : 'Could not add that song');
+      } else {
+        await _c.addTrack(LiveTrack(bytes: bytes, title: picked.title));
+        _snack('Added to queue');
+      }
+    } catch (_) {
+      _snack('Could not read that track.');
+    }
+  }
+
+  Future<({String title, Future<Uint8List> Function() load})?> _pickWebSong(
+      String heading,
+      List<({String title, Future<Uint8List> Function() load})> items) {
+    final scheme = Theme.of(context).colorScheme;
+    return showModalBottomSheet<
+        ({String title, Future<Uint8List> Function() load})>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(heading,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 15)),
+              ),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: items.length,
+                itemBuilder: (_, i) => ListTile(
+                  leading:
+                      Icon(Icons.music_note_rounded, color: scheme.primary),
+                  title: Text(items[i].title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => Navigator.of(ctx).pop(items[i]),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<String?> _pickLoadedSong(String heading) async {
     final loaded = playlistNotifier.value;
     if (loaded.isEmpty) {
@@ -2542,6 +2635,10 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   }
 
   Future<void> _addSongToQueue() async {
+    if (kIsWeb) {
+      await _addWebSong(toRoom: false);
+      return;
+    }
     final chosen = await _pickLoadedSong('Add to queue');
     if (chosen == null || !mounted) return;
     try {
@@ -2560,6 +2657,10 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   /// LISTENER (room, contributions on): pick a song and upload it to the host,
   /// who drops it into the shared queue attributed to me.
   Future<void> _contributeSong() async {
+    if (kIsWeb) {
+      await _addWebSong(toRoom: true);
+      return;
+    }
     final chosen = await _pickLoadedSong('Add a song to the room');
     if (chosen == null || !mounted) return;
     try {
@@ -2932,4 +3033,68 @@ class _ReactionLog {
   final DateTime at;
   bool get isComment => text != null;
   bool get isGif => gif != null;
+}
+
+// A faint, playful "music wallpaper" behind the Chat & reactions feed: a soft
+// accent wash plus a sparse, seeded scatter of tiny music glyphs, hearts and
+// sparkles in the theme accent at low opacity — so the panel feels like a
+// listening room, not a blank black/white box.
+class _ChatDoodlePainter extends CustomPainter {
+  _ChatDoodlePainter(this.accent);
+  final Color accent;
+
+  static const List<String> _glyphs = [
+    '\u266A', // ♪
+    '\u266B', // ♫
+    '\u2669', // ♩
+    '\u266C', // ♬
+    '\u2661', // ♡
+    '\u2727', // ✧
+    '\u2606', // ☆
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+    final rect = Offset.zero & size;
+    // Soft accent wash, strongest at the top, fading down.
+    final wash = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          accent.withValues(alpha: 0.06),
+          accent.withValues(alpha: 0.0),
+        ],
+      ).createShader(rect);
+    canvas.drawRect(rect, wash);
+
+    // Sparse scatter, seeded so it's stable across rebuilds.
+    final rnd = math.Random(1973);
+    final count =
+        ((size.width * size.height) / 7000).clamp(10, 70).round();
+    for (var i = 0; i < count; i++) {
+      final g = _glyphs[rnd.nextInt(_glyphs.length)];
+      final x = rnd.nextDouble() * size.width;
+      final y = rnd.nextDouble() * size.height;
+      final fs = 12.0 + rnd.nextDouble() * 22.0;
+      final a = 0.04 + rnd.nextDouble() * 0.06;
+      final angle = (rnd.nextDouble() - 0.5) * 0.9;
+      final tp = TextPainter(
+        text: TextSpan(
+          text: g,
+          style: TextStyle(fontSize: fs, color: accent.withValues(alpha: a)),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.rotate(angle);
+      tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ChatDoodlePainter old) => old.accent != accent;
 }

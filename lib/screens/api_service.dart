@@ -1691,6 +1691,47 @@ class ApiService {
     }
   }
 
+  /// The full, playable Monthly Mixtape recap for a calendar month (YYYY-MM).
+  Future<Map<String, dynamic>?> getRecap(int spaceId, String month) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/recap/$month'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final d = jsonDecode(resp.body);
+        if (d is Map<String, dynamic>) return d;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('getRecap failed: $e');
+      return null;
+    }
+  }
+
+  /// Months (last ~12) that have shared content + `latest_ready` (the finished
+  /// month the dashboard card offers).
+  Future<Map<String, dynamic>?> listRecaps(int spaceId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/recaps'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final d = jsonDecode(resp.body);
+        if (d is Map<String, dynamic>) return d;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('listRecaps failed: $e');
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>?> getQuestion(int spaceId) async {
     try {
       final token = await _getToken();

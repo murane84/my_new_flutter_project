@@ -1665,6 +1665,7 @@ class ApiService {
     String? trackTitle,
     String? trackArtist,
     String? trackRef,
+    String? mood,
   }) async {
     try {
       final token = await _getToken();
@@ -1677,6 +1678,7 @@ class ApiService {
           'track_title': ?trackTitle,
           'track_artist': ?trackArtist,
           'track_ref': ?trackRef,
+          'mood': ?mood,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {

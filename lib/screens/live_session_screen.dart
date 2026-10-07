@@ -12,6 +12,7 @@ import '../services/live_audio_cache.dart' show liveTrackFingerprint;
 import 'home_page.dart' show playbackBus, playlistNotifier;
 import '../state/playback_state.dart';
 import '../utils/file_bytes.dart';
+import '../utils/toast_helper.dart';
 import '../utils/marquee_text.dart';
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
@@ -743,9 +744,13 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     );
   }
 
-  void _snack(String m) {
+  void _snack(String m, {ToastType type = ToastType.info}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+    // Use the overlay toast (inserted on top of the overlay) rather than a
+    // ScaffoldMessenger SnackBar — the SnackBar anchors to the root Scaffold
+    // and renders BEHIND this session dialog (an unstyled black bar peeking
+    // out from under the card). The overlay pill shows above the card.
+    showToast(context, m, type: type);
   }
 
   Future<void> _leaveOrEnd() async {

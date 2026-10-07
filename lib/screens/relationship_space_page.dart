@@ -5541,11 +5541,16 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                 ),
               ),
             ],
+            if (kind == 'listen') ...[
+              const SizedBox(height: 10),
+              _listenMomentCard(scheme, m),
+            ],
             // Non-media captions (note / song / voice) read beneath the content.
             if (caption.isNotEmpty &&
                 kind != 'photo' &&
                 kind != 'gif' &&
-                kind != 'video') ...[
+                kind != 'video' &&
+                kind != 'listen') ...[
               const SizedBox(height: 10),
               Text(caption,
                   style: TextStyle(
@@ -5846,6 +5851,98 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     }
   }
 
+  // A saved listen-together session: a headphones header, the set's song list,
+  // the session length, and the live-reaction tally captured during playback.
+  Widget _listenMomentCard(ColorScheme scheme, Map<String, dynamic> m) {
+    List<String> songs = const [];
+    int reactions = 0;
+    int minutes = 0;
+    final ref = m['ref'];
+    if (ref is String && ref.trim().isNotEmpty) {
+      try {
+        final j = jsonDecode(ref);
+        if (j is Map) {
+          songs = ((j['songs'] as List?) ?? const [])
+              .map((e) => e.toString())
+              .where((e) => e.trim().isNotEmpty)
+              .toList();
+          reactions = (j['reactions'] as num?)?.toInt() ?? 0;
+          minutes = (j['minutes'] as num?)?.toInt() ?? 0;
+        }
+      } catch (_) {}
+    }
+    final shown = songs.take(6).toList();
+    final extra = songs.length - shown.length;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _accent.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.headphones_rounded, size: 18, color: _accent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Listened together',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800, color: scheme.onSurface)),
+              ),
+              if (minutes > 0)
+                Text('${minutes}m',
+                    style: TextStyle(
+                        fontSize: 12, color: scheme.onSurfaceVariant)),
+            ],
+          ),
+          if (shown.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            for (final t in shown)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.music_note_rounded,
+                        size: 14, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(t,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 13, color: scheme.onSurface)),
+                    ),
+                  ],
+                ),
+              ),
+            if (extra > 0)
+              Padding(
+                padding: const EdgeInsets.only(left: 22, top: 2),
+                child: Text('+$extra more',
+                    style: TextStyle(
+                        fontSize: 12, color: scheme.onSurfaceVariant)),
+              ),
+          ],
+          if (reactions > 0) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(Icons.favorite_rounded, size: 13, color: _accent),
+                const SizedBox(width: 6),
+                Text('$reactions reaction${reactions == 1 ? '' : 's'} shared',
+                    style: TextStyle(
+                        fontSize: 12, color: scheme.onSurfaceVariant)),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   String _momentLabel(String kind) {
     switch (kind) {
       case 'dedication':
@@ -5860,6 +5957,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         return 'A video';
       case 'gif':
         return 'A GIF';
+      case 'listen':
+        return 'A listen';
       default:
         return 'A note';
     }

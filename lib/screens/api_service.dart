@@ -1402,6 +1402,37 @@ class ApiService {
     }
   }
 
+  /// Save a listen-together session as a `listen` moment in the caller's bond
+  /// space with [partnerId]. Resolves the bond server-side; null if not bonded
+  /// (409) or on error.
+  Future<Map<String, dynamic>?> saveListenMoment(
+    int partnerId, {
+    required String caption,
+    String? ref,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/spaces/with/$partnerId/moments'),
+        headers: _authHeaders(token),
+        body: jsonEncode({
+          'kind': 'listen',
+          'ref': ?ref,
+          'caption': caption,
+        }),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('saveListenMoment failed: $e');
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>?> addMoment(
     int spaceId, {
     required String kind,

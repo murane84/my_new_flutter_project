@@ -942,3 +942,39 @@ class LoveCapsule(Base):
 
     creator = relationship("User", foreign_keys=[created_by],
                            passive_deletes=True)
+
+
+class CoupleStreak(Base):
+    """The bond's "In tune" streak (§5.7) — consecutive days with a meaningful
+    act between the two (answered the daily question, listened together, wrote
+    in the diary, sent a dedication, kept a moment). Keyed by pair_key='lo:hi'.
+    Computed from those source tables and cached here so the hub paints fast.
+    Auto-created; no ALTER."""
+    __tablename__ = "couple_streaks"
+
+    pair_key = Column(String, primary_key=True)
+    current_days = Column(Integer, nullable=False, default=0, server_default="0")
+    longest_days = Column(Integer, nullable=False, default=0, server_default="0")
+    last_active_date = Column(Date, nullable=True)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class CoupleUnlock(Base):
+    """A cosmetic reward a bond has earned via its streak (§5.7) — e.g. a shared
+    theme or the 'anniversary vinyl' disc skin. One row per (pair_key, kind);
+    the uniqueness makes the milestone grant idempotent (and the one-time
+    'you unlocked …' nudge fire exactly once). Auto-created; no ALTER."""
+    __tablename__ = "couple_unlocks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pair_key = Column(String, nullable=False, index=True)
+    kind = Column(String, nullable=False)
+    unlocked_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint('pair_key', 'kind', name='_couple_unlock_uc'),
+    )

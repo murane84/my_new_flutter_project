@@ -1670,6 +1670,27 @@ class ApiService {
   }
 
   /// Today's "Us" question for this bond (prompt + my/partner answers).
+  /// The bond's "In tune" streak: current/longest days, stage, next milestone,
+  /// earned unlocks, and any freshly-granted ones (new_unlocks).
+  Future<Map<String, dynamic>?> getStreak(int spaceId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/streak'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final d = jsonDecode(resp.body);
+        if (d is Map<String, dynamic>) return d;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('getStreak failed: $e');
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>?> getQuestion(int spaceId) async {
     try {
       final token = await _getToken();

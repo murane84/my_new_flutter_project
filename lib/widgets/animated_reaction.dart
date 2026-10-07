@@ -152,14 +152,18 @@ class _AnimatedReactionState extends State<AnimatedReaction>
                 CustomPaint(
                     size: Size(box, box),
                     painter: _TearPainter(t, widget.size)),
-              Transform(
-                alignment: Alignment.center,
-                transform: Matrix4.identity()
-                  ..translate(dx, dy)
-                  ..rotateZ(rot)
-                  ..scale(scale),
-                child: Text(widget.emoji,
-                    style: TextStyle(fontSize: widget.size)),
+              // Composable Transform widgets (no deprecated Matrix4.translate/
+              // scale, and portable across Flutter channels).
+              Transform.translate(
+                offset: Offset(dx, dy),
+                child: Transform.rotate(
+                  angle: rot,
+                  child: Transform.scale(
+                    scale: scale,
+                    child: Text(widget.emoji,
+                        style: TextStyle(fontSize: widget.size)),
+                  ),
+                ),
               ),
             ],
           );

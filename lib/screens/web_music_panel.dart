@@ -359,7 +359,37 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasQueue = _queue.isNotEmpty;
+    if (_queue.isEmpty) return _emptyState(theme);
+    // Active: controls pinned at the top, queue fills the rest (scrolls inside),
+    // so everything is reachable without scrolling the whole panel.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 2),
+          child: Column(
+            children: [
+              _sourceRow(theme),
+              const SizedBox(height: 10),
+              _nowPlaying(theme),
+              const SizedBox(height: 2),
+              _seekBar(theme),
+              _transport(theme),
+              _secondaryRow(theme),
+              const SizedBox(height: 8),
+              _queueHeader(theme),
+            ],
+          ),
+        ),
+        Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.4)),
+        Expanded(child: _queueBody(theme)),
+      ],
+    );
+  }
+
+  // First-run / empty state: a short prompt + the load buttons, and the lite
+  // note tucked into the info popover. Scrollable so pull-to-refresh still works.
+  Widget _emptyState(ThemeData theme) {
     return RefreshIndicator(
       onRefresh: _reloadPage,
       child: LayoutBuilder(
@@ -373,26 +403,25 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.library_music_outlined,
-                      size: 48, color: theme.hintColor),
-                  const SizedBox(height: 10),
+                      size: 52, color: theme.hintColor),
+                  const SizedBox(height: 12),
+                  Text('Play music here',
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
                   Text(
-                    'The browser version is the lite one — browsers can\'t scan '
-                    'your music library, so load songs to play here (pick '
-                    'several at once, or a whole folder). The full app adds your '
-                    'library + background playback.',
+                    'Load songs to build a queue — pick several at once, or a '
+                    'whole folder.',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: widget.textColor),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 16),
                   FilledButton.icon(
                     onPressed: _loading ? null : _openFiles,
                     icon: const Icon(Icons.library_add_rounded),
-                    label: Text(_loading
-                        ? 'Loading…'
-                        : hasQueue
-                            ? 'Add more songs'
-                            : 'Choose songs to play'),
+                    label:
+                        Text(_loading ? 'Loading…' : 'Choose songs to play'),
                   ),
                   if (folderPickSupported) ...[
                     const SizedBox(height: 8),
@@ -402,47 +431,136 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                       label: const Text('Load a music folder'),
                     ),
                   ],
-                  if (hasQueue) ...[
-                    const SizedBox(height: 18),
-                    _nowPlaying(theme),
-                    const SizedBox(height: 6),
-                    _seekBar(theme),
-                    const SizedBox(height: 4),
-                    _transport(theme),
-                    const SizedBox(height: 6),
-                    _secondaryRow(theme),
-                    const SizedBox(height: 14),
-                    _queueHeader(theme),
-                    const SizedBox(height: 4),
-                    _queueList(theme),
-                  ],
-                  const SizedBox(height: 22),
-                  Text('Get the full app',
-                      style: theme.textTheme.labelLarge
-                          ?.copyWith(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: () => _download('aluta.apk'),
-                        icon: const Icon(Icons.android),
-                        label: const Text('Android'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () => _download('aluta-windows.zip'),
-                        icon: const Icon(Icons.desktop_windows),
-                        label: const Text('Windows'),
-                      ),
-                    ],
-                  ),
+                  const SizedBox(height: 14),
+                  _infoAnchor(theme, inline: true),
                 ],
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // Compact source controls for the active player: add songs, load a folder,
+  // and the info popover.
+  Widget _sourceRow(ThemeData theme) {
+    return Row(
+      children: [
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: _loading ? null : _openFiles,
+            icon: const Icon(Icons.library_add_rounded, size: 18),
+            label: Text(_loading ? 'Loading…' : 'Add songs',
+                overflow: TextOverflow.ellipsis),
+            style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                visualDensity: VisualDensity.compact),
+          ),
+        ),
+        if (folderPickSupported) ...[
+          const SizedBox(width: 8),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _loading ? null : _openFolder,
+              icon: const Icon(Icons.folder_copy_outlined, size: 18),
+              label: const Text('Folder', overflow: TextOverflow.ellipsis),
+              style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  visualDensity: VisualDensity.compact),
+            ),
+          ),
+        ],
+        const SizedBox(width: 2),
+        _infoAnchor(theme),
+      ],
+    );
+  }
+
+  // The lite-player note + "get the full app" buttons, hidden behind an info
+  // button and shown as a popover card over the player.
+  Widget _infoAnchor(ThemeData theme, {bool inline = false}) {
+    return MenuAnchor(
+      style: MenuStyle(
+        backgroundColor:
+            WidgetStatePropertyAll(theme.colorScheme.surfaceContainerHigh),
+        shape: WidgetStatePropertyAll(RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16))),
+        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+      ),
+      builder: (context, controller, _) {
+        void toggle() =>
+            controller.isOpen ? controller.close() : controller.open();
+        if (inline) {
+          return TextButton.icon(
+            onPressed: toggle,
+            icon: const Icon(Icons.info_outline_rounded, size: 16),
+            label: const Text('About this player · Get the app'),
+          );
+        }
+        return IconButton(
+          tooltip: 'About · Get the app',
+          iconSize: 20,
+          color: theme.hintColor,
+          onPressed: toggle,
+          icon: const Icon(Icons.info_outline_rounded),
+        );
+      },
+      menuChildren: [_infoCard(theme)],
+    );
+  }
+
+  Widget _infoCard(ThemeData theme) {
+    return Container(
+      width: 272,
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.library_music_outlined,
+                  size: 18, color: theme.colorScheme.primary),
+              const SizedBox(width: 6),
+              Text('Lite web player',
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Browsers can't scan your music library, so load songs to play "
+            'here — pick several at once, or a whole folder. The full app adds '
+            'your library + background playback.',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: widget.textColor),
+          ),
+          const SizedBox(height: 12),
+          Text('Get the full app',
+              style: theme.textTheme.labelMedium
+                  ?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _download('aluta.apk'),
+                  icon: const Icon(Icons.android, size: 18),
+                  label: const Text('Android'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _download('aluta-windows.zip'),
+                  icon: const Icon(Icons.desktop_windows, size: 18),
+                  label: const Text('Windows'),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -455,7 +573,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       children: [
         Text(name,
             textAlign: TextAlign.center,
-            maxLines: 2,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.titleSmall
                 ?.copyWith(fontWeight: FontWeight.bold)),
@@ -704,24 +822,17 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     );
   }
 
-  Widget _queueList(ThemeData theme) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.4)),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 240),
-        child: ReorderableListView.builder(
-          shrinkWrap: true,
-          buildDefaultDragHandles: false,
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          itemCount: _queue.length,
-          // onReorder is the stable, widely-supported callback; onReorderItem
-          // only exists on very recent channels.
-          // ignore: deprecated_member_use
-          onReorder: _reorder,
-          itemBuilder: (_, i) {
+  // The queue fills the Expanded area below the controls and scrolls inside it.
+  Widget _queueBody(ThemeData theme) {
+    return ReorderableListView.builder(
+      buildDefaultDragHandles: false,
+      padding: const EdgeInsets.only(top: 4, bottom: 12),
+      itemCount: _queue.length,
+      // onReorder is the stable, widely-supported callback; onReorderItem
+      // only exists on very recent channels.
+      // ignore: deprecated_member_use
+      onReorder: _reorder,
+      itemBuilder: (_, i) {
             final current = i == _index;
             return ListTile(
               key: ValueKey(_queue[i]),
@@ -765,8 +876,6 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
               onTap: current ? null : () => _playAt(i),
             );
           },
-        ),
-      ),
     );
   }
 }

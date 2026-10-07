@@ -1886,6 +1886,11 @@ extension _HomeFriendListView on HomePageState {
 
   /// Start a room: from the song already playing (one tap), else pick one.
   Future<void> _startRoomFlow() async {
+    // Web has no file paths — host from the lite player's loaded song bytes.
+    if (kIsWeb) {
+      await _startRoomFlowWeb();
+      return;
+    }
     final playing = playbackBus.isPlaying?.call() ?? false;
     final curPath = playbackBus.currentPath?.call();
     String? path;
@@ -1929,6 +1934,35 @@ extension _HomeFriendListView on HomePageState {
         myUserId: myUserId,
         audioBytes: bytes,
         title: _roomTitleFromPath(path!),
+        startPositionMs: startPos,
+      ),
+    ));
+  }
+
+  /// Web: host a room from the lite player's currently-loaded song. Its bytes
+  /// + title are published on playbackBus by WebMusicPanel, so no file path (or
+  /// "load songs first" dead-end) is needed — as long as a song is loaded.
+  Future<void> _startRoomFlowWeb() async {
+    final bytes = playbackBus.currentBytes?.call();
+    final title = playbackBus.currentTitle?.call();
+    if (bytes == null || bytes.isEmpty || title == null || title.isEmpty) {
+      showToast(
+          context, 'Load a song in the music player first, then start a room.',
+          type: ToastType.info);
+      return;
+    }
+    final startPos = playbackBus.currentPositionMs?.call() ?? 0;
+    final token = await getToken();
+    final myUserId = _myUserId;
+    if (token == null || myUserId == null || !mounted) return;
+    playbackBus.onPause?.call(); // stop local playback; the room takes over
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      fullscreenDialog: true,
+      builder: (_) => LiveSessionScreen.roomHost(
+        token: token,
+        myUserId: myUserId,
+        audioBytes: bytes,
+        title: title,
         startPositionMs: startPos,
       ),
     ));

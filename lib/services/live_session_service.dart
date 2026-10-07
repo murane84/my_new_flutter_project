@@ -2104,6 +2104,11 @@ class LiveSessionController {
   void sendReaction(String emoji) => _sendControl(
       {'type': 'reaction', 'emoji': emoji, 'from_id': _myUserId});
 
+  /// A GIF/sticker reaction — relayed like an emoji reaction (no `to`), carrying
+  /// the GIF url instead of an emoji. Ephemeral.
+  void sendGifReaction(String url) => _sendControl(
+      {'type': 'reaction', 'gif': url, 'from_id': _myUserId});
+
   /// Either participant → everyone: a typed chat line in the reactions column.
   /// Relayed by the server like any control message (no `to`), so it just
   /// appears in the other screens' live feed. Ephemeral — nothing is stored.

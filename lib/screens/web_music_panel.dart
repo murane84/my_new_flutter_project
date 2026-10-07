@@ -105,10 +105,11 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   }
 
   Future<void> _openFiles() async {
+    // file_picker 12: pickFiles is multi-select by default (pickFile is single),
+    // so no allowMultiple flag is needed.
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'],
-      allowMultiple: true,
     );
     if (result == null || result.files.isEmpty) return;
     setState(() => _loading = true);
@@ -695,6 +696,9 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           buildDefaultDragHandles: false,
           padding: const EdgeInsets.symmetric(vertical: 4),
           itemCount: _queue.length,
+          // onReorder is the stable, widely-supported callback; onReorderItem
+          // only exists on very recent channels.
+          // ignore: deprecated_member_use
           onReorder: _reorder,
           itemBuilder: (_, i) {
             final current = i == _index;

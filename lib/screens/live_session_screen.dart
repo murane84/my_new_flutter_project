@@ -1525,7 +1525,22 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                   reverse: true,
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   itemCount: _reactionFeed.length,
-                  itemBuilder: (_, i) => _feedRow(scheme, _reactionFeed[i]),
+                  itemBuilder: (_, i) {
+                    final r = _reactionFeed[i];
+                    // The item visually BELOW (newer) is index i-1 in this
+                    // reversed list. If it's a same-sender friend comment, this
+                    // one is an older continuation → hide its avatar so the run
+                    // shows one avatar (on the newest bubble) and the rest
+                    // indent under it.
+                    final below = i > 0 ? _reactionFeed[i - 1] : null;
+                    final grouped = r.isComment &&
+                        !r.mine &&
+                        below != null &&
+                        below.isComment &&
+                        !below.mine &&
+                        below.name == r.name;
+                    return _feedRow(scheme, r, groupedWithBelow: grouped);
+                  },
                 ),
         ),
             // ── The composer: type a line to everyone in the room ──
@@ -1720,8 +1735,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     );
   }
 
-  Widget _feedRow(ColorScheme scheme, _ReactionLog r) {
-    if (r.isComment) return _commentRow(scheme, r);
+  Widget _feedRow(ColorScheme scheme, _ReactionLog r,
+      {bool groupedWithBelow = false}) {
+    if (r.isComment) return _commentRow(scheme, r, groupedWithBelow);
     return _reactionRow(scheme, r); // emoji or GIF/sticker
   }
 
@@ -1802,7 +1818,8 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
 
   // A typed comment as a group-chat bubble: a friend's line gets their avatar +
   // name on the left; my own is tinted and pushed to the right ("You" implied).
-  Widget _commentRow(ColorScheme scheme, _ReactionLog r) {
+  Widget _commentRow(ColorScheme scheme, _ReactionLog r,
+      bool groupedWithBelow) {
     if (r.mine) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(40, 3, 12, 3),
@@ -1826,13 +1843,18 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         ),
       );
     }
-    // No name label — the avatar is the friend's identity. Just avatar + bubble.
+    // No name label — the avatar is the friend's identity. A run of messages
+    // from the same person shows one avatar (on the newest) and indents the
+    // rest, like a group chat.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 3, 24, 3),
+      padding: EdgeInsets.fromLTRB(
+          12, groupedWithBelow ? 1 : 3, 24, groupedWithBelow ? 1 : 3),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _avatarRing(scheme, r.name, r.avatar),
+          groupedWithBelow
+              ? const SizedBox(width: 31)
+              : _avatarRing(scheme, r.name, r.avatar),
           const SizedBox(width: 8),
           Flexible(
             child: Align(

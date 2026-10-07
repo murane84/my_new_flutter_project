@@ -30,6 +30,11 @@ class PlaybackBus {
   String? Function()? currentPath; // file path of the current track, if any
   int Function()? currentPositionMs; // current playback position
   bool Function()? isPlaying;
+  // Web-only: the lite player holds tracks as in-memory bytes (no file path),
+  // so it exposes the current song's bytes + title directly for the Listen
+  // Together / room-host flow, which otherwise reads a path it can't produce.
+  Uint8List Function()? currentBytes;
+  String Function()? currentTitle;
   // Toggle "favourite" on the currently-playing track (driven by the bar heart).
   VoidCallback? onToggleFavorite;
   // Share the currently-playing track to a chat (the quick action that used to

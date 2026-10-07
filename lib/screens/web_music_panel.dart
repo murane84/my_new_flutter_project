@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/live_session_service.dart' show BytesAudioSource;
 import '../services/now_playing_presence.dart';
+import 'home_page.dart' show playbackBus;
 import 'web_fs/music_folder.dart';
 import '../utils/app_config.dart';
 import '../utils/app_reload.dart';
@@ -58,11 +59,21 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   Timer? _sleepTimer;
   int _sleepMinutes = 0; // 0 = off
   StreamSubscription<PlayerState>? _psSub;
+  // The bytes + title of the track currently loaded, exposed on playbackBus so
+  // "Start a room" / Listen Together can host it (web has no file paths).
+  Uint8List? _currentBytes;
+  String? _currentTitle;
 
   @override
   void initState() {
     super.initState();
     _psSub = _player.playerStateStream.listen(_onPlayerState);
+    // Let the room/listen-together flow read what the web player is playing.
+    playbackBus.currentBytes = () => _currentBytes ?? Uint8List(0);
+    playbackBus.currentTitle = () => _currentTitle ?? '';
+    playbackBus.currentPositionMs = () => _player.position.inMilliseconds;
+    playbackBus.isPlaying = () => _player.playing;
+    playbackBus.onPause = () => _player.pause();
   }
 
   void _onPlayerState(PlayerState st) {
@@ -87,6 +98,12 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     _psSub?.cancel();
     _sleepTimer?.cancel();
     NowPlayingPresence.instance.reportManual(title: '', playing: false);
+    // Release the bus handlers we registered (web has no other player).
+    playbackBus.currentBytes = null;
+    playbackBus.currentTitle = null;
+    playbackBus.currentPositionMs = null;
+    playbackBus.isPlaying = null;
+    playbackBus.onPause = null;
     _player.dispose();
     super.dispose();
   }
@@ -168,6 +185,8 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     final t = _queue[i];
     try {
       final bytes = await t.load();
+      _currentBytes = bytes;
+      _currentTitle = _cleanTitle(t.name);
       await _player.setAudioSource(
           BytesAudioSource(bytes, contentType: _mimeFor(t.name)));
       await _player.setVolume(_volume);
@@ -283,6 +302,8 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       _queue.clear();
       _index = -1;
     });
+    _currentBytes = null;
+    _currentTitle = null;
     NowPlayingPresence.instance.reportManual(title: '', playing: false);
   }
 

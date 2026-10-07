@@ -3817,15 +3817,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
         final eased = Curves.easeOutCubic.transform(t);
         // Music surface: the playlist is a full PAGE, not a drawer. It fills the
         // whole panel (the Positioned.fill host already covers the "Now Playing"
-        // header), needs no scrim, and fades + rises in. The overlay's own
-        // header (back arrow + controls) becomes the page's top bar.
+        // header), needs no scrim. It slides in from the LEFT to its resting
+        // position (so the motion agrees with the back ← arrow) and fades as it
+        // goes; tapping the arrow reverses it back out to the left. The
+        // overlay's own header (back arrow + controls) becomes the page's top bar.
         if (music) {
           return IgnorePointer(
             ignoring: t < 0.05,
             child: Opacity(
               opacity: eased,
               child: FractionalTranslation(
-                translation: Offset(0, (1 - eased) * 0.04),
+                translation: Offset(-(1 - eased) * 0.12, 0),
                 child: Material(
                   // Transparent so only the overlay's own rounded card shows
                   // (no square surface behind its rounded corners).

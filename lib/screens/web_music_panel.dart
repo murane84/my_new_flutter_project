@@ -512,7 +512,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
 
   Widget _infoCard(ThemeData theme) {
     return Container(
-      width: 272,
+      width: 280,
       padding: const EdgeInsets.all(14),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -541,24 +541,22 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
               style: theme.textTheme.labelMedium
                   ?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _download('aluta.apk'),
-                  icon: const Icon(Icons.android, size: 18),
-                  label: const Text('Android'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _download('aluta-windows.zip'),
-                  icon: const Icon(Icons.desktop_windows, size: 18),
-                  label: const Text('Windows'),
-                ),
-              ),
-            ],
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _download('aluta.apk'),
+              icon: const Icon(Icons.android, size: 18),
+              label: const Text('Android'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _download('aluta-windows.zip'),
+              icon: const Icon(Icons.desktop_windows, size: 18),
+              label: const Text('Windows'),
+            ),
           ),
         ],
       ),

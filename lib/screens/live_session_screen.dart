@@ -1826,43 +1826,32 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         ),
       );
     }
-    final nameColor = _nameColor(r.name, scheme);
+    // No name label — the avatar is the friend's identity. Just avatar + bubble.
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 3, 24, 3),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _avatarRing(scheme, r.name, r.avatar),
           const SizedBox(width: 8),
           Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(r.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        color: nameColor)),
-                const SizedBox(height: 2),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: scheme.surfaceContainerHighest,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(4),
-                      topRight: Radius.circular(14),
-                      bottomLeft: Radius.circular(14),
-                      bottomRight: Radius.circular(14),
-                    ),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4),
+                    topRight: Radius.circular(14),
+                    bottomLeft: Radius.circular(14),
+                    bottomRight: Radius.circular(14),
                   ),
-                  child: Text(r.text ?? '',
-                      style:
-                          TextStyle(fontSize: 13.5, color: scheme.onSurface)),
                 ),
-              ],
+                child: Text(r.text ?? '',
+                    style: TextStyle(fontSize: 13.5, color: scheme.onSurface)),
+              ),
             ),
           ),
         ],

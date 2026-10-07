@@ -211,6 +211,10 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   final List<_FloatReaction> _floats = [];
   int _floatSeq = 0;
   int _reactionCount = 0;
+  // Who's dropped in (from the server roster) and a live feed of reactions with
+  // the sender attached — the "People" + "Chat" regions of the hub.
+  final List<_Participant> _participants = [];
+  final List<_ReactionLog> _reactionFeed = [];
   // Save-this-session (host 1:1 only): when the set ends, offer to keep it as a
   // dated memory on the Our Space wall. Guarded so it's offered at most once.
   final DateTime _sessionStart = DateTime.now();
@@ -470,7 +474,12 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         break;
       case 'reaction':
         final em = (e['emoji'] ?? '❤').toString();
-        _spawnReaction(em);
+        final fromId = (e['from_id'] as num?)?.toInt();
+        _spawnReaction(em, fromId: fromId);
+        break;
+      case 'session_roster':
+        final people = ((e['data'] as Map?)?['people'] as List?) ?? const [];
+        _setRoster(people);
         break;
       case 'play':
         setState(() => _status = 'Playing');
@@ -561,7 +570,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   }
 
   // Float a reaction locally. [mine] also sends it to the partner over the WS.
-  void _spawnReaction(String emoji, {bool mine = false}) {
+  void _spawnReaction(String emoji, {bool mine = false, int? fromId}) {
     if (!mounted) return;
     if (mine) _c.sendReaction(emoji);
     final id = _floatSeq++;
@@ -569,6 +578,50 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     setState(() {
       _floats.add(_FloatReaction(id, emoji, dx));
       _reactionCount++;
+    });
+    _logReaction(emoji, mine ? widget.myUserId : fromId, mine: mine);
+  }
+
+  void _setRoster(List people) {
+    final list = <_Participant>[];
+    for (final p in people) {
+      if (p is! Map) continue;
+      list.add(_Participant(
+        id: (p['id'] as num?)?.toInt() ?? 0,
+        name: (p['username'] ?? 'Someone').toString(),
+        avatar: (p['avatar_url'] as String?),
+        isHost: p['is_host'] == true,
+      ));
+    }
+    if (!mounted) return;
+    setState(() {
+      // Carry each person's last reaction across a roster refresh.
+      final prev = {for (final x in _participants) x.id: x.lastReaction};
+      for (final x in list) {
+        x.lastReaction = prev[x.id];
+      }
+      _participants
+        ..clear()
+        ..addAll(list);
+    });
+  }
+
+  void _logReaction(String emoji, int? fromId, {bool mine = false}) {
+    if (!mounted) return;
+    String name;
+    if (mine) {
+      name = 'You';
+      final i = _participants.indexWhere((x) => x.id == widget.myUserId);
+      if (i != -1) _participants[i].lastReaction = emoji;
+    } else {
+      final i =
+          fromId == null ? -1 : _participants.indexWhere((x) => x.id == fromId);
+      name = i == -1 ? 'Someone' : _participants[i].name;
+      if (i != -1) _participants[i].lastReaction = emoji;
+    }
+    setState(() {
+      _reactionFeed.insert(0, _ReactionLog(name, emoji, DateTime.now()));
+      if (_reactionFeed.length > 50) _reactionFeed.removeLast();
     });
   }
 
@@ -896,44 +949,14 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
             children: [
               LayoutBuilder(
                 builder: (ctx, c) {
-                  // Desktop / wide: two columns — player on the left, queue on
-                  // the right — so the side space isn't wasted. Mobile: the
-                  // player sits on top and the queue fills the rest.
-                  final wide = c.maxWidth >= 760;
-                  if (wide) {
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          flex: 5,
-                          child: Column(
-                            children: [
-                              Expanded(
-                                child: SingleChildScrollView(
-                                  child: _playerSection(theme, scheme),
-                                ),
-                              ),
-                              _leaveBar(scheme),
-                            ],
-                          ),
-                        ),
-                        VerticalDivider(
-                            width: 1,
-                            color: scheme.outlineVariant.withAlpha(90)),
-                        SizedBox(
-                          width: 380,
-                          child: _queueSection(scheme),
-                        ),
-                      ],
-                    );
-                  }
-                  return Column(
-                    children: [
-                      _playerSection(theme, scheme),
-                      Expanded(child: _queueSection(scheme)),
-                      _leaveBar(scheme),
-                    ],
-                  );
+                  // Wide (desktop/window): three columns — people + reactions
+                  // on the left, the player in the middle, the queue on the
+                  // right — with the transport controls as a bottom bar.
+                  // Narrow (phone): the player on top, then [Queue · People]
+                  // tabs. Reactions float over everything in both.
+                  return c.maxWidth >= 760
+                      ? _wideLayout(theme, scheme)
+                      : _narrowLayout(theme, scheme);
                 },
               ),
               _floatingLayer(),
@@ -944,16 +967,92 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     );
   }
 
-  // The player half of the hub: the now-playing-style disc, the waveform, the
-  // transport controls and the quick-reaction row (or the reconnect prompt).
-  Widget _playerSection(ThemeData theme, ColorScheme scheme) {
+  // ── Wide (desktop) three-column layout ──────────────────────────────────────
+  Widget _wideLayout(ThemeData theme, ColorScheme scheme) {
+    final div = VerticalDivider(
+        width: 1, color: scheme.outlineVariant.withAlpha(90));
+    return Column(
+      children: [
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(width: 300, child: _peoplePanel(scheme)),
+              div,
+              Expanded(child: _centerPlayer(theme, scheme)),
+              div,
+              SizedBox(width: 340, child: _queueSection(scheme)),
+            ],
+          ),
+        ),
+        _bottomControlsBar(scheme),
+      ],
+    );
+  }
+
+  // ── Narrow (phone) layout: player on top, [Queue · People] tabs below ───────
+  Widget _narrowLayout(ThemeData theme, ColorScheme scheme) {
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          _mobilePlayerTop(theme, scheme),
+          TabBar(
+            labelColor: scheme.primary,
+            unselectedLabelColor: scheme.onSurfaceVariant,
+            indicatorColor: scheme.primary,
+            tabs: const [
+              Tab(height: 40, child: Text('Queue')),
+              Tab(height: 40, child: Text('People')),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _queueSection(scheme),
+                _peoplePanel(scheme),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // The player in the middle (wide) — disc + waveform only; controls live in
+  // the bottom bar there.
+  Widget _centerPlayer(ThemeData theme, ColorScheme scheme) {
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          const SizedBox(height: 16),
+          _discHero(theme, scheme, side: 150),
+          const SizedBox(height: 14),
+          if (_lostConnection)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+              child: _buildReconnect(scheme),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28),
+              child: _buildSeekBar(),
+            ),
+          const SizedBox(height: 10),
+        ],
+      ),
+    );
+  }
+
+  // The player on top (phone) — disc + waveform + controls + quick reactions.
+  Widget _mobilePlayerTop(ThemeData theme, ColorScheme scheme) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 10),
-        _discHero(theme, scheme),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
+        _discHero(theme, scheme, side: 104),
+        const SizedBox(height: 8),
         if (_lostConnection)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -964,13 +1063,39 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: _buildSeekBar(),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           if (_isHost) _buildHostControls() else _buildListenerControls(),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           _reactionBar(scheme),
           const SizedBox(height: 6),
         ],
       ],
+    );
+  }
+
+  // Bottom controls bar (wide): quick reactions + transport, spanning.
+  Widget _bottomControlsBar(ColorScheme scheme) {
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        border: Border(
+            top: BorderSide(color: scheme.outlineVariant.withAlpha(70))),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: _reactionBar(scheme),
+          ),
+          const SizedBox(height: 2),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: _isHost ? _buildHostControls() : _buildListenerControls(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -988,20 +1113,168 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     );
   }
 
-  Widget _leaveBar(ColorScheme scheme) {
+  // Left column (wide) / "People" tab (phone): a strip of who's dropped in with
+  // their latest reaction, then the live reactions/chat feed.
+  Widget _peoplePanel(ColorScheme scheme) {
+    final people = _participants;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
+          child: Row(
+            children: [
+              Icon(Icons.group_rounded, size: 16, color: scheme.primary),
+              const SizedBox(width: 6),
+              Text('In the room',
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: scheme.onSurface)),
+              const Spacer(),
+              Text('${people.length}',
+                  style: TextStyle(
+                      fontSize: 12, color: scheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 68,
+          child: people.isEmpty
+              ? Center(
+                  child: Text('Just you so far',
+                      style: TextStyle(
+                          fontSize: 12, color: scheme.onSurfaceVariant)))
+              : ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: people.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 10),
+                  itemBuilder: (_, i) => _personChip(scheme, people[i]),
+                ),
+        ),
+        Divider(height: 12, color: scheme.outlineVariant.withAlpha(80)),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+          child: Row(
+            children: [
+              Icon(Icons.chat_bubble_outline_rounded,
+                  size: 15, color: scheme.primary),
+              const SizedBox(width: 6),
+              Text('Reactions',
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: scheme.onSurface)),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _reactionFeed.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text('Tap a reaction to cheer \u{1F389}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 12.5, color: scheme.onSurfaceVariant)),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: _reactionFeed.length,
+                  itemBuilder: (_, i) => _feedRow(scheme, _reactionFeed[i]),
+                ),
+        ),
+      ],
+    );
+  }
+
+  Color _nameColor(String name, ColorScheme scheme) {
+    var h = 0;
+    for (final cu in name.codeUnits) {
+      h = (h * 31 + cu) & 0x7fffffff;
+    }
+    return HSLColor.fromAHSL(1.0, (h % 360).toDouble(), 0.5,
+            scheme.brightness == Brightness.dark ? 0.62 : 0.5)
+        .toColor();
+  }
+
+  Widget _personChip(ColorScheme scheme, _Participant p) {
+    final initial = p.name.isNotEmpty ? p.name[0].toUpperCase() : '?';
+    return SizedBox(
+      width: 56,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: _nameColor(p.name, scheme),
+                child: Text(initial,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15)),
+              ),
+              if (p.isHost)
+                Positioned(
+                  bottom: -3,
+                  right: -3,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: scheme.surface,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.headphones_rounded,
+                        size: 12, color: scheme.primary),
+                  ),
+                ),
+              if (p.lastReaction != null)
+                Positioned(
+                  top: -8,
+                  right: -8,
+                  child: Text(p.lastReaction!,
+                      style: const TextStyle(fontSize: 15)),
+                ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(p.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 10.5, color: scheme.onSurface)),
+        ],
+      ),
+    );
+  }
+
+  Widget _feedRow(ColorScheme scheme, _ReactionLog r) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      child: FilledButton.tonalIcon(
-        onPressed: (_ready || _lostConnection) ? _leaveOrEnd : null,
-        icon: Icon(_isHost ? Icons.stop_circle_outlined : Icons.logout),
-        label: Text(_isHost ? 'End session' : 'Leave'),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+      child: Row(
+        children: [
+          Text(r.emoji, style: const TextStyle(fontSize: 18)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(r.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 12.5, color: scheme.onSurface)),
+          ),
+        ],
       ),
     );
   }
 
   // Now-Playing-style disc hero: the user's chosen player style, spinning while
   // audio plays, tap to restyle — plus the track title and who you're with.
-  Widget _discHero(ThemeData theme, ColorScheme scheme) {
+  Widget _discHero(ThemeData theme, ColorScheme scheme, {double side = 132}) {
     final isDark = scheme.brightness == Brightness.dark;
     final accent = scheme.primary;
     return StreamBuilder<PlayerState>(
@@ -1018,11 +1291,11 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                 GestureDetector(
                   onTap: () => showPlayerStyleSheet(context, accent: accent),
                   child: SizedBox(
-                    width: 132,
-                    height: 132,
+                    width: side,
+                    height: side,
                     child: PlayerDisc(
                       style: style,
-                      side: 132,
+                      side: side,
                       accent: accent,
                       scheme: scheme,
                       isDark: isDark,
@@ -1037,7 +1310,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                     ),
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: MarqueeText(
@@ -1984,4 +2257,26 @@ class _LiveWavePainter extends CustomPainter {
       old.accent != accent ||
       old.inactive != inactive ||
       old.heights != heights;
+}
+
+// ── People & reactions models ────────────────────────────────────────────────
+class _Participant {
+  _Participant({
+    required this.id,
+    required this.name,
+    this.avatar,
+    this.isHost = false,
+  });
+  final int id;
+  final String name;
+  final String? avatar;
+  final bool isHost;
+  String? lastReaction; // their most recent emoji, shown beside the avatar
+}
+
+class _ReactionLog {
+  _ReactionLog(this.name, this.emoji, this.at);
+  final String name;
+  final String emoji;
+  final DateTime at;
 }

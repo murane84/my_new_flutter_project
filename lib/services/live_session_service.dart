@@ -1952,8 +1952,8 @@ class LiveSessionController {
   /// Either partner → the other: a live "concert-lighter" reaction. Relayed by
   /// the server like any control message (no `to`), so it just floats on the
   /// other screen. Ephemeral — nothing is stored.
-  void sendReaction(String emoji) =>
-      _sendControl({'type': 'reaction', 'emoji': emoji});
+  void sendReaction(String emoji) => _sendControl(
+      {'type': 'reaction', 'emoji': emoji, 'from_id': _myUserId});
 
   // ---------------------------------------------------------------------------
   // TEARDOWN

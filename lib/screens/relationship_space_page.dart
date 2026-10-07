@@ -640,6 +640,17 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     return DateFormat('MMM d, yyyy').format(dt.toLocal());
   }
 
+  /// Whole days since the bond began (its close-since date) — the "X days
+  /// together" headline of the Our World hub. Null if the date is unknown.
+  int? _daysTogether() {
+    final raw = (_space['close_since'] ?? _space['stats']?['close_since'] ?? '')
+        .toString();
+    final dt = DateTime.tryParse(raw);
+    if (dt == null) return null;
+    final d = DateTime.now().toUtc().difference(dt.toUtc()).inDays;
+    return d < 0 ? 0 : d;
+  }
+
   // ── actions ────────────────────────────────────────────────────────────────
   /// Start a private 1:1 Listen Together with this bond's partner: pick the song
   /// (what's playing now, else choose one), then open the live session as host —
@@ -1446,12 +1457,12 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       _pendingPartnerBanner(scheme),
       _milestoneBanner(scheme),
       const SizedBox(height: 14),
-      // The lightest, most-used gesture sits right under the hero, above every
-      // card — a quick "I'm thinking of you" is the first thing in reach.
+      // The now-listening presence is the hero — first thing under the
+      // identity, because shared listening is Aluta's whole reason for being.
+      if (isPair) _presenceHero(scheme),
+      // The lightest, most-used gesture: a quick "I'm thinking of you".
       if (isPair) _quickPill(scheme),
       if (isPair) const SizedBox(height: 14),
-      _tuneInCard(scheme),
-      if (isPair) const SizedBox(height: 12),
       if (isPair) _dailyQuestionCard(scheme),
       if (isPair) _streakCard(scheme),
       if (isPair) _recapCard(scheme),
@@ -3401,10 +3412,31 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final streak = (stats['listen_streak'] as num?)?.toInt() ?? 0;
     final hasStats = others.isNotEmpty && (days > 0 || streak > 0);
 
-    // The identity block: avatars, name, close-since — always centred.
+    // The identity block: Our World eyebrow, avatars, name, days-together —
+    // always centred.
+    final daysTogether = others.isNotEmpty ? _daysTogether() : null;
     final identity = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (others.isNotEmpty) ...[
+          Text(
+            'OUR WORLD',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.85),
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 2.4,
+              shadows: [
+                Shadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
         _overlappedAvatars(others),
         const SizedBox(height: 12),
         Text(
@@ -3425,11 +3457,27 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           ),
         ),
         const SizedBox(height: 5),
+        if (daysTogether != null)
+          Text(
+            '$daysTogether day${daysTogether == 1 ? '' : 's'} together',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w700,
+              shadows: [
+                Shadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+          ),
         Text(
           'Close since ${_closeSince()}',
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.92),
-            fontSize: 12.5,
+            color: Colors.white.withValues(alpha: daysTogether != null ? 0.8 : 0.92),
+            fontSize: daysTogether != null ? 11.5 : 12.5,
             shadows: [
               Shadow(
                 color: Colors.black.withValues(alpha: 0.18),
@@ -4081,6 +4129,88 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   /// presence), invite the user to sync up in one tap. Disappears the moment
   /// they stop. This is the "③ tune-in" beat — catch the bond in a listening
   /// mood and turn it into a shared session.
+  // ── "Our World" presence hero (§5.9) ──────────────────────────────────────
+  // The now-listening presence is the hub's hero: when the partner is playing,
+  // the rich live card; otherwise a gentle invite to start listening together,
+  // so the hero is ALWAYS present (never a blank gap) and always points back at
+  // the one thing only Aluta can do.
+  Widget _presenceHero(ColorScheme scheme) {
+    final pid = _partnerId;
+    if (pid == null) return const SizedBox.shrink();
+    final track = NowPlayingPresence.instance.trackFor(pid);
+    final active =
+        track != null && (track['title'] ?? '').toString().trim().isNotEmpty;
+    if (active) return _tuneInCard(scheme);
+    // Nobody's playing — a calm invite rather than an empty space.
+    final name = _others.isNotEmpty
+        ? (_others.first['username'] ?? 'them').toString()
+        : 'them';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: _listenTogether,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: Color.alphaBlend(
+                  _accent.withValues(alpha: 0.10), scheme.surface),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _accent.withValues(alpha: 0.26)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _accent.withValues(alpha: 0.16),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.headphones_rounded,
+                      color: _accent, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Listen together',
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              color: scheme.onSurface)),
+                      const SizedBox(height: 2),
+                      Text('Nobody\'s playing right now — tap to share a song '
+                          'with $name in sync',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 12, color: scheme.onSurfaceVariant)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Container(
+                  width: 36,
+                  height: 36,
+                  alignment: Alignment.center,
+                  decoration:
+                      BoxDecoration(color: _accent, shape: BoxShape.circle),
+                  child: Icon(Icons.play_arrow_rounded,
+                      color: scheme.onPrimary, size: 22),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _tuneInCard(ColorScheme scheme) {
     final pid = _partnerId;
     if (pid == null) return const SizedBox.shrink();

@@ -210,6 +210,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   // dated memory on the Our Space wall. Guarded so it's offered at most once.
   final DateTime _sessionStart = DateTime.now();
   bool _saveOffered = false;
+  // The host's bonds, pre-fetched so a Live Room set can be saved to one of
+  // them (a room has no single partner). Empty for a listener / no bonds.
+  List<Map<String, dynamic>> _hostSpaces = const [];
   final math.Random _rand = math.Random();
   static const List<String> _quickReactions = ['❤️', '🔥', '😍', '🎶', '👏', '🥹'];
   // The music panel also observes session repeat/shuffle. While this popup is
@@ -263,6 +266,8 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   void initState() {
     super.initState();
     _title = widget.title ?? (widget.track?['title'] as String?) ?? 'Live song';
+    // Pre-fetch the host's bonds so a Live Room set can be saved to one of them.
+    if (_isHost) _prefetchHostSpaces();
 
     if (widget.resume && activeLiveSession != null) {
       // Reopening a minimised session — rebind to the live controller and
@@ -560,8 +565,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   // stored (the set streamed local files).
   Future<void> _maybeOfferSave() async {
     _saveOffered = true;
+    // 1:1 → that partner (resolved server-side). Room → null, resolved to a
+    // picked bond after the user confirms.
     final partnerId = widget.receiverId;
-    if (partnerId == null) return;
     final titles = <String>[];
     for (final t in _c.queue) {
       final tt = t.title.trim();
@@ -606,12 +612,83 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
       'reactions': _reactionCount,
       'minutes': mins,
     });
-    final res = await ApiService()
-        .saveListenMoment(partnerId, caption: summary, ref: ref);
+    Map<String, dynamic>? res;
+    if (partnerId != null) {
+      // 1:1 set → that partner's bond space (resolved server-side).
+      res = await ApiService()
+          .saveListenMoment(partnerId, caption: summary, ref: ref);
+    } else {
+      // Live Room set → a bond the host picks (rooms have no single partner).
+      final spaceId = await _pickSaveSpace();
+      if (spaceId == null || !mounted) return;
+      res = await ApiService()
+          .addMoment(spaceId, kind: 'listen', caption: summary, ref: ref);
+    }
     if (!mounted) return;
     _snack(res != null
         ? 'Saved to Our Space 💞'
         : 'Could not save this listen');
+  }
+
+  // Pick which bond to keep a Live Room set in: straight to the only one, a
+  // chooser when there are several, or null when the host has no bonds.
+  Future<int?> _pickSaveSpace() async {
+    final spaces = _hostSpaces;
+    if (spaces.isEmpty) {
+      _snack('Bond in Our Space first to keep a set together.');
+      return null;
+    }
+    if (spaces.length == 1) {
+      return (spaces.first['id'] as num?)?.toInt();
+    }
+    return showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      builder: (bctx) {
+        final sc = Theme.of(bctx).colorScheme;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 2, 20, 8),
+                child: Text('Save to\u2026',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: sc.onSurface)),
+              ),
+              for (final sp in spaces)
+                ListTile(
+                  leading: CircleAvatar(
+                    radius: 20,
+                    backgroundColor: sc.primaryContainer,
+                    child: Icon(Icons.favorite_rounded,
+                        size: 18, color: sc.primary),
+                  ),
+                  title: Text(_spaceTitle(sp)),
+                  onTap: () =>
+                      Navigator.pop(bctx, (sp['id'] as num?)?.toInt()),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _spaceTitle(Map<String, dynamic> sp) {
+    final name = (sp['name'] ?? '').toString().trim();
+    return name.isEmpty ? 'Our Space' : name;
+  }
+
+  Future<void> _prefetchHostSpaces() async {
+    try {
+      final sp = await ApiService().listSpaces();
+      if (mounted) setState(() => _hostSpaces = sp);
+    } catch (_) {/* no bonds / offline — room save just won't be offered */}
   }
 
   // The full-width floating layer (rising emoji) laid over the session sheet.
@@ -664,12 +741,13 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   }
 
   Future<void> _leaveOrEnd() async {
-    // Host of a 1:1 bonded set: offer to save it as a memory before closing.
+    // Host: offer to keep the set as a memory before closing — a 1:1 set saves
+    // to that partner's space; a Live Room set saves to a bond the host picks
+    // (only offered when they actually have one).
     if (_isHost &&
-        !widget.isRoom &&
-        widget.receiverId != null &&
         !_saveOffered &&
-        _c.queue.isNotEmpty) {
+        _c.queue.isNotEmpty &&
+        (widget.receiverId != null || _hostSpaces.isNotEmpty)) {
       await _maybeOfferSave();
       if (!mounted) return;
     }

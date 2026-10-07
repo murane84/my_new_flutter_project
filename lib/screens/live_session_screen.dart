@@ -13,9 +13,14 @@ import 'home_page.dart' show playbackBus, playlistNotifier;
 import '../state/playback_state.dart';
 import '../utils/file_bytes.dart';
 import '../utils/toast_helper.dart';
+import '../utils/app_config.dart';
+import '../utils/net_image.dart' show authNetworkImageProvider;
+import 'token_helper.dart' show mediaAuthHeaders;
+import 'gif_picker.dart' show GifPicker, GifResult;
 import 'music/player_disc_style.dart'
     show PlayerDisc, PlayerStyleController, showPlayerStyleSheet;
-import 'relationship_space_page.dart' show pickDiaryReaction;
+import 'relationship_space_page.dart'
+    show pickDiaryReaction, resolveAvatarUrl;
 import '../utils/marquee_text.dart';
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
@@ -244,6 +249,8 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   final TextEditingController _commentCtrl = TextEditingController();
   final FocusNode _commentFocus = FocusNode();
   bool _peopleCollapsed = false;
+  // Resolved once so feed avatars can load profile photos.
+  String _apiBase = '';
   // Save-this-session (host 1:1 only): when the set ends, offer to keep it as a
   // dated memory on the Our Space wall. Guarded so it's offered at most once.
   final DateTime _sessionStart = DateTime.now();
@@ -319,6 +326,10 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   void initState() {
     super.initState();
     _title = widget.title ?? (widget.track?['title'] as String?) ?? 'Live song';
+    // Resolve the media base so feed avatars can show profile photos.
+    AppConfig.baseUrl.then((b) {
+      if (mounted) setState(() => _apiBase = b);
+    });
     // Pre-fetch the host's bonds so a Live Room set can be saved to one of them.
     if (_isHost) _prefetchHostSpaces();
 
@@ -502,9 +513,14 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         });
         break;
       case 'reaction':
-        final em = (e['emoji'] ?? '❤').toString();
         final fromId = (e['from_id'] as num?)?.toInt();
-        _spawnReaction(em, fromId: fromId);
+        final gifUrl = (e['gif'] ?? '').toString();
+        if (gifUrl.isNotEmpty) {
+          _logGif(gifUrl, fromId);
+        } else {
+          final em = (e['emoji'] ?? '❤').toString();
+          _spawnReaction(em, fromId: fromId);
+        }
         break;
       case 'comment':
         final txt = (e['text'] ?? '').toString();
@@ -640,23 +656,53 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     });
   }
 
+  // Resolve a participant's avatar url by id (null if unknown / no photo).
+  String? _avatarFor(int? id) {
+    if (id == null) return null;
+    final i = _participants.indexWhere((x) => x.id == id);
+    return i == -1 ? null : _participants[i].avatar;
+  }
+
   void _logReaction(String emoji, int? fromId, {bool mine = false}) {
     if (!mounted) return;
+    final id = mine ? widget.myUserId : fromId;
     String name;
+    final i = _participants.indexWhere((x) => x.id == id);
     if (mine) {
       name = 'You';
-      final i = _participants.indexWhere((x) => x.id == widget.myUserId);
       if (i != -1) _participants[i].lastReaction = emoji;
     } else {
-      final i =
-          fromId == null ? -1 : _participants.indexWhere((x) => x.id == fromId);
       name = i == -1 ? 'Someone' : _participants[i].name;
       if (i != -1) _participants[i].lastReaction = emoji;
     }
     setState(() {
-      _reactionFeed.insert(0, _ReactionLog(name, emoji, DateTime.now()));
-      if (_reactionFeed.length > 50) _reactionFeed.removeLast();
+      _reactionFeed.insert(
+          0,
+          _ReactionLog(name, emoji, DateTime.now(),
+              mine: mine, avatar: _avatarFor(id)));
+      if (_reactionFeed.length > 80) _reactionFeed.removeLast();
     });
+  }
+
+  // A GIF/sticker reaction in the feed (shown bigger, no bubble).
+  void _logGif(String url, int? fromId, {bool mine = false}) {
+    if (!mounted) return;
+    final id = mine ? widget.myUserId : fromId;
+    final i = _participants.indexWhere((x) => x.id == id);
+    final name = mine ? 'You' : (i == -1 ? 'Someone' : _participants[i].name);
+    setState(() {
+      _reactionFeed.insert(
+          0,
+          _ReactionLog(name, '', DateTime.now(),
+              gif: url, mine: mine, avatar: _avatarFor(id)));
+      if (_reactionFeed.length > 80) _reactionFeed.removeLast();
+    });
+  }
+
+  void _sendGifReaction(String url) {
+    if (url.isEmpty) return;
+    _c.sendGifReaction(url);
+    _logGif(url, widget.myUserId, mine: true);
   }
 
   // A typed chat line in the reactions column. [fromId] == my id (or mine)
@@ -674,9 +720,50 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     }
     setState(() {
       _reactionFeed.insert(
-          0, _ReactionLog(name, '', DateTime.now(), text: text, mine: mine));
+          0,
+          _ReactionLog(name, '', DateTime.now(),
+              text: text, mine: mine, avatar: _avatarFor(mine ? widget.myUserId : fromId)));
       if (_reactionFeed.length > 80) _reactionFeed.removeLast();
     });
+  }
+
+  // Emoji button → pick one and insert it into the composer at the cursor.
+  Future<void> _insertEmoji() async {
+    final em = await pickDiaryReaction(
+        context, Theme.of(context).colorScheme.primary);
+    if (em == null || em.isEmpty || !mounted) return;
+    final sel = _commentCtrl.selection;
+    final text = _commentCtrl.text;
+    final start = sel.start < 0 ? text.length : sel.start;
+    final end = sel.end < 0 ? text.length : sel.end;
+    _commentCtrl.text = text.replaceRange(start, end, em);
+    _commentCtrl.selection =
+        TextSelection.collapsed(offset: start + em.length);
+    _commentFocus.requestFocus();
+  }
+
+  // GIF button → open the GIPHY picker and send the chosen GIF as a reaction.
+  Future<void> _pickGif() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => SizedBox(
+        height: MediaQuery.of(ctx).size.height * 0.6,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: GifPicker(
+            onSelected: (GifResult g) {
+              Navigator.of(ctx).pop();
+              _sendGifReaction(g.fullUrl);
+            },
+          ),
+        ),
+      ),
+    );
   }
 
   // Send whatever is in the composer as a chat line, and echo it locally.
@@ -1441,7 +1528,30 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
             top: BorderSide(color: scheme.outlineVariant.withAlpha(70))),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
+          // Emoji → insert into the text; GIF → send as a reaction gesture.
+          IconButton(
+            tooltip: 'Emoji',
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.all(6),
+            constraints: const BoxConstraints(),
+            iconSize: 22,
+            color: scheme.onSurfaceVariant,
+            onPressed: _insertEmoji,
+            icon: const Icon(Icons.emoji_emotions_outlined),
+          ),
+          IconButton(
+            tooltip: 'GIF',
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.all(6),
+            constraints: const BoxConstraints(),
+            iconSize: 22,
+            color: scheme.onSurfaceVariant,
+            onPressed: _pickGif,
+            icon: const Icon(Icons.gif_box_outlined),
+          ),
+          const SizedBox(width: 4),
           Expanded(
             child: TextField(
               controller: _commentCtrl,
@@ -1467,7 +1577,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           Material(
             color: scheme.primary,
             shape: const CircleBorder(),
@@ -1498,6 +1608,10 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
 
   Widget _personChip(ColorScheme scheme, _Participant p) {
     final initial = p.name.isNotEmpty ? p.name[0].toUpperCase() : '?';
+    final raw = (p.avatar ?? '').trim();
+    final url = (raw.isNotEmpty && _apiBase.isNotEmpty)
+        ? resolveAvatarUrl(raw, _apiBase)
+        : null;
     return SizedBox(
       width: 56,
       child: Column(
@@ -1509,11 +1623,17 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               CircleAvatar(
                 radius: 20,
                 backgroundColor: _nameColor(p.name, scheme),
-                child: Text(initial,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15)),
+                backgroundImage: url != null
+                    ? authNetworkImageProvider(url, mediaAuthHeaders(url),
+                        cacheSize: 80)
+                    : null,
+                child: url != null
+                    ? null
+                    : Text(initial,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15)),
               ),
               if (p.isHost)
                 Positioned(
@@ -1550,85 +1670,148 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   }
 
   Widget _feedRow(ColorScheme scheme, _ReactionLog r) {
-    // A typed comment → a group-chat bubble (mine tinted + right-aligned).
-    if (r.isComment) return _commentBubble(scheme, r);
-    // A reaction → a soft inline pill, "<emoji> <name> reacted".
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-      child: Row(
-        children: [
-          Container(
-            width: 30,
-            height: 30,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: scheme.primary.withValues(alpha: 0.08),
-              shape: BoxShape.circle,
-            ),
-            child: Text(r.emoji, style: const TextStyle(fontSize: 16)),
-          ),
-          const SizedBox(width: 9),
-          Expanded(
-            child: RichText(
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              text: TextSpan(
-                style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
-                children: [
-                  TextSpan(
-                      text: r.name,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: r.mine
-                              ? scheme.primary
-                              : _nameColor(r.name, scheme))),
-                  const TextSpan(text: ' reacted'),
-                ],
+    if (r.isComment) return _commentRow(scheme, r);
+    return _reactionRow(scheme, r); // emoji or GIF/sticker
+  }
+
+  // A sender's identity: their profile photo (if any) in a coloured ring, else
+  // a coloured initial — like a group-chat avatar.
+  Widget _avatarRing(ColorScheme scheme, String name, String? avatar,
+      {double size = 28}) {
+    final color = _nameColor(name, scheme);
+    final raw = (avatar ?? '').trim();
+    final url = (raw.isNotEmpty && _apiBase.isNotEmpty)
+        ? resolveAvatarUrl(raw, _apiBase)
+        : null;
+    final Widget inner = (url != null)
+        ? CircleAvatar(
+            radius: size / 2,
+            backgroundColor: color,
+            backgroundImage: authNetworkImageProvider(
+                url, mediaAuthHeaders(url),
+                cacheSize: (size * 2).round()),
+          )
+        : CircleAvatar(
+            radius: size / 2,
+            backgroundColor: color,
+            child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: size * 0.42)),
+          );
+    return Container(
+      padding: const EdgeInsets.all(1.5),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: color.withValues(alpha: 0.65), width: 1.5),
+      ),
+      child: inner,
+    );
+  }
+
+  // A reaction "gesture": a big emoji or a GIF/sticker, with the sender's
+  // avatar ring — no "reacted" text. Friends left, my own right.
+  Widget _reactionRow(ColorScheme scheme, _ReactionLog r) {
+    final mine = r.mine;
+    final Widget content = r.isGif
+        ? ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.network(
+              r.gif!,
+              height: 74,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => Container(
+                width: 74,
+                height: 74,
+                color: scheme.surfaceContainerHighest,
+                alignment: Alignment.center,
+                child: Icon(Icons.gif_box_outlined,
+                    color: scheme.onSurfaceVariant),
               ),
             ),
-          ),
-        ],
+          )
+        : Text(r.emoji, style: const TextStyle(fontSize: 30));
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      child: Row(
+        mainAxisAlignment:
+            mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: mine
+            ? [content]
+            : [
+                _avatarRing(scheme, r.name, r.avatar),
+                const SizedBox(width: 8),
+                Flexible(child: content),
+              ],
       ),
     );
   }
 
-  // A chat bubble for a typed comment — sender name, then the text, with
-  // my own lines tinted and pushed to the right like a messaging thread.
-  Widget _commentBubble(ColorScheme scheme, _ReactionLog r) {
-    final mine = r.mine;
-    final bubbleColor = mine
-        ? scheme.primary.withValues(alpha: 0.16)
-        : scheme.surfaceContainerHighest;
-    final nameColor = mine ? scheme.primary : _nameColor(r.name, scheme);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-      child: Column(
-        crossAxisAlignment:
-            mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          Text(r.name,
-              style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  color: nameColor)),
-          const SizedBox(height: 2),
-          Align(
-            alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 230),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-              decoration: BoxDecoration(
-                color: bubbleColor,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(14),
-                  topRight: const Radius.circular(14),
-                  bottomLeft: Radius.circular(mine ? 14 : 4),
-                  bottomRight: Radius.circular(mine ? 4 : 14),
-                ),
+  // A typed comment as a group-chat bubble: a friend's line gets their avatar +
+  // name on the left; my own is tinted and pushed to the right ("You" implied).
+  Widget _commentRow(ColorScheme scheme, _ReactionLog r) {
+    if (r.mine) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(40, 3, 12, 3),
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 230),
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: 0.18),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(14),
+                topRight: Radius.circular(14),
+                bottomLeft: Radius.circular(14),
+                bottomRight: Radius.circular(4),
               ),
-              child: Text(r.text ?? '',
-                  style: TextStyle(fontSize: 13, color: scheme.onSurface)),
+            ),
+            child: Text(r.text ?? '',
+                style: TextStyle(fontSize: 13.5, color: scheme.onSurface)),
+          ),
+        ),
+      );
+    }
+    final nameColor = _nameColor(r.name, scheme);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 3, 24, 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _avatarRing(scheme, r.name, r.avatar),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(r.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: nameColor)),
+                const SizedBox(height: 2),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(4),
+                      topRight: Radius.circular(14),
+                      bottomLeft: Radius.circular(14),
+                      bottomRight: Radius.circular(14),
+                    ),
+                  ),
+                  child: Text(r.text ?? '',
+                      style:
+                          TextStyle(fontSize: 13.5, color: scheme.onSurface)),
+                ),
+              ],
             ),
           ),
         ],
@@ -2672,11 +2855,15 @@ class _Participant {
 }
 
 class _ReactionLog {
-  _ReactionLog(this.name, this.emoji, this.at, {this.text, this.mine = false});
+  _ReactionLog(this.name, this.emoji, this.at,
+      {this.text, this.gif, this.mine = false, this.avatar});
   final String name;
-  final String emoji; // '' for a typed comment
+  final String emoji; // '' for a typed comment or a gif
   final String? text; // non-null → this entry is a typed chat line
+  final String? gif; // non-null → this entry is a GIF/sticker reaction
   final bool mine; // sent by this device (align/colour differently)
+  final String? avatar; // sender's avatar url (profile photo), if any
   final DateTime at;
   bool get isComment => text != null;
+  bool get isGif => gif != null;
 }

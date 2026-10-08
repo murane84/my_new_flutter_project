@@ -18,6 +18,7 @@ import '../utils/toast_helper.dart';
 import '../utils/bounce_tap.dart' show Tactile;
 import '../services/track_title.dart'
     show cleanDisplayName, splitTitleArtist;
+import 'listening_audience_sheet.dart' show PresenceShareButton;
 
 /// Web-only replacement for the native [MusicControls] panel.
 ///
@@ -939,6 +940,11 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
         const SizedBox(width: 8),
         // Playback speed — cycles 0.5x … 2x — as a raised 3D pill.
         _speedPill(theme, speedLabel),
+        const SizedBox(width: 2),
+        // Share "listening now" with friends: tap = on/off, long-press = pick
+        // who sees it. Same control the native player uses, so web users get
+        // the same privacy gating.
+        PresenceShareButton(color: accent, size: 18),
         const Spacer(),
         // Volume: a single icon. Tap it to slide out the slider (right→left),
         // which fades/collapses away on its own after a short idle — so there

@@ -168,7 +168,7 @@ class NowPlayingPresence extends ChangeNotifier {
   void start() {
     if (!_settingLoaded) loadShareSetting();
     final h = audioHandler;
-    if (h != null) {
+    if (!kIsWeb && h != null) {
       _miSub ??= h.mediaItem.listen((_) => _emit());
       _psSub ??= h.playbackState.listen((_) => _emit());
     }
@@ -195,7 +195,10 @@ class NowPlayingPresence extends ChangeNotifier {
 
   void reportManual(
       {required String title, String artist = '', required bool playing}) {
-    if (audioHandler != null) return; // handler-driven platforms ignore this
+    // Web has an audio_service handler too, but the web ("lite") player drives
+    // just_audio directly and never feeds that handler — so on web THIS manual
+    // report is the only now-playing source. Native keeps using the handler.
+    if (!kIsWeb) return; // native platforms drive presence from the handler
     _manualActive = true;
     _manualTitle = title.trim();
     _manualArtist = artist.trim();
@@ -232,7 +235,7 @@ class NowPlayingPresence extends ChangeNotifier {
     final String title;
     final String artist;
     final bool localPlaying;
-    if (h != null) {
+    if (!kIsWeb && h != null) {
       final mi = h.mediaItem.value;
       title = (mi?.title ?? '').trim();
       artist = (mi?.artist ?? '').trim();

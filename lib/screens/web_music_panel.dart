@@ -458,8 +458,6 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 2),
           child: Column(
             children: [
-              _sourceRow(theme),
-              const SizedBox(height: 10),
               _nowPlayingCard(theme),
               const SizedBox(height: 8),
               _seekBar(theme),
@@ -539,41 +537,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
 
   // Compact source controls for the active player: add songs, load a folder,
   // and the info popover.
-  Widget _sourceRow(ThemeData theme) {
-    return Row(
-      children: [
-        Expanded(
-          child: FilledButton.icon(
-            onPressed: _loading ? null : _openFiles,
-            icon: const Icon(Icons.library_add_rounded, size: 18),
-            label: Text(_loading ? 'Loading…' : 'Add songs',
-                overflow: TextOverflow.ellipsis),
-            style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                visualDensity: VisualDensity.compact),
-          ),
-        ),
-        if (folderPickSupported) ...[
-          const SizedBox(width: 8),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _loading ? null : _openFolder,
-              icon: const Icon(Icons.folder_copy_outlined, size: 18),
-              label: const Text('Folder', overflow: TextOverflow.ellipsis),
-              style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  visualDensity: VisualDensity.compact),
-            ),
-          ),
-        ],
-        const SizedBox(width: 2),
-        _infoAnchor(theme),
-      ],
-    );
-  }
 
-  // The lite-player note + "get the full app" buttons, hidden behind an info
-  // button and shown as a popover card over the player.
   Widget _infoAnchor(ThemeData theme, {bool inline = false}) {
     return MenuAnchor(
       style: MenuStyle(
@@ -1464,6 +1428,24 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
         Text('Queue (${_queue.length})',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
         const Spacer(),
+        // Add songs / folder folded in here (like the native playlist), plus
+        // the "about this player" popover.
+        IconButton(
+          tooltip: 'Add songs',
+          iconSize: 18,
+          color: theme.colorScheme.primary,
+          onPressed: _loading ? null : _openFiles,
+          icon: const Icon(Icons.library_add_rounded),
+        ),
+        if (folderPickSupported)
+          IconButton(
+            tooltip: 'Load a folder',
+            iconSize: 18,
+            color: theme.colorScheme.primary,
+            onPressed: _loading ? null : _openFolder,
+            icon: const Icon(Icons.folder_copy_outlined),
+          ),
+        _infoAnchor(theme),
         IconButton(
           tooltip: 'Clear queue',
           iconSize: 18,

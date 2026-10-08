@@ -25,6 +25,7 @@ import 'screens/music_controls.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'services/audio_handler.dart';
+import 'services/desktop_audio.dart';
 import 'services/notif_service.dart';
 import 'services/fcm_service.dart';
 import 'services/metadata_overrides.dart';
@@ -96,6 +97,10 @@ Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Windows: put just_audio on libmpv (media_kit) BEFORE any AudioPlayer is
+  // built, so playback never contends with the Media-Foundation camera/video
+  // plugins. No-op on web and mobile.
+  await initDesktopAudio();
   // Paint the app (its splash) AS SOON AS POSSIBLE. Only Sentry wraps runApp, so
   // it still installs capture of BOTH uncaught Flutter framework errors and
   // async (PlatformDispatcher / zone) errors. Everything heavy — the audio

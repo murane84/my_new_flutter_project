@@ -56,7 +56,15 @@ dependencies:
 
   # Audio
   just_audio: ^0.10.5
-  just_audio_windows: ^0.2.0
+  # Windows audio runs on libmpv (media_kit) instead of just_audio_windows.
+  # just_audio_windows uses the WinRT MediaPlayer / Media Foundation, which
+  # races at startup with the other Media-Foundation Windows plugins we now
+  # ship (camera_windows, video_player_win) — that race left the player stuck
+  # "loading" on some launches. media_kit keeps audio off Media Foundation, so
+  # camera + video keep MF to themselves and audio always starts. StreamAudio-
+  # Source (Listen Together) still works via just_audio's local HTTP server.
+  just_audio_media_kit: ^2.0.4
+  media_kit_libs_windows_audio: any
   audioplayers: ^6.5.0
   on_audio_query: ^2.9.0
   palette_generator: ^0.3.3

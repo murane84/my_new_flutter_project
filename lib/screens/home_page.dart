@@ -5,7 +5,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
-    show kIsWeb, kReleaseMode, defaultTargetPlatform, TargetPlatform;
+    show kIsWeb, kReleaseMode, defaultTargetPlatform, TargetPlatform, ValueListenable;
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:phone_numbers_parser/phone_numbers_parser.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
@@ -606,97 +606,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   }
 
 
-  void _showWebQueueSheet() {
-    final queueOf = playbackBus.webQueue;
-    final queue = queueOf?.call() ?? const [];
-    if (queue.isEmpty) {
-      showToast(
-        context,
-        'No music loaded yet — add songs in the Music panel first.',
-        type: ToastType.info,
-      );
-      return;
-    }
-    final scheme = Theme.of(context).colorScheme;
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      useRootNavigator: true,
-      backgroundColor: scheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        final rev = playbackBus.webQueueRev;
-        Widget buildList() {
-          final items = playbackBus.webQueue?.call() ?? const [];
-          final current = playbackBus.webCurrentIndex?.call() ?? -1;
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 2, 20, 8),
-                child: Row(
-                  children: [
-                    Icon(Icons.queue_music_rounded,
-                        size: 20, color: scheme.primary),
-                    const SizedBox(width: 8),
-                    Text('Queue (${items.length})',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 15)),
-                  ],
-                ),
-              ),
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: items.length,
-                  itemBuilder: (_, i) {
-                    final playing = i == current;
-                    return ListTile(
-                      dense: true,
-                      leading: Icon(
-                        playing
-                            ? Icons.graphic_eq_rounded
-                            : Icons.music_note_rounded,
-                        color: playing
-                            ? scheme.primary
-                            : scheme.onSurfaceVariant,
-                      ),
-                      title: Text(
-                        items[i].title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight:
-                              playing ? FontWeight.w700 : FontWeight.w500,
-                          color: playing ? scheme.primary : null,
-                        ),
-                      ),
-                      onTap: () => playbackBus.webPlayAt?.call(i),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-          );
-        }
 
-        return SafeArea(
-          child: rev == null
-              ? buildList()
-              : ValueListenableBuilder<int>(
-                  valueListenable: rev,
-                  builder: (_, _, _) => buildList(),
-                ),
-        );
-      },
-    );
-  }
-
-  // ── Session expiry → clean auto sign-out ──────────────────────────────────
   bool _handlingExpiry = false;
   Future<void> _onSessionExpired() async {
     if (!SessionEvents.instance.expired.value) return;

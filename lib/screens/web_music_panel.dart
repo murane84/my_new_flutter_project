@@ -74,6 +74,9 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   // idle — so it never looks like a second seek bar.
   bool _showVolume = false;
   Timer? _volumeHideTimer;
+  // Ticks whenever the queue or current track changes, so the in-chat queue
+  // sheet can mirror this player and stay live.
+  final ValueNotifier<int> _queueRev = ValueNotifier<int>(0);
 
   @override
   void initState() {
@@ -89,6 +92,10 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     playbackBus.webQueue = () => _queue
         .map((t) => (title: _cleanTitle(t.name), load: t.load))
         .toList();
+    // Let the in-chat queue sheet mirror + control this player.
+    playbackBus.webCurrentIndex = () => _index;
+    playbackBus.webPlayAt = (i) => _playAt(i);
+    playbackBus.webQueueRev = _queueRev;
   }
 
   void _onPlayerState(PlayerState st) {
@@ -105,6 +112,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     }
     // Auto-advance when a track finishes.
     if (st.processingState == ProcessingState.completed) _onComplete();
+    _queueRev.value++;
     if (mounted) setState(() {});
   }
 
@@ -122,6 +130,10 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     playbackBus.isPlaying = null;
     playbackBus.onPause = null;
     playbackBus.webQueue = null;
+    playbackBus.webCurrentIndex = null;
+    playbackBus.webPlayAt = null;
+    playbackBus.webQueueRev = null;
+    _queueRev.dispose();
     _player.dispose();
     super.dispose();
   }
@@ -154,6 +166,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       for (final f in result.files) {
         final bytes = await f.readAsBytes();
         _queue.add(_WebTrack(f.name, () async => bytes));
+        _queueRev.value++;
       }
       if (!mounted) return;
       setState(() {});
@@ -177,6 +190,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       if (entries.isEmpty) return;
       for (final e in entries) {
         _queue.add(_WebTrack(e.name, e.load));
+        _queueRev.value++;
       }
       if (!mounted) return;
       setState(() {});
@@ -282,6 +296,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   void _removeAt(int i) {
     final wasCurrent = i == _index;
     setState(() => _queue.removeAt(i));
+    _queueRev.value++;
     if (_queue.isEmpty) {
       _player.stop();
       _index = -1;
@@ -367,6 +382,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
         _index += 1;
       }
     });
+    _queueRev.value++;
   }
 
   Future<void> _download(String fileName) async {

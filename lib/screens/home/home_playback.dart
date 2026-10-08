@@ -40,6 +40,12 @@ class PlaybackBus {
   // device library or file paths to read from.
   List<({String title, Future<Uint8List> Function() load})> Function()?
       webQueue;
+  // Web-only: the index of the track playing now, jump-to-track, and a counter
+  // that ticks whenever the queue or current track changes — so an external
+  // view (the in-chat queue sheet) can mirror the lite player and stay live.
+  int Function()? webCurrentIndex;
+  void Function(int index)? webPlayAt;
+  ValueListenable<int>? webQueueRev;
   // Toggle "favourite" on the currently-playing track (driven by the bar heart).
   VoidCallback? onToggleFavorite;
   // Share the currently-playing track to a chat (the quick action that used to

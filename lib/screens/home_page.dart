@@ -571,15 +571,103 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // apps DO support it instead of silently toggling an empty drawer.
   void _openChatPlaylist() {
     if (kIsWeb) {
+      _showWebQueueSheet();
+      return;
+    }
+    playlistDrawerBus.toggle?.call();
+  }
+
+  /// Web: the "lite" player holds its queue in memory, so from a chat we show a
+  /// live bottom sheet of that queue (tap a track to jump to it). Mirrors how
+  /// the native playlist drawer is reachable from a chat.
+  void _showWebQueueSheet() {
+    final queueOf = playbackBus.webQueue;
+    final queue = queueOf?.call() ?? const [];
+    if (queue.isEmpty) {
       showToast(
         context,
-        'Playlists use the music saved on your device — open Aluta on your '
-        'phone or the desktop app to build and play your library.',
+        'No music loaded yet — add songs in the Music panel first.',
         type: ToastType.info,
       );
       return;
     }
-    playlistDrawerBus.toggle?.call();
+    final scheme = Theme.of(context).colorScheme;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useRootNavigator: true,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final rev = playbackBus.webQueueRev;
+        Widget buildList() {
+          final items = playbackBus.webQueue?.call() ?? const [];
+          final current = playbackBus.webCurrentIndex?.call() ?? -1;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 2, 20, 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.queue_music_rounded,
+                        size: 20, color: scheme.primary),
+                    const SizedBox(width: 8),
+                    Text('Queue (${items.length})',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15)),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: items.length,
+                  itemBuilder: (_, i) {
+                    final playing = i == current;
+                    return ListTile(
+                      dense: true,
+                      leading: Icon(
+                        playing
+                            ? Icons.graphic_eq_rounded
+                            : Icons.music_note_rounded,
+                        color: playing
+                            ? scheme.primary
+                            : scheme.onSurfaceVariant,
+                      ),
+                      title: Text(
+                        items[i].title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight:
+                              playing ? FontWeight.w700 : FontWeight.w500,
+                          color: playing ? scheme.primary : null,
+                        ),
+                      ),
+                      onTap: () => playbackBus.webPlayAt?.call(i),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          );
+        }
+
+        return SafeArea(
+          child: rev == null
+              ? buildList()
+              : ValueListenableBuilder<int>(
+                  valueListenable: rev,
+                  builder: (_, _, _) => buildList(),
+                ),
+        );
+      },
+    );
   }
 
   // ── Session expiry → clean auto sign-out ──────────────────────────────────

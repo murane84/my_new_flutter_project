@@ -77,6 +77,9 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   // Ticks whenever the queue or current track changes, so the in-chat queue
   // sheet can mirror this player and stay live.
   final ValueNotifier<int> _queueRev = ValueNotifier<int>(0);
+  // Playlist tile collapses/expands the inline queue (native has the list
+  // behind its Playlist button).
+  bool _queueCollapsed = false;
 
   @override
   void initState() {
@@ -137,6 +140,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     _psSub?.cancel();
     _sleepTimer?.cancel();
     _volumeHideTimer?.cancel();
+    _bannerTimer?.cancel();
     if (_blobUrl != null) revokeBlobUrl(_blobUrl!);
     NowPlayingPresence.instance.reportManual(title: '', playing: false);
     // Release the bus handlers we registered (web has no other player).
@@ -456,18 +460,24 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
             children: [
               _sourceRow(theme),
               const SizedBox(height: 10),
-              _nowPlaying(theme),
-              const SizedBox(height: 2),
+              _nowPlayingCard(theme),
+              const SizedBox(height: 8),
               _seekBar(theme),
               _transport(theme),
-              _secondaryRow(theme),
               const SizedBox(height: 8),
-              _queueHeader(theme),
+              _featureRow(theme),
+              const SizedBox(height: 12),
+              _bottomRow(theme),
+              const SizedBox(height: 8),
+              if (!_queueCollapsed) _queueHeader(theme),
             ],
           ),
         ),
-        Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.4)),
-        Expanded(child: _queueBody(theme)),
+        if (!_queueCollapsed) ...[
+          Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.4)),
+          Expanded(child: _queueBody(theme)),
+        ] else
+          const Spacer(),
       ],
     );
   }
@@ -648,22 +658,117 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     );
   }
 
-  Widget _nowPlaying(ThemeData theme) {
+  // A vinyl disc, like the native player's now-playing art.
+  Widget _vinyl(Color accent) {
+    return Container(
+      width: 54,
+      height: 54,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          colors: [Color.lerp(accent, Colors.black, 0.5)!, Colors.black],
+          stops: const [0.18, 1.0],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.4),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Container(
+          width: 18,
+          height: 18,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: accent,
+            boxShadow: [
+              BoxShadow(color: accent.withValues(alpha: 0.6), blurRadius: 8),
+            ],
+          ),
+          child: Center(
+            child: Container(
+              width: 5,
+              height: 5,
+              decoration: const BoxDecoration(
+                  shape: BoxShape.circle, color: Colors.black),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Now-playing card: disc + title + track counter + live indicator + heart,
+  // mirroring the native player's header card.
+  Widget _nowPlayingCard(ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final accent = scheme.primary;
     final name = (_index >= 0 && _index < _queue.length)
         ? _cleanTitle(_queue[_index].name)
-        : '';
-    return Column(
-      children: [
-        Text(name,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.titleSmall
-                ?.copyWith(fontWeight: FontWeight.bold)),
-        Text('Track ${_index + 1} of ${_queue.length}',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.hintColor)),
-      ],
+        : 'Nothing playing';
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.alphaBlend(
+                accent.withValues(alpha: isDark ? 0.13 : 0.07), scheme.surface),
+            scheme.surface,
+          ],
+        ),
+        border: Border.all(color: accent.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        children: [
+          _vinyl(accent),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 14.5),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _queue.isEmpty
+                      ? ''
+                      : 'Track ${_index + 1} of ${_queue.length}',
+                  style: TextStyle(fontSize: 11.5, color: theme.hintColor),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.podcasts_rounded, size: 18, color: accent),
+              const SizedBox(height: 6),
+              // Favourites need the account-backed library → not on web.
+              GestureDetector(
+                onTap: () => _featureUnavailable('Favourites'),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(Icons.favorite_border_rounded,
+                      size: 20, color: scheme.onSurfaceVariant),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -735,12 +840,21 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
             children: [
               _discBtn(
                 theme,
+                icon: Icons.shuffle_rounded,
+                size: 18,
+                tooltip: 'Shuffle',
+                onTap: _queue.length > 1 ? _toggleShuffle : null,
+                active: _shuffle,
+              ),
+              const SizedBox(width: 8),
+              _discBtn(
+                theme,
                 icon: Icons.skip_previous_rounded,
-                size: 26,
+                size: 24,
                 tooltip: 'Previous',
                 onTap: _queue.length > 1 ? _prev : null,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               _discBtn(
                 theme,
                 icon: Icons.replay_10_rounded,
@@ -758,13 +872,28 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                 tooltip: 'Forward 10s',
                 onTap: () => _seekBy(10),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               _discBtn(
                 theme,
                 icon: Icons.skip_next_rounded,
-                size: 26,
+                size: 24,
                 tooltip: 'Next',
                 onTap: _queue.length > 1 ? _next : null,
+              ),
+              const SizedBox(width: 8),
+              _discBtn(
+                theme,
+                icon: _repeat == _repeatOne
+                    ? Icons.repeat_one_rounded
+                    : Icons.repeat_rounded,
+                size: 18,
+                tooltip: _repeat == _repeatOne
+                    ? 'Repeat one'
+                    : _repeat == _repeatAll
+                        ? 'Repeat all'
+                        : 'Repeat off',
+                onTap: _toggleRepeat,
+                active: _repeat != _repeatOff,
               ),
             ],
           ),
@@ -951,18 +1080,175 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     );
   }
 
-  Widget _secondaryRow(ThemeData theme) {
+  // ── Native-style feature row + bottom row ────────────────────────────────
+
+  // Playlist · Sleep · Equalizer · Lyrics — mirrors the native player. The two
+  // that need the device/account (Equalizer DSP, synced Lyrics) aren't possible
+  // on web, so tapping them shows a banner pointing to the Windows/Android app.
+  Widget _featureRow(ThemeData theme) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        _featureTile(
+          theme,
+          icon: Icons.queue_music_rounded,
+          label: 'Playlist',
+          active: !_queueCollapsed,
+          badge: _queue.isNotEmpty ? '${_queue.length}' : null,
+          onTap: () => setState(() => _queueCollapsed = !_queueCollapsed),
+        ),
+        _featureTile(
+          theme,
+          icon: Icons.snooze_rounded,
+          label: 'Sleep',
+          active: _sleepMinutes > 0,
+          badge: _sleepMinutes > 0 ? '${_sleepMinutes}m' : null,
+          onTap: _showSleepMenu,
+        ),
+        _featureTile(
+          theme,
+          icon: Icons.graphic_eq_rounded,
+          label: 'Equalizer',
+          available: false,
+          onTap: () => _featureUnavailable('Equalizer'),
+        ),
+        _featureTile(
+          theme,
+          icon: Icons.lyrics_rounded,
+          label: 'Lyrics',
+          available: false,
+          onTap: () => _featureUnavailable('Lyrics'),
+        ),
+      ],
+    );
+  }
+
+  Widget _featureTile(
+    ThemeData theme, {
+    required IconData icon,
+    required String label,
+    VoidCallback? onTap,
+    bool active = false,
+    bool available = true,
+    String? badge,
+  }) {
     final scheme = theme.colorScheme;
     final isDark = scheme.brightness == Brightness.dark;
     final accent = scheme.primary;
-    IconData repeatIcon;
-    switch (_repeat) {
-      case _repeatOne:
-        repeatIcon = Icons.repeat_one_rounded;
-        break;
-      default:
-        repeatIcon = Icons.repeat_rounded;
-    }
+    final tint = active ? accent : accent.withValues(alpha: isDark ? 0.5 : 0.4);
+    final iconColor = !available
+        ? scheme.onSurfaceVariant.withValues(alpha: 0.55)
+        : active
+            ? accent
+            : scheme.onSurface;
+    return Tactile(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color.alphaBlend(
+                            tint.withValues(alpha: isDark ? 0.14 : 0.09),
+                            scheme.surface),
+                        Color.alphaBlend(
+                            tint.withValues(alpha: isDark ? 0.24 : 0.16),
+                            scheme.surfaceContainerHighest),
+                      ],
+                    ),
+                    border: Border.all(
+                      color: active
+                          ? accent.withValues(alpha: 0.5)
+                          : accent.withValues(alpha: 0.18),
+                      width: 1,
+                    ),
+                    boxShadow: active
+                        ? [
+                            BoxShadow(
+                              color: accent.withValues(alpha: 0.28),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Icon(icon, size: 20, color: iconColor),
+                ),
+                if (badge != null)
+                  Positioned(
+                    right: -4,
+                    top: -4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: accent,
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: Text(
+                        badge,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                if (!available)
+                  Positioned(
+                    right: -3,
+                    bottom: -3,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: scheme.surface,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: scheme.outlineVariant
+                                .withValues(alpha: 0.6)),
+                      ),
+                      child: Icon(Icons.lock_rounded,
+                          size: 9, color: scheme.onSurfaceVariant),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                color: !available
+                    ? scheme.onSurfaceVariant.withValues(alpha: 0.7)
+                    : active
+                        ? accent
+                        : null,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Bottom row — volume (floating slider) · share · speed, like native.
+  Widget _bottomRow(ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final accent = scheme.primary;
     final speedLabel =
         '${_speed.toStringAsFixed(_speed.truncateToDouble() == _speed ? 0 : 2)}x';
     final volIcon = _volume <= 0
@@ -970,48 +1256,15 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
         : _volume < 0.5
             ? Icons.volume_down_rounded
             : Icons.volume_up_rounded;
-
-    // A fixed-height stage so the floating volume slider can glow OVER the
-    // buttons without shifting the layout.
     return SizedBox(
       height: 54,
       child: Stack(
         alignment: Alignment.center,
         clipBehavior: Clip.none,
         children: [
-          // Base: one evenly-spaced, centered cluster — shuffle · repeat ·
-          // speed · share · volume.
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _discBtn(
-                theme,
-                icon: Icons.shuffle_rounded,
-                size: 18,
-                tooltip: 'Shuffle',
-                onTap: _queue.length > 1 ? _toggleShuffle : null,
-                active: _shuffle,
-              ),
-              const SizedBox(width: 12),
-              _discBtn(
-                theme,
-                icon: repeatIcon,
-                size: 18,
-                tooltip: _repeat == _repeatOne
-                    ? 'Repeat one'
-                    : _repeat == _repeatAll
-                        ? 'Repeat all'
-                        : 'Repeat off',
-                onTap: _toggleRepeat,
-                active: _repeat != _repeatOff,
-              ),
-              const SizedBox(width: 12),
-              _speedPill(theme, speedLabel),
-              const SizedBox(width: 12),
-              // Share "listening now": tap = on/off, long-press = who sees it.
-              PresenceShareButton(color: accent, size: 18),
-              const SizedBox(width: 12),
-              // Volume: tap floats the slider over the buttons; hold = mute.
               GestureDetector(
                 onLongPress: () {
                   _toggleMute();
@@ -1026,11 +1279,12 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                   active: _showVolume || _volume <= 0,
                 ),
               ),
+              // Share "listening now": tap = on/off, long-press = who sees it.
+              PresenceShareButton(color: accent, size: 20),
+              _speedPill(theme, speedLabel),
             ],
           ),
-
-          // Floating volume slider — glows over the cluster when open, then
-          // fades back to the icon. No layout shift, nothing scattered.
+          // Floating volume slider — glows over the row, fades back to the icon.
           IgnorePointer(
             ignoring: !_showVolume,
             child: AnimatedOpacity(
@@ -1049,10 +1303,8 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                       scheme.surface,
                     ),
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: accent.withValues(alpha: 0.38),
-                      width: 1,
-                    ),
+                    border:
+                        Border.all(color: accent.withValues(alpha: 0.38)),
                     boxShadow: [
                       BoxShadow(
                         color: accent.withValues(alpha: 0.50),
@@ -1064,7 +1316,6 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Tap the icon to collapse back to just the icon.
                       IconButton(
                         iconSize: 18,
                         visualDensity: VisualDensity.compact,
@@ -1109,6 +1360,79 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     );
   }
 
+  // A sleep-timer chooser (web supports this one).
+  void _showSleepMenu() {
+    final scheme = Theme.of(context).colorScheme;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        Widget row(String label, int minutes) => ListTile(
+              leading: Icon(
+                  minutes == 0
+                      ? Icons.alarm_off_rounded
+                      : Icons.snooze_rounded,
+                  color: _sleepMinutes == minutes ? scheme.primary : null),
+              title: Text(label),
+              trailing: _sleepMinutes == minutes
+                  ? Icon(Icons.check_rounded, color: scheme.primary)
+                  : null,
+              onTap: () {
+                _setSleep(minutes);
+                Navigator.pop(ctx);
+              },
+            );
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              row('Off', 0),
+              row('15 minutes', 15),
+              row('30 minutes', 30),
+              row('45 minutes', 45),
+              row('1 hour', 60),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Banner shown when a feature only the full app can do is tapped on web.
+  Timer? _bannerTimer;
+  void _featureUnavailable(String feature) {
+    final messenger = ScaffoldMessenger.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    messenger.clearMaterialBanners();
+    messenger.showMaterialBanner(
+      MaterialBanner(
+        backgroundColor: scheme.surfaceContainerHighest,
+        leading: Icon(Icons.phonelink_rounded, color: scheme.primary),
+        content: Text(
+          '$feature is only available in the Windows or Android app — '
+          'open Aluta there to use it.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: messenger.clearMaterialBanners,
+            child: const Text('GOT IT'),
+          ),
+        ],
+      ),
+    );
+    _bannerTimer?.cancel();
+    _bannerTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) messenger.clearMaterialBanners();
+    });
+  }
+
+
   // ── Volume popup (tap-to-reveal, auto-hide) ──────────────────────────────
   void _toggleVolume() {
     if (_showVolume) {
@@ -1140,38 +1464,6 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
         Text('Queue (${_queue.length})',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
         const Spacer(),
-        // Sleep timer — pause playback after a while.
-        PopupMenuButton<int>(
-          tooltip: 'Sleep timer',
-          onSelected: _setSleep,
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 0, child: Text('Sleep: Off')),
-            PopupMenuItem(value: 15, child: Text('Sleep in 15 min')),
-            PopupMenuItem(value: 30, child: Text('Sleep in 30 min')),
-            PopupMenuItem(value: 60, child: Text('Sleep in 60 min')),
-          ],
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.bedtime_outlined,
-                    size: 18,
-                    color: _sleepMinutes > 0
-                        ? theme.colorScheme.primary
-                        : theme.hintColor),
-                if (_sleepMinutes > 0) ...[
-                  const SizedBox(width: 3),
-                  Text('${_sleepMinutes}m',
-                      style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
-                          color: theme.colorScheme.primary)),
-                ],
-              ],
-            ),
-          ),
-        ),
         IconButton(
           tooltip: 'Clear queue',
           iconSize: 18,

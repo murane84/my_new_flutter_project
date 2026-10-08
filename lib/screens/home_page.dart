@@ -578,8 +578,34 @@ class HomePageState extends rp.ConsumerState<HomePage>
   }
 
   /// Web: the "lite" player holds its queue in memory, so from a chat we show a
-  /// live bottom sheet of that queue (tap a track to jump to it). Mirrors how
-  /// the native playlist drawer is reachable from a chat.
+  /// live bottom sheet of that queue — with a full transport strip (seek +
+  /// shuffle/repeat/prev/play/next) and tap-to-jump — mirroring how the native
+  /// playlist drawer is reachable from a chat.
+  void _showWebQueueSheet() {
+    final queue = playbackBus.webQueue?.call() ?? const [];
+    if (queue.isEmpty) {
+      showToast(
+        context,
+        'No music loaded yet — add songs in the Music panel first.',
+        type: ToastType.info,
+      );
+      return;
+    }
+    final scheme = Theme.of(context).colorScheme;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => const _WebQueueSheet(),
+    );
+  }
+
+
   void _showWebQueueSheet() {
     final queueOf = playbackBus.webQueue;
     final queue = queueOf?.call() ?? const [];
@@ -4885,3 +4911,239 @@ class _CallTickerState extends State<_CallTicker> {
   Widget build(BuildContext context) => widget.builder();
 }
 
+
+// ─── In-chat web queue sheet ──────────────────────────────────────────────────
+// A live view of the web ("lite") player's in-memory queue, with a full
+// transport strip, reachable from the chat header's playlist button. All of its
+// controls drive the lite player through playbackBus; it mirrors how the native
+// playlist drawer is reachable from a chat.
+class _WebQueueSheet extends StatefulWidget {
+  const _WebQueueSheet();
+
+  @override
+  State<_WebQueueSheet> createState() => _WebQueueSheetState();
+}
+
+class _WebQueueSheetState extends State<_WebQueueSheet> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    // Poll position for the seek bar while the sheet is open (cheap).
+    _tick = Timer.periodic(const Duration(milliseconds: 400), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  String _fmt(int ms) {
+    final d = Duration(milliseconds: ms < 0 ? 0 : ms);
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final rev = playbackBus.webQueueRev;
+    return SafeArea(
+      child: rev == null
+          ? _content(scheme)
+          : ValueListenableBuilder<int>(
+              valueListenable: rev,
+              builder: (_, _, _) => _content(scheme),
+            ),
+    );
+  }
+
+  Widget _content(ColorScheme scheme) {
+    final items = playbackBus.webQueue?.call() ?? const [];
+    final current = playbackBus.webCurrentIndex?.call() ?? -1;
+    final playing = playbackBus.isPlaying?.call() ?? false;
+    final shuffle = playbackBus.webShuffle?.call() ?? false;
+    final repeat = playbackBus.webRepeat?.call() ?? 0;
+    final posMs = playbackBus.currentPositionMs?.call() ?? 0;
+    final durMs = playbackBus.webDurationMs?.call() ?? 0;
+    final title = (playbackBus.currentTitle?.call() ?? '').trim();
+    final frac = durMs > 0 ? (posMs / durMs).clamp(0.0, 1.0) : 0.0;
+    final repeatIcon =
+        repeat == 2 ? Icons.repeat_one_rounded : Icons.repeat_rounded;
+    final maxH = MediaQuery.of(context).size.height * 0.7;
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxH),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Now playing + queue count.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 2, 20, 2),
+            child: Row(
+              children: [
+                Icon(Icons.queue_music_rounded,
+                    size: 20, color: scheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title.isEmpty ? 'Queue (${items.length})' : title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                ),
+                Text('${items.length}',
+                    style: TextStyle(
+                        fontSize: 12, color: scheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          // Seek bar + times.
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 3,
+              activeTrackColor: scheme.primary,
+              inactiveTrackColor: scheme.primary.withValues(alpha: 0.20),
+              thumbColor: scheme.primary,
+              overlayColor: scheme.primary.withValues(alpha: 0.14),
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+            ),
+            child: Slider(
+              value: frac.toDouble(),
+              onChanged: durMs > 0
+                  ? (v) => playbackBus.onSeekFraction?.call(v)
+                  : null,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 22),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(_fmt(posMs),
+                    style: TextStyle(
+                        fontSize: 11, color: scheme.onSurfaceVariant)),
+                Text(durMs > 0 ? _fmt(durMs) : '--:--',
+                    style: TextStyle(
+                        fontSize: 11, color: scheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          // Transport: shuffle · prev · play/pause · next · repeat.
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                tooltip: 'Shuffle',
+                iconSize: 20,
+                color: shuffle ? scheme.primary : scheme.onSurfaceVariant,
+                onPressed: () => playbackBus.onToggleShuffle?.call(),
+                icon: const Icon(Icons.shuffle_rounded),
+              ),
+              const SizedBox(width: 6),
+              IconButton(
+                tooltip: 'Previous',
+                iconSize: 28,
+                color: scheme.onSurface,
+                onPressed: () => playbackBus.onPrev?.call(),
+                icon: const Icon(Icons.skip_previous_rounded),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color.lerp(scheme.primary, Colors.white, 0.22)!,
+                      scheme.primary,
+                      Color.lerp(scheme.primary, Colors.black, 0.14)!,
+                    ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: scheme.primary.withValues(alpha: 0.45),
+                      blurRadius: 14,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+                child: IconButton(
+                  tooltip: playing ? 'Pause' : 'Play',
+                  iconSize: 30,
+                  color: Colors.white,
+                  onPressed: () => playbackBus.onToggle?.call(),
+                  icon: Icon(
+                      playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                ),
+              ),
+              const SizedBox(width: 6),
+              IconButton(
+                tooltip: 'Next',
+                iconSize: 28,
+                color: scheme.onSurface,
+                onPressed: () => playbackBus.onNext?.call(),
+                icon: const Icon(Icons.skip_next_rounded),
+              ),
+              const SizedBox(width: 6),
+              IconButton(
+                tooltip: repeat == 2
+                    ? 'Repeat one'
+                    : repeat == 1
+                        ? 'Repeat all'
+                        : 'Repeat off',
+                iconSize: 20,
+                color: repeat == 0 ? scheme.onSurfaceVariant : scheme.primary,
+                onPressed: () => playbackBus.onToggleRepeat?.call(),
+                icon: Icon(repeatIcon),
+              ),
+            ],
+          ),
+          const Divider(height: 14),
+          // The queue itself — tap a row to jump to it.
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              padding: const EdgeInsets.only(bottom: 8),
+              itemCount: items.length,
+              itemBuilder: (_, i) {
+                final isNow = i == current;
+                return ListTile(
+                  dense: true,
+                  leading: Icon(
+                    isNow
+                        ? Icons.graphic_eq_rounded
+                        : Icons.music_note_rounded,
+                    color:
+                        isNow ? scheme.primary : scheme.onSurfaceVariant,
+                  ),
+                  title: Text(
+                    items[i].title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: isNow ? FontWeight.w700 : FontWeight.w500,
+                      color: isNow ? scheme.primary : null,
+                    ),
+                  ),
+                  onTap: () => playbackBus.webPlayAt?.call(i),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

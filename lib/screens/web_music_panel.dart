@@ -96,6 +96,22 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     playbackBus.webCurrentIndex = () => _index;
     playbackBus.webPlayAt = (i) => _playAt(i);
     playbackBus.webQueueRev = _queueRev;
+    playbackBus.onToggle =
+        () => _player.playing ? _player.pause() : _player.play();
+    playbackBus.onPlay = () => _player.play();
+    playbackBus.onNext = _next;
+    playbackBus.onPrev = _prev;
+    playbackBus.onSeekFraction = (fr) {
+      final d = _player.duration;
+      if (d != null && d.inMilliseconds > 0) {
+        _player.seek(d * fr.clamp(0.0, 1.0));
+      }
+    };
+    playbackBus.webDurationMs = () => _player.duration?.inMilliseconds ?? 0;
+    playbackBus.webShuffle = () => _shuffle;
+    playbackBus.webRepeat = () => _repeat;
+    playbackBus.onToggleShuffle = _toggleShuffle;
+    playbackBus.onToggleRepeat = _toggleRepeat;
   }
 
   void _onPlayerState(PlayerState st) {
@@ -133,6 +149,16 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     playbackBus.webCurrentIndex = null;
     playbackBus.webPlayAt = null;
     playbackBus.webQueueRev = null;
+    playbackBus.onToggle = null;
+    playbackBus.onPlay = null;
+    playbackBus.onNext = null;
+    playbackBus.onPrev = null;
+    playbackBus.onSeekFraction = null;
+    playbackBus.webDurationMs = null;
+    playbackBus.webShuffle = null;
+    playbackBus.webRepeat = null;
+    playbackBus.onToggleShuffle = null;
+    playbackBus.onToggleRepeat = null;
     _queueRev.dispose();
     _player.dispose();
     super.dispose();
@@ -312,8 +338,15 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     }
   }
 
-  void _toggleRepeat() => setState(() => _repeat = (_repeat + 1) % 3);
-  void _toggleShuffle() => setState(() => _shuffle = !_shuffle);
+  void _toggleRepeat() {
+    setState(() => _repeat = (_repeat + 1) % 3);
+    _queueRev.value++;
+  }
+
+  void _toggleShuffle() {
+    setState(() => _shuffle = !_shuffle);
+    _queueRev.value++;
+  }
 
   void _cycleSpeed() {
     final i = _speeds.indexOf(_speed);

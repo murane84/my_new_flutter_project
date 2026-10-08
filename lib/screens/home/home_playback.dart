@@ -46,6 +46,13 @@ class PlaybackBus {
   int Function()? webCurrentIndex;
   void Function(int index)? webPlayAt;
   ValueListenable<int>? webQueueRev;
+  // Web-only transport read-backs so the in-chat queue sheet can host a full
+  // control strip (seek + shuffle/repeat), mirroring the native playlist drawer.
+  int Function()? webDurationMs; // current track duration (0 if unknown)
+  bool Function()? webShuffle;
+  int Function()? webRepeat; // 0 off · 1 all · 2 one
+  VoidCallback? onToggleShuffle;
+  VoidCallback? onToggleRepeat;
   // Toggle "favourite" on the currently-playing track (driven by the bar heart).
   VoidCallback? onToggleFavorite;
   // Share the currently-playing track to a chat (the quick action that used to

@@ -2164,27 +2164,49 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   /// for an unreadable/unsupported source, else the engine's message).
   Future<String?> _openSource(String path, {bool autoplay = true}) async {
     try {
+      // A file that was moved or deleted since it was saved to the playlist
+      // makes the native engine sit in "loading" forever instead of throwing.
+      // Check the file is actually there first (fast-fail -> 'missing' so the
+      // caller can prune + recover), and cap the load with a timeout as a
+      // last-resort guard against any other stuck open.
+      const loadTimeout = Duration(seconds: 15);
       if (_isMobile) {
         if (!_uriMapBuilt || !_uriByPath.containsKey(path)) {
           await _ensureUriMap();
         }
         final uri = _uriByPath[path];
         if (uri != null && uri.isNotEmpty) {
-          await _player.setUrl(uri);
+          await _player.setUrl(uri).timeout(loadTimeout);
         } else {
-          await _player.setFilePath(path);
+          if (!await _fileExists(path)) return 'missing';
+          await _player.setFilePath(path).timeout(loadTimeout);
         }
       } else {
-        await _player.setFilePath(path);
+        if (!await _fileExists(path)) return 'missing';
+        await _player.setFilePath(path).timeout(loadTimeout);
       }
       await _player.setVolume(_muted ? 0 : _volume);
       await _player.setSpeed(_speed);
       if (autoplay) await _player.play();
       return null;
+    } on TimeoutException catch (_) {
+      // Treat a stuck open as unplayable so the UI recovers instead of
+      // spinning; _pruneIfMissing decides whether the file is actually gone.
+      return 'missing';
     } on PlayerException catch (e) {
       return e.message ?? 'format';
     } catch (_) {
       return 'format';
+    }
+  }
+
+  /// Whether [path] still exists on disk. Web has no real files, so assume yes.
+  Future<bool> _fileExists(String path) async {
+    if (kIsWeb) return true;
+    try {
+      return await File(path).exists();
+    } catch (_) {
+      return false;
     }
   }
 
@@ -2245,7 +2267,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   /// is a SINGLE stat, only for the track we actually tried to play — never a
   /// launch-time sweep of the whole saved playlist. Returns true if it pruned.
   bool _pruneIfMissing(String path) {
-    if (kIsWeb || !_isMobile) return false;
+    if (kIsWeb) return false;
     try {
       if (File(path).existsSync()) return false; // exists → a real format error
     } catch (_) {

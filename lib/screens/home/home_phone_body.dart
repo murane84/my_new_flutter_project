@@ -162,7 +162,8 @@ extension _HomePhoneBody on HomePageState {
           const SizedBox(height: 10),
           Expanded(
             child: kIsWeb
-                ? WebMusicPanel(textColor: scheme.onSurface)
+                ? WebMusicPanel(
+                    key: _webMusicPanelKey, textColor: scheme.onSurface)
                 : MusicControls(
                     key: _musicPanelKey, textColor: scheme.onSurface),
           ),

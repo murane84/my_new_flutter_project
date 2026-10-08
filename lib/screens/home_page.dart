@@ -233,6 +233,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // breakpoint. Without a shared key, crossing the breakpoint disposed the
   // playing instance and mounted an empty one ("No track loaded").
   final GlobalKey _musicPanelKey = GlobalKey(debugLabel: 'musicControls');
+  // Same shared-key trick for the web ('lite') player, so squeezing the
+  // window across the mobile breakpoint (or minimising) keeps its loaded queue
+  // instead of disposing it and mounting an empty 'Play music here' panel.
+  final GlobalKey _webMusicPanelKey = GlobalKey(debugLabel: 'webMusicPanel');
   double _musicPanelWidth = 280;
   bool _isMusicFullScreen = false;
   bool _isChatFullScreen = false;
@@ -3126,7 +3130,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
               const SizedBox(height: 10),
               Expanded(
                 child: kIsWeb
-                    ? WebMusicPanel(textColor: scheme.onSurface)
+                    ? WebMusicPanel(
+                        key: _webMusicPanelKey, textColor: scheme.onSurface)
                     : MusicControls(
                         key: _musicPanelKey, textColor: scheme.onSurface),
               ),

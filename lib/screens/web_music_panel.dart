@@ -941,7 +941,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     // A fixed-height stage so the floating volume slider can glow OVER the
     // buttons without shifting the layout.
     return SizedBox(
-      height: 48,
+      height: 54,
       child: Stack(
         alignment: Alignment.center,
         clipBehavior: Clip.none,

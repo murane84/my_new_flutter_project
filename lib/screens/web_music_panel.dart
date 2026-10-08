@@ -903,7 +903,9 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   }
 
   Widget _secondaryRow(ThemeData theme) {
-    final accent = theme.colorScheme.primary;
+    final scheme = theme.colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final accent = scheme.primary;
     IconData repeatIcon;
     switch (_repeat) {
       case _repeatOne:
@@ -914,101 +916,147 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     }
     final speedLabel =
         '${_speed.toStringAsFixed(_speed.truncateToDouble() == _speed ? 0 : 2)}x';
-    return Row(
-      children: [
-        _discBtn(
-          theme,
-          icon: Icons.shuffle_rounded,
-          size: 18,
-          tooltip: 'Shuffle',
-          onTap: _queue.length > 1 ? _toggleShuffle : null,
-          active: _shuffle,
-        ),
-        const SizedBox(width: 8),
-        _discBtn(
-          theme,
-          icon: repeatIcon,
-          size: 18,
-          tooltip: _repeat == _repeatOne
-              ? 'Repeat one'
-              : _repeat == _repeatAll
-                  ? 'Repeat all'
-                  : 'Repeat off',
-          onTap: _toggleRepeat,
-          active: _repeat != _repeatOff,
-        ),
-        const SizedBox(width: 8),
-        // Playback speed — cycles 0.5x … 2x — as a raised 3D pill.
-        _speedPill(theme, speedLabel),
-        const SizedBox(width: 2),
-        // Share "listening now" with friends: tap = on/off, long-press = pick
-        // who sees it. Same control the native player uses, so web users get
-        // the same privacy gating.
-        PresenceShareButton(color: accent, size: 18),
-        const Spacer(),
-        // Volume: a single icon. Tap it to slide out the slider (right→left),
-        // which fades/collapses away on its own after a short idle — so there
-        // is never a second always-on slider competing with the seek bar.
-        // Long-press / second tap behaviour: a plain tap reveals; the mute
-        // toggle lives on the icon only while the slider is hidden.
-        AnimatedSize(
-          duration: const Duration(milliseconds: 240),
-          curve: Curves.easeOutCubic,
-          alignment: Alignment.centerRight,
-          child: _showVolume
-              ? SizedBox(
-                  width: 128,
-                  child: AnimatedOpacity(
-                    opacity: _showVolume ? 1 : 0,
-                    duration: const Duration(milliseconds: 160),
-                    child: SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        trackHeight: 3,
-                        activeTrackColor: accent,
-                        inactiveTrackColor: accent.withValues(alpha: 0.20),
-                        thumbColor: accent,
-                        overlayColor: accent.withValues(alpha: 0.14),
-                        thumbShape:
-                            const RoundSliderThumbShape(enabledThumbRadius: 6),
-                        overlayShape:
-                            const RoundSliderOverlayShape(overlayRadius: 12),
-                      ),
-                      child: Slider(
-                        value: _volume,
-                        onChanged: (v) {
-                          setState(() => _volume = v);
-                          _player.setVolume(v);
-                          _armVolumeHide();
-                        },
-                      ),
+    final volIcon = _volume <= 0
+        ? Icons.volume_off_rounded
+        : _volume < 0.5
+            ? Icons.volume_down_rounded
+            : Icons.volume_up_rounded;
+
+    // A fixed-height stage so the floating volume slider can glow OVER the
+    // buttons without shifting the layout.
+    return SizedBox(
+      height: 48,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          // Base: one evenly-spaced, centered cluster — shuffle · repeat ·
+          // speed · share · volume.
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _discBtn(
+                theme,
+                icon: Icons.shuffle_rounded,
+                size: 18,
+                tooltip: 'Shuffle',
+                onTap: _queue.length > 1 ? _toggleShuffle : null,
+                active: _shuffle,
+              ),
+              const SizedBox(width: 12),
+              _discBtn(
+                theme,
+                icon: repeatIcon,
+                size: 18,
+                tooltip: _repeat == _repeatOne
+                    ? 'Repeat one'
+                    : _repeat == _repeatAll
+                        ? 'Repeat all'
+                        : 'Repeat off',
+                onTap: _toggleRepeat,
+                active: _repeat != _repeatOff,
+              ),
+              const SizedBox(width: 12),
+              _speedPill(theme, speedLabel),
+              const SizedBox(width: 12),
+              // Share "listening now": tap = on/off, long-press = who sees it.
+              PresenceShareButton(color: accent, size: 18),
+              const SizedBox(width: 12),
+              // Volume: tap floats the slider over the buttons; hold = mute.
+              GestureDetector(
+                onLongPress: () {
+                  _toggleMute();
+                  _armVolumeHide();
+                },
+                child: _discBtn(
+                  theme,
+                  icon: volIcon,
+                  size: 18,
+                  tooltip: 'Volume  (hold to mute)',
+                  onTap: _toggleVolume,
+                  active: _showVolume || _volume <= 0,
+                ),
+              ),
+            ],
+          ),
+
+          // Floating volume slider — glows over the cluster when open, then
+          // fades back to the icon. No layout shift, nothing scattered.
+          IgnorePointer(
+            ignoring: !_showVolume,
+            child: AnimatedOpacity(
+              opacity: _showVolume ? 1 : 0,
+              duration: const Duration(milliseconds: 160),
+              child: AnimatedScale(
+                scale: _showVolume ? 1 : 0.86,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutBack,
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 300),
+                  padding: const EdgeInsets.only(left: 4, right: 12),
+                  decoration: BoxDecoration(
+                    color: Color.alphaBlend(
+                      accent.withValues(alpha: isDark ? 0.16 : 0.10),
+                      scheme.surface,
                     ),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: accent.withValues(alpha: 0.38),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.50),
+                        blurRadius: 22,
+                        spreadRadius: 1,
+                      ),
+                    ],
                   ),
-                )
-              : const SizedBox.shrink(),
-        ),
-        // Tap = reveal the slider; long-press = quick mute / unmute.
-        GestureDetector(
-          onLongPress: () {
-            _toggleMute();
-            _armVolumeHide();
-          },
-          child: IconButton(
-            tooltip: _showVolume
-                ? 'Volume  (hold to mute)'
-                : (_volume <= 0 ? 'Unmute' : 'Volume  (hold to mute)'),
-            iconSize: 18,
-            onPressed: _toggleVolume,
-            color: _showVolume ? accent : theme.hintColor,
-            icon: Icon(
-              _volume <= 0
-                  ? Icons.volume_off_rounded
-                  : _volume < 0.5
-                      ? Icons.volume_down_rounded
-                      : Icons.volume_up_rounded,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Tap the icon to collapse back to just the icon.
+                      IconButton(
+                        iconSize: 18,
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Close',
+                        color: accent,
+                        onPressed: _closeVolume,
+                        icon: Icon(volIcon),
+                      ),
+                      SizedBox(
+                        width: 180,
+                        child: SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            trackHeight: 3,
+                            activeTrackColor: accent,
+                            inactiveTrackColor:
+                                accent.withValues(alpha: 0.22),
+                            thumbColor: accent,
+                            overlayColor: accent.withValues(alpha: 0.14),
+                            thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 6),
+                            overlayShape: const RoundSliderOverlayShape(
+                                overlayRadius: 11),
+                          ),
+                          child: Slider(
+                            value: _volume,
+                            onChanged: (v) {
+                              setState(() => _volume = v);
+                              _player.setVolume(v);
+                              _armVolumeHide();
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

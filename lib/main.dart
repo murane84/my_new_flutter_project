@@ -660,7 +660,12 @@ class SplashScreenState extends State<SplashScreen>
     await Future.wait([
       _bootstrapServices()
           .timeout(const Duration(seconds: 8), onTimeout: () {}),
-      Future.delayed(const Duration(milliseconds: 600)),
+      // Hold long enough for the splash entrance animation (logo → wordmark →
+      // "Closer, in harmony" tagline → floating glyphs, ~1.5s) to actually play
+      // out before we navigate on — otherwise, on a fast / biometric-enabled
+      // launch the splash was being replaced by the lock screen in ~0.6s and
+      // the animation was never seen.
+      Future.delayed(const Duration(milliseconds: 1800)),
     ]);
     if (!mounted) return;
     final prefs = await SharedPreferences.getInstance();

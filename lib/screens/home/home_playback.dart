@@ -53,6 +53,8 @@ class PlaybackBus {
   int Function()? webRepeat; // 0 off · 1 all · 2 one
   VoidCallback? onToggleShuffle;
   VoidCallback? onToggleRepeat;
+  VoidCallback? webAddSongs; // open the file picker to add tracks
+  void Function(int index)? webRemoveAt; // drop a track from the queue
   // Toggle "favourite" on the currently-playing track (driven by the bar heart).
   VoidCallback? onToggleFavorite;
   // Share the currently-playing track to a chat (the quick action that used to

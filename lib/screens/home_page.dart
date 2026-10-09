@@ -50,6 +50,8 @@ import '../services/fcm_service.dart';
 import '../services/share_inbox.dart';
 import '../services/contact_names.dart';
 import '../services/metadata_overrides.dart';
+import '../services/track_title.dart' show splitTitleArtist;
+import 'listening_audience_sheet.dart' show PresenceShareButton;
 import '../services/app_busy.dart';
 import '../utils/net_image.dart';
 import 'token_helper.dart';
@@ -4836,19 +4838,25 @@ class _WebQueueSheet extends StatefulWidget {
 
 class _WebQueueSheetState extends State<_WebQueueSheet> {
   Timer? _tick;
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _query = '';
 
   @override
   void initState() {
     super.initState();
-    // Poll position for the seek bar while the sheet is open (cheap).
     _tick = Timer.periodic(const Duration(milliseconds: 400), (_) {
       if (mounted) setState(() {});
+    });
+    _searchCtrl.addListener(() {
+      final q = _searchCtrl.text.trim().toLowerCase();
+      if (q != _query) setState(() => _query = q);
     });
   }
 
   @override
   void dispose() {
     _tick?.cancel();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -4873,183 +4881,294 @@ class _WebQueueSheetState extends State<_WebQueueSheet> {
     );
   }
 
+  Widget _avatar(ColorScheme scheme, bool isNow) {
+    final accent = scheme.primary;
+    final isDark = scheme.brightness == Brightness.dark;
+    const d = 42.0;
+    if (isNow) {
+      return Container(
+        width: d,
+        height: d,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.lerp(accent, Colors.white, 0.22)!,
+              accent,
+              Color.lerp(accent, Colors.black, 0.14)!,
+            ],
+          ),
+          boxShadow: [
+            BoxShadow(
+                color: accent.withValues(alpha: 0.45),
+                blurRadius: 12,
+                spreadRadius: 1),
+          ],
+        ),
+        child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 20),
+      );
+    }
+    return Container(
+      width: d,
+      height: d,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.alphaBlend(
+                accent.withValues(alpha: isDark ? 0.16 : 0.10), scheme.surface),
+            Color.alphaBlend(accent.withValues(alpha: isDark ? 0.26 : 0.18),
+                scheme.surfaceContainerHighest),
+          ],
+        ),
+        border: Border.all(color: accent.withValues(alpha: 0.22)),
+      ),
+      child: Icon(Icons.music_note_rounded,
+          size: 19, color: accent.withValues(alpha: 0.95)),
+    );
+  }
+
   Widget _content(ColorScheme scheme) {
+    final isDark = scheme.brightness == Brightness.dark;
+    final accent = scheme.primary;
     final items = playbackBus.webQueue?.call() ?? const [];
     final current = playbackBus.webCurrentIndex?.call() ?? -1;
     final playing = playbackBus.isPlaying?.call() ?? false;
-    final shuffle = playbackBus.webShuffle?.call() ?? false;
-    final repeat = playbackBus.webRepeat?.call() ?? 0;
     final posMs = playbackBus.currentPositionMs?.call() ?? 0;
     final durMs = playbackBus.webDurationMs?.call() ?? 0;
     final title = (playbackBus.currentTitle?.call() ?? '').trim();
     final frac = durMs > 0 ? (posMs / durMs).clamp(0.0, 1.0) : 0.0;
-    final repeatIcon =
-        repeat == 2 ? Icons.repeat_one_rounded : Icons.repeat_rounded;
-    final maxH = MediaQuery.of(context).size.height * 0.7;
+    final maxH = MediaQuery.of(context).size.height * 0.82;
+
+    final matches = <int>[];
+    for (var i = 0; i < items.length; i++) {
+      if (_query.isEmpty || items[i].title.toLowerCase().contains(_query)) {
+        matches.add(i);
+      }
+    }
 
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: maxH),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Now playing + queue count.
+          // Header — Playlist (N) + add.
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 2, 20, 2),
+            padding: const EdgeInsets.fromLTRB(16, 2, 8, 2),
             child: Row(
               children: [
-                Icon(Icons.queue_music_rounded,
-                    size: 20, color: scheme.primary),
+                Icon(Icons.queue_music_rounded, size: 20, color: accent),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title.isEmpty ? 'Queue (${items.length})' : title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                Text('Playlist (${items.length})',
                     style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 15),
+                        fontWeight: FontWeight.bold, fontSize: 16)),
+                const Spacer(),
+                IconButton(
+                  tooltip: 'Add songs',
+                  iconSize: 22,
+                  color: accent,
+                  onPressed: () => playbackBus.webAddSongs?.call(),
+                  icon: const Icon(Icons.add_rounded),
+                ),
+              ],
+            ),
+          ),
+          // Search.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+            child: TextField(
+              controller: _searchCtrl,
+              style: const TextStyle(fontSize: 14),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Search tracks…',
+                prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                filled: true,
+                fillColor:
+                    scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
+          // List.
+          Flexible(
+            child: matches.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                        items.isEmpty ? 'No songs loaded' : 'No matches',
+                        style: TextStyle(color: scheme.onSurfaceVariant)),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.only(top: 2),
+                    itemCount: matches.length,
+                    itemBuilder: (_, k) {
+                      final i = matches[k];
+                      final isNow = i == current;
+                      final ta = splitTitleArtist(items[i].title);
+                      return ListTile(
+                        dense: true,
+                        leading: _avatar(scheme, isNow),
+                        title: Text(
+                          ta.$1,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: isNow ? FontWeight.w700 : FontWeight.w600,
+                            color: isNow ? accent : null,
+                          ),
+                        ),
+                        subtitle: (ta.$2 != null && ta.$2!.isNotEmpty)
+                            ? Text(
+                                ta.$2!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isNow
+                                      ? accent.withValues(alpha: 0.75)
+                                      : scheme.onSurfaceVariant,
+                                ),
+                              )
+                            : null,
+                        onTap: () => playbackBus.webPlayAt?.call(i),
+                        trailing: PopupMenuButton<String>(
+                          tooltip: 'More',
+                          icon: Icon(Icons.more_vert_rounded,
+                              color: scheme.onSurfaceVariant),
+                          onSelected: (v) {
+                            if (v == 'play') {
+                              playbackBus.webPlayAt?.call(i);
+                            } else if (v == 'remove') {
+                              playbackBus.webRemoveAt?.call(i);
+                            }
+                          },
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                              value: 'play',
+                              child: Row(children: [
+                                Icon(Icons.play_arrow_rounded, size: 20),
+                                SizedBox(width: 10),
+                                Text('Play'),
+                              ]),
+                            ),
+                            PopupMenuItem(
+                              value: 'remove',
+                              child: Row(children: [
+                                Icon(Icons.close_rounded, size: 20),
+                                SizedBox(width: 10),
+                                Text('Remove from queue'),
+                              ]),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.5)),
+          // Now-playing bar — seek + mini art + title + share + prev/play/next.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 3,
+                    activeTrackColor: accent,
+                    inactiveTrackColor: accent.withValues(alpha: 0.20),
+                    thumbColor: accent,
+                    overlayColor: accent.withValues(alpha: 0.14),
+                    thumbShape:
+                        const RoundSliderThumbShape(enabledThumbRadius: 5),
+                    overlayShape:
+                        const RoundSliderOverlayShape(overlayRadius: 10),
+                  ),
+                  child: Slider(
+                    value: frac.toDouble(),
+                    onChanged: durMs > 0
+                        ? (v) => playbackBus.onSeekFraction?.call(v)
+                        : null,
                   ),
                 ),
-                Text('${items.length}',
-                    style: TextStyle(
-                        fontSize: 12, color: scheme.onSurfaceVariant)),
-              ],
-            ),
-          ),
-          // Seek bar + times.
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 3,
-              activeTrackColor: scheme.primary,
-              inactiveTrackColor: scheme.primary.withValues(alpha: 0.20),
-              thumbColor: scheme.primary,
-              overlayColor: scheme.primary.withValues(alpha: 0.14),
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-            ),
-            child: Slider(
-              value: frac.toDouble(),
-              onChanged: durMs > 0
-                  ? (v) => playbackBus.onSeekFraction?.call(v)
-                  : null,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 22),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(_fmt(posMs),
-                    style: TextStyle(
-                        fontSize: 11, color: scheme.onSurfaceVariant)),
-                Text(durMs > 0 ? _fmt(durMs) : '--:--',
-                    style: TextStyle(
-                        fontSize: 11, color: scheme.onSurfaceVariant)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
-          // Transport: shuffle · prev · play/pause · next · repeat.
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                tooltip: 'Shuffle',
-                iconSize: 20,
-                color: shuffle ? scheme.primary : scheme.onSurfaceVariant,
-                onPressed: () => playbackBus.onToggleShuffle?.call(),
-                icon: const Icon(Icons.shuffle_rounded),
-              ),
-              const SizedBox(width: 6),
-              IconButton(
-                tooltip: 'Previous',
-                iconSize: 28,
-                color: scheme.onSurface,
-                onPressed: () => playbackBus.onPrev?.call(),
-                icon: const Icon(Icons.skip_previous_rounded),
-              ),
-              const SizedBox(width: 6),
-              Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color.lerp(scheme.primary, Colors.white, 0.22)!,
-                      scheme.primary,
-                      Color.lerp(scheme.primary, Colors.black, 0.14)!,
-                    ],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: scheme.primary.withValues(alpha: 0.45),
-                      blurRadius: 14,
-                      spreadRadius: 1,
+                Row(
+                  children: [
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            title.isEmpty ? 'Nothing playing' : title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w700),
+                          ),
+                          Text(
+                            '${_fmt(posMs)}  /  ${durMs > 0 ? _fmt(durMs) : "--:--"}',
+                            style: TextStyle(
+                                fontSize: 11, color: scheme.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PresenceShareButton(color: accent, size: 18),
+                    IconButton(
+                      iconSize: 26,
+                      color: scheme.onSurface,
+                      onPressed: () => playbackBus.onPrev?.call(),
+                      icon: const Icon(Icons.skip_previous_rounded),
+                    ),
+                    Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Color.lerp(accent, Colors.white, 0.22)!,
+                            accent,
+                            Color.lerp(accent, Colors.black, 0.14)!,
+                          ],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                              color: accent.withValues(alpha: 0.45),
+                              blurRadius: 12,
+                              spreadRadius: 1),
+                        ],
+                      ),
+                      child: IconButton(
+                        iconSize: 26,
+                        color: Colors.white,
+                        onPressed: () => playbackBus.onToggle?.call(),
+                        icon: Icon(playing
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded),
+                      ),
+                    ),
+                    IconButton(
+                      iconSize: 26,
+                      color: scheme.onSurface,
+                      onPressed: () => playbackBus.onNext?.call(),
+                      icon: const Icon(Icons.skip_next_rounded),
                     ),
                   ],
                 ),
-                child: IconButton(
-                  tooltip: playing ? 'Pause' : 'Play',
-                  iconSize: 30,
-                  color: Colors.white,
-                  onPressed: () => playbackBus.onToggle?.call(),
-                  icon: Icon(
-                      playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                ),
-              ),
-              const SizedBox(width: 6),
-              IconButton(
-                tooltip: 'Next',
-                iconSize: 28,
-                color: scheme.onSurface,
-                onPressed: () => playbackBus.onNext?.call(),
-                icon: const Icon(Icons.skip_next_rounded),
-              ),
-              const SizedBox(width: 6),
-              IconButton(
-                tooltip: repeat == 2
-                    ? 'Repeat one'
-                    : repeat == 1
-                        ? 'Repeat all'
-                        : 'Repeat off',
-                iconSize: 20,
-                color: repeat == 0 ? scheme.onSurfaceVariant : scheme.primary,
-                onPressed: () => playbackBus.onToggleRepeat?.call(),
-                icon: Icon(repeatIcon),
-              ),
-            ],
-          ),
-          const Divider(height: 14),
-          // The queue itself — tap a row to jump to it.
-          Flexible(
-            child: ListView.builder(
-              shrinkWrap: true,
-              padding: const EdgeInsets.only(bottom: 8),
-              itemCount: items.length,
-              itemBuilder: (_, i) {
-                final isNow = i == current;
-                return ListTile(
-                  dense: true,
-                  leading: Icon(
-                    isNow
-                        ? Icons.graphic_eq_rounded
-                        : Icons.music_note_rounded,
-                    color:
-                        isNow ? scheme.primary : scheme.onSurfaceVariant,
-                  ),
-                  title: Text(
-                    items[i].title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: isNow ? FontWeight.w700 : FontWeight.w500,
-                      color: isNow ? scheme.primary : null,
-                    ),
-                  ),
-                  onTap: () => playbackBus.webPlayAt?.call(i),
-                );
-              },
+              ],
             ),
           ),
         ],

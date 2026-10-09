@@ -138,7 +138,7 @@ class AuthPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Music & Chat — together',
+                        'Closer, in harmony',
                         style: TextStyle(
                           color: subColor,
                           fontSize: 15,

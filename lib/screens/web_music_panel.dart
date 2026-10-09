@@ -214,11 +214,14 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   /// Load every audio file in a chosen folder (web folder picker). Entries load
   /// their bytes lazily, so a large library is cheap to list.
   Future<void> _openFolder() async {
+    // Don't flip _loading until AFTER the (possibly long) picker resolves —
+    // otherwise an open/slow chooser would leave the panel "loading", which
+    // disables the Queue add/folder buttons.
+    final startEmpty = _queue.isEmpty;
+    final entries = await pickMusicFolder();
+    if (entries.isEmpty) return;
     setState(() => _loading = true);
     try {
-      final startEmpty = _queue.isEmpty;
-      final entries = await pickMusicFolder();
-      if (entries.isEmpty) return;
       for (final e in entries) {
         _queue.add(_WebTrack(e.name, e.load));
         _queueRev.value++;

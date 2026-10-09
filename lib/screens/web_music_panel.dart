@@ -115,6 +115,8 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     playbackBus.webRepeat = () => _repeat;
     playbackBus.onToggleShuffle = _toggleShuffle;
     playbackBus.onToggleRepeat = _toggleRepeat;
+    playbackBus.webAddSongs = () => _openFiles();
+    playbackBus.webRemoveAt = _removeAt;
   }
 
   void _onPlayerState(PlayerState st) {
@@ -163,6 +165,8 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     playbackBus.webRepeat = null;
     playbackBus.onToggleShuffle = null;
     playbackBus.onToggleRepeat = null;
+    playbackBus.webAddSongs = null;
+    playbackBus.webRemoveAt = null;
     _queueRev.dispose();
     _player.dispose();
     super.dispose();

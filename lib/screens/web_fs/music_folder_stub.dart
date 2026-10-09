@@ -7,3 +7,5 @@ export 'music_folder_types.dart';
 const bool folderPickSupported = false;
 
 Future<List<WebAudioEntry>> pickMusicFolder() async => const <WebAudioEntry>[];
+
+Future<List<WebAudioEntry>> pickMusicFiles() async => const <WebAudioEntry>[];

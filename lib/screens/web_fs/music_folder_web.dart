@@ -53,6 +53,39 @@ Future<List<WebAudioEntry>> pickMusicFolder() {
   return completer.future;
 }
 
+/// A plain multi-FILE audio picker (no folder): a reliable multi-select on
+/// mobile web, where file_picker's allowMultiple is flaky. Bytes load lazily.
+Future<List<WebAudioEntry>> pickMusicFiles() {
+  final input = html.FileUploadInputElement()
+    ..multiple = true
+    ..accept = 'audio/*';
+
+  final completer = Completer<List<WebAudioEntry>>();
+  StreamSubscription<html.Event>? focusSub;
+  void finish(List<WebAudioEntry> v) {
+    if (!completer.isCompleted) completer.complete(v);
+    focusSub?.cancel();
+  }
+
+  input.onChange.listen((_) {
+    final files = input.files ?? const <html.File>[];
+    final out = <WebAudioEntry>[];
+    for (final f in files) {
+      out.add(WebAudioEntry(f.name, () => _read(f)));
+    }
+    finish(out);
+  });
+
+  // Cancel detection: a cancelled dialog fires no change event.
+  focusSub = html.window.onFocus.listen((_) {
+    Future.delayed(const Duration(milliseconds: 700),
+        () => finish(const <WebAudioEntry>[]));
+  });
+
+  input.click();
+  return completer.future;
+}
+
 Future<Uint8List> _read(html.File f) {
   final reader = html.FileReader();
   final c = Completer<Uint8List>();

@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -187,20 +186,17 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   }
 
   Future<void> _openFiles() async {
-    // Multi-select (allowMultiple) so a phone/web user can grab many songs at
-    // once, like the desktop picker — without it the browser input is single.
-    final result = await FilePicker.pickFiles(
-      allowMultiple: true, // ignore: deprecated_member_use
-      type: FileType.custom,
-      allowedExtensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'],
-    );
-    if (result == null || result.files.isEmpty) return;
+    // Use a raw web <input multiple accept="audio/*"> (via the web_fs helper)
+    // rather than file_picker — on mobile browsers file_picker's allowMultiple
+    // is unreliable and limits you to one song, while the native input reliably
+    // multi-selects. Bytes load lazily per track.
+    final picked = await pickMusicFiles();
+    if (picked.isEmpty) return;
     setState(() => _loading = true);
     try {
       final startEmpty = _queue.isEmpty;
-      for (final f in result.files) {
-        final bytes = await f.readAsBytes();
-        _queue.add(_WebTrack(f.name, () async => bytes));
+      for (final e in picked) {
+        _queue.add(_WebTrack(e.name, e.load));
         _queueRev.value++;
       }
       if (!mounted) return;

@@ -943,14 +943,19 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final shared = widget.initialSharePaths;
     if (shared != null && shared.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _consumeSharedImages(shared);
+        _consumeSharedMedia(shared);
       });
     }
   }
 
-  /// Send each shared-in image through the normal preview → caption → upload
-  /// path (works for both DMs and groups). Called once, from initState.
-  Future<void> _consumeSharedImages(List<String> paths) async {
+  /// Send each shared-in file (works for both DMs and groups). Images go
+  /// through the preview → caption → upload path; videos go straight through the
+  /// video upload path (compressing big clips), mirroring the in-chat pickers.
+  /// Called once, from initState.
+  static const _videoExts = {
+    'mp4', 'mov', 'm4v', 'webm', 'mkv', '3gp', 'avi', 'ts'
+  };
+  Future<void> _consumeSharedMedia(List<String> paths) async {
     // Tell the host to drop these now so a later rebuild can't re-send them.
     widget.onShareConsumed?.call();
     for (final p in paths) {
@@ -961,12 +966,78 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         final bytes = await file.readAsBytes();
         if (bytes.isEmpty || !mounted) continue;
         final name = p.split(Platform.pathSeparator).last;
-        await _previewAndSendImage(
-            bytes, name.isNotEmpty ? name : 'shared.jpg', 'image/jpeg');
+        final ext =
+            name.contains('.') ? name.split('.').last.toLowerCase() : '';
+        const imgExts = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic'};
+        if (_videoExts.contains(ext)) {
+          await _sendSharedVideo(
+              bytes, name.isNotEmpty ? name : 'shared.mp4', ext, p);
+        } else if (imgExts.contains(ext)) {
+          await _previewAndSendImage(
+              bytes, name.isNotEmpty ? name : 'shared.jpg', 'image/jpeg');
+        } else {
+          // Any other file (pdf, audio, apk, doc, zip …) — send as a document.
+          await _uploadAndSend(
+            bytes: bytes,
+            filename: name.isNotEmpty ? name : 'shared_file',
+            mime: _mimeForExt(ext),
+            type: 'file',
+            ephemeral: bytes.length > 15 * 1024 * 1024,
+          );
+        }
       } catch (_) {
         /* skip a bad path, continue with the rest */
       }
     }
+  }
+
+  /// Send a shared-in video: compress a big clip on-device, enforce the cap,
+  /// then upload (same flow as the in-chat video picker).
+  Future<void> _sendSharedVideo(
+      List<int> bytes, String filename, String ext, String path) async {
+    String mime = ext == 'mov'
+        ? 'video/quicktime'
+        : (ext == 'webm' ? 'video/webm' : 'video/mp4');
+    const cap = 200 * 1024 * 1024;
+    const compressAbove = 12 * 1024 * 1024;
+    if (!kIsWeb && _isMobile && bytes.length > compressAbove) {
+      if (mounted) showToast(context, 'Compressing video…');
+      try {
+        final info = await VideoCompress.compressVideo(
+          path,
+          quality: VideoQuality.MediumQuality,
+          deleteOrigin: false,
+          includeAudio: true,
+        );
+        final cf = info?.file;
+        if (cf != null) {
+          final cb = await cf.readAsBytes();
+          if (cb.isNotEmpty && cb.length < bytes.length) {
+            bytes = cb;
+            mime = 'video/mp4';
+            final dot = filename.lastIndexOf('.');
+            filename =
+                '${dot > 0 ? filename.substring(0, dot) : filename}.mp4';
+          }
+        }
+      } catch (_) {/* keep the original bytes on any failure */}
+    }
+    if (bytes.length > cap) {
+      if (mounted) {
+        showToast(context, 'Video is too large to send (max 200 MB).',
+            type: ToastType.error);
+      }
+      return;
+    }
+    await _uploadAndSend(
+        bytes: bytes,
+        filename: filename,
+        mime: mime,
+        type: 'video',
+        ephemeral: bytes.length > 15 * 1024 * 1024);
+    try {
+      await VideoCompress.deleteAllCache();
+    } catch (_) {}
   }
 
   void _onConnStatusChanged() {

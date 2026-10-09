@@ -52,12 +52,15 @@ void _listenForSharedMedia() {
   if (!_shareIntakeSupported) return;
   try {
     ReceiveSharingIntent.instance.getMediaStream().listen((files) {
-      final imgs = files
-          .where((f) => f.type == SharedMediaType.image)
+      final media = files
+          .where((f) =>
+              f.type == SharedMediaType.image ||
+              f.type == SharedMediaType.video ||
+              f.type == SharedMediaType.file)
           .map((f) => f.path)
           .toList();
-      if (imgs.isEmpty) return;
-      ShareInbox.instance.add(imgs);
+      if (media.isEmpty) return;
+      ShareInbox.instance.add(media);
       // Surface the friend list (with its "tap a contact to send" banner) in
       // case the share arrived while the user was in a chat or sub-screen.
       navigatorKey.currentState?.popUntil((r) => r.isFirst);
@@ -72,12 +75,15 @@ Future<void> consumeInitialSharedMedia() async {
   if (!_shareIntakeSupported) return;
   try {
     final files = await ReceiveSharingIntent.instance.getInitialMedia();
-    final imgs = files
-        .where((f) => f.type == SharedMediaType.image)
+    final media = files
+        .where((f) =>
+            f.type == SharedMediaType.image ||
+            f.type == SharedMediaType.video ||
+            f.type == SharedMediaType.file)
         .map((f) => f.path)
         .toList();
-    if (imgs.isNotEmpty) {
-      ShareInbox.instance.add(imgs);
+    if (media.isNotEmpty) {
+      ShareInbox.instance.add(media);
       ReceiveSharingIntent.instance.reset();
     }
   } catch (_) {/* platform without the plugin */}
@@ -548,14 +554,18 @@ class SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Image.asset(
-              'assets/images/logo.png',
-              width: 120,
-              height: 120,
-              errorBuilder: (_, _, _) => Icon(
-                Icons.forum_rounded,
-                size: 72,
-                color: scheme.primary,
+            // Rounded (squircle) logo instead of hard square corners.
+            ClipRRect(
+              borderRadius: BorderRadius.circular(28),
+              child: Image.asset(
+                'assets/images/logo.png',
+                width: 120,
+                height: 120,
+                errorBuilder: (_, _, _) => Icon(
+                  Icons.forum_rounded,
+                  size: 72,
+                  color: scheme.primary,
+                ),
               ),
             ),
             const SizedBox(height: 16),

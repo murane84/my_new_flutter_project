@@ -583,11 +583,11 @@ extension _HomeFriendListView on HomePageState {
     final spaceId = (space['id'] as num?)?.toInt();
     return Padding(
       key: spaceId == null ? null : _spaceTileKey(spaceId),
-      padding: const EdgeInsets.only(top: 4, bottom: 8),
+      padding: const EdgeInsets.only(top: 6, bottom: 14),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(22),
           onTapDown: (d) {
             _spaceOpenOrigin = d.globalPosition;
             _spaceOpenOriginId = spaceId;
@@ -595,9 +595,9 @@ extension _HomeFriendListView on HomePageState {
           onTap: () => _openSpace(space),
           onLongPress: () => _showSpaceManageSheet(space),
           child: Container(
-            padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+            padding: const EdgeInsets.fromLTRB(18, 20, 16, 20),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(22),
               // Glossy 3D gradient: a light sheen top-left, the accent through
               // the middle, deep shade bottom-right — reads as a raised surface.
               gradient: LinearGradient(
@@ -631,8 +631,8 @@ extension _HomeFriendListView on HomePageState {
             child: Row(
               children: [
                 _heroOverlapAvatars(
-                    otherName, otherAvatar, 21, someoneListening),
-                const SizedBox(width: 14),
+                    otherName, otherAvatar, 24, someoneListening),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -647,8 +647,8 @@ extension _HomeFriendListView on HomePageState {
                           Text(
                             'OUR SPACE',
                             style: TextStyle(
-                              fontSize: 9,
-                              letterSpacing: 1.3,
+                              fontSize: 10,
+                              letterSpacing: 1.5,
                               fontWeight: FontWeight.w800,
                               color: Colors.white.withValues(alpha: 0.85),
                             ),
@@ -659,26 +659,27 @@ extension _HomeFriendListView on HomePageState {
                           ],
                         ],
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 7),
                       Text(
                         title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 17,
+                          fontSize: 20,
                           fontWeight: FontWeight.w800,
+                          letterSpacing: 0.2,
                         ),
                       ),
                       if (meta.isNotEmpty) ...[
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 5),
                         Text(
                           meta,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.9),
-                            fontSize: 11.5,
+                            color: Colors.white.withValues(alpha: 0.92),
+                            fontSize: 12.5,
                           ),
                         ),
                       ],
@@ -815,7 +816,7 @@ extension _HomeFriendListView on HomePageState {
   /// The white "Enter" pill on the hero (the whole card is tappable; this is the
   /// clear call-to-action).
   Widget _heroEnterButton(Color accent) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             begin: Alignment.topCenter,

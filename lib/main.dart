@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
@@ -497,6 +498,26 @@ class SplashScreen extends StatefulWidget {
   SplashScreenState createState() => SplashScreenState();
 }
 
+/// A decorative glyph that drifts/twinkles around the splash tagline.
+class _SplashGlyph {
+  const _SplashGlyph(
+    this.icon,
+    this.align,
+    this.size,
+    this.color,
+    this.phase,
+    this.bob,
+    this.drift,
+  );
+  final IconData icon;
+  final Alignment align;
+  final double size;
+  final Color color;
+  final double phase; // 0..1 offset into the loop
+  final double bob; // vertical travel (px)
+  final double drift; // horizontal travel (px)
+}
+
 class SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
   // Staggered entrance (logo → wordmark → tagline → spinner) + a gentle,
@@ -505,6 +526,9 @@ class SplashScreenState extends State<SplashScreen>
       vsync: this, duration: const Duration(milliseconds: 1500));
   late final AnimationController _pulse = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 2200));
+  // Continuous (non-reversing) loop that drives the floating glyph field.
+  late final AnimationController _float = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 7000));
   late final Animation<double> _logoAnim = CurvedAnimation(
       parent: _entrance,
       curve: const Interval(0.0, 0.55, curve: Curves.easeOutBack));
@@ -534,6 +558,79 @@ class SplashScreenState extends State<SplashScreen>
     );
   }
 
+  // One floating glyph: gentle bob + sideways drift + soft twinkle, faded in
+  // with the tagline's entrance so it never pops before the words arrive.
+  Widget _floatingGlyph(_SplashGlyph g) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_float, _taglineAnim]),
+      builder: (_, __) {
+        final ang = (_float.value + g.phase) * 2 * math.pi;
+        final dy = math.sin(ang) * g.bob;
+        final dx = math.cos(ang * 0.8) * g.drift;
+        final twinkle =
+            0.42 + 0.42 * (0.5 + 0.5 * math.sin(ang * 1.3 + g.phase * 6));
+        final entrance = _taglineAnim.value.clamp(0.0, 1.0);
+        return Align(
+          alignment: g.align,
+          child: Transform.translate(
+            offset: Offset(dx, dy),
+            child: Opacity(
+              opacity: (twinkle * entrance).clamp(0.0, 1.0),
+              child: Icon(g.icon, size: g.size, color: g.color),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // The tagline, wrapped in a field of stars / music notes / hearts that
+  // float around the words.
+  Widget _taglineWithGlyphs(ColorScheme scheme) {
+    final primary = scheme.primary;
+    const soft = Color(0xE6FFFFFF); // white @ ~90%
+    final glyphs = <_SplashGlyph>[
+      _SplashGlyph(Icons.star_rounded, const Alignment(-0.92, -1.3), 13,
+          primary, 0.00, 5, 3),
+      _SplashGlyph(Icons.music_note_rounded, const Alignment(0.86, -1.5), 16,
+          soft, 0.33, 6, 2),
+      _SplashGlyph(Icons.favorite_rounded, const Alignment(0.72, 1.35), 13,
+          primary, 0.58, 5, 3),
+      _SplashGlyph(Icons.star_rounded, const Alignment(-0.78, 1.45), 10, soft,
+          0.80, 4, 2),
+      _SplashGlyph(Icons.music_note_rounded, const Alignment(-1.28, 0.1), 12,
+          primary, 0.18, 5, 2),
+      _SplashGlyph(Icons.favorite_rounded, const Alignment(1.30, 0.2), 11, soft,
+          0.48, 5, 2),
+      _SplashGlyph(Icons.star_rounded, const Alignment(0.04, -1.7), 9, soft,
+          0.66, 4, 2),
+    ];
+    return SizedBox(
+      width: 300,
+      height: 74,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          for (final g in glyphs) _floatingGlyph(g),
+          _rise(
+            _taglineAnim,
+            12,
+            Text(
+              'Closer, in harmony',
+              style: TextStyle(
+                fontSize: 14.5,
+                color: Colors.white.withValues(alpha: 0.82),
+                letterSpacing: 1.4,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -547,6 +644,7 @@ class SplashScreenState extends State<SplashScreen>
     _checkLoginStatus();
     _entrance.forward();
     _pulse.repeat(reverse: true);
+    _float.repeat();
   }
 
   Future<void> _checkLoginStatus() async {
@@ -583,6 +681,7 @@ class SplashScreenState extends State<SplashScreen>
   void dispose() {
     _entrance.dispose();
     _pulse.dispose();
+    _float.dispose();
     super.dispose();
   }
 
@@ -654,21 +753,9 @@ class SplashScreenState extends State<SplashScreen>
                 ),
               ),
             ),
-            const SizedBox(height: 8),
-            _rise(
-              _taglineAnim,
-              12,
-              Text(
-                'Closer, in harmony',
-                style: TextStyle(
-                  fontSize: 14.5,
-                  color: Colors.white.withValues(alpha: 0.82),
-                  letterSpacing: 1.4,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ),
-            const SizedBox(height: 34),
+            const SizedBox(height: 10),
+            _taglineWithGlyphs(scheme),
+            const SizedBox(height: 30),
             FadeTransition(
               opacity: _spinAnim,
               child: SizedBox(

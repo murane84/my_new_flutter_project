@@ -4933,7 +4933,6 @@ class _WebQueueSheetState extends State<_WebQueueSheet> {
   }
 
   Widget _content(ColorScheme scheme) {
-    final isDark = scheme.brightness == Brightness.dark;
     final accent = scheme.primary;
     final items = playbackBus.webQueue?.call() ?? const [];
     final current = playbackBus.webCurrentIndex?.call() ?? -1;

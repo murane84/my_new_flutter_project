@@ -497,7 +497,43 @@ class SplashScreen extends StatefulWidget {
   SplashScreenState createState() => SplashScreenState();
 }
 
-class SplashScreenState extends State<SplashScreen> {
+class SplashScreenState extends State<SplashScreen>
+    with TickerProviderStateMixin {
+  // Staggered entrance (logo → wordmark → tagline → spinner) + a gentle,
+  // continuous brand-glow pulse behind the logo.
+  late final AnimationController _entrance = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1500));
+  late final AnimationController _pulse = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 2200));
+  late final Animation<double> _logoAnim = CurvedAnimation(
+      parent: _entrance,
+      curve: const Interval(0.0, 0.55, curve: Curves.easeOutBack));
+  late final Animation<double> _titleAnim = CurvedAnimation(
+      parent: _entrance,
+      curve: const Interval(0.28, 0.68, curve: Curves.easeOut));
+  late final Animation<double> _taglineAnim = CurvedAnimation(
+      parent: _entrance,
+      curve: const Interval(0.5, 0.92, curve: Curves.easeOut));
+  late final Animation<double> _spinAnim = CurvedAnimation(
+      parent: _entrance,
+      curve: const Interval(0.78, 1.0, curve: Curves.easeOut));
+
+  // Fade + rise-up entrance for a widget, driven by [a].
+  Widget _rise(Animation<double> a, double dy, Widget child) {
+    return AnimatedBuilder(
+      animation: a,
+      builder: (_, c) {
+        final v = a.value.clamp(0.0, 1.0);
+        return Opacity(
+          opacity: v,
+          child:
+              Transform.translate(offset: Offset(0, (1 - v) * dy), child: c),
+        );
+      },
+      child: child,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -509,6 +545,8 @@ class SplashScreenState extends State<SplashScreen> {
       if (ctx != null) showToast(ctx, message, type: ToastType.info);
     };
     _checkLoginStatus();
+    _entrance.forward();
+    _pulse.repeat(reverse: true);
   }
 
   Future<void> _checkLoginStatus() async {
@@ -542,6 +580,13 @@ class SplashScreenState extends State<SplashScreen> {
   }
 
   @override
+  void dispose() {
+    _entrance.dispose();
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     // Splash is a pre-login brand surface → always brand red (accent-free),
     // in both light and dark modes.
@@ -554,37 +599,85 @@ class SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Rounded (squircle) logo instead of hard square corners.
-            ClipRRect(
-              borderRadius: BorderRadius.circular(28),
-              child: Image.asset(
-                'assets/images/logo.png',
-                width: 120,
-                height: 120,
-                errorBuilder: (_, _, _) => Icon(
-                  Icons.forum_rounded,
-                  size: 72,
-                  color: scheme.primary,
+            // Rounded (squircle) logo — scales in with a bouncy overshoot and a
+            // soft, continuously pulsing brand glow.
+            AnimatedBuilder(
+              animation: Listenable.merge([_logoAnim, _pulse]),
+              builder: (_, child) {
+                final v = _logoAnim.value;
+                final glow = 0.22 + _pulse.value * 0.38;
+                return Opacity(
+                  opacity: v.clamp(0.0, 1.0),
+                  child: Transform.scale(
+                    scale: 0.82 + 0.18 * v,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(28),
+                        boxShadow: [
+                          BoxShadow(
+                            color: scheme.primary.withValues(alpha: glow),
+                            blurRadius: 44,
+                            spreadRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: child,
+                    ),
+                  ),
+                );
+              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: Image.asset(
+                  'assets/images/logo.png',
+                  width: 120,
+                  height: 120,
+                  errorBuilder: (_, _, _) => Icon(
+                    Icons.forum_rounded,
+                    size: 72,
+                    color: scheme.primary,
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            Text(
-              'Aluta',
-              style: TextStyle(
-                fontSize: 36,
-                fontWeight: FontWeight.bold,
-                color: scheme.primary,
-                letterSpacing: 2,
+            const SizedBox(height: 18),
+            _rise(
+              _titleAnim,
+              14,
+              Text(
+                'Aluta',
+                style: TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                  color: scheme.primary,
+                  letterSpacing: 2,
+                ),
               ),
             ),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: 32,
-              height: 32,
-              child: CircularProgressIndicator(
-                strokeWidth: 3,
-                color: scheme.primary,
+            const SizedBox(height: 8),
+            _rise(
+              _taglineAnim,
+              12,
+              Text(
+                'Closer, in harmony',
+                style: TextStyle(
+                  fontSize: 14.5,
+                  color: Colors.white.withValues(alpha: 0.82),
+                  letterSpacing: 1.4,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+            const SizedBox(height: 34),
+            FadeTransition(
+              opacity: _spinAnim,
+              child: SizedBox(
+                width: 30,
+                height: 30,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  color: scheme.primary,
+                ),
               ),
             ),
           ],

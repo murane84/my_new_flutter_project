@@ -187,9 +187,10 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   }
 
   Future<void> _openFiles() async {
-    // file_picker 12: pickFiles is multi-select by default (pickFile is single),
-    // so no allowMultiple flag is needed.
+    // Multi-select (allowMultiple) so a phone/web user can grab many songs at
+    // once, like the desktop picker — without it the browser input is single.
     final result = await FilePicker.pickFiles(
+      allowMultiple: true, // ignore: deprecated_member_use
       type: FileType.custom,
       allowedExtensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'],
     );

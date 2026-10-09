@@ -563,7 +563,7 @@ class SplashScreenState extends State<SplashScreen>
   Widget _floatingGlyph(_SplashGlyph g) {
     return AnimatedBuilder(
       animation: Listenable.merge([_float, _taglineAnim]),
-      builder: (_, __) {
+      builder: (_, _) {
         final ang = (_float.value + g.phase) * 2 * math.pi;
         final dy = math.sin(ang) * g.bob;
         final dx = math.cos(ang * 0.8) * g.drift;

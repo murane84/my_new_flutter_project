@@ -1124,7 +1124,7 @@ extension _HomeFriendListView on HomePageState {
       ),
       child: Row(
         children: [
-          Icon(Icons.photo_library_rounded,
+          Icon(Icons.ios_share_rounded,
               size: 20, color: scheme.onPrimaryContainer),
           const SizedBox(width: 10),
           Expanded(
@@ -1132,7 +1132,7 @@ extension _HomeFriendListView on HomePageState {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  n > 1 ? 'Sharing $n photos' : 'Sharing a photo',
+                  n > 1 ? 'Sharing $n files' : 'Sharing a file',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 13,

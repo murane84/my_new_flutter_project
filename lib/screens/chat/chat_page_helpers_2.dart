@@ -611,7 +611,9 @@ extension _ChatPageHelpers2 on _ChatPageState {
     if (p != null &&
         p < 0.90 &&
         prev != null &&
-        (p - prev).abs() < 0.01) return;
+        (p - prev).abs() < 0.01) {
+      return;
+    }
     rebuildWith(() => _messages[idx]['__upProgress'] = p);
   }
 

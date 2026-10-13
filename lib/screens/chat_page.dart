@@ -57,6 +57,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'chat/formatted_text.dart';
 import 'chat/heart_message.dart';
+import '../services/keystroke_sounds.dart';
 import 'package:float_column/float_column.dart';
 import 'package:linkify/linkify.dart' show linkify;
 import 'package:geolocator/geolocator.dart';
@@ -355,6 +356,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _initChat();
     _loadMySpaces();
     _loadSavedMediaKeys();
+    KeystrokeSounds.instance.init();
 
     _statusTimer = Timer.periodic(
       const Duration(seconds: 10),
@@ -1087,6 +1089,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   // ── Typing indicator ──────────────────────────────────────────────────────
 
   void _onTextChanged() {
+    if (!_applyingListEdit) {
+      // Optional subtle typing feedback (off by default; Appearance setting).
+      final len = _ctrl.text.length;
+      if (len > _lastComposerText.length) {
+        KeystrokeSounds.instance.playType();
+      } else if (len < _lastComposerText.length) {
+        KeystrokeSounds.instance.playDelete();
+      }
+    }
     if (!_applyingListEdit) _maybeContinueList();
     if (!_applyingListEdit) _maybeFractionReplace();
     setState(() {});

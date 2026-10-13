@@ -210,3 +210,5 @@ flutter:
   assets:
     - assets/images/logo.png
     - assets/images/auth_background.jpg
+    - assets/sounds/type.wav
+    - assets/sounds/delete.wav

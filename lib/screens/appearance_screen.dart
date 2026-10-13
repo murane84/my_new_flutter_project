@@ -5,6 +5,7 @@ import 'theme_provider.dart';
 import '../utils/popup_shell.dart';
 import '../utils/app_config.dart';
 import '../utils/chat_background.dart';
+import '../services/keystroke_sounds.dart';
 import '../utils/bubble_theme.dart';
 import '../services/wallpapers_service.dart';
 import '../widgets/wallpaper_gallery.dart';
@@ -192,6 +193,8 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                     _StatusMediaSection(),
                   ],
                 ),
+          const SizedBox(height: 10),
+          const _KeystrokeSoundSection(),
           if (_showGuide) ...[
             const SizedBox(height: 8),
             Text(
@@ -816,6 +819,98 @@ class _StatusMediaSectionState extends State<_StatusMediaSection> {
                 fit: BoxFit.scaleDown,
                 child: Switch(
                   value: _videosOnWifi,
+                  onChanged: _loaded ? _set : null,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Settings card: optional subtle key/delete sounds while typing in chat.
+class _KeystrokeSoundSection extends StatefulWidget {
+  const _KeystrokeSoundSection();
+
+  @override
+  State<_KeystrokeSoundSection> createState() => _KeystrokeSoundSectionState();
+}
+
+class _KeystrokeSoundSectionState extends State<_KeystrokeSoundSection> {
+  bool _on = KeystrokeSounds.instance.enabled;
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    await KeystrokeSounds.instance.init();
+    if (!mounted) return;
+    setState(() {
+      _on = KeystrokeSounds.instance.enabled;
+      _loaded = true;
+    });
+  }
+
+  Future<void> _set(bool v) async {
+    setState(() => _on = v);
+    await KeystrokeSounds.instance.setEnabled(v);
+    if (v) {
+      // Tiny confirmation so you hear what you just enabled.
+      KeystrokeSounds.instance.playType();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return DecoratedBox(
+      decoration: _raisedCardDecoration(scheme, isDark),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        child: Row(
+          children: [
+            _accentIconChip(scheme, Icons.keyboard_rounded),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Keystroke sounds',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface)),
+                  const SizedBox(height: 2),
+                  Text(
+                      !_loaded
+                          ? 'Loading…'
+                          : (_on
+                              ? 'Soft tick on type, tock on delete'
+                              : 'Off'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 12, color: scheme.onSurfaceVariant)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              height: 24,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Switch(
+                  value: _on,
                   onChanged: _loaded ? _set : null,
                 ),
               ),

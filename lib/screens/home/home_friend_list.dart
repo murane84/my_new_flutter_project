@@ -703,26 +703,44 @@ extension _HomeFriendListView on HomePageState {
                           ),
                         ),
                       ],
-                      if (someoneListening) ...[
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(Icons.graphic_eq_rounded,
-                                size: 13, color: Colors.white),
-                            const SizedBox(width: 5),
-                            Expanded(
-                              child: _scrollingText(
-                                liveLine ?? 'listening now',
-                                const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w600,
+                      // The "listening now" line eases in/out (height + fade)
+                      // instead of popping, so the card doesn't jolt when a
+                      // partner starts or stops playing.
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 320),
+                        curve: Curves.easeOutCubic,
+                        alignment: Alignment.topLeft,
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 280),
+                          switchInCurve: Curves.easeOut,
+                          switchOutCurve: Curves.easeIn,
+                          child: !someoneListening
+                              ? const SizedBox(
+                                  key: ValueKey('hero-live-off'),
+                                  width: double.infinity)
+                              : Padding(
+                                  key: const ValueKey('hero-live-on'),
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.graphic_eq_rounded,
+                                          size: 13, color: Colors.white),
+                                      const SizedBox(width: 5),
+                                      Expanded(
+                                        child: _scrollingText(
+                                          liveLine ?? 'listening now',
+                                          const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ),
-                          ],
                         ),
-                      ],
+                      ),
                     ],
                   ),
                 ),
@@ -772,27 +790,52 @@ extension _HomeFriendListView on HomePageState {
   /// motion always means someone's playing right now.
   Widget _heroOverlapAvatars(
       String otherName, String? otherAvatar, double r, bool listening) {
-    Widget front = _heroAvatarRing(
-      InitialsAvatar(
-        name: otherName.isEmpty ? '?' : otherName,
-        radius: r,
-        imageUrl: otherAvatar,
+    // Fixed geometry whether or not anyone is listening: the space for the
+    // spinning ring is always reserved, so the avatar never changes size or
+    // shape and the card doesn't shift. The ring just fades in and out.
+    const ring = 3.0;
+    final d = r * 2 + 4; // avatar + its 2px white border
+    final slot = d + ring * 2;
+    final front = SizedBox(
+      width: slot,
+      height: slot,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            child: AnimatedOpacity(
+              opacity: listening ? 1 : 0,
+              duration: const Duration(milliseconds: 420),
+              curve: Curves.easeInOut,
+              // Pause the spin while hidden (no wasted frames).
+              child: TickerMode(
+                enabled: listening,
+                child: SpinningVinylRing(
+                  color: Colors.white,
+                  ring: ring,
+                  child: SizedBox(width: d, height: d),
+                ),
+              ),
+            ),
+          ),
+          _heroAvatarRing(
+            InitialsAvatar(
+              name: otherName.isEmpty ? '?' : otherName,
+              radius: r,
+              imageUrl: otherAvatar,
+            ),
+          ),
+        ],
       ),
     );
-    if (listening) {
-      front = SpinningVinylRing(
-        color: Colors.white,
-        child: front,
-      );
-    }
     return SizedBox(
-      width: r * 3 + 8,
-      height: r * 2 + 8,
+      width: r + 4 + slot,
+      height: slot,
       child: Stack(
         alignment: Alignment.centerLeft,
         children: [
           Positioned(
-            left: 0,
+            left: ring,
             child: _heroAvatarRing(
               InitialsAvatar(
                 name: _username.isNotEmpty ? _username : 'You',

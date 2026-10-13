@@ -199,25 +199,81 @@ class _HeartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final path = heartPath(size);
     final rect = Offset.zero & size;
-    final grad = LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [
-        Color.lerp(accent, Colors.white, 0.22)!,
-        accent,
-        Color.lerp(accent, Colors.black, 0.38)!,
-      ],
-      stops: const [0.0, 0.5, 1.0],
+    final w = size.width, h = size.height;
+
+    // 1) Soft coloured glow behind the heart — premium lift off the wallpaper.
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = accent.withValues(alpha: 0.38)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14),
     );
-    canvas.drawShadow(path.shift(const Offset(0, 4)), Colors.black54, 8, false);
-    canvas.drawPath(path, Paint()..shader = grad.createShader(rect));
-    // soft sheen
+    // 2) Grounding contact shadow.
+    canvas.drawShadow(path.shift(const Offset(0, 6)), Colors.black87, 10, false);
+
+    // 3) Volume: radial gradient lit from the upper-left so the lobes read as
+    //    rounded, with a deep shaded bottom tip.
+    final base = RadialGradient(
+      center: const Alignment(-0.35, -0.5),
+      radius: 1.15,
+      colors: [
+        Color.lerp(accent, Colors.white, 0.5)!,
+        accent,
+        Color.lerp(accent, Colors.black, 0.55)!,
+      ],
+      stops: const [0.0, 0.52, 1.0],
+    );
+    canvas.drawPath(path, Paint()..shader = base.createShader(rect));
+
+    // 4) Inside-the-heart shading: glossy highlight + bottom inner shadow.
+    canvas.save();
+    canvas.clipPath(path);
+    // Bottom inner shadow → depth at the tip.
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.center,
+          end: Alignment.bottomCenter,
+          colors: [Colors.transparent, Colors.black.withValues(alpha: 0.34)],
+        ).createShader(rect),
+    );
+    // Big soft specular sheen on the upper-left lobe.
+    final hlCenter = Offset(w * 0.33, h * 0.24);
+    canvas.drawCircle(
+      hlCenter,
+      w * 0.30,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          Colors.white.withValues(alpha: 0.55),
+          Colors.white.withValues(alpha: 0.0),
+        ]).createShader(Rect.fromCircle(center: hlCenter, radius: w * 0.30))
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+    );
+    // Small crisp sparkle.
+    canvas.drawCircle(
+      Offset(w * 0.30, h * 0.2),
+      w * 0.045,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.75)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
+    );
+    canvas.restore();
+
+    // 5) Bright rim light along the edge (top-left catches the light).
     canvas.drawPath(
       path,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2
-        ..color = Colors.white.withValues(alpha: 0.25),
+        ..strokeWidth = 1.4
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.5),
+            Colors.white.withValues(alpha: 0.05),
+          ],
+        ).createShader(rect),
     );
   }
 

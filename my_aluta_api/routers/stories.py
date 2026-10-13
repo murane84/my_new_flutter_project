@@ -113,6 +113,10 @@ def create_story(
     elif kind == "text":
         if not (payload.caption and payload.caption.strip()):
             raise HTTPException(status_code=400, detail="Nothing to post")
+    elif kind == "sticker":
+        # A sticker/GIF story carries its image URL in music_art_url.
+        if not (payload.music_art_url and payload.music_art_url.strip()):
+            raise HTTPException(status_code=400, detail="Nothing to post")
     else:  # music
         if not (payload.music_title or payload.caption):
             raise HTTPException(status_code=400, detail="Nothing to post")

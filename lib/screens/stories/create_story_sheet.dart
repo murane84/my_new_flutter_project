@@ -947,6 +947,7 @@ class _TextStoryPageState extends State<_TextStoryPage> {
   final TextEditingController _text = TextEditingController();
   int _bg = 0;
   bool _posting = false;
+  bool _showEmoji = false; // inline emoji panel (text stays visible above it)
 
   @override
   void initState() {
@@ -1078,10 +1079,17 @@ class _TextStoryPageState extends State<_TextStoryPage> {
                       onPressed: _addSticker,
                     ),
                     IconButton(
-                      tooltip: 'Add emoji',
-                      icon: const Icon(Icons.emoji_emotions_outlined),
+                      tooltip: _showEmoji ? 'Keyboard' : 'Add emoji',
+                      icon: Icon(_showEmoji
+                          ? Icons.keyboard_rounded
+                          : Icons.emoji_emotions_outlined),
                       color: ink,
-                      onPressed: () => showEmojiPickerSheet(context, _text),
+                      onPressed: () {
+                        setState(() => _showEmoji = !_showEmoji);
+                        if (_showEmoji) {
+                          FocusManager.instance.primaryFocus?.unfocus();
+                        }
+                      },
                     ),
                   ],
                 ),
@@ -1095,6 +1103,9 @@ class _TextStoryPageState extends State<_TextStoryPage> {
                       child: TextField(
                         controller: _text,
                         autofocus: true,
+                        onTap: () {
+                          if (_showEmoji) setState(() => _showEmoji = false);
+                        },
                         textAlign: TextAlign.center,
                         maxLines: null,
                         cursorColor: ink,
@@ -1142,6 +1153,13 @@ class _TextStoryPageState extends State<_TextStoryPage> {
                   ],
                 ),
               ),
+              // Inline emoji panel (consistent with photo/music composers):
+              // the centred text shrinks up and stays visible above it.
+              if (_showEmoji)
+                SizedBox(
+                  height: 300,
+                  child: inlineEmojiPicker(context, _text),
+                ),
             ],
           ),
         ),

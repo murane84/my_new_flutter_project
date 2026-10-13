@@ -702,7 +702,8 @@ extension _HomePageHelpers1 on HomePageState {
         }
       } catch (_) {/* not our JSON — show as-is */}
     }
-    return raw;
+    // Strip formatting markers so the preview reads cleanly (no *…* _…_ etc.).
+    return stripMessageFormatting(raw);
   }
 
   /// The saved phone number for a friend by their user id, looked up in the

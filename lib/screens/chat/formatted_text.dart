@@ -574,3 +574,53 @@ List<InlineSpan> _composerSpans(
   }
   return out;
 }
+
+// ── Plain-text strip (for chat-list previews, notifications, etc.) ───────────
+String _stripInline(String s) {
+  final out = StringBuffer();
+  var cursor = 0;
+  while (cursor < s.length) {
+    _Found? found;
+    for (var i = cursor; i < s.length; i++) {
+      final m = _markerAt(s, i);
+      if (m == null) continue;
+      final close = s.indexOf(m.token, i + m.token.length);
+      if (close < 0 || close <= i + m.token.length) continue;
+      final inner = s.substring(i + m.token.length, close);
+      if (inner.trim().isEmpty) continue;
+      if (m.wordGuard && (inner.startsWith(' ') || inner.endsWith(' '))) {
+        continue;
+      }
+      found = _Found(i, close, m, inner);
+      break;
+    }
+    if (found == null) {
+      out.write(s.substring(cursor));
+      break;
+    }
+    out.write(s.substring(cursor, found.start));
+    out.write(found.marker.kind == 'code'
+        ? found.inner
+        : _stripInline(found.inner));
+    cursor = found.close + found.marker.token.length;
+  }
+  return out.toString();
+}
+
+/// Remove all formatting markers (and block prefixes) for a clean one-line
+/// preview: `*Hello* _world_` → `Hello world`, `> quote` → `quote`,
+/// `- item` → `item`, plus unicode fractions.
+String stripMessageFormatting(String text) {
+  final lines = text.split('\n').map((l) {
+    final q = _quoteRe.firstMatch(l);
+    if (q != null) return q.group(1) ?? '';
+    final b = _bulletRe.firstMatch(l);
+    if (b != null) return b.group(1) ?? '';
+    final n = _numberRe.firstMatch(l);
+    if (n != null) return n.group(2) ?? '';
+    return l;
+  });
+  var s = _stripInline(lines.join(' '));
+  s = _applyFractions(s);
+  return s.replaceAll(RegExp(r'\s+'), ' ').trim();
+}

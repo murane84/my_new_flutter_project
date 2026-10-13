@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:math' as math;
 import 'package:visibility_detector/visibility_detector.dart';
 
 /// A "secret heart" message bubble (message_type == 'heart'). Arrives covered
@@ -38,7 +39,7 @@ class HeartBubble extends StatefulWidget {
 }
 
 class _HeartBubbleState extends State<HeartBubble>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _beat = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1400));
   late final Animation<double> _scale = TweenSequence<double>([
@@ -49,6 +50,10 @@ class _HeartBubbleState extends State<HeartBubble>
     TweenSequenceItem(tween: Tween(begin: 1.05, end: 1.0), weight: 10),
     TweenSequenceItem(tween: ConstantTween(1.0), weight: 55),
   ]).animate(_beat);
+
+  // A slow continuous clock for the drifting star field around the heart.
+  late final AnimationController _stars = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 7200));
 
   final GlobalKey _heartKey = GlobalKey();
   bool _revealedInHeart = false;
@@ -71,10 +76,17 @@ class _HeartBubbleState extends State<HeartBubble>
         _beat.value = 0;
       }
     }
+    final starsOn = _visible && !_reduceMotion;
+    if (starsOn) {
+      if (!_stars.isAnimating) _stars.repeat();
+    } else if (_stars.isAnimating) {
+      _stars.stop();
+    }
   }
 
   @override
   void dispose() {
+    _stars.dispose();
     _beat.dispose();
     super.dispose();
   }
@@ -126,13 +138,40 @@ class _HeartBubbleState extends State<HeartBubble>
       child: GestureDetector(
         onTap: _onTap,
         onDoubleTap: widget.onLoveBack == null ? null : _loveBack,
-        child: AnimatedBuilder(
-          animation: _scale,
-          builder: (context, _) => Transform.scale(
-            scale: revealed ? 1.0 : _scale.value,
-            child: _heart(revealed),
+        child: _withStars(revealed),
+      ),
+    );
+  }
+
+  Widget _withStars(bool revealed) {
+    final heart = AnimatedBuilder(
+      animation: _scale,
+      builder: (context, _) => Transform.scale(
+        scale: revealed ? 1.0 : _scale.value,
+        child: _heart(revealed),
+      ),
+    );
+    if (_reduceMotion) return heart;
+    return SizedBox(
+      width: 160,
+      height: 142,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: RepaintBoundary(
+                child: AnimatedBuilder(
+                  animation: _stars,
+                  builder: (context, _) => CustomPaint(
+                    painter: _StarsPainter(_stars.value, widget.accent),
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
+          heart,
+        ],
       ),
     );
   }
@@ -215,48 +254,75 @@ class _HeartPainter extends CustomPainter {
     // 3) Volume: radial gradient lit from the upper-left so the lobes read as
     //    rounded, with a deep shaded bottom tip.
     final base = RadialGradient(
-      center: const Alignment(-0.35, -0.5),
-      radius: 1.15,
+      center: const Alignment(-0.35, -0.62),
+      radius: 1.25,
       colors: [
-        Color.lerp(accent, Colors.white, 0.5)!,
+        Color.lerp(accent, Colors.white, 0.72)!,
+        Color.lerp(accent, Colors.white, 0.28)!,
         accent,
-        Color.lerp(accent, Colors.black, 0.55)!,
+        Color.lerp(accent, Colors.black, 0.4)!,
+        Color.lerp(accent, Colors.black, 0.68)!,
       ],
-      stops: const [0.0, 0.52, 1.0],
+      stops: const [0.0, 0.22, 0.52, 0.8, 1.0],
     );
     canvas.drawPath(path, Paint()..shader = base.createShader(rect));
 
-    // 4) Inside-the-heart shading: glossy highlight + bottom inner shadow.
+    // 4) Inside-the-heart shading: clip to the heart, then sculpt the volume.
     canvas.save();
     canvas.clipPath(path);
-    // Bottom inner shadow → depth at the tip.
+    // 4a) Deep core shadow pooled at the bottom tip → real sense of mass.
+    final tip = Offset(w * 0.5, h * 0.82);
+    canvas.drawCircle(
+      tip,
+      w * 0.6,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            Colors.black.withValues(alpha: 0.42),
+            Colors.black.withValues(alpha: 0.0),
+          ],
+        ).createShader(Rect.fromCircle(center: tip, radius: w * 0.6)),
+    );
+    // 4b) Gentle overall bottom darken for grounding.
     canvas.drawRect(
       rect,
       Paint()
         ..shader = LinearGradient(
           begin: Alignment.center,
           end: Alignment.bottomCenter,
-          colors: [Colors.transparent, Colors.black.withValues(alpha: 0.34)],
+          colors: [Colors.transparent, Colors.black.withValues(alpha: 0.26)],
         ).createShader(rect),
     );
-    // Big soft specular sheen on the upper-left lobe.
-    final hlCenter = Offset(w * 0.33, h * 0.24);
+    // 4c) Big soft specular sheen on the upper-left lobe.
+    final hlCenter = Offset(w * 0.33, h * 0.22);
     canvas.drawCircle(
       hlCenter,
-      w * 0.30,
+      w * 0.32,
       Paint()
         ..shader = RadialGradient(colors: [
-          Colors.white.withValues(alpha: 0.55),
+          Colors.white.withValues(alpha: 0.6),
           Colors.white.withValues(alpha: 0.0),
-        ]).createShader(Rect.fromCircle(center: hlCenter, radius: w * 0.30))
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+        ]).createShader(Rect.fromCircle(center: hlCenter, radius: w * 0.32))
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
     );
-    // Small crisp sparkle.
+    // 4d) Secondary smaller glossy catch on the right lobe → both bumps lit.
+    final hl2 = Offset(w * 0.66, h * 0.26);
     canvas.drawCircle(
-      Offset(w * 0.30, h * 0.2),
-      w * 0.045,
+      hl2,
+      w * 0.17,
       Paint()
-        ..color = Colors.white.withValues(alpha: 0.75)
+        ..shader = RadialGradient(colors: [
+          Colors.white.withValues(alpha: 0.32),
+          Colors.white.withValues(alpha: 0.0),
+        ]).createShader(Rect.fromCircle(center: hl2, radius: w * 0.17))
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+    );
+    // 4e) Crisp hotspot sparkle on the main lobe.
+    canvas.drawCircle(
+      Offset(w * 0.3, h * 0.18),
+      w * 0.05,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.85)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
     );
     canvas.restore();
@@ -280,6 +346,69 @@ class _HeartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_HeartPainter old) => old.accent != accent;
+}
+
+/// A gentle field of tiny twinkling stars drifting down around the heart.
+class _StarsPainter extends CustomPainter {
+  _StarsPainter(this.t, this.accent);
+  final double t; // 0..1 loop phase
+  final Color accent;
+
+  static const int _count = 13;
+
+  double _hash(int i) {
+    final x = math.sin(i * 12.9898) * 43758.5453;
+    return x - x.floorToDouble();
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final tint = Color.lerp(Colors.white, accent, 0.2)!;
+    const tau = math.pi * 2;
+    for (int i = 0; i < _count; i++) {
+      final fx = _hash(i * 2 + 1);
+      final speed = 0.45 + _hash(i * 7 + 3) * 0.75;
+      final phase = _hash(i * 5 + 2);
+      final scale = 0.6 + _hash(i * 3 + 4) * 1.0;
+      final fy = (phase + t * speed) % 1.0;
+      final x = fx * w + math.sin((t * speed + phase) * tau) * 3.0;
+      final y = fy * h;
+      // fade in/out at the top and bottom edges
+      final edge = (fy < 0.12
+              ? fy / 0.12
+              : (fy > 0.88 ? (1 - fy) / 0.12 : 1.0))
+          .clamp(0.0, 1.0);
+      // twinkle
+      final tw = 0.3 + 0.7 * (0.5 + 0.5 * math.sin((t * speed * 3 + phase) * tau));
+      final a = (0.9 * edge * tw).clamp(0.0, 1.0);
+      if (a <= 0.02) continue;
+      final r = 1.1 * scale;
+      final color = tint.withValues(alpha: a);
+      // soft glow
+      canvas.drawCircle(
+        Offset(x, y),
+        r * 2.4,
+        Paint()
+          ..color = tint.withValues(alpha: a * 0.35)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
+      );
+      // four-point sparkle cross
+      final p = Paint()
+        ..color = color
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = r * 0.7;
+      final arm = r * 2.2;
+      canvas.drawLine(Offset(x - arm, y), Offset(x + arm, y), p);
+      canvas.drawLine(Offset(x, y - arm), Offset(x, y + arm), p);
+      // bright core
+      canvas.drawCircle(
+          Offset(x, y), r * 0.7, Paint()..color = Colors.white.withValues(alpha: a));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_StarsPainter old) => old.t != t || old.accent != accent;
 }
 
 /// Bloom a decorated "genie" card out of the heart at [originRect], with the

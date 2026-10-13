@@ -3573,7 +3573,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                 transitionBuilder: (child, anim) =>
                                     SizeTransition(
                                   axis: Axis.horizontal,
-                                  axisAlignment: -1,
+                                  alignment: Alignment.centerLeft,
                                   sizeFactor: anim,
                                   child:
                                       FadeTransition(opacity: anim, child: child),
@@ -3672,7 +3672,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                 transitionBuilder: (child, anim) =>
                                     SizeTransition(
                                   axis: Axis.horizontal,
-                                  axisAlignment: 1,
+                                  alignment: Alignment.centerRight,
                                   sizeFactor: anim,
                                   child:
                                       FadeTransition(opacity: anim, child: child),

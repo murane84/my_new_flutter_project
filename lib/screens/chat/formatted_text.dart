@@ -451,3 +451,126 @@ class _FormattedTextState extends State<FormattedText> {
     return col;
   }
 }
+
+// ── Live formatting inside the composer ─────────────────────────────────────
+// A TextEditingController that styles the text AS YOU TYPE: the marked ranges
+// render bold / italic / etc. and the markers themselves dim, like a code
+// editor. The characters are preserved exactly (markers stay in the text), so
+// the cursor and editing stay correct — only the STYLE changes. Fractions and
+// marker-hiding are deliberately NOT applied here (that would change the text
+// length and break the caret); they still render in the sent bubble.
+class FormattingTextController extends TextEditingController {
+  FormattingTextController({super.text});
+
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    final base = style ?? const TextStyle();
+    final scheme = Theme.of(context).colorScheme;
+    final onColor = base.color ?? scheme.onSurface;
+    return TextSpan(
+      style: base,
+      children: _composerSpans(
+        text,
+        base,
+        marker: onColor.withValues(alpha: 0.35),
+        codeBg: onColor.withValues(alpha: 0.12),
+        highlightBg: const Color(0x66FFC107),
+        spoilerBg: scheme.primary.withValues(alpha: 0.16),
+      ),
+    );
+  }
+}
+
+List<InlineSpan> _composerSpans(
+  String s,
+  TextStyle base, {
+  required Color marker,
+  required Color codeBg,
+  required Color highlightBg,
+  required Color spoilerBg,
+}) {
+  List<InlineSpan> recurse(String inner, TextStyle st) => _composerSpans(
+        inner, st,
+        marker: marker,
+        codeBg: codeBg,
+        highlightBg: highlightBg,
+        spoilerBg: spoilerBg,
+      );
+
+  final out = <InlineSpan>[];
+  var cursor = 0;
+  while (cursor < s.length) {
+    _Found? found;
+    for (var i = cursor; i < s.length; i++) {
+      final m = _markerAt(s, i);
+      if (m == null) continue;
+      final close = s.indexOf(m.token, i + m.token.length);
+      if (close < 0 || close <= i + m.token.length) continue;
+      final inner = s.substring(i + m.token.length, close);
+      if (inner.trim().isEmpty) continue;
+      if (m.wordGuard && (inner.startsWith(' ') || inner.endsWith(' '))) {
+        continue;
+      }
+      found = _Found(i, close, m, inner);
+      break;
+    }
+    if (found == null) {
+      out.add(TextSpan(text: s.substring(cursor), style: base));
+      break;
+    }
+    if (found.start > cursor) {
+      out.add(TextSpan(text: s.substring(cursor, found.start), style: base));
+    }
+    final tok = found.marker.token;
+    final markerStyle = base.copyWith(color: marker);
+    out.add(TextSpan(text: tok, style: markerStyle)); // opening delimiter
+
+    if (found.marker.kind == 'code') {
+      out.add(TextSpan(
+        text: found.inner,
+        style: base.copyWith(
+          fontFamily: 'monospace',
+          fontFamilyFallback: const ['monospace', 'Courier'],
+          letterSpacing: 0,
+          background: Paint()..color = codeBg,
+        ),
+      ));
+    } else {
+      TextStyle innerBase;
+      switch (found.marker.kind) {
+        case 'highlight':
+          innerBase = base.copyWith(background: Paint()..color = highlightBg);
+          break;
+        case 'spoiler':
+          innerBase = base.copyWith(background: Paint()..color = spoilerBg);
+          break;
+        case 'underline':
+          innerBase = base.copyWith(
+              decoration: _mergeDec(base.decoration, TextDecoration.underline));
+          break;
+        case 'bold':
+          innerBase = base.copyWith(fontWeight: FontWeight.w700);
+          break;
+        case 'italic':
+          innerBase = base.copyWith(fontStyle: FontStyle.italic);
+          break;
+        case 'strike':
+          innerBase = base.copyWith(
+              decoration:
+                  _mergeDec(base.decoration, TextDecoration.lineThrough));
+          break;
+        default:
+          innerBase = base;
+      }
+      out.addAll(recurse(found.inner, innerBase));
+    }
+
+    out.add(TextSpan(text: tok, style: markerStyle)); // closing delimiter
+    cursor = found.close + tok.length;
+  }
+  return out;
+}

@@ -250,7 +250,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   final Map<String, GlobalKey> _msgKeys = {};
   String? _highlightedId;
 
-  final _ctrl = TextEditingController();
+  // Styles *bold* _italic_ etc. live in the composer as you type.
+  final _ctrl = FormattingTextController();
   // Smart-list continuation state (bullets / numbers).
   String _lastComposerText = '';
   bool _applyingListEdit = false;

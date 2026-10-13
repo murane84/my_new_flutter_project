@@ -836,6 +836,18 @@ extension _ChatPageHelpers2 on _ChatPageState {
           textScaler: scaler,
         )..layout(maxWidth: maxW);
         final w = (tp.width + 0.5).clamp(0.0, maxW);
+        // With a mouse (desktop / web on a computer) the text is selectable:
+        // drag to highlight, Ctrl+C or right-click → Copy. Same span, style
+        // and scaler, so it looks identical. Touch keeps the plain path (long
+        // press there opens the message menu).
+        if (RendererBinding.instance.mouseTracker.mouseIsConnected) {
+          return SizedBox(
+            width: w,
+            child: SelectionArea(
+              child: Text.rich(span, textScaler: scaler),
+            ),
+          );
+        }
         return SizedBox(
           width: w,
           child: FloatColumn(

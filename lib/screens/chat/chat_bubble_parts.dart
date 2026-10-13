@@ -936,6 +936,15 @@ class _SwipeToReplyState extends State<_SwipeToReply>
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
+      // Swipe-to-reply is a finger gesture. A mouse drag is left alone so it
+      // can select text in the bubble (desktop/web); mouse users reply from
+      // the hover chevron or the right-click menu.
+      supportedDevices: const {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.invertedStylus,
+        PointerDeviceKind.unknown,
+      },
       onHorizontalDragUpdate: (d) {
         // Reply is a rightward pull only; resist and cap the travel.
         final next = (_dx + d.delta.dx).clamp(0.0, _maxDrag);

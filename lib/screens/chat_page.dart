@@ -4,6 +4,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, compute, kIsWeb;
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:flutter/rendering.dart' show RendererBinding;
 import 'package:pasteboard/pasteboard.dart';
 import 'package:image/image.dart' as img;
 // Hide intl's TextDirection so the unprefixed name resolves to dart:ui's

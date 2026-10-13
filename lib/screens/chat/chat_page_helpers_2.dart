@@ -904,43 +904,19 @@ extension _ChatPageHelpers2 on _ChatPageState {
   // span + style + scaler as image captions — so every bubble, image or not,
   // shares one text engine and one font. Links stay tappable via _captionSpan.
   Widget _bubbleTextOnly(String text, Color textColor, Color linkColor) {
-    final span = _captionSpan(
-        text, _capStyle(textColor), _capLinkStyle(linkColor));
-    return LayoutBuilder(
-      builder: (ctx, c) {
-        final scaler = MediaQuery.textScalerOf(ctx);
-        final maxW = c.maxWidth.isFinite ? c.maxWidth : 280.0;
-        // FloatColumn always fills its max width, so measure the text and size
-        // the bubble to its content — short messages stay short, long ones wrap
-        // at the bubble's max — while still rendering through FloatColumn for a
-        // font identical to image captions.
-        final tp = TextPainter(
-          text: span,
-          textDirection: TextDirection.ltr,
-          textScaler: scaler,
-        )..layout(maxWidth: maxW);
-        final w = (tp.width + 0.5).clamp(0.0, maxW);
-        // With a mouse (desktop / web on a computer) the text is selectable:
-        // drag to highlight, Ctrl+C or right-click → Copy. Same span, style
-        // and scaler, so it looks identical. Touch keeps the plain path (long
-        // press there opens the message menu).
-        if (RendererBinding.instance.mouseTracker.mouseIsConnected) {
-          return SizedBox(
-            width: w,
-            child: SelectionArea(
-              child: Text.rich(span, textScaler: scaler),
-            ),
-          );
-        }
-        return SizedBox(
-          width: w,
-          child: FloatColumn(
-            children: [
-              WrappableText(text: span, textScaler: scaler),
-            ],
-          ),
-        );
-      },
+    // Rich inline formatting (*bold* _italic_ ~strike~ __underline__ `code`
+    // ==highlight== ||spoiler|| + fractions + auto-links) plus block quotes
+    // and bulleted/numbered lists. Selectable with a mouse (desktop/web).
+    return FormattedText(
+      text: text,
+      style: _capStyle(textColor),
+      linkStyle: _capLinkStyle(linkColor),
+      onOpenLink: (url) => _openLink(url),
+      codeBg: textColor.withValues(alpha: 0.12),
+      highlightBg: const Color(0x66FFC107),
+      spoilerCover: textColor.withValues(alpha: 0.40),
+      quoteBar: linkColor,
+      selectable: RendererBinding.instance.mouseTracker.mouseIsConnected,
     );
   }
 

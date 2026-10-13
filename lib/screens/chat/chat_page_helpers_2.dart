@@ -543,8 +543,12 @@ extension _ChatPageHelpers2 on _ChatPageState {
             filename: sendName,
             mime: sendMime,
             ephemeral: ephemeral,
-            onProgress: (sent, total) =>
-                _setUploadProgress(tempId, total > 0 ? sent / total : null)));
+            onProgress: (sent, total) => _setUploadProgress(
+                tempId,
+                // Cap live progress below 100%: bytes handed to the socket
+                // aren't "done" — the server still has to receive + accept
+                // them. We only show 100% on a genuine send (below).
+                total > 0 ? (sent / total).clamp(0.0, 0.99) : null)));
         if (up == null || up['url'] == null) {
           _replaceOptimistic(tempId, null);
           if (mounted) {
@@ -566,11 +570,18 @@ extension _ChatPageHelpers2 on _ChatPageState {
               mediaDuration: durationMs,
               conversationId: widget.conversationId,
             ));
-        _replaceOptimistic(tempId, sent);
-        if (sent == null && mounted) {
+        if (sent != null) {
+          // Truly done now (uploaded AND the message was created). Fill the
+          // ring to 100% and confirm with a "Sent" toast, then let the
+          // optimistic bubble swap to the real sent message.
+          _setUploadProgress(tempId, 1.0);
+          if (mounted) showToast(context, 'Sent', type: ToastType.success);
+          await Future.delayed(const Duration(milliseconds: 350));
+        } else if (mounted) {
           showToast(context, 'Could not send — tap the ! to retry',
               type: ToastType.error);
         }
+        _replaceOptimistic(tempId, sent);
       } catch (_) {
         _replaceOptimistic(tempId, null);
         if (mounted) {
@@ -663,59 +674,71 @@ extension _ChatPageHelpers2 on _ChatPageState {
         color: textColor.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(ic, size: 22, color: textColor.withValues(alpha: 0.85)),
-          const SizedBox(width: 10),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+      child: Builder(builder: (context) {
+        final scheme = Theme.of(context).colorScheme;
+        final p = (msg['__upProgress'] as num?)?.toDouble();
+        final pct = (p == null || p <= 0) ? null : p.clamp(0.0, 1.0);
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(ic, size: 22, color: textColor.withValues(alpha: 0.85)),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13)),
+                  const SizedBox(height: 3),
+                  Text(
+                    pct == null
+                        ? 'Uploading\u2026'
+                        : 'Uploading ${(pct * 100).round()}%',
                     style: TextStyle(
-                        color: textColor,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13)),
-                const SizedBox(height: 7),
-                Builder(builder: (context) {
-                  final p = (msg['__upProgress'] as num?)?.toDouble();
-                  final scheme = Theme.of(context).colorScheme;
-                  final pct =
-                      (p == null || p <= 0) ? null : (p.clamp(0.0, 1.0));
-                  return Row(
-                    children: [
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: pct,
-                            minHeight: 5,
-                            backgroundColor: textColor.withValues(alpha: 0.14),
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(scheme.primary),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        pct == null ? 'Uploading\u2026' : '${(pct * 100).round()}%',
-                        style: TextStyle(
-                            color: textColor.withValues(alpha: 0.88),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700),
-                      ),
-                    ],
-                  );
-                }),
-              ],
+                        color: scheme.primary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
+            const SizedBox(width: 10),
+            // Same progress ring as the download bubble, for symmetry.
+            SizedBox(
+              width: 30,
+              height: 30,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 30,
+                    height: 30,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.6,
+                      value: pct,
+                      backgroundColor: textColor.withValues(alpha: 0.15),
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(scheme.primary),
+                    ),
+                  ),
+                  if (pct != null)
+                    Text('${(pct * 100).round()}',
+                        style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: textColor)),
+                ],
+              ),
+            ),
+          ],
+        );
+      }),
     );
   }
 

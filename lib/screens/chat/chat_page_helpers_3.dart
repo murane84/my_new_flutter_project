@@ -88,7 +88,11 @@ extension _ChatPageHelpers3 on _ChatPageState {
     final size = (msg['media_size'] as num?)?.toInt();
     final dlBusy = msg['__dlBusy'] == true;
     final dlP = (msg['__dlProgress'] as num?)?.toDouble();
-    final saved = _savedMediaKeys.contains(msg['media_url'] as String?);
+    // "Owned" = the sender's own file (they always have it) OR a file this
+    // device has already downloaded. Owned shows the Aluta mark; not-yet-owned
+    // shows the download arrow.
+    final isMine = msg['sender_id']?.toString() == _myId;
+    final owned = isMine || _savedMediaKeys.contains(msg['media_url'] as String?);
     return GestureDetector(
       onTap: () => _openUrl(url),
       child: Container(
@@ -174,22 +178,39 @@ extension _ChatPageHelpers3 on _ChatPageState {
                   ),
                 ),
               )
+            else if (owned)
+              // Owned content → the Aluta mark (always on the sender's own
+              // bubble; on the receiver's once downloaded). Still tappable to
+              // save again to a chosen location.
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                tooltip: isMine ? 'Your file' : 'Saved — tap to save again',
+                icon: ClipRRect(
+                  borderRadius: BorderRadius.circular(5),
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    width: 20,
+                    height: 20,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => Icon(
+                        Icons.verified_rounded,
+                        size: 20,
+                        color: scheme.primary),
+                  ),
+                ),
+                onPressed: () => _downloadMediaWithProgress(msg),
+              )
             else
               IconButton(
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-                tooltip: saved ? 'Saved — tap to save again' : 'Save to device',
-                // Downloaded already → a distinct "saved" badge (still tappable
-                // to re-save). Fresh content shows the plain download arrow.
-                icon: Icon(
-                    saved
-                        ? Icons.download_done_rounded
-                        : Icons.download_rounded,
-                    size: 20,
-                    color: saved
-                        ? scheme.primary
-                        : textColor.withAlpha(180)),
+                tooltip: 'Save to device',
+                // Not yet owned → the plain download arrow.
+                icon: Icon(Icons.download_rounded,
+                    size: 20, color: textColor.withAlpha(180)),
                 onPressed: () => _downloadMediaWithProgress(msg),
               ),
           ],

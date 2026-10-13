@@ -1682,7 +1682,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final images = <String>[];
     final imgMsgs = <Map<String, dynamic>?>[];
     for (final m in _messages) {
-      if ((m['message_type'] as String?) == 'image') {
+      final t = (m['message_type'] as String?);
+      // The gallery now scrolls through photos AND videos (chronological).
+      if (t == 'image' || t == 'video') {
         final rel = (m['media_url'] as String?) ?? '';
         if (rel.isNotEmpty) {
           images.add(fullMediaUrl(rel));
@@ -1866,13 +1868,28 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                       color: isDark ? Colors.white : accent),
                 ),
               ),
-              builder: (ctx2, p) => PhotoViewGalleryPageOptions(
-                imageProvider: _viewerProviders[p],
-                minScale: PhotoViewComputedScale.contained,
-                maxScale: PhotoViewComputedScale.covered * 3,
-                initialScale: PhotoViewComputedScale.contained,
-                onTapUp: (_, _, _) => toggle(),
-              ),
+              builder: (ctx2, p) {
+                final vm = p < _viewerMsgs.length ? _viewerMsgs[p] : null;
+                final isVideo =
+                    (vm?['message_type'] as String?) == 'video';
+                if (isVideo) {
+                  return PhotoViewGalleryPageOptions.customChild(
+                    child: _GalleryVideo(
+                        key: ValueKey('galvid-${imgs[p]}'), url: imgs[p]),
+                    minScale: PhotoViewComputedScale.contained,
+                    maxScale: PhotoViewComputedScale.contained * 2,
+                    initialScale: PhotoViewComputedScale.contained,
+                    onTapUp: (_, _, _) => toggle(),
+                  );
+                }
+                return PhotoViewGalleryPageOptions(
+                  imageProvider: _viewerProviders[p],
+                  minScale: PhotoViewComputedScale.contained,
+                  maxScale: PhotoViewComputedScale.covered * 3,
+                  initialScale: PhotoViewComputedScale.contained,
+                  onTapUp: (_, _, _) => toggle(),
+                );
+              },
             ),
             // Top bar (sender · time · reply · save · close).
             Positioned(
@@ -4372,6 +4389,125 @@ class _FullMenuCardState extends State<_FullMenuCard> {
 /// On wide/desktop layouts, shows a small chevron on a message bubble while the
 /// pointer hovers it — tapping it opens the action dropdown anchored there.
 /// Long-press / right-click still work via the bubble's own gestures.
+/// A video page inside the fullscreen media gallery: cache-first init, tap the
+/// center button to play, tap the video to pause. Lives only while its page is
+/// built, so swiping away disposes the controller.
+class _GalleryVideo extends StatefulWidget {
+  const _GalleryVideo({super.key, required this.url});
+  final String url;
+  @override
+  State<_GalleryVideo> createState() => _GalleryVideoState();
+}
+
+class _GalleryVideoState extends State<_GalleryVideo> {
+  VideoPlayerController? _c;
+  bool _error = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      VideoPlayerController c;
+      if (!kIsWeb) {
+        File? f = await MediaStore.instance.cached(widget.url);
+        f ??= await MediaStore.instance
+            .getFile(widget.url, mediaAuthHeaders(widget.url));
+        c = f != null
+            ? VideoPlayerController.file(f)
+            : VideoPlayerController.networkUrl(Uri.parse(widget.url),
+                httpHeaders: mediaAuthHeaders(widget.url));
+      } else {
+        c = VideoPlayerController.networkUrl(Uri.parse(widget.url),
+            httpHeaders: mediaAuthHeaders(widget.url));
+      }
+      await c.initialize();
+      if (!mounted) {
+        c.dispose();
+        return;
+      }
+      c.addListener(() {
+        if (mounted) setState(() {});
+      });
+      c.setLooping(true);
+      setState(() => _c = c);
+    } catch (_) {
+      if (mounted) setState(() => _error = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _c?.dispose();
+    super.dispose();
+  }
+
+  void _toggle() {
+    final c = _c;
+    if (c == null) return;
+    c.value.isPlaying ? c.pause() : c.play();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _c;
+    if (_error) {
+      return const Center(
+        child: Icon(Icons.broken_image_rounded,
+            color: Colors.white54, size: 48),
+      );
+    }
+    if (c == null || !c.value.isInitialized) {
+      return const Center(
+        child: SizedBox(
+          width: 30,
+          height: 30,
+          child: CircularProgressIndicator(
+              strokeWidth: 2, color: Colors.white),
+        ),
+      );
+    }
+    return Center(
+      child: AspectRatio(
+        aspectRatio:
+            c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            VideoPlayer(c),
+            // Full-area tap pauses while playing (lets the center button and
+            // the gallery's chrome-toggle work when paused).
+            if (c.value.isPlaying)
+              Positioned.fill(
+                child: GestureDetector(
+                    onTap: _toggle, behavior: HitTestBehavior.opaque),
+              ),
+            AnimatedOpacity(
+              opacity: c.value.isPlaying ? 0.0 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              child: GestureDetector(
+                onTap: _toggle,
+                child: Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withValues(alpha: 0.45)),
+                  child: const Icon(Icons.play_arrow_rounded,
+                      color: Colors.white, size: 40),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _HoverChevron extends StatefulWidget {
   const _HoverChevron({
     required this.enabled,

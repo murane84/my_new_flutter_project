@@ -265,11 +265,26 @@ extension _ChatPageHelpers3 on _ChatPageState {
             if (f != null) bytes = await f.readAsBytes();
           } catch (_) {}
         }
-        if (bytes == null || bytes.isEmpty) {
-          final res = await appBusy.run(
-              () => http.get(Uri.parse(url), headers: mediaAuthHeaders(url)));
-          if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
-            bytes = res.bodyBytes;
+        // A dropped connection mid-download shouldn't fail the save: retry a
+        // couple of times with a short pause. 410 (gone from the server) is
+        // final, so stop there.
+        for (var attempt = 0;
+            attempt < 3 && (bytes == null || bytes.isEmpty);
+            attempt++) {
+          if (attempt > 0) {
+            if (mounted) showToast(context, 'Connection dropped — retrying…');
+            await Future.delayed(Duration(seconds: 2 * attempt));
+          }
+          try {
+            final res = await appBusy.run(() =>
+                http.get(Uri.parse(url), headers: mediaAuthHeaders(url)));
+            if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
+              bytes = res.bodyBytes;
+            } else if (res.statusCode == 410 || res.statusCode == 404) {
+              break;
+            }
+          } catch (_) {
+            // network error — loop and retry
           }
         }
       }

@@ -11,7 +11,7 @@ Design notes:
   unread counts, "delivered/read by all" ticks, and seen-by lists without a row
   per (message, member).
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -232,6 +232,11 @@ def mark_cached_up_to(db: Session, conversation_id: int, user_id: int, up_to: in
     return False
 
 
+# How long a delivered attachment stays downloadable before the store-and-forward
+# purge may sweep its bytes (see purge_cached_conversation).
+MEDIA_PURGE_GRACE = timedelta(days=7)
+
+
 def purge_cached_conversation(db: Session, conversation_id: int) -> int:
     """Drop the content + media bytes of messages EVERY member has already
     cached locally (min cached pointer covers them), keeping a lightweight
@@ -265,6 +270,13 @@ def purge_cached_conversation(db: Session, conversation_id: int) -> int:
                 # desktop) fetched an empty tombstone and showed blank bubbles.
                 # Text is tiny; only media bytes are worth sweeping.
                 Message.media_url.isnot(None),
+                # Grace period: "cached" here means the recipient's device saved
+                # the chat (the message row), NOT that it downloaded the file.
+                # Purging straight away killed downloads that dropped on a weak
+                # network ("File is no longer available" on retry). Keep the
+                # bytes for MEDIA_PURGE_GRACE so a retry always works — the same
+                # 7-day window the large (ephemeral) uploads already get.
+                Message.timestamp < datetime.now(timezone.utc) - MEDIA_PURGE_GRACE,
             )
             .all()
         )

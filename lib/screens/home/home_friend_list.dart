@@ -628,34 +628,54 @@ extension _HomeFriendListView on HomePageState {
                 ),
               ],
             ),
-            child: Row(
+            child: LayoutBuilder(builder: (context, box) {
+              // Narrow panel: drop the message shortcut first, then the Enter
+              // pill (the whole card still opens the Space), so the name and
+              // details keep their room instead of overflowing.
+              final roomy = box.maxWidth >= 400;
+              final showEnter = box.maxWidth >= 290;
+              return Row(
               children: [
                 _heroOverlapAvatars(
-                    otherName, otherAvatar, 24, someoneListening),
-                const SizedBox(width: 16),
+                    otherName, otherAvatar, box.maxWidth >= 340 ? 24 : 18,
+                    someoneListening),
+                SizedBox(width: box.maxWidth >= 340 ? 16 : 10),
                 Expanded(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Label + TOGETHER badge shrink instead of overflowing
+                      // when the Harmony panel is narrow.
                       Row(
                         children: [
                           Icon(Icons.push_pin_rounded,
                               size: 11,
                               color: Colors.white.withValues(alpha: 0.8)),
                           const SizedBox(width: 4),
-                          Text(
-                            'OUR SPACE',
-                            style: TextStyle(
-                              fontSize: 10,
-                              letterSpacing: 1.5,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white.withValues(alpha: 0.85),
+                          Flexible(
+                            child: Text(
+                              'OUR SPACE',
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.fade,
+                              style: TextStyle(
+                                fontSize: 10,
+                                letterSpacing: 1.5,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white.withValues(alpha: 0.85),
+                              ),
                             ),
                           ),
                           if (together) ...[
                             const SizedBox(width: 8),
-                            _togetherBadge(),
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: _togetherBadge(),
+                              ),
+                            ),
                           ],
                         ],
                       ),
@@ -706,13 +726,18 @@ extension _HomeFriendListView on HomePageState {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                // BRIDGE — message the bond from Harmony (opens the chat).
-                _heroMessageButton(space),
-                const SizedBox(width: 6),
-                _heroEnterButton(accent),
+                if (roomy) ...[
+                  const SizedBox(width: 8),
+                  // BRIDGE — message the bond from Harmony (opens the chat).
+                  _heroMessageButton(space),
+                ],
+                if (showEnter) ...[
+                  SizedBox(width: roomy ? 6 : 8),
+                  _heroEnterButton(accent),
+                ],
               ],
-            ),
+            );
+            }),
           ),
         ),
       ),

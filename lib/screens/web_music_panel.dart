@@ -467,11 +467,11 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
               _seekBar(theme),
               _transport(theme),
               const SizedBox(height: 8),
-              _featureRow(theme),
+              _fitNarrow(_featureRow(theme), 340),
               const SizedBox(height: 12),
-              _bottomRow(theme),
+              _fitNarrow(_bottomRow(theme), 300),
               const SizedBox(height: 8),
-              if (!_queueCollapsed) _queueHeader(theme),
+              if (!_queueCollapsed) _fitNarrow(_queueHeader(theme), 370),
             ],
           ),
         ),
@@ -1053,6 +1053,19 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   // Playlist · Sleep · Equalizer · Lyrics — mirrors the native player. The two
   // that need the device/account (Equalizer DSP, synced Lyrics) aren't possible
   // on web, so tapping them shows a banner pointing to the Windows/Android app.
+  // When the music panel is dragged narrow, lay a row out at its design width
+  // and scale it down to fit, instead of letting it overflow.
+  Widget _fitNarrow(Widget row, [double designWidth = 320]) {
+    return LayoutBuilder(builder: (context, c) {
+      if (c.maxWidth >= designWidth) return row;
+      return FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.center,
+        child: SizedBox(width: designWidth, child: row),
+      );
+    });
+  }
+
   Widget _featureRow(ThemeData theme) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,

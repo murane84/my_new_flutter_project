@@ -1421,7 +1421,9 @@ extension _ChatPageHelpers3 on _ChatPageState {
     final tc = DateTime.tryParse(curr['timestamp'] ?? '');
     final tp = DateTime.tryParse(prev['timestamp'] ?? '');
     if (tc == null || tp == null) return false;
-    return tc.difference(tp).inMinutes < 3;
+    // Group messages from the same sender sent within 30 s of each other
+    // (the tight "almost the same time" window social apps use).
+    return tc.difference(tp).inSeconds < 30;
   }
 
   Widget _buildDateSeparator(String label) {

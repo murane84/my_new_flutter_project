@@ -2776,8 +2776,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                 ? Colors.white.withAlpha(20)
                 : Colors.black.withAlpha(14)));
 
-    // ── Bubble shape: a little beak/tail on the bottom-most bubble of each
-    // group, pointing to its sender's side (avatar for received, edge for me).
+    // ── Bubble shape: a little beak/tail on the FIRST bubble of each group
+    // (top-most / oldest of the run), pointing to its sender's side. Every
+    // bubble reserves the same tail-side gutter so the run aligns straight.
     const tailSize = 7.0;
     final bubbleShape = _BubbleBorder(
       radius: 18,
@@ -2907,10 +2908,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         ),
                       ],
                     ),
-                    // Extra padding on the tail side so text clears the beak.
+                    // Reserve the tail-side gutter on EVERY bubble (not just
+                    // the one with the beak) so a grouped run aligns straight.
                     padding: EdgeInsets.only(
-                        left: 11 + (showTail && !isMe ? tailSize : 0),
-                        right: 11 + (showTail && isMe ? tailSize : 0),
+                        left: 11 + (!isMe ? tailSize : 0),
+                        right: 11 + (isMe ? tailSize : 0),
                         top: 8,
                         bottom: 6),
                     child: Column(

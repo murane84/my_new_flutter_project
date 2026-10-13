@@ -274,7 +274,13 @@ class _BubbleBorder extends ShapeBorder {
     final path = Path();
 
     if (!showTail) {
-      path.addRRect(RRect.fromRectAndRadius(rect, Radius.circular(r)));
+      // Reserve the same tail-side gutter the tailed (first) bubble uses, so a
+      // grouped run lines up in a straight column instead of the tail-less
+      // bubbles jutting out past the one with the beak.
+      final body = tailOnRight
+          ? Rect.fromLTRB(rect.left, rect.top, rect.right - tailSize, rect.bottom)
+          : Rect.fromLTRB(rect.left + tailSize, rect.top, rect.right, rect.bottom);
+      path.addRRect(RRect.fromRectAndRadius(body, Radius.circular(r)));
       return path;
     }
 

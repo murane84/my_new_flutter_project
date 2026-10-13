@@ -1115,21 +1115,30 @@ class _TextStoryPageState extends State<_TextStoryPage> {
                 ),
               ),
               // Tappable colour / gradient strip
-              _swatchStrip(ink),
-              const SizedBox(height: 10),
+              // Colour strip + send button side by side, so the button no
+              // longer floats over (and hides) the last swatches.
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10, right: 12),
+                child: Row(
+                  children: [
+                    Expanded(child: _swatchStrip(ink)),
+                    const SizedBox(width: 8),
+                    FloatingActionButton(
+                      onPressed: _posting ? null : _post,
+                      child: _posting
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.send_rounded),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _posting ? null : _post,
-        child: _posting
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white))
-            : const Icon(Icons.send_rounded),
       ),
     );
   }
@@ -1282,21 +1291,30 @@ class _StickerComposePageState extends State<_StickerComposePage> {
                   ),
                 ),
               ),
-              _swatchStrip(ink),
-              const SizedBox(height: 10),
+              // Colour strip + send button side by side, so the button no
+              // longer floats over (and hides) the last swatches.
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10, right: 12),
+                child: Row(
+                  children: [
+                    Expanded(child: _swatchStrip(ink)),
+                    const SizedBox(width: 8),
+                    FloatingActionButton(
+                      onPressed: _posting ? null : _post,
+                      child: _posting
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.send_rounded),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _posting ? null : _post,
-        child: _posting
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white))
-            : const Icon(Icons.send_rounded),
       ),
     );
   }

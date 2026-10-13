@@ -2727,6 +2727,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   accent: accent,
                   bonded: _canHarmony,
                   heartKeySeed: msgId,
+                  // Bonded-space gesture: double-tap to love back (❤ reaction).
+                  onLoveBack:
+                      _canHarmony ? () => _addReaction(msg, '❤️') : null,
                 ),
               ),
             ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 /// A "secret heart" message bubble (message_type == 'heart'). Arrives covered
@@ -14,6 +15,7 @@ class HeartBubble extends StatefulWidget {
     required this.accent,
     this.bonded = false,
     this.heartKeySeed,
+    this.onLoveBack,
   });
 
   final String text;
@@ -21,6 +23,10 @@ class HeartBubble extends StatefulWidget {
   final Color accent;
   final bool bonded;
   final String? heartKeySeed;
+
+  /// Bonded-space gesture: double-tap the heart to "love back" (a reaction +
+  /// haptic + a little rising-hearts burst). Null = gesture disabled.
+  final VoidCallback? onLoveBack;
 
   /// A note longer than this (or spanning several lines) opens the genie card
   /// instead of revealing inside the heart.
@@ -94,6 +100,16 @@ class _HeartBubbleState extends State<HeartBubble>
     }
   }
 
+  void _loveBack() {
+    HapticFeedback.mediumImpact();
+    final box = _heartKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize) {
+      _showLoveBurst(context, box.localToGlobal(Offset.zero) & box.size,
+          widget.accent);
+    }
+    widget.onLoveBack?.call();
+  }
+
   @override
   Widget build(BuildContext context) {
     final revealed = _revealedInHeart && !_isLong;
@@ -108,6 +124,7 @@ class _HeartBubbleState extends State<HeartBubble>
       },
       child: GestureDetector(
         onTap: _onTap,
+        onDoubleTap: widget.onLoveBack == null ? null : _loveBack,
         child: AnimatedBuilder(
           animation: _scale,
           builder: (context, _) => Transform.scale(
@@ -385,6 +402,87 @@ class _HeartGenieState extends State<_HeartGenie>
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// A brief burst of little hearts rising + fading from [origin] — the reward
+/// for a bonded "love back" double-tap. Self-removing after the animation.
+void _showLoveBurst(BuildContext context, Rect origin, Color accent) {
+  final overlay = Overlay.of(context);
+  late OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (ctx) => _LoveBurst(
+      origin: origin,
+      accent: accent,
+      onDone: () => entry.remove(),
+    ),
+  );
+  overlay.insert(entry);
+}
+
+class _LoveBurst extends StatefulWidget {
+  const _LoveBurst({
+    required this.origin,
+    required this.accent,
+    required this.onDone,
+  });
+  final Rect origin;
+  final Color accent;
+  final VoidCallback onDone;
+
+  @override
+  State<_LoveBurst> createState() => _LoveBurstState();
+}
+
+class _LoveBurstState extends State<_LoveBurst>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1100))
+    ..forward().whenComplete(widget.onDone);
+
+  // Per-heart jitter: horizontal drift, size, delay.
+  static const _n = 7;
+  final List<double> _dx = List.generate(_n, (i) => (i - _n / 2) * 9.0);
+  final List<double> _size = List.generate(_n, (i) => 14.0 + (i % 3) * 6.0);
+  final List<double> _delay = List.generate(_n, (i) => (i % 4) * 0.08);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cx = widget.origin.center.dx;
+    final top = widget.origin.top;
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) {
+          final hearts = <Widget>[];
+          for (var i = 0; i < _n; i++) {
+            final t = ((_c.value - _delay[i]) / (1 - _delay[i])).clamp(0.0, 1.0);
+            if (t <= 0) continue;
+            final rise = 70.0 * t;
+            final opacity = (t < 0.15 ? t / 0.15 : (1 - t)).clamp(0.0, 1.0);
+            hearts.add(Positioned(
+              left: cx + _dx[i] * t,
+              top: top - rise,
+              child: Opacity(
+                opacity: opacity,
+                child: Transform.scale(
+                  scale: 0.6 + 0.6 * t,
+                  child: Icon(Icons.favorite_rounded,
+                      size: _size[i], color: widget.accent),
+                ),
+              ),
+            ));
+          }
+          return Stack(children: hearts);
+        },
       ),
     );
   }

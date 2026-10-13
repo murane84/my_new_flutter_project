@@ -2549,6 +2549,7 @@ class ApiService {
     required String filename,
     required String mime,
     bool ephemeral = false,
+    void Function(int sent, int total)? onProgress,
   }) async {
     try {
       final token = await _getToken();
@@ -2568,7 +2569,29 @@ class ApiService {
               mime.isNotEmpty ? mime : 'application/octet-stream'),
         ));
 
-      final streamed = await req.send();
+      http.StreamedResponse streamed;
+      if (onProgress == null) {
+        streamed = await req.send();
+      } else {
+        // Wrap the finalized multipart body so we can report how many bytes
+        // have been pushed up — drives the in-bubble upload percentage.
+        final total = req.contentLength;
+        var sent = 0;
+        final sreq = http.StreamedRequest(req.method, req.url)
+          ..headers.addAll(req.headers)
+          ..contentLength = total;
+        req.finalize().listen(
+          (chunk) {
+            sent += chunk.length;
+            onProgress(sent, total);
+            sreq.sink.add(chunk);
+          },
+          onError: sreq.sink.addError,
+          onDone: sreq.sink.close,
+          cancelOnError: true,
+        );
+        streamed = await http.Client().send(sreq);
+      }
       final resp = await http.Response.fromStream(streamed);
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final data = jsonDecode(resp.body);

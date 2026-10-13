@@ -497,6 +497,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
     optimistic['media_mime'] = mime;
     optimistic['media_size'] = bytes.length;
     optimistic['media_duration'] = durationMs;
+    optimistic['__upProgress'] = 0.0;
     if (type == 'image') {
       // A local preview so the sent photo shows while it uploads.
       optimistic['__localBytes'] = Uint8List.fromList(bytes);
@@ -541,7 +542,9 @@ extension _ChatPageHelpers2 on _ChatPageState {
             bytes: sendBytes,
             filename: sendName,
             mime: sendMime,
-            ephemeral: ephemeral));
+            ephemeral: ephemeral,
+            onProgress: (sent, total) =>
+                _setUploadProgress(tempId, total > 0 ? sent / total : null)));
         if (up == null || up['url'] == null) {
           _replaceOptimistic(tempId, null);
           if (mounted) {
@@ -579,6 +582,17 @@ extension _ChatPageHelpers2 on _ChatPageState {
 
     _outbox[tempId] = attempt;
     unawaited(attempt());
+  }
+
+  /// Live upload progress for an optimistic media bubble. Throttled to ~1%
+  /// steps so a large file doesn't trigger a rebuild per network chunk.
+  void _setUploadProgress(String tempId, double? p) {
+    if (!mounted) return;
+    final idx = _messages.indexWhere((m) => m['id'] == tempId);
+    if (idx == -1) return;
+    final prev = _messages[idx]['__upProgress'] as double?;
+    if (p != null && prev != null && (p - prev).abs() < 0.01) return;
+    setState(() => _messages[idx]['__upProgress'] = p);
   }
 
   String _fmtBytes(int? n) {
@@ -666,11 +680,37 @@ extension _ChatPageHelpers2 on _ChatPageState {
                         color: textColor,
                         fontWeight: FontWeight.w600,
                         fontSize: 13)),
-                const SizedBox(height: 2),
-                Text('Uploading\u2026',
-                    style: TextStyle(
-                        color: textColor.withValues(alpha: 0.7),
-                        fontSize: 11)),
+                const SizedBox(height: 7),
+                Builder(builder: (context) {
+                  final p = (msg['__upProgress'] as num?)?.toDouble();
+                  final scheme = Theme.of(context).colorScheme;
+                  final pct =
+                      (p == null || p <= 0) ? null : (p.clamp(0.0, 1.0));
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: pct,
+                            minHeight: 5,
+                            backgroundColor: textColor.withValues(alpha: 0.14),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(scheme.primary),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        pct == null ? 'Uploading\u2026' : '${(pct * 100).round()}%',
+                        style: TextStyle(
+                            color: textColor.withValues(alpha: 0.88),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  );
+                }),
               ],
             ),
           ),

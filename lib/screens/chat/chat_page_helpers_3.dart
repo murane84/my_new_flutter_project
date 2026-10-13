@@ -86,6 +86,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
       ColorScheme scheme) {
     final name = (msg['media_name'] as String?) ?? 'File';
     final size = (msg['media_size'] as num?)?.toInt();
+    final dlBusy = msg['__dlBusy'] == true;
+    final dlP = (msg['__dlProgress'] as num?)?.toDouble();
     return GestureDetector(
       onTap: () => _openUrl(url),
       child: Container(
@@ -120,7 +122,17 @@ extension _ChatPageHelpers3 on _ChatPageState {
                           color: textColor,
                           fontWeight: FontWeight.w600,
                           fontSize: 13)),
-                  if (size != null && size > 0)
+                  if (dlBusy)
+                    Text(
+                      dlP == null
+                          ? 'Downloading\u2026'
+                          : 'Downloading ${(dlP * 100).round()}%',
+                      style: TextStyle(
+                          color: scheme.primary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600),
+                    )
+                  else if (size != null && size > 0)
                     Text(_fmtBytes(size),
                         style: TextStyle(
                             color: textColor.withAlpha(150), fontSize: 11)),
@@ -128,17 +140,49 @@ extension _ChatPageHelpers3 on _ChatPageState {
               ),
             ),
             const SizedBox(width: 2),
-            // Explicit "Save to device" (Save As…). Tapping the rest of the
+            // Explicit "Save to device" (Save As…) — becomes a live progress
+            // ring while the file is downloading. Tapping the rest of the
             // bubble still opens/previews the file.
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-              tooltip: 'Save to device',
-              icon: Icon(Icons.download_rounded,
-                  size: 20, color: textColor.withAlpha(180)),
-              onPressed: () => _saveMediaToDevice(msg),
-            ),
+            if (dlBusy)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: SizedBox(
+                  width: 30,
+                  height: 30,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 30,
+                        height: 30,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.6,
+                          value: dlP,
+                          backgroundColor: textColor.withAlpha(38),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(scheme.primary),
+                        ),
+                      ),
+                      if (dlP != null)
+                        Text('${(dlP * 100).round()}',
+                            style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: textColor)),
+                    ],
+                  ),
+                ),
+              )
+            else
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                tooltip: 'Save to device',
+                icon: Icon(Icons.download_rounded,
+                    size: 20, color: textColor.withAlpha(180)),
+                onPressed: () => _downloadMediaWithProgress(msg),
+              ),
           ],
         ),
       ),
@@ -237,7 +281,62 @@ extension _ChatPageHelpers3 on _ChatPageState {
   /// may already be purged, so we read from the LOCAL CACHE first and only fall
   /// back to the network while the bytes still live there. The bytes are then
   /// handed to [_saveBytesToDevice], which shows a real "Save As…" dialog.
-  Future<void> _saveMediaToDevice(Map<String, dynamic> msg) async {
+  /// Streamed GET that reports download progress (received/total) as bytes
+  /// arrive, so a file bubble can show a live percentage. Returns the status
+  /// and the full bytes (empty on non-200).
+  Future<({int status, List<int> bytes})> _httpGetProgress(
+      String url, void Function(int received, int total)? onProgress) async {
+    final client = http.Client();
+    try {
+      final req = http.Request('GET', Uri.parse(url))
+        ..headers.addAll(mediaAuthHeaders(url));
+      final resp = await client.send(req);
+      if (resp.statusCode != 200) {
+        return (status: resp.statusCode, bytes: const <int>[]);
+      }
+      final total = resp.contentLength ?? 0;
+      final out = <int>[];
+      var received = 0;
+      await for (final chunk in resp.stream) {
+        out.addAll(chunk);
+        received += chunk.length;
+        if (onProgress != null) onProgress(received, total);
+      }
+      return (status: 200, bytes: out);
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Download + save a file bubble's attachment while showing a live
+  /// percentage in the bubble. Stashes transient progress on the message map
+  /// (throttled to ~1% steps) and rebuilds.
+  Future<void> _downloadMediaWithProgress(Map<String, dynamic> msg) async {
+    if (msg['__dlBusy'] == true) return;
+    setState(() {
+      msg['__dlBusy'] = true;
+      msg['__dlProgress'] = null;
+    });
+    try {
+      await _saveMediaToDevice(msg, onProgress: (received, total) {
+        if (!mounted) return;
+        final q = total > 0 ? received / total : null;
+        final prev = msg['__dlProgress'] as double?;
+        if (q != null && prev != null && (q - prev).abs() < 0.01) return;
+        setState(() => msg['__dlProgress'] = q);
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          msg['__dlBusy'] = false;
+          msg['__dlProgress'] = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveMediaToDevice(Map<String, dynamic> msg,
+      {void Function(int received, int total)? onProgress}) async {
     final rel = msg['media_url'] as String?;
     if (rel == null || rel.isEmpty) return;
     final name = (msg['media_name'] as String?)?.trim();
@@ -258,7 +357,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
       // it still holds the bytes.
       if (bytes == null || bytes.isEmpty) {
         final url = fullMediaUrl(rel);
-        if (!kIsWeb && id == null) {
+        if (!kIsWeb && id == null && onProgress == null) {
           try {
             final f =
                 await MediaStore.instance.getFile(url, mediaAuthHeaders(url));
@@ -276,11 +375,11 @@ extension _ChatPageHelpers3 on _ChatPageState {
             await Future.delayed(Duration(seconds: 2 * attempt));
           }
           try {
-            final res = await appBusy.run(() =>
-                http.get(Uri.parse(url), headers: mediaAuthHeaders(url)));
-            if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
-              bytes = res.bodyBytes;
-            } else if (res.statusCode == 410 || res.statusCode == 404) {
+            final r =
+                await appBusy.run(() => _httpGetProgress(url, onProgress));
+            if (r.status == 200 && r.bytes.isNotEmpty) {
+              bytes = r.bytes;
+            } else if (r.status == 410 || r.status == 404) {
               break;
             }
           } catch (_) {

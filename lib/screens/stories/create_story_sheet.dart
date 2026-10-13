@@ -799,21 +799,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                         const SizedBox(height: 12),
                         _field(_caption, 'Say something (optional)', ink,
                             onEmoji: _toggleEmoji),
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: _posting ? null : _post,
-                            icon: _posting
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2, color: Colors.white))
-                                : const Icon(Icons.send_rounded),
-                            label: const Text('Share to story'),
-                          ),
-                        ),
+                        const SizedBox(height: 12),
                       ],
                     ),
                   ),
@@ -821,7 +807,27 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                 ),
                 // Visible background picker — tap a swatch to recolour (was a
                 // blind cycle button before), matching the other composers.
-                _bgStrip(ink),
+                // Same bottom bar as the text and sticker composers: colour
+                // strip with the send button beside it.
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: Row(
+                    children: [
+                      Expanded(child: _bgStrip(ink)),
+                      const SizedBox(width: 8),
+                      FloatingActionButton(
+                        onPressed: _posting ? null : _post,
+                        child: _posting
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.send_rounded),
+                      ),
+                    ],
+                  ),
+                ),
                 // Inline emoji panel: the caption stays visible above and
                 // updates live as emojis are tapped (no covering modal).
                 if (_showEmoji)

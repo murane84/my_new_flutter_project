@@ -313,7 +313,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
   /// (throttled to ~1% steps) and rebuilds.
   Future<void> _downloadMediaWithProgress(Map<String, dynamic> msg) async {
     if (msg['__dlBusy'] == true) return;
-    setState(() {
+    rebuildWith(() {
       msg['__dlBusy'] = true;
       msg['__dlProgress'] = null;
     });
@@ -323,11 +323,11 @@ extension _ChatPageHelpers3 on _ChatPageState {
         final q = total > 0 ? received / total : null;
         final prev = msg['__dlProgress'] as double?;
         if (q != null && prev != null && (q - prev).abs() < 0.01) return;
-        setState(() => msg['__dlProgress'] = q);
+        rebuildWith(() => msg['__dlProgress'] = q);
       });
     } finally {
       if (mounted) {
-        setState(() {
+        rebuildWith(() {
           msg['__dlBusy'] = false;
           msg['__dlProgress'] = null;
         });

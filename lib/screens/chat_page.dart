@@ -1139,6 +1139,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _scrollToBottom();
   }
 
+  /// Rebuild hook for the part-file helper extensions, which can't call the
+  /// protected [setState] directly. They mutate state inside [fn] and this
+  /// triggers the repaint.
+  void rebuildWith(void Function() fn) {
+    if (!mounted) return;
+    setState(fn);
+  }
+
   // Swap a pending bubble for the real server message (success) or flag it
   // failed (so the tick slot shows a tappable retry). Dedupes if a poll already
   // pulled the real message in.

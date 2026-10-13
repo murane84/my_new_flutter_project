@@ -592,7 +592,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
     if (idx == -1) return;
     final prev = _messages[idx]['__upProgress'] as double?;
     if (p != null && prev != null && (p - prev).abs() < 0.01) return;
-    setState(() => _messages[idx]['__upProgress'] = p);
+    rebuildWith(() => _messages[idx]['__upProgress'] = p);
   }
 
   String _fmtBytes(int? n) {

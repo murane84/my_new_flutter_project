@@ -235,6 +235,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   // send. Kept until the send succeeds so a failed bubble can retry.
   final Map<String, Future<void> Function()> _outbox = {};
 
+  // Attachment keys (media_url) that have been saved to THIS device, so a file
+  // bubble can show a "downloaded" icon instead of the fresh download arrow.
+  // Persisted across restarts in SharedPreferences.
+  final Set<String> _savedMediaKeys = <String>{};
+
   // edit-in-place: the message currently being edited, plus any reply-quote
   // prefix to preserve when saving.
   Map<String, dynamic>? _editing;
@@ -344,6 +349,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     ConnectionStatus.instance.online.addListener(_onConnStatusChanged);
     _initChat();
     _loadMySpaces();
+    _loadSavedMediaKeys();
 
     _statusTimer = Timer.periodic(
       const Duration(seconds: 10),
@@ -1145,6 +1151,34 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   void rebuildWith(void Function() fn) {
     if (!mounted) return;
     setState(fn);
+  }
+
+  // ── "Saved to device" memory (per attachment) ──────────────────────────────
+  Future<void> _loadSavedMediaKeys() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList('chat_saved_media');
+      if (list != null && list.isNotEmpty) {
+        _savedMediaKeys.addAll(list);
+        if (mounted) setState(() {});
+      }
+    } catch (_) {}
+  }
+
+  void _markMediaSaved(String? key) {
+    if (key == null || key.isEmpty || _savedMediaKeys.contains(key)) return;
+    _savedMediaKeys.add(key);
+    if (mounted) setState(() {});
+    () async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        // Cap the list so it can't grow without bound.
+        final keep = _savedMediaKeys.toList();
+        await prefs.setStringList(
+            'chat_saved_media',
+            keep.length > 500 ? keep.sublist(keep.length - 500) : keep);
+      } catch (_) {}
+    }();
   }
 
   // Swap a pending bubble for the real server message (success) or flag it

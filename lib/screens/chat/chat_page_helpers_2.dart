@@ -545,10 +545,11 @@ extension _ChatPageHelpers2 on _ChatPageState {
             ephemeral: ephemeral,
             onProgress: (sent, total) => _setUploadProgress(
                 tempId,
-                // Cap live progress below 100%: bytes handed to the socket
-                // aren't "done" — the server still has to receive + accept
-                // them. We only show 100% on a genuine send (below).
-                total > 0 ? (sent / total).clamp(0.0, 0.99) : null)));
+                // Bytes handed to the socket aren't "done" — the server still
+                // has to receive + accept them, then we create the message.
+                // Map the byte phase to 0..90% and let the final steps carry
+                // it smoothly to 100%, so it never slams to ~99% then stalls.
+                total > 0 ? (sent / total * 0.90).clamp(0.0, 0.90) : null)));
         if (up == null || up['url'] == null) {
           _replaceOptimistic(tempId, null);
           if (mounted) {
@@ -557,6 +558,9 @@ extension _ChatPageHelpers2 on _ChatPageState {
           }
           return;
         }
+        // File is on the server; keep the ring moving while the message row is
+        // created (the animated bar eases, so this reads as one smooth fill).
+        _setUploadProgress(tempId, 0.96);
         final sent = await appBusy.run(() => ApiService().sendMessage(
               widget.friendId,
               // Caption travels as the message content, so an image + text
@@ -576,7 +580,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
           // optimistic bubble swap to the real sent message.
           _setUploadProgress(tempId, 1.0);
           if (mounted) showToast(context, 'Sent', type: ToastType.success);
-          await Future.delayed(const Duration(milliseconds: 350));
+          await Future.delayed(const Duration(milliseconds: 600));
         } else if (mounted) {
           showToast(context, 'Could not send — tap the ! to retry',
               type: ToastType.error);
@@ -602,7 +606,12 @@ extension _ChatPageHelpers2 on _ChatPageState {
     final idx = _messages.indexWhere((m) => m['id'] == tempId);
     if (idx == -1) return;
     final prev = _messages[idx]['__upProgress'] as double?;
-    if (p != null && prev != null && (p - prev).abs() < 0.01) return;
+    // Throttle only the dense byte-phase updates (< 0.90); always apply the
+    // milestone values (0.90, 0.96, 1.0) so the fill completes cleanly.
+    if (p != null &&
+        p < 0.90 &&
+        prev != null &&
+        (p - prev).abs() < 0.01) return;
     rebuildWith(() => _messages[idx]['__upProgress'] = p);
   }
 
@@ -677,66 +686,76 @@ extension _ChatPageHelpers2 on _ChatPageState {
       child: Builder(builder: (context) {
         final scheme = Theme.of(context).colorScheme;
         final p = (msg['__upProgress'] as num?)?.toDouble();
-        final pct = (p == null || p <= 0) ? null : p.clamp(0.0, 1.0);
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(ic, size: 22, color: textColor.withValues(alpha: 0.85)),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: textColor,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13)),
-                  const SizedBox(height: 3),
-                  Text(
-                    pct == null
-                        ? 'Uploading\u2026'
-                        : 'Uploading ${(pct * 100).round()}%',
-                    style: TextStyle(
-                        color: scheme.primary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            // Same progress ring as the download bubble, for symmetry.
-            SizedBox(
-              width: 30,
-              height: 30,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  SizedBox(
-                    width: 30,
-                    height: 30,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.6,
-                      value: pct,
-                      backgroundColor: textColor.withValues(alpha: 0.15),
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(scheme.primary),
-                    ),
-                  ),
-                  if (pct != null)
-                    Text('${(pct * 100).round()}',
+        final determinate = p != null && p > 0;
+        final target = (p ?? 0.0).clamp(0.0, 1.0);
+        // TweenAnimationBuilder eases the ring + percent between milestone
+        // targets, so the fill reads as one continuous motion to 100% instead
+        // of racing to ~99% and jumping.
+        return TweenAnimationBuilder<double>(
+          tween: Tween<double>(end: target),
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeOut,
+          builder: (context, v, _) {
+            final pctInt = (v * 100).round();
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(ic, size: 22, color: textColor.withValues(alpha: 0.85)),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: textColor,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13)),
+                      const SizedBox(height: 3),
+                      Text(
+                        determinate ? 'Uploading $pctInt%' : 'Uploading\u2026',
                         style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            color: textColor)),
-                ],
-              ),
-            ),
-          ],
+                            color: scheme.primary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // Same progress ring as the download bubble, for symmetry.
+                SizedBox(
+                  width: 30,
+                  height: 30,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 30,
+                        height: 30,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.6,
+                          value: determinate ? v : null,
+                          backgroundColor: textColor.withValues(alpha: 0.15),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(scheme.primary),
+                        ),
+                      ),
+                      if (determinate)
+                        Text('$pctInt',
+                            style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: textColor)),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         );
       }),
     );

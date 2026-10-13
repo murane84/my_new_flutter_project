@@ -88,6 +88,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
     final size = (msg['media_size'] as num?)?.toInt();
     final dlBusy = msg['__dlBusy'] == true;
     final dlP = (msg['__dlProgress'] as num?)?.toDouble();
+    final saved = _savedMediaKeys.contains(msg['media_url'] as String?);
     return GestureDetector(
       onTap: () => _openUrl(url),
       child: Container(
@@ -178,9 +179,17 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-                tooltip: 'Save to device',
-                icon: Icon(Icons.download_rounded,
-                    size: 20, color: textColor.withAlpha(180)),
+                tooltip: saved ? 'Saved — tap to save again' : 'Save to device',
+                // Downloaded already → a distinct "saved" badge (still tappable
+                // to re-save). Fresh content shows the plain download arrow.
+                icon: Icon(
+                    saved
+                        ? Icons.download_done_rounded
+                        : Icons.download_rounded,
+                    size: 20,
+                    color: saved
+                        ? scheme.primary
+                        : textColor.withAlpha(180)),
                 onPressed: () => _downloadMediaWithProgress(msg),
               ),
           ],
@@ -318,13 +327,14 @@ extension _ChatPageHelpers3 on _ChatPageState {
       msg['__dlProgress'] = null;
     });
     try {
-      await _saveMediaToDevice(msg, onProgress: (received, total) {
+      final ok = await _saveMediaToDevice(msg, onProgress: (received, total) {
         if (!mounted) return;
         final q = total > 0 ? received / total : null;
         final prev = msg['__dlProgress'] as double?;
         if (q != null && prev != null && (q - prev).abs() < 0.01) return;
         rebuildWith(() => msg['__dlProgress'] = q);
       });
+      if (ok) _markMediaSaved(msg['media_url'] as String?);
     } finally {
       if (mounted) {
         rebuildWith(() {
@@ -335,10 +345,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
     }
   }
 
-  Future<void> _saveMediaToDevice(Map<String, dynamic> msg,
+  Future<bool> _saveMediaToDevice(Map<String, dynamic> msg,
       {void Function(int received, int total)? onProgress}) async {
     final rel = msg['media_url'] as String?;
-    if (rel == null || rel.isEmpty) return;
+    if (rel == null || rel.isEmpty) return false;
     final name = (msg['media_name'] as String?)?.trim();
     final mime = msg['media_mime'] as String?;
     final type = (msg['message_type'] as String?) ?? 'file';
@@ -395,18 +405,19 @@ extension _ChatPageHelpers3 on _ChatPageState {
                   : 'File is no longer available',
               type: ToastType.error);
         }
-        return;
+        return false;
       }
       final ext = type == 'song' ? '.mp3' : '';
       final fallback =
           'aluta_${type}_${DateTime.now().millisecondsSinceEpoch}$ext';
-      await _saveBytesToDevice(
+      return await _saveBytesToDevice(
           bytes, (name == null || name.isEmpty) ? fallback : name,
           image: type == 'image');
     } catch (_) {
       if (mounted) {
         showToast(context, 'Could not save', type: ToastType.error);
       }
+      return false;
     }
   }
 
@@ -415,7 +426,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
   /// location picker on mobile, and — because `bytes` is passed — writes the
   /// file itself, returning the chosen path (null if the user cancels). If the
   /// platform doesn't support the dialog, we fall back to the share/save sheet.
-  Future<void> _saveBytesToDevice(List<int> bytes, String fname,
+  Future<bool> _saveBytesToDevice(List<int> bytes, String fname,
       {bool image = false}) async {
     final data = Uint8List.fromList(bytes);
     // On a phone, drop images straight into the photo gallery (easy to find,
@@ -430,7 +441,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
           if (mounted) {
             showToast(context, 'Saved to gallery', type: ToastType.success);
           }
-          return;
+          return true;
         }
       } catch (_) {/* fall through to the generic saver */}
     }
@@ -442,7 +453,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
         if (mounted) {
           showToast(context, 'Saved to Downloads', type: ToastType.success);
         }
-        return;
+        return true;
       }
     }
     try {
@@ -452,12 +463,17 @@ extension _ChatPageHelpers3 on _ChatPageState {
         bytes: data,
       );
       // A null result is a user cancel, not an error.
-      if (saved != null && mounted) {
-        showToast(context, 'Saved to device', type: ToastType.success);
+      if (saved != null) {
+        if (mounted) {
+          showToast(context, 'Saved to device', type: ToastType.success);
+        }
+        return true;
       }
+      return false;
     } catch (_) {
       // saveFile unsupported here → fall back to the system share/save sheet.
       await _shareBytes(data, fname);
+      return false;
     }
   }
 

@@ -2575,12 +2575,17 @@ class ApiService {
       } else {
         // Wrap the finalized multipart body so we can report how many bytes
         // have been pushed up — drives the in-bubble upload percentage.
+        // IMPORTANT: finalize() FIRST — that's what stamps the
+        // `content-type: multipart/form-data; boundary=…` header on the
+        // request. Copy headers only AFTER, or the server gets a body it
+        // can't parse (upload reaches 100% then fails).
+        final body = req.finalize();
         final total = req.contentLength;
         var sent = 0;
         final sreq = http.StreamedRequest(req.method, req.url)
           ..headers.addAll(req.headers)
           ..contentLength = total;
-        req.finalize().listen(
+        body.listen(
           (chunk) {
             sent += chunk.length;
             onProgress(sent, total);

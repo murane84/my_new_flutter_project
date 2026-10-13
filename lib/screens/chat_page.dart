@@ -4381,17 +4381,12 @@ class _HoverChevronState extends State<_HoverChevron> {
                   width: 26,
                   height: 26,
                   decoration: BoxDecoration(
-                    color: scheme.surface,
+                    // Subtle, near-transparent circle (works in light + dark);
+                    // the chevron keeps its brand colour.
+                    color: scheme.onSurface.withValues(alpha: 0.06),
                     shape: BoxShape.circle,
                     border: Border.all(
-                        color: scheme.outlineVariant.withValues(alpha: 0.6)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.18),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+                        color: scheme.outlineVariant.withValues(alpha: 0.25)),
                   ),
                   child: Icon(Icons.expand_more_rounded,
                       size: 18, color: scheme.primary),

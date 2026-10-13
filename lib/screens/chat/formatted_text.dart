@@ -1,7 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_linkify/flutter_linkify.dart' show LooseUrlLinkifier;
-import 'package:linkify/linkify.dart';
+import 'package:flutter_linkify/flutter_linkify.dart';
+import 'package:linkify/linkify.dart' show linkify;
 
 /// Renders a chat message with lightweight, WhatsApp/Telegram-style formatting:
 ///   *bold*  _italic_  ~strike~  __underline__  `code`  ==highlight==  ||spoiler||

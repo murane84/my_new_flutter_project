@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aluta — Friend list concepts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0a0b;
+    --surface:#171516;
+    --surface-2:#211e1f;
+    --line:#2a2627;
+    --ink:#EFEAEA;
+    --ink-mute:#8B8385;
+    --coral:#FF5A5F;
+    --coral-dim:#B43A3E;
+    --green:#3BD16F;
+    --r:22px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:#050405;
+    color:var(--ink);
+    font-family:'Nunito',-apple-system,'Segoe UI',Roboto,sans-serif;
+    padding:32px 20px 60px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .page-head{max-width:1200px;margin:0 auto 34px}
+  .page-head h1{font-size:26px;font-weight:800;letter-spacing:-.4px}
+  .page-head p{color:var(--ink-mute);font-size:14px;margin-top:6px;max-width:60ch;line-height:1.5}
+
+  .rail{
+    display:grid;
+    grid-template-columns:repeat(4,340px);
+    gap:26px;
+    max-width:1200px;
+    margin:0 auto;
+    overflow-x:auto;
+    padding-bottom:18px;
+    scroll-snap-type:x mandatory;
+  }
+  @media(max-width:1100px){.rail{grid-template-columns:repeat(4,300px)}}
+
+  .concept{scroll-snap-align:start}
+  .cap{margin-bottom:12px}
+  .cap .n{
+    font-size:11px;font-weight:800;letter-spacing:1.4px;
+    color:var(--coral);text-transform:uppercase;
+  }
+  .cap h2{font-size:19px;font-weight:800;margin-top:3px}
+  .cap p{font-size:12.5px;color:var(--ink-mute);line-height:1.5;margin-top:5px;min-height:56px}
+
+  /* ---- phone ---- */
+  .phone{
+    background:var(--bg);
+    border:1px solid var(--line);
+    border-radius:30px;
+    height:660px;
+    overflow:hidden;
+    display:flex;flex-direction:column;
+    position:relative;
+    box-shadow:0 20px 50px rgba(0,0,0,.6);
+  }
+  .status{
+    display:flex;justify-content:space-between;
+    font-size:10px;color:var(--ink-mute);
+    padding:10px 18px 4px;font-weight:600;
+  }
+  .appbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:6px 18px 12px;
+  }
+  .appbar b{font-size:20px;font-weight:800;letter-spacing:-.3px}
+  .dots{color:var(--ink-mute);font-size:16px;letter-spacing:1px}
+  .body{flex:1;overflow:hidden;padding:0 12px;position:relative}
+  .card{
+    background:var(--surface);border-radius:var(--r);
+    height:100%;padding:14px 12px;overflow:hidden;
+  }
+
+  .search{
+    background:var(--surface-2);border-radius:14px;
+    padding:9px 12px;font-size:12px;color:#6d6668;
+    display:flex;gap:8px;align-items:center;margin-bottom:12px;
+  }
+
+  .zone{
+    font-size:10px;font-weight:800;letter-spacing:1.3px;
+    color:var(--ink-mute);text-transform:uppercase;
+    margin:2px 4px 9px;display:flex;align-items:center;gap:7px;
+  }
+  .zone::after{content:'';flex:1;height:1px;background:var(--line)}
+
+  /* avatars */
+  .av{border-radius:50%;flex:none;display:grid;place-items:center;
+      font-size:12px;font-weight:800;color:#fff;overflow:hidden}
+  .a1{background:linear-gradient(140deg,#7a5c8e,#4a3a5c)}
+  .a2{background:linear-gradient(140deg,#c78a5c,#7d4f30)}
+  .a3{background:linear-gradient(140deg,#4d8ac9,#2b5a8a)}
+  .a4{background:linear-gradient(140deg,#3f9d72,#26624a)}
+  .a5{background:linear-gradient(140deg,#b7434a,#7a2529)}
+
+  /* ===== 1. TUNED IN ===== */
+  .live{
+    border-radius:18px;padding:11px;margin-bottom:9px;
+    display:flex;align-items:center;gap:11px;position:relative;overflow:hidden;
+  }
+  .live::before{
+    content:'';position:absolute;inset:0;opacity:.5;
+  }
+  .liveA::before{background:linear-gradient(105deg,#6d2f52,#2a1220 70%)}
+  .liveB::before{background:linear-gradient(105deg,#2f5a6d,#122029 70%)}
+  .live>*{position:relative;z-index:1}
+  .live .meta{flex:1;min-width:0}
+  .live .nm{font-size:13.5px;font-weight:800}
+  .live .tk{font-size:11px;color:#d8cdd0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+  .joinbtn{
+    background:var(--coral);color:#fff;font-size:10.5px;font-weight:800;
+    padding:6px 13px;border-radius:20px;letter-spacing:.3px;
+  }
+  .wave{display:flex;align-items:flex-end;gap:2px;height:15px;margin-top:5px}
+  .wave i{width:2.5px;background:var(--coral);border-radius:2px;animation:eq .9s ease-in-out infinite}
+  .wave i:nth-child(1){height:40%;animation-delay:0s}
+  .wave i:nth-child(2){height:85%;animation-delay:.12s}
+  .wave i:nth-child(3){height:55%;animation-delay:.24s}
+  .wave i:nth-child(4){height:100%;animation-delay:.06s}
+  .wave i:nth-child(5){height:35%;animation-delay:.3s}
+  .wave i:nth-child(6){height:70%;animation-delay:.18s}
+  @keyframes eq{0%,100%{transform:scaleY(.45)}50%{transform:scaleY(1)}}
+
+  .quiet{display:flex;align-items:center;gap:11px;padding:9px 4px}
+  .quiet .nm{font-size:13px;font-weight:600}
+  .quiet .sub{font-size:11px;color:var(--ink-mute);margin-top:1px}
+  .quiet .tm{font-size:10px;color:#5f585a;margin-left:auto}
+
+  /* ===== 2. MOSAIC ===== */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .tile{
+    aspect-ratio:1;border-radius:16px;padding:10px;
+    display:flex;flex-direction:column;justify-content:flex-end;
+    position:relative;overflow:hidden;
+  }
+  .t1{background:linear-gradient(160deg,#8a3b5e,#2b1220)}
+  .t2{background:linear-gradient(160deg,#3b6a8a,#12202b)}
+  .t3{background:linear-gradient(160deg,#8a6a3b,#2b2312)}
+  .t4{background:linear-gradient(160deg,#3b8a5e,#122b1e)}
+  .tile .tav{width:26px;height:26px;position:absolute;top:10px;left:10px;
+    border:2px solid rgba(255,255,255,.85);font-size:9px}
+  .tile .tn{font-size:12.5px;font-weight:800;line-height:1.2}
+  .tile .tt{font-size:10px;color:rgba(255,255,255,.72);margin-top:2px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .badge{
+    position:absolute;top:9px;right:9px;background:var(--coral);
+    min-width:19px;height:19px;border-radius:10px;font-size:10px;font-weight:800;
+    display:grid;place-items:center;padding:0 5px;
+  }
+  .playing{position:absolute;top:12px;right:11px;display:flex;gap:2px;align-items:flex-end;height:11px}
+  .playing i{width:2px;background:#fff;border-radius:2px;animation:eq .8s ease-in-out infinite}
+  .playing i:nth-child(1){height:50%}
+  .playing i:nth-child(2){height:100%;animation-delay:.15s}
+  .playing i:nth-child(3){height:70%;animation-delay:.3s}
+
+  /* ===== 3. RINGED ROWS ===== */
+  .row{display:flex;align-items:center;gap:12px;padding:11px 4px}
+  .ring{
+    padding:2.5px;border-radius:50%;flex:none;
+    background:conic-gradient(from 200deg,var(--coral),#ff9a6b,#ffd06b,var(--coral));
+  }
+  .ring.seen{background:var(--line)}
+  .ring.none{padding:0;background:none}
+  .ring .av{border:2.5px solid var(--surface)}
+  .row .meta{flex:1;min-width:0}
+  .row .nm{font-size:14.5px;font-weight:700;letter-spacing:-.2px}
+  .row .sub{font-size:12px;color:var(--ink-mute);margin-top:2px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .sub.music{color:#d4a0a3}
+  .row .tm{font-size:10.5px;color:#5f585a;align-self:flex-start;margin-top:3px}
+  .unread{background:var(--coral);color:#fff;font-size:10px;font-weight:800;
+    border-radius:10px;padding:1px 6px;margin-top:5px;display:inline-block}
+  .rowdiv{height:1px;background:var(--line);margin-left:60px}
+
+  /* ===== 4. VINYL ===== */
+  .vrow{display:flex;align-items:center;gap:13px;padding:11px 4px}
+  .vinyl{width:52px;height:52px;border-radius:50%;flex:none;position:relative;
+    display:grid;place-items:center;
+    background:repeating-radial-gradient(circle at 50% 50%,#1a1718 0 2px,#131011 2px 4px);
+    border:1px solid #2e2a2b;}
+  .vinyl.spin{animation:spin 4.5s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .vinyl .lbl{width:26px;height:26px;border-radius:50%;font-size:9px}
+  .vinyl::after{content:'';position:absolute;width:5px;height:5px;border-radius:50%;
+    background:#0b0a0b;border:1px solid #3a3536}
+  .arc{position:absolute;inset:-4px;border-radius:50%;
+    background:conic-gradient(var(--coral) 0 62%,transparent 62% 100%);
+    -webkit-mask:radial-gradient(circle,transparent 0 26px,#000 26px);
+    mask:radial-gradient(circle,transparent 0 26px,#000 26px);}
+  .vrow .nm{font-size:14.5px;font-weight:700}
+  .vrow .sub{font-size:12px;color:var(--ink-mute);margin-top:2px}
+
+  /* ---- footer bar (shared) ---- */
+  .foot{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:10px 16px 14px;gap:8px;border-top:1px solid var(--line);
+  }
+  .nowchip{
+    border:1px solid var(--coral-dim);border-radius:20px;
+    padding:6px 14px;font-size:11.5px;font-weight:700;color:var(--coral);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .mechip{
+    border:1px solid var(--line);border-radius:20px;
+    padding:6px 12px;font-size:11.5px;font-weight:700;color:var(--ink-mute);
+  }
+
+  .note{max-width:1200px;margin:34px auto 0;color:var(--ink-mute);
+    font-size:13px;line-height:1.65}
+  .note b{color:var(--ink)}
+
+  @media(prefers-reduced-motion:reduce){
+    *{animation:none!important}
+  }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>Aluta — four ways to rebuild the friend list</h1>
+  <p>Same contacts, same palette, four different structures. The thing that makes the current page read as WhatsApp is the arrangement, not the colour — so each of these changes what the list is sorted by and what a row is made of.</p>
+</div>
+
+<div class="rail">
+
+  <!-- ============ 1 ============ -->
+  <div class="concept">
+    <div class="cap">
+      <div class="n">Concept 01</div>
+      <h2>Tuned In</h2>
+      <p>Sorted by who's playing music, not by who messaged last. Live listeners rise to the top as wide cards you can join in one tap. Everyone else sits quiet below.</p>
+    </div>
+    <div class="phone">
+      <div class="status"><span>21:38</span><span>▮▮▮ 89</span></div>
+      <div class="appbar"><b>Aluta</b><span class="dots">⋮</span></div>
+      <div class="body"><div class="card">
+        <div class="search"><span>⌕</span><span>Search messages…</span></div>
+
+        <div class="zone">Listening now · 2</div>
+
+        <div class="live liveA">
+          <div class="av a1" style="width:42px;height:42px">WH</div>
+          <div class="meta">
+            <div class="nm">WIFEY HALOTEL</div>
+            <div class="tk">Ngishutheni — Goon</div>
+            <div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </div>
+          <div class="joinbtn">Join</div>
+        </div>
+
+        <div class="live liveB">
+          <div class="av a3" style="width:42px;height:42px">BH</div>
+          <div class="meta">
+            <div class="nm">Belyner Halotel</div>
+            <div class="tk">No wahala Rmx</div>
+            <div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </div>
+          <div class="joinbtn">Join</div>
+        </div>
+
+        <div class="zone" style="margin-top:16px">Quiet</div>
+
+        <div class="quiet">
+          <div class="av a2" style="width:36px;height:36px">OT</div>
+          <div><div class="nm">ozy tigo</div><div class="sub">morning</div></div>
+          <div class="tm">12:03</div>
+        </div>
+        <div class="quiet">
+          <div class="av a4" style="width:36px;height:36px">F</div>
+          <div><div class="nm">Family</div><div class="sub">answered</div></div>
+          <div class="tm">12:00</div>
+        </div>
+      </div></div>
+      <div class="foot">
+        <div class="nowchip">♪ No wahala Rmx</div>
+        <div class="mechip">Anesius ⌃</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 2 ============ -->
+  <div class="concept">
+    <div class="cap">
+      <div class="n">Concept 02</div>
+      <h2>The Mosaic</h2>
+      <p>No rows at all. Each person is a square tile carrying their current or last-played cover art. Reads as a music library made of people. Boldest option — hardest to scan past ~30 contacts.</p>
+    </div>
+    <div class="phone">
+      <div class="status"><span>21:38</span><span>▮▮▮ 89</span></div>
+      <div class="appbar"><b>Aluta</b><span class="dots">⋮</span></div>
+      <div class="body"><div class="card">
+        <div class="search"><span>⌕</span><span>Search…</span></div>
+        <div class="grid">
+          <div class="tile t1">
+            <div class="av a1 tav">WH</div>
+            <div class="playing"><i></i><i></i><i></i></div>
+            <div class="tn">WIFEY HALOTEL</div>
+            <div class="tt">Ngishutheni — Goon</div>
+          </div>
+          <div class="tile t2">
+            <div class="av a2 tav">OT</div>
+            <div class="badge">3</div>
+            <div class="tn">ozy tigo</div>
+            <div class="tt">morning</div>
+          </div>
+          <div class="tile t3">
+            <div class="av a4 tav">F</div>
+            <div class="tn">Family</div>
+            <div class="tt">answered</div>
+          </div>
+          <div class="tile t4">
+            <div class="av a3 tav">BH</div>
+            <div class="playing"><i></i><i></i><i></i></div>
+            <div class="tn">Belyner Halotel</div>
+            <div class="tt">No wahala Rmx</div>
+          </div>
+        </div>
+      </div></div>
+      <div class="foot">
+        <div class="nowchip">♪ No wahala Rmx</div>
+        <div class="mechip">Anesius ⌃</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 3 ============ -->
+  <div class="concept">
+    <div class="cap">
+      <div class="n">Concept 03</div>
+      <h2>Ringed rows</h2>
+      <p>The stories strip is absorbed into the avatars — gradient ring means an unseen story. Tap ring for story, tap name for chat. Buys back a full screenful and drops the most Instagram-ish element.</p>
+    </div>
+    <div class="phone">
+      <div class="status"><span>21:38</span><span>▮▮▮ 89</span></div>
+      <div class="appbar"><b>Aluta</b><span class="dots">⋮</span></div>
+      <div class="body"><div class="card">
+        <div class="search"><span>⌕</span><span>Search messages…</span></div>
+
+        <div class="row">
+          <div class="ring"><div class="av a1" style="width:46px;height:46px">WH</div></div>
+          <div class="meta">
+            <div class="nm">WIFEY HALOTEL</div>
+            <div class="sub music">♪ Ngishutheni — Goon</div>
+          </div>
+          <div class="tm">4:54 PM</div>
+        </div>
+        <div class="rowdiv"></div>
+
+        <div class="row">
+          <div class="ring"><div class="av a2" style="width:46px;height:46px">OT</div></div>
+          <div class="meta">
+            <div class="nm">ozy tigo</div>
+            <div class="sub">morning</div>
+            <span class="unread">2</span>
+          </div>
+          <div class="tm">12:03 PM</div>
+        </div>
+        <div class="rowdiv"></div>
+
+        <div class="row">
+          <div class="ring seen"><div class="av a4" style="width:46px;height:46px">F</div></div>
+          <div class="meta">
+            <div class="nm">Family</div>
+            <div class="sub">answered · 4 people</div>
+          </div>
+          <div class="tm">12:00 PM</div>
+        </div>
+        <div class="rowdiv"></div>
+
+        <div class="row">
+          <div class="ring none"><div class="av a3" style="width:46px;height:46px">BH</div></div>
+          <div class="meta">
+            <div class="nm">Belyner Halotel</div>
+            <div class="sub">Contact</div>
+          </div>
+          <div class="tm">Wed</div>
+        </div>
+      </div></div>
+      <div class="foot">
+        <div class="nowchip">♪ No wahala Rmx</div>
+        <div class="mechip">Anesius ⌃</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 4 ============ -->
+  <div class="concept">
+    <div class="cap">
+      <div class="n">Concept 04</div>
+      <h2>Vinyl rows</h2>
+      <p>Familiar list navigation, unmistakable identity. The avatar becomes a record that spins only while that person is playing, with their track progress as a coral arc around it.</p>
+    </div>
+    <div class="phone">
+      <div class="status"><span>21:38</span><span>▮▮▮ 89</span></div>
+      <div class="appbar"><b>Aluta</b><span class="dots">⋮</span></div>
+      <div class="body"><div class="card">
+        <div class="search"><span>⌕</span><span>Search messages…</span></div>
+
+        <div class="vrow">
+          <div class="vinyl spin"><div class="arc"></div><div class="av a1 lbl">WH</div></div>
+          <div class="meta">
+            <div class="nm">WIFEY HALOTEL</div>
+            <div class="sub" style="color:#d4a0a3">Ngishutheni — Goon</div>
+          </div>
+          <div class="tm" style="font-size:10.5px;color:#5f585a">4:54</div>
+        </div>
+        <div class="rowdiv"></div>
+
+        <div class="vrow">
+          <div class="vinyl"><div class="av a2 lbl">OT</div></div>
+          <div class="meta"><div class="nm">ozy tigo</div><div class="sub">morning</div></div>
+          <div class="tm" style="font-size:10.5px;color:#5f585a">12:03</div>
+        </div>
+        <div class="rowdiv"></div>
+
+        <div class="vrow">
+          <div class="vinyl"><div class="av a4 lbl">F</div></div>
+          <div class="meta"><div class="nm">Family</div><div class="sub">answered</div></div>
+          <div class="tm" style="font-size:10.5px;color:#5f585a">12:00</div>
+        </div>
+        <div class="rowdiv"></div>
+
+        <div class="vrow">
+          <div class="vinyl spin" style="animation-duration:6s"><div class="arc" style="background:conic-gradient(var(--coral) 0 22%,transparent 22% 100%)"></div><div class="av a3 lbl">BH</div></div>
+          <div class="meta">
+            <div class="nm">Belyner Halotel</div>
+            <div class="sub" style="color:#d4a0a3">No wahala Rmx</div>
+          </div>
+          <div class="tm" style="font-size:10.5px;color:#5f585a">Wed</div>
+        </div>
+      </div></div>
+      <div class="foot">
+        <div class="nowchip">♪ No wahala Rmx</div>
+        <div class="mechip">Anesius ⌃</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="note">
+  <b>Carried across all four:</b> the green “0 online” pill is gone from the header until presence is truthful; the four identical red call buttons are dropped in favour of swipe-to-call, so nothing competes with the Join action; and the row hierarchy is fixed — name 15sp bold, preview 12sp at 60% opacity, timestamp 10.5sp.
+</div>
+
+</body>
+</html>

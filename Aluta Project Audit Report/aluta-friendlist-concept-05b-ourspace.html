@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aluta — Concept 05b · Our Space & Personalization</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0a0b; --surface:#171516; --surface-2:#211e1f; --line:#2a2627;
+    --ink:#EFEAEA; --ink-mute:#8B8385; --coral:#FF5A5F; --coral-dim:#B43A3E;
+    --gold:#E9C67B; --green:#3BD16F; --rose:#FF7BA6; --violet:#9b7bff; --r:22px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#050405;color:var(--ink);font-family:'Nunito',-apple-system,'Segoe UI',Roboto,sans-serif;
+    padding:32px 20px 70px;-webkit-font-smoothing:antialiased;}
+  .page-head{max-width:1300px;margin:0 auto 30px}
+  .kick{font-size:11px;font-weight:900;letter-spacing:1.6px;color:var(--coral);text-transform:uppercase}
+  .page-head h1{font-size:27px;font-weight:900;letter-spacing:-.5px;margin-top:5px}
+  .page-head p{color:var(--ink-mute);font-size:14px;margin-top:8px;max-width:76ch;line-height:1.6}
+  .rail{display:flex;flex-wrap:wrap;gap:30px;max-width:1300px;margin:0 auto;align-items:flex-start}
+
+  .concept .cap{margin-bottom:12px;max-width:344px}
+  .cap .n{font-size:11px;font-weight:900;letter-spacing:1.3px;color:var(--coral);text-transform:uppercase}
+  .cap h2{font-size:18px;font-weight:900;margin-top:3px}
+  .cap p{font-size:12px;color:var(--ink-mute);line-height:1.5;margin-top:5px;min-height:52px}
+
+  .phone{background:var(--bg);border:1px solid var(--line);border-radius:32px;width:344px;height:722px;
+    overflow:hidden;display:flex;flex-direction:column;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.6);flex:none}
+  .status{display:flex;justify-content:space-between;font-size:10px;color:var(--ink-mute);padding:11px 20px 4px;font-weight:700}
+  .appbar{display:flex;align-items:center;justify-content:space-between;padding:6px 18px 10px}
+  .appbar .brand{display:flex;align-items:baseline;gap:9px}
+  .appbar b{font-size:21px;font-weight:900;letter-spacing:-.4px}
+  .appbar .pres{font-size:10.5px;font-weight:800;color:var(--coral);display:flex;align-items:center;gap:5px}
+  .pdot{width:6px;height:6px;border-radius:50%;background:var(--coral);animation:pulse 1.8s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,90,95,.5)}70%{box-shadow:0 0 0 7px rgba(255,90,95,0)}100%{box-shadow:0 0 0 0 rgba(255,90,95,0)}}
+  .back{font-size:19px;color:var(--ink)}
+  .dots{color:var(--ink-mute);font-size:16px}
+  .body{flex:1;overflow:hidden;padding:0 12px;position:relative}
+  .card{background:var(--surface);border-radius:var(--r);height:100%;padding:13px 12px;overflow-y:auto}
+  .card::-webkit-scrollbar{width:0}
+  .search{background:var(--surface-2);border-radius:14px;padding:9px 12px;font-size:12px;color:#6d6668;display:flex;gap:8px;align-items:center;margin-bottom:13px}
+  .zone{font-size:10px;font-weight:900;letter-spacing:1.3px;color:var(--ink-mute);text-transform:uppercase;margin:2px 4px 10px;display:flex;align-items:center;gap:8px}
+  .zone::after{content:'';flex:1;height:1px;background:var(--line)}
+  .zone .ct{color:var(--coral)}
+
+  .av{border-radius:50%;flex:none;display:grid;place-items:center;font-size:12px;font-weight:900;color:#fff;overflow:hidden}
+  .a1{background:linear-gradient(140deg,#7a5c8e,#4a3a5c)}.a2{background:linear-gradient(140deg,#c78a5c,#7d4f30)}
+  .a3{background:linear-gradient(140deg,#4d8ac9,#2b5a8a)}.a4{background:linear-gradient(140deg,#3f9d72,#26624a)}
+  .a5{background:linear-gradient(140deg,#b7434a,#7a2529)}
+
+  .ring{border-radius:50%;padding:2.5px;display:grid;place-items:center}
+  .ring.unseen{background:conic-gradient(from 200deg,var(--coral),#ff9a6b,#ffd06b,var(--coral))}
+  .ring.seen{background:var(--line)}.ring.none{padding:0;background:none}
+  .vinyl{border-radius:50%;position:relative;display:grid;place-items:center;
+    background:repeating-radial-gradient(circle at 50% 50%,#1a1718 0 2px,#131011 2px 4px);border:1px solid #2e2a2b}
+  .vinyl.spin{animation:spin 4.5s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .vinyl::after{content:'';position:absolute;width:5px;height:5px;border-radius:50%;background:#0b0a0b;border:1px solid #3a3536}
+  .lbl{border-radius:50%}
+  .wave{display:inline-flex;align-items:flex-end;gap:2px;height:12px}
+  .wave i{width:2.5px;background:var(--coral);border-radius:2px;animation:eq .9s ease-in-out infinite}
+  .wave i:nth-child(1){height:40%}.wave i:nth-child(2){height:85%;animation-delay:.12s}.wave i:nth-child(3){height:55%;animation-delay:.24s}
+  .wave i:nth-child(4){height:100%;animation-delay:.06s}.wave i:nth-child(5){height:35%;animation-delay:.3s}.wave i:nth-child(6){height:70%;animation-delay:.18s}
+  @keyframes eq{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(1)}}
+
+  /* ---- Our Space hero (themeable) ---- */
+  .pair{position:relative;border-radius:18px;padding:13px;margin-bottom:12px;overflow:hidden;border:1px solid rgba(233,198,123,.34);
+    --sp:linear-gradient(120deg,rgba(180,58,62,.22),rgba(30,18,24,.30));background:var(--sp)}
+  .pair.rose{--sp:linear-gradient(120deg,rgba(255,123,166,.22),rgba(40,18,30,.34));border-color:rgba(255,123,166,.4)}
+  .pair.green{--sp:linear-gradient(120deg,rgba(59,209,111,.18),rgba(15,35,24,.4));border-color:rgba(59,209,111,.35)}
+  .pair>*{position:relative;z-index:1}
+  .pair .top{display:flex;align-items:center;gap:12px}
+  .duo{position:relative;flex:none;width:50px;height:44px}
+  .duo .av{position:absolute;border:2px solid #171516}
+  .duo .av:first-child{left:0;top:0;width:34px;height:34px}
+  .duo .av:last-child{right:0;bottom:0;width:34px;height:34px}
+  .pair .nm{font-size:14px;font-weight:900;display:flex;align-items:center;gap:6px}
+  .together{font-size:8.5px;font-weight:900;letter-spacing:.6px;color:#0b0a0b;background:var(--gold);border-radius:6px;padding:1px 5px;text-transform:uppercase}
+  .pair .since{font-size:10.5px;color:#e6d3d7;margin-top:2px}
+  .pair .line{font-size:11px;color:#f0d3d8;margin-top:2px;display:flex;align-items:center;gap:6px}
+  .enter{background:var(--coral);color:#fff;font-size:10.5px;font-weight:900;padding:7px 14px;border-radius:20px;margin-left:auto;white-space:nowrap}
+
+  /* ---- Spaces chip row ---- */
+  .spaces{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 12px;margin-bottom:4px}
+  .spaces::-webkit-scrollbar{height:0}
+  .chip{flex:none;width:66px;text-align:center}
+  .chip .cd{width:56px;height:56px;border-radius:18px;margin:0 auto 6px;position:relative;display:grid;place-items:center;
+    border:1px solid var(--line);background:var(--surface-2)}
+  .chip .cd .duo{width:40px;height:34px}
+  .chip .cd .duo .av{width:26px;height:26px}
+  .chip .cd.plus{color:var(--ink-mute);font-size:22px;font-weight:700;border-style:dashed}
+  .chip .cl{font-size:10.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chip .dot{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%}
+  .chip.active .cd{border-color:var(--coral);box-shadow:0 0 0 2px rgba(255,90,95,.25)}
+
+  /* ---- rows ---- */
+  .vrow{display:flex;align-items:center;gap:12px;padding:9px 4px}
+  .vrow .meta{flex:1;min-width:0}
+  .vrow .nm{font-size:14px;font-weight:700;letter-spacing:-.2px}
+  .vrow .sub{font-size:11.5px;color:var(--ink-mute);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vrow .sub.music{color:#d4a0a3}.vrow .sub.match{color:#9fb8d6}
+  .vrow .tm{font-size:10px;color:#5f585a;align-self:flex-start;margin-top:3px}
+  .rowdiv{height:1px;background:var(--line);margin-left:58px}
+
+  /* ================= Our Space profile ================= */
+  .prof-hero{border-radius:20px;padding:18px 16px;position:relative;overflow:hidden;margin-bottom:14px;
+    background:linear-gradient(150deg,rgba(255,123,166,.30),rgba(40,16,28,.55))}
+  .prof-hero::after{content:'';position:absolute;inset:0;background:radial-gradient(90% 80% at 100% 0%,rgba(255,123,166,.25),transparent 60%)}
+  .prof-hero>*{position:relative;z-index:1}
+  .prof-hero .duo{width:74px;height:56px;margin-bottom:8px}
+  .prof-hero .duo .av{width:48px;height:48px;font-size:16px;border:3px solid #22141c}
+  .prof-hero h3{font-size:20px;font-weight:900;display:flex;align-items:center;gap:8px}
+  .prof-hero .theme{font-size:10.5px;color:#f0cdd8;margin-top:3px}
+  .stats{display:flex;gap:8px;margin-bottom:14px}
+  .stat{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 8px;text-align:center}
+  .stat .big{font-size:17px;font-weight:900}
+  .stat .sm{font-size:9.5px;color:var(--ink-mute);margin-top:2px;line-height:1.25}
+  .oursong{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;display:flex;align-items:center;gap:12px;margin-bottom:12px}
+  .oursong .art{width:46px;height:46px;border-radius:11px;background:linear-gradient(160deg,#8a3b5e,#2b1220);flex:none;display:grid;place-items:center;font-size:16px}
+  .oursong .nm{font-size:13px;font-weight:900}
+  .oursong .sub{font-size:11px;color:var(--ink-mute);margin-top:2px}
+  .oursong .play{margin-left:auto;width:34px;height:34px;border-radius:50%;background:var(--coral);color:#fff;display:grid;place-items:center;font-size:13px}
+  .mtitle{font-size:10px;font-weight:900;letter-spacing:1.2px;color:var(--ink-mute);text-transform:uppercase;margin:4px 4px 9px}
+  .moments{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+  .moment{aspect-ratio:1;border-radius:13px;position:relative;overflow:hidden;display:grid;place-items:end;padding:8px}
+  .m1{background:linear-gradient(160deg,#7a4a63,#241019)}.m2{background:linear-gradient(160deg,#4a6a7a,#101f24)}
+  .m3{background:linear-gradient(160deg,#7a6a4a,#241f10)}.m4{background:linear-gradient(160deg,#5a4a7a,#171024)}
+  .m5{background:linear-gradient(160deg,#4a7a5f,#10241a)}
+  .moment .mi{font-size:16px}.moment.pin::before{content:'📌';position:absolute;top:6px;right:7px;font-size:10px}
+  .moment .ml{position:absolute;bottom:6px;left:8px;font-size:9px;color:rgba(255,255,255,.85);font-weight:700}
+  .pactions{display:flex;gap:9px}
+  .pbtn{flex:1;border-radius:22px;padding:11px;text-align:center;font-size:12px;font-weight:900}
+  .pbtn.primary{background:var(--coral);color:#fff}
+  .pbtn.ghost{border:1px solid var(--line);color:var(--ink)}
+  .forever{font-size:10px;color:#7d7476;text-align:center;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:6px}
+  .forever .g{color:var(--gold)}
+
+  /* ================= theme picker ================= */
+  .seg{display:flex;background:var(--surface-2);border-radius:14px;padding:4px;margin-bottom:16px}
+  .seg span{flex:1;text-align:center;font-size:12px;font-weight:800;padding:8px;border-radius:10px;color:var(--ink-mute)}
+  .seg span.on{background:var(--coral);color:#fff}
+  .pick-t{font-size:11px;font-weight:900;letter-spacing:1px;color:var(--ink-mute);text-transform:uppercase;margin:16px 4px 11px;display:flex;align-items:center;gap:8px}
+  .pick-t::after{content:'';flex:1;height:1px;background:var(--line)}
+  .swatches{display:flex;gap:12px;flex-wrap:wrap;margin:0 2px}
+  .sw{width:42px;height:42px;border-radius:13px;position:relative;cursor:pointer;border:2px solid transparent}
+  .sw.on{border-color:#fff}
+  .sw.on::after{content:'✓';position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-weight:900;font-size:14px;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+  .sw.coral{background:linear-gradient(145deg,#ff5a5f,#b43a3e)}
+  .sw.rose{background:linear-gradient(145deg,#ff7ba6,#a83a63)}
+  .sw.violet{background:linear-gradient(145deg,#9b7bff,#5a3aa8)}
+  .sw.green{background:linear-gradient(145deg,#3bd16f,#1e6b3c)}
+  .sw.amber{background:linear-gradient(145deg,#ffb75e,#c47a12)}
+  .sw.teal{background:linear-gradient(145deg,#3bc9d1,#166b6b)}
+  .sw.lock{background:var(--surface-2);border:1px dashed var(--line);display:grid;place-items:center;color:var(--ink-mute)}
+  .hintrow{font-size:11px;color:var(--ink-mute);margin:12px 4px 0;line-height:1.5}
+  .hintrow b{color:var(--gold)}
+  .preview{margin-top:16px;border-radius:16px;padding:13px;border:1px solid var(--line);background:linear-gradient(120deg,rgba(255,123,166,.22),rgba(40,18,30,.34))}
+  .preview .pl{font-size:10px;color:#8B8385;font-weight:800;letter-spacing:.8px;text-transform:uppercase;margin-bottom:8px}
+  .preview .row2{display:flex;align-items:center;gap:11px}
+  .preview .nm{font-size:13.5px;font-weight:900}
+  .preview .sub{font-size:11px;color:#f0cdd8;margin-top:1px}
+
+  .foot{display:flex;align-items:center;justify-content:space-between;padding:10px 15px 13px;gap:8px;border-top:1px solid var(--line)}
+  .nowchip{border:1px solid var(--coral-dim);border-radius:20px;padding:6px 13px;font-size:11px;font-weight:800;color:var(--coral);display:flex;align-items:center;gap:6px}
+  .mechip{border:1px solid var(--line);border-radius:20px;padding:6px 12px;font-size:11px;font-weight:800;color:var(--ink-mute)}
+
+  .note{max-width:1300px;margin:36px auto 0;color:var(--ink-mute);font-size:13px;line-height:1.7}
+  .note b{color:var(--ink)}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <div class="kick">Concept 05b · Our Space + Personalization</div>
+  <h1>The bond as a place — chosen, multiple, and yours to theme</h1>
+  <p>Extending the hybrid: Our Space is a <b style="color:#d9cdcf">deliberate pin</b> (one hero bond + a small row of others), each opening a <b style="color:#d9cdcf">relationship profile</b> — the story of your connection through Aluta. And the dark palette is the confident default, with curated personalization layered on top: app accent + a colour per Space.</p>
+</div>
+
+<div class="rail">
+
+  <!-- ========== A · list with multi-Space ========== -->
+  <div class="concept">
+    <div class="cap"><div class="n">05b · A</div><h2>Your Spaces</h2>
+      <p>One hero bond, then a scroll of smaller Spaces — family, a best friend. Deliberate and scarce, so the pin stays meaningful. “＋” creates a new one.</p></div>
+    <div class="phone">
+      <div class="status"><span>21:38</span><span>▮▮▮ 89</span></div>
+      <div class="appbar"><div class="brand"><b>Aluta</b><span class="pres"><span class="pdot"></span>2 tuned in</span></div><span class="dots">⋮</span></div>
+      <div class="body"><div class="card">
+        <div class="search"><span>⌕</span><span>Search people, songs, moments…</span></div>
+
+        <div class="pair rose">
+          <div class="top">
+            <div class="duo"><div class="av a1">A</div><div class="av a5">B</div></div>
+            <div style="min-width:0">
+              <div class="nm">You &amp; Belyner <span class="together">Together</span></div>
+              <div class="since">Close since Feb 2025 · 187 days in a song</div>
+              <div class="line"><span class="wave"><i></i><i></i><i></i><i></i><i></i><i></i></span> listening together now</div>
+            </div>
+            <div class="enter">Enter</div>
+          </div>
+        </div>
+
+        <div class="zone">Your Spaces</div>
+        <div class="spaces">
+          <div class="chip"><div class="cd plus">＋</div><div class="cl" style="color:#8B8385">New</div></div>
+          <div class="chip active"><div class="cd"><span class="dot" style="background:var(--rose)"></span><div class="duo"><div class="av a1">A</div><div class="av a5">B</div></div></div><div class="cl">Belyner ♥</div></div>
+          <div class="chip"><div class="cd"><span class="dot" style="background:var(--green)"></span><div class="duo"><div class="av a4">F</div><div class="av a2">·</div></div></div><div class="cl">Family</div></div>
+          <div class="chip"><div class="cd"><span class="dot" style="background:var(--violet)"></span><div class="duo"><div class="av a4">LU</div><div class="av a3">·</div></div></div><div class="cl">Lusajo 🎧</div></div>
+        </div>
+
+        <div class="zone" style="margin-top:6px">Listening now · <span class="ct">2</span></div>
+        <div class="vrow">
+          <div class="ring unseen" style="width:48px;height:48px"><div class="vinyl spin" style="width:43px;height:43px"><div class="av a1 lbl" style="width:24px;height:24px;font-size:9px">WH</div></div></div>
+          <div class="meta"><div class="nm">WIFEY HALOTEL</div><div class="sub music">♪ Ngishutheni — Goon · room · 3</div></div>
+          <div class="enter" style="margin-left:0">Join</div>
+        </div>
+        <div class="rowdiv"></div>
+        <div class="vrow">
+          <div class="ring none" style="width:48px;height:48px"><div class="vinyl" style="width:48px;height:48px"><div class="av a4 lbl" style="width:24px;height:24px;font-size:9px">LU</div></div></div>
+          <div class="meta"><div class="nm">Lusajo</div><div class="sub match">♪ 82% taste match</div></div><div class="tm">Wed</div>
+        </div>
+      </div></div>
+      <div class="foot"><div class="nowchip"><span class="wave" style="height:9px"><i></i><i></i><i></i></span> No wahala Rmx</div><div class="mechip">Anesius ⌃</div></div>
+    </div>
+  </div>
+
+  <!-- ========== B · Our Space profile ========== -->
+  <div class="concept">
+    <div class="cap"><div class="n">05b · B</div><h2>Inside a Space</h2>
+      <p>Not a chat — the story of the bond: how long, your streak, your song, pinned moments. History kept forever on the Together plan.</p></div>
+    <div class="phone">
+      <div class="status"><span>21:39</span><span>▮▮▮ 89</span></div>
+      <div class="appbar"><span class="back">‹</span><b style="font-size:15px">Our Space</b><span class="dots">⋯</span></div>
+      <div class="body"><div class="card">
+        <div class="prof-hero">
+          <div class="duo"><div class="av a1">A</div><div class="av a5">B</div></div>
+          <h3>You &amp; Belyner <span class="together">Together</span></h3>
+          <div class="theme">Rose theme · shared by you both</div>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><div class="big">187</div><div class="sm">days in a song</div></div>
+          <div class="stat"><div class="big">🔥 12</div><div class="sm">day streak</div></div>
+          <div class="stat"><div class="big">1yr</div><div class="sm">in 42 days</div></div>
+        </div>
+
+        <div class="mtitle">Your song</div>
+        <div class="oursong">
+          <div class="art">💿</div>
+          <div style="min-width:0"><div class="nm">Ngishutheni — Goon</div><div class="sub">played together 43×</div></div>
+          <div class="play">▶</div>
+        </div>
+
+        <div class="mtitle">Pinned moments</div>
+        <div class="moments">
+          <div class="moment m1 pin"><span class="ml">🎁 dedication</span></div>
+          <div class="moment m2"><span class="ml">🎤 voice</span></div>
+          <div class="moment m3"><span class="ml">📷 Zanzibar</span></div>
+          <div class="moment m4"><span class="ml">♪ first song</span></div>
+          <div class="moment m5"><span class="ml">💬 3am talk</span></div>
+          <div class="moment" style="background:var(--surface-2);display:grid;place-items:center;color:#8B8385;font-size:20px">＋</div>
+        </div>
+
+        <div class="pactions">
+          <div class="pbtn primary">▶ Listen together</div>
+          <div class="pbtn ghost">🎁 Send a moment</div>
+        </div>
+        <div class="forever"><span class="g">∞</span> History kept forever · Together plan</div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ========== C · personalization ========== -->
+  <div class="concept">
+    <div class="cap"><div class="n">05b · C</div><h2>Make it yours</h2>
+      <p>Dark stays the default identity. Curated presets on top: an app accent, and a colour per Space. Custom gradients unlock with Together.</p></div>
+    <div class="phone">
+      <div class="status"><span>21:40</span><span>▮▮▮ 89</span></div>
+      <div class="appbar"><span class="back">‹</span><b style="font-size:15px">Appearance</b><span class="dots"></span></div>
+      <div class="body"><div class="card">
+        <div class="pick-t">App theme</div>
+        <div class="seg"><span class="on">🌙 Dark</span><span>☀ Light</span><span>⚙ System</span></div>
+
+        <div class="pick-t">Accent</div>
+        <div class="swatches">
+          <div class="sw coral on"></div><div class="sw rose"></div><div class="sw violet"></div>
+          <div class="sw green"></div><div class="sw amber"></div><div class="sw teal"></div>
+        </div>
+
+        <div class="pick-t">This Space’s colour · Belyner ♥</div>
+        <div class="swatches">
+          <div class="sw rose on"></div><div class="sw coral"></div><div class="sw violet"></div>
+          <div class="sw amber"></div><div class="sw teal"></div><div class="sw lock">🔒</div>
+        </div>
+        <div class="hintrow">The lock unlocks <b>custom gradients &amp; seasonal packs</b> with the Together plan — presets stay free, so it always looks good.</div>
+
+        <div class="preview">
+          <div class="pl">Live preview</div>
+          <div class="row2">
+            <div class="duo" style="width:46px;height:40px"><div class="av a1" style="width:30px;height:30px">A</div><div class="av a5" style="width:30px;height:30px">B</div></div>
+            <div><div class="nm">You &amp; Belyner</div><div class="sub">Rose · 187 days in a song</div></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="note">
+  <b>Read together:</b> A shows Our Space as a chosen, bounded set (hero + scroll); B is what opens when you tap one — a relationship profile, not a thread, carrying the connection’s history (streak, “your song”, pinned moments) with <b>forever-history as the Together hook</b>; C keeps dark as the brand default and layers <b>curated</b> personalization — one app accent, one colour per Space, custom gradients gated to Together. Every premium surface here deepens closeness rather than gating basic use — the brief’s rule. Full write-up: <b>Aluta_FriendList_and_OurSpace_Design_Spec.md</b> in this folder.
+</div>
+
+</body>
+</html>

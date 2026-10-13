@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aluta — Concept 05 · The Hybrid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0a0b; --surface:#171516; --surface-2:#211e1f; --line:#2a2627;
+    --ink:#EFEAEA; --ink-mute:#8B8385; --coral:#FF5A5F; --coral-dim:#B43A3E;
+    --gold:#E9C67B; --green:#3BD16F; --r:22px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#050405;color:var(--ink);
+    font-family:'Nunito',-apple-system,'Segoe UI',Roboto,sans-serif;
+    padding:32px 20px 70px;-webkit-font-smoothing:antialiased;}
+  .page-head{max-width:1240px;margin:0 auto 30px}
+  .kick{font-size:11px;font-weight:900;letter-spacing:1.6px;color:var(--coral);text-transform:uppercase}
+  .page-head h1{font-size:28px;font-weight:900;letter-spacing:-.5px;margin-top:5px}
+  .page-head p{color:var(--ink-mute);font-size:14px;margin-top:8px;max-width:74ch;line-height:1.6}
+  .page-head .thesis{color:#d9cdcf;font-style:italic}
+
+  .stage{display:flex;flex-wrap:wrap;gap:34px;max-width:1240px;margin:0 auto;align-items:flex-start}
+
+  /* ---------- phone ---------- */
+  .phone{background:var(--bg);border:1px solid var(--line);border-radius:32px;
+    width:344px;height:720px;overflow:hidden;display:flex;flex-direction:column;
+    position:relative;box-shadow:0 24px 60px rgba(0,0,0,.6);flex:none;}
+  .status{display:flex;justify-content:space-between;font-size:10px;color:var(--ink-mute);
+    padding:11px 20px 4px;font-weight:700;}
+  .appbar{display:flex;align-items:center;justify-content:space-between;padding:6px 18px 10px;}
+  .appbar .brand{display:flex;align-items:baseline;gap:9px}
+  .appbar b{font-size:21px;font-weight:900;letter-spacing:-.4px}
+  .appbar .pres{font-size:10.5px;font-weight:800;color:var(--coral);display:flex;align-items:center;gap:5px}
+  .pdot{width:6px;height:6px;border-radius:50%;background:var(--coral);box-shadow:0 0 0 0 rgba(255,90,95,.6);animation:pulse 1.8s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,90,95,.5)}70%{box-shadow:0 0 0 7px rgba(255,90,95,0)}100%{box-shadow:0 0 0 0 rgba(255,90,95,0)}}
+  .dots{color:var(--ink-mute);font-size:16px;letter-spacing:1px}
+  .body{flex:1;overflow:hidden;padding:0 12px;position:relative}
+  .card{background:var(--surface);border-radius:var(--r);height:100%;padding:13px 12px;overflow-y:auto;}
+  .card::-webkit-scrollbar{width:0}
+
+  .search{background:var(--surface-2);border-radius:14px;padding:9px 12px;font-size:12px;
+    color:#6d6668;display:flex;gap:8px;align-items:center;margin-bottom:13px;}
+
+  .zone{font-size:10px;font-weight:900;letter-spacing:1.3px;color:var(--ink-mute);
+    text-transform:uppercase;margin:2px 4px 10px;display:flex;align-items:center;gap:8px;}
+  .zone::after{content:'';flex:1;height:1px;background:var(--line)}
+  .zone .ct{color:var(--coral)}
+
+  /* avatars / discs */
+  .av{border-radius:50%;flex:none;display:grid;place-items:center;font-size:12px;font-weight:900;color:#fff;overflow:hidden}
+  .a1{background:linear-gradient(140deg,#7a5c8e,#4a3a5c)}
+  .a2{background:linear-gradient(140deg,#c78a5c,#7d4f30)}
+  .a3{background:linear-gradient(140deg,#4d8ac9,#2b5a8a)}
+  .a4{background:linear-gradient(140deg,#3f9d72,#26624a)}
+  .a5{background:linear-gradient(140deg,#b7434a,#7a2529)}
+
+  /* --- the signature disc: story-ring (outer) + progress arc (mid) + vinyl (inner) --- */
+  .disc{position:relative;flex:none;display:grid;place-items:center}
+  .ring{border-radius:50%;padding:2.5px;display:grid;place-items:center}
+  .ring.unseen{background:conic-gradient(from 200deg,var(--coral),#ff9a6b,#ffd06b,var(--coral))}
+  .ring.seen{background:var(--line)}
+  .ring.none{padding:0;background:none}
+  .vinyl{border-radius:50%;position:relative;display:grid;place-items:center;
+    background:repeating-radial-gradient(circle at 50% 50%,#1a1718 0 2px,#131011 2px 4px);
+    border:1px solid #2e2a2b;}
+  .vinyl.spin{animation:spin 4.5s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .vinyl::after{content:'';position:absolute;width:5px;height:5px;border-radius:50%;background:#0b0a0b;border:1px solid #3a3536}
+  .arc{position:absolute;border-radius:50%;} /* coral progress ring, bound to real position in-app */
+  .lbl{border-radius:50%}
+
+  /* ===== pinned "Our Space" pair (the wedge + Together plan) ===== */
+  .pair{position:relative;border-radius:18px;padding:13px 13px;margin-bottom:14px;overflow:hidden;
+    border:1px solid rgba(233,198,123,.34);
+    background:linear-gradient(120deg,rgba(180,58,62,.20),rgba(30,18,24,.30));}
+  .pair::before{content:'';position:absolute;inset:0;background:
+    radial-gradient(120% 90% at 100% 0%,rgba(233,198,123,.12),transparent 55%);}
+  .pair>*{position:relative;z-index:1}
+  .pair .top{display:flex;align-items:center;gap:12px}
+  .duo{position:relative;width:50px;height:44px;flex:none}
+  .duo .av{width:34px;height:34px;position:absolute;border:2px solid #171516}
+  .duo .av:first-child{left:0;top:0}
+  .duo .av:last-child{right:0;bottom:0}
+  .pair .nm{font-size:14px;font-weight:900;display:flex;align-items:center;gap:6px}
+  .together{font-size:8.5px;font-weight:900;letter-spacing:.6px;color:#0b0a0b;
+    background:var(--gold);border-radius:6px;padding:1px 5px;text-transform:uppercase}
+  .pair .since{font-size:10.5px;color:#d8c7b0;margin-top:2px}
+  .pair .line{font-size:11px;color:#e7c9cc;margin-top:1px;display:flex;align-items:center;gap:6px}
+  .enter{background:var(--coral);color:#fff;font-size:10.5px;font-weight:900;
+    padding:7px 14px;border-radius:20px;margin-left:auto;white-space:nowrap}
+
+  /* ===== listening-now live rows ===== */
+  .live{border-radius:16px;padding:10px 11px;margin-bottom:9px;display:flex;align-items:center;gap:12px;
+    position:relative;overflow:hidden;}
+  .live::before{content:'';position:absolute;inset:0;opacity:.5}
+  .liveA::before{background:linear-gradient(105deg,#6d2f52,#2a1220 70%)}
+  .liveB::before{background:linear-gradient(105deg,#2f5a6d,#122029 70%)}
+  .live>*{position:relative;z-index:1}
+  .live .meta{flex:1;min-width:0}
+  .live .nm{font-size:13.5px;font-weight:900}
+  .live .tk{font-size:11px;color:#e2d7da;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+  .live .with{font-size:10px;color:#c6a7ac;margin-top:2px}
+  .wave{display:flex;align-items:flex-end;gap:2px;height:14px;margin-top:5px}
+  .wave i{width:2.5px;background:var(--coral);border-radius:2px;animation:eq .9s ease-in-out infinite}
+  .wave i:nth-child(1){height:40%}.wave i:nth-child(2){height:85%;animation-delay:.12s}
+  .wave i:nth-child(3){height:55%;animation-delay:.24s}.wave i:nth-child(4){height:100%;animation-delay:.06s}
+  .wave i:nth-child(5){height:35%;animation-delay:.3s}.wave i:nth-child(6){height:70%;animation-delay:.18s}
+  @keyframes eq{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(1)}}
+  .joinbtn{background:var(--coral);color:#fff;font-size:10.5px;font-weight:900;padding:7px 14px;border-radius:20px;white-space:nowrap}
+  .joinbtn.room{background:transparent;border:1px solid var(--coral);color:var(--coral)}
+
+  /* ===== circle (quiet) vinyl rows ===== */
+  .vrow{display:flex;align-items:center;gap:12px;padding:10px 4px}
+  .vrow .meta{flex:1;min-width:0}
+  .vrow .nm{font-size:14px;font-weight:700;letter-spacing:-.2px}
+  .vrow .sub{font-size:11.5px;color:var(--ink-mute);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vrow .sub.music{color:#d4a0a3}
+  .vrow .sub.match{color:#9fb8d6}
+  .vrow .tm{font-size:10px;color:#5f585a;align-self:flex-start;margin-top:3px}
+  .unread{background:var(--coral);color:#fff;font-size:9.5px;font-weight:900;border-radius:10px;padding:1px 6px;margin-top:5px;display:inline-block}
+  .rowdiv{height:1px;background:var(--line);margin-left:60px}
+  .gift{font-size:13px;opacity:.7;margin-left:6px}
+
+  /* ---- footer (shared self now-playing) ---- */
+  .foot{display:flex;align-items:center;justify-content:space-between;padding:10px 15px 13px;gap:8px;border-top:1px solid var(--line)}
+  .nowchip{border:1px solid var(--coral-dim);border-radius:20px;padding:6px 13px;font-size:11px;font-weight:800;color:var(--coral);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px}
+  .mechip{border:1px solid var(--line);border-radius:20px;padding:6px 12px;font-size:11px;font-weight:800;color:var(--ink-mute)}
+
+  /* ---------- desktop reflow ---------- */
+  .laptop{flex:1;min-width:520px;max-width:760px;background:var(--bg);border:1px solid var(--line);
+    border-radius:18px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.6);display:flex;flex-direction:column;height:720px}
+  .winbar{display:flex;align-items:center;gap:7px;padding:11px 14px;border-bottom:1px solid var(--line);background:#0e0d0e}
+  .tl{width:11px;height:11px;border-radius:50%;background:#39343500}
+  .tl.r{background:#ff5f57}.tl.y{background:#febc2e}.tl.g{background:#28c840}
+  .winbar .wt{margin-left:10px;font-size:12px;font-weight:800;color:var(--ink-mute)}
+  .desk{display:grid;grid-template-columns:290px 1fr;flex:1;min-height:0}
+  .side{border-right:1px solid var(--line);padding:14px 12px;overflow-y:auto;background:var(--surface)}
+  .side::-webkit-scrollbar,.main::-webkit-scrollbar{width:0}
+  .side .brand{font-size:19px;font-weight:900;padding:2px 4px 12px}
+  .main{padding:18px 20px;overflow-y:auto;position:relative}
+
+  /* room hero (the intimate presence surface on desktop) */
+  .roomhero{border-radius:20px;padding:20px;position:relative;overflow:hidden;
+    background:linear-gradient(120deg,#5a2440,#1a1013 75%);margin-bottom:8px}
+  .roomhero::after{content:'';position:absolute;inset:0;background:radial-gradient(90% 120% at 90% 10%,rgba(255,90,95,.18),transparent 60%)}
+  .roomhero>*{position:relative;z-index:1}
+  .rtag{font-size:10px;font-weight:900;letter-spacing:1.4px;color:#ffb3b6;text-transform:uppercase;display:flex;align-items:center;gap:7px}
+  .roomhero h3{font-size:22px;font-weight:900;margin-top:8px}
+  .roomhero .rt{color:#e9d4d7;font-size:13px;margin-top:3px}
+  .listeners{display:flex;align-items:center;gap:-8px;margin-top:14px}
+  .listeners .av{width:34px;height:34px;border:2px solid #23151a;margin-right:-9px}
+  .listeners .more{margin-left:16px;font-size:12px;color:#e9d4d7;font-weight:700}
+  .roomcta{display:flex;gap:10px;margin-top:16px}
+  .roomcta .primary{background:var(--coral);color:#fff;font-weight:900;font-size:13px;padding:10px 20px;border-radius:24px}
+  .roomcta .ghost{border:1px solid rgba(255,255,255,.3);color:#fff;font-weight:800;font-size:13px;padding:10px 18px;border-radius:24px}
+  .cleanad{font-size:10.5px;color:#7d7476;margin-top:14px;display:flex;align-items:center;gap:7px}
+  .cleanad .lock{color:var(--green)}
+
+  .wallhead{font-size:11px;font-weight:900;letter-spacing:1.3px;color:var(--ink-mute);text-transform:uppercase;margin:22px 4px 12px;display:flex;gap:8px;align-items:center}
+  .wallhead::after{content:'';flex:1;height:1px;background:var(--line)}
+  .wall{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .cover{aspect-ratio:1;border-radius:16px;padding:11px;display:flex;flex-direction:column;justify-content:flex-end;position:relative;overflow:hidden}
+  .c1{background:linear-gradient(160deg,#8a3b5e,#2b1220)}.c2{background:linear-gradient(160deg,#3b6a8a,#12202b)}
+  .c3{background:linear-gradient(160deg,#8a6a3b,#2b2312)}.c4{background:linear-gradient(160deg,#3b8a5e,#122b1e)}
+  .c5{background:linear-gradient(160deg,#6a3b8a,#1e122b)}.c6{background:linear-gradient(160deg,#8a5b3b,#2b1a12)}
+  .cover .cav{width:26px;height:26px;position:absolute;top:10px;left:10px;border:2px solid rgba(255,255,255,.85);font-size:9px}
+  .cover .cn{font-size:12.5px;font-weight:900;line-height:1.15}
+  .cover .ct2{font-size:10px;color:rgba(255,255,255,.72);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cover .join2{position:absolute;inset:0;display:grid;place-items:center;opacity:0;transition:.18s;
+    background:rgba(10,8,9,.45);font-size:11px;font-weight:900;color:#fff}
+  .cover:hover .join2{opacity:1}
+  .playing{position:absolute;top:11px;right:10px;display:flex;gap:2px;align-items:flex-end;height:11px}
+  .playing i{width:2px;background:#fff;border-radius:2px;animation:eq .8s ease-in-out infinite}
+  .playing i:nth-child(2){height:100%;animation-delay:.15s}.playing i:nth-child(1){height:50%}.playing i:nth-child(3){height:70%;animation-delay:.3s}
+
+  /* side list mini */
+  .side .zone{margin:14px 4px 9px}
+  .miniv{display:flex;align-items:center;gap:10px;padding:8px 3px}
+  .miniv .nm{font-size:13px;font-weight:700}
+  .miniv .sub{font-size:11px;color:var(--ink-mute);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+  .miniv .sub.music{color:#d4a0a3}
+
+  /* ---------- notes ---------- */
+  .note{max-width:1240px;margin:38px auto 0}
+  .note h2{font-size:16px;font-weight:900;margin:26px 0 12px;display:flex;align-items:center;gap:9px}
+  .note h2 .bar{width:16px;height:3px;background:var(--coral);border-radius:2px}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+  .ncard{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px}
+  .ncard .h{font-size:13.5px;font-weight:900;color:var(--ink);margin-bottom:6px;display:flex;gap:8px;align-items:center}
+  .ncard .h .em{font-size:15px}
+  .ncard p{font-size:12.5px;color:var(--ink-mute);line-height:1.6}
+  .ncard p b{color:#d9cdcf;font-weight:800}
+  .maps{max-width:1240px;margin:20px auto 0;color:var(--ink-mute);font-size:12.5px;line-height:1.7}
+  .maps b{color:var(--ink)}
+  .foot-note{max-width:1240px;margin:26px auto 0;color:#6d6668;font-size:12px;line-height:1.6;border-top:1px solid var(--line);padding-top:16px}
+
+  @media(prefers-reduced-motion:reduce){*{animation:none!important}}
+  @media(max-width:1180px){.laptop{min-width:100%}}
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <div class="kick">Concept 05 · The Hybrid — recommended direction</div>
+  <h1>Aluta — the friend list as a room you can walk into</h1>
+  <p class="thesis">"Not a messenger that plays music — a way for two people to feel close, present to each other, even when they're apart."</p>
+  <p>Concepts 01 + 04 fused: music-presence decides the order (who's <b style="color:#d9cdcf">tuned in</b> rises to the top, one tap to join), the vinyl disc is the identity mark (spins + a coral arc of the real track position only while they're actually playing), and the story ring is folded into the disc so one avatar carries three states at once — <b style="color:#d9cdcf">story · playing · person</b>. A pinned "Our&nbsp;Space" leads with the wedge (the one person you're closest to). Below: the phone, and how it reflows on desktop.</p>
+</div>
+
+<div class="stage">
+
+  <!-- ================= PHONE ================= -->
+  <div class="phone">
+    <div class="status"><span>21:38</span><span>▮▮▮ 89</span></div>
+    <div class="appbar">
+      <div class="brand"><b>Aluta</b><span class="pres"><span class="pdot"></span>2 tuned in</span></div>
+      <span class="dots">⋮</span>
+    </div>
+    <div class="body"><div class="card">
+      <div class="search"><span>⌕</span><span>Search people, songs, moments…</span></div>
+
+      <!-- Our Space: the wedge + Together plan + "close since" counter -->
+      <div class="pair">
+        <div class="top">
+          <div class="duo">
+            <div class="av a1">A</div><div class="av a5">B</div>
+          </div>
+          <div style="min-width:0">
+            <div class="nm">You &amp; Belyner <span class="together">Together</span></div>
+            <div class="since">Close since Feb 2025 · 187 days in a song</div>
+            <div class="line"><span class="wave" style="height:11px"><i></i><i></i><i></i><i></i><i></i><i></i></span> listening together now</div>
+          </div>
+          <div class="enter">Enter</div>
+        </div>
+      </div>
+
+      <!-- Listening now: live, joinable -->
+      <div class="zone">Listening now · <span class="ct">2</span></div>
+
+      <div class="live liveA">
+        <div class="disc">
+          <div class="ring unseen" style="width:50px;height:50px">
+            <div class="vinyl spin" style="width:45px;height:45px">
+              <div class="arc" style="inset:-3px;background:conic-gradient(var(--coral) 0 64%,transparent 0);-webkit-mask:radial-gradient(circle,transparent 0 22px,#000 22px);mask:radial-gradient(circle,transparent 0 22px,#000 22px)"></div>
+              <div class="av a1 lbl" style="width:26px;height:26px;font-size:9px">WH</div>
+            </div>
+          </div>
+        </div>
+        <div class="meta">
+          <div class="nm">WIFEY HALOTEL</div>
+          <div class="tk">Ngishutheni — Goon</div>
+          <div class="with">in a room · 3 listening</div>
+        </div>
+        <div class="joinbtn">Join</div>
+      </div>
+
+      <div class="live liveB">
+        <div class="disc">
+          <div class="ring seen" style="width:50px;height:50px">
+            <div class="vinyl spin" style="width:45px;height:45px;animation-duration:6s">
+              <div class="arc" style="inset:-3px;background:conic-gradient(var(--coral) 0 22%,transparent 0);-webkit-mask:radial-gradient(circle,transparent 0 22px,#000 22px);mask:radial-gradient(circle,transparent 0 22px,#000 22px)"></div>
+              <div class="av a3 lbl" style="width:26px;height:26px;font-size:9px">BH</div>
+            </div>
+          </div>
+        </div>
+        <div class="meta">
+          <div class="nm">Belyner Halotel</div>
+          <div class="tk">No wahala Rmx</div>
+          <div class="with">solo · tap to listen along</div>
+        </div>
+        <div class="joinbtn">Join</div>
+      </div>
+
+      <!-- Your circle: still discs, contextual line -->
+      <div class="zone" style="margin-top:16px">Your circle</div>
+
+      <div class="vrow">
+        <div class="ring unseen" style="width:50px;height:50px">
+          <div class="vinyl" style="width:45px;height:45px"><div class="av a2 lbl" style="width:26px;height:26px;font-size:9px">OT</div></div>
+        </div>
+        <div class="meta"><div class="nm">ozy tigo</div><div class="sub">morning</div><span class="unread">2</span></div>
+        <div class="tm">12:03</div>
+      </div>
+      <div class="rowdiv"></div>
+
+      <div class="vrow">
+        <div class="ring none" style="width:50px;height:50px">
+          <div class="vinyl" style="width:50px;height:50px"><div class="av a4 lbl" style="width:26px;height:26px;font-size:9px">LU</div></div>
+        </div>
+        <div class="meta"><div class="nm">Lusajo <span class="gift">🎁</span></div><div class="sub match">♪ 82% taste match · you both love Goon</div></div>
+        <div class="tm">Wed</div>
+      </div>
+      <div class="rowdiv"></div>
+
+      <div class="vrow">
+        <div class="ring seen" style="width:50px;height:50px">
+          <div class="vinyl" style="width:45px;height:45px"><div class="av a5 lbl" style="width:26px;height:26px;font-size:9px">F</div></div>
+        </div>
+        <div class="meta"><div class="nm">Family</div><div class="sub">answered · 4 people</div></div>
+        <div class="tm">12:00</div>
+      </div>
+    </div></div>
+    <div class="foot">
+      <div class="nowchip"><span class="wave" style="height:9px"><i></i><i></i><i></i></span> No wahala Rmx</div>
+      <div class="mechip">Anesius ⌃</div>
+    </div>
+  </div>
+
+  <!-- ================= DESKTOP REFLOW ================= -->
+  <div class="laptop">
+    <div class="winbar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><span class="wt">Aluta — Desktop</span></div>
+    <div class="desk">
+      <!-- left: the list collapses to a rail -->
+      <div class="side">
+        <div class="brand">Aluta</div>
+        <div class="search"><span>⌕</span><span>Search…</span></div>
+
+        <div class="pair" style="margin-bottom:12px;padding:11px">
+          <div class="top">
+            <div class="duo" style="width:44px;height:40px"><div class="av a1" style="width:30px;height:30px">A</div><div class="av a5" style="width:30px;height:30px">B</div></div>
+            <div style="min-width:0"><div class="nm" style="font-size:13px">Our Space <span class="together">Together</span></div><div class="since" style="font-size:9.5px">187 days in a song</div></div>
+          </div>
+        </div>
+
+        <div class="zone">Listening now · <span class="ct">2</span></div>
+        <div class="miniv">
+          <div class="ring unseen" style="width:44px;height:44px"><div class="vinyl spin" style="width:39px;height:39px"><div class="av a1 lbl" style="width:22px;height:22px;font-size:8px">WH</div></div></div>
+          <div style="min-width:0"><div class="nm">WIFEY HALOTEL</div><div class="sub music">♪ Ngishutheni — Goon</div></div>
+        </div>
+        <div class="miniv">
+          <div class="ring seen" style="width:44px;height:44px"><div class="vinyl spin" style="width:39px;height:39px;animation-duration:6s"><div class="av a3 lbl" style="width:22px;height:22px;font-size:8px">BH</div></div></div>
+          <div style="min-width:0"><div class="nm">Belyner Halotel</div><div class="sub music">♪ No wahala Rmx</div></div>
+        </div>
+
+        <div class="zone">Your circle</div>
+        <div class="miniv">
+          <div class="ring unseen" style="width:44px;height:44px"><div class="vinyl" style="width:39px;height:39px"><div class="av a2 lbl" style="width:22px;height:22px;font-size:8px">OT</div></div></div>
+          <div style="min-width:0"><div class="nm">ozy tigo</div><div class="sub">morning · 2 unread</div></div>
+        </div>
+        <div class="miniv">
+          <div class="ring none" style="width:44px;height:44px"><div class="vinyl" style="width:44px;height:44px"><div class="av a4 lbl" style="width:22px;height:22px;font-size:8px">LU</div></div></div>
+          <div style="min-width:0"><div class="nm">Lusajo</div><div class="sub match" style="color:#9fb8d6">82% taste match</div></div>
+        </div>
+        <div class="miniv">
+          <div class="ring seen" style="width:44px;height:44px"><div class="vinyl" style="width:39px;height:39px"><div class="av a5 lbl" style="width:22px;height:22px;font-size:8px">F</div></div></div>
+          <div style="min-width:0"><div class="nm">Family</div><div class="sub">answered · 4 people</div></div>
+        </div>
+      </div>
+
+      <!-- right: the intimate presence surface — a room preview + who's playing -->
+      <div class="main">
+        <div class="roomhero">
+          <div class="rtag"><span class="pdot"></span>Live room · your circle</div>
+          <h3>WIFEY HALOTEL's room</h3>
+          <div class="rt">Now playing — Ngishutheni · Goon &nbsp;·&nbsp; queue of 12</div>
+          <div class="listeners">
+            <div class="av a1">WH</div><div class="av a3">BH</div><div class="av a2">OT</div>
+            <span class="more">+ join them</span>
+          </div>
+          <div class="roomcta">
+            <div class="primary">▶ Listen together</div>
+            <div class="ghost">Wave 👋</div>
+          </div>
+          <div class="cleanad"><span class="lock">🔒</span> No ads ever appear here. The moment two people are together, the app goes quiet.</div>
+        </div>
+
+        <div class="wallhead">Now playing around you</div>
+        <div class="wall">
+          <div class="cover c1"><div class="av a1 cav">WH</div><div class="playing"><i></i><i></i><i></i></div><div class="cn">WIFEY HALOTEL</div><div class="ct2">Ngishutheni — Goon</div><div class="join2">▶ Join</div></div>
+          <div class="cover c4"><div class="av a3 cav">BH</div><div class="playing"><i></i><i></i><i></i></div><div class="cn">Belyner</div><div class="ct2">No wahala Rmx</div><div class="join2">▶ Join</div></div>
+          <div class="cover c3"><div class="av a4 cav">LU</div><div class="cn">Lusajo</div><div class="ct2">82% taste match</div><div class="join2">Invite to listen</div></div>
+          <div class="cover c2"><div class="av a2 cav">OT</div><div class="cn">ozy tigo</div><div class="ct2">last: morning</div><div class="join2">Message</div></div>
+          <div class="cover c5"><div class="av a5 cav">F</div><div class="cn">Family</div><div class="ct2">4 people</div><div class="join2">Open</div></div>
+          <div class="cover c6"><div class="av a1 cav">+</div><div class="cn">Add friend</div><div class="ct2">username or number</div><div class="join2">＋ Add</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ================= NOTES ================= -->
+<div class="note">
+  <h2><span class="bar"></span>How each element earns its place</h2>
+  <div class="grid2">
+    <div class="ncard">
+      <div class="h"><span class="em">🎧</span>Sorted by presence, not recency</div>
+      <p><b>"Listening now" rises to the top.</b> The organizing principle is who you can <b>be with right now</b> — one tap into their song. This is the roadmap's ★ "Now-Playing presence → join in one gesture," made the spine of the whole page rather than a badge.</p>
+    </div>
+    <div class="ncard">
+      <div class="h"><span class="em">💿</span>The disc is the identity</div>
+      <p>Story ring (outer) + real-track-position arc (mid) + record (inner). It <b>spins and shows the arc only while actually playing</b>, so motion always means something. One avatar = story · playing · person, no separate stories strip.</p>
+    </div>
+    <div class="ncard">
+      <div class="h"><span class="em">💞</span>Our Space leads (the wedge)</div>
+      <p>The pinned pair with a <b>"close since / days in a song" counter</b> is the long-distance-couple wedge and the <b>Together plan</b> made visible — shared, felt, sticky. It's the first thing the eye lands on because closeness is the product.</p>
+    </div>
+    <div class="ncard">
+      <div class="h"><span class="em">🎁</span>Moments, quietly present</div>
+      <p>The small gift glyph on a row is a <b>song dedication / "thinking of you"</b> (Lever 2 — spikes). Emotional, one-off, on-thesis — never a banner, just an affordance where a moment naturally belongs.</p>
+    </div>
+    <div class="ncard">
+      <div class="h"><span class="em">🔀</span>Taste-match as discovery</div>
+      <p><b>"82% taste match · you both love Goon"</b> replaces a dead "Contact" label with a reason to reach out — the music-graph moat, surfaced where it creates a spark instead of buried in a separate tab.</p>
+    </div>
+    <div class="ncard">
+      <div class="h"><span class="em">🔒</span>The intimate surface stays clean</div>
+      <p>The hard rule made visible: <b>no ad ever inside a room, call, or thread.</b> Ads live only in a clearly-public "discover" space. On desktop the right pane <b>is</b> the intimate surface — so it's quiet by design.</p>
+    </div>
+  </div>
+
+  <h2><span class="bar"></span>Functionality · responsiveness · what to build behind it</h2>
+  <div class="maps">
+    <p><b>One contextual line per row, prioritized:</b> live track → typing… → unread preview → taste-match → last-seen. Never stack them. <b>Join is the only persistent CTA</b> — call/message/dedicate/remove live in swipe (mobile) and row-hover (desktop). <b>Empty state matters more now</b> that the list is scoped to real friends: a quiet circle should feel inviting ("Add friends · scan contacts · find your taste-twins"), never broken.</p>
+    <p><b>Reflow, don't stretch:</b> the phone's stacked zones become <b>rail + presence-pane</b> on desktop — the list collapses left, and the right pane hosts the room preview and the "now playing wall" (Concept 02's mosaic, finally in its right home as a mode, not the primary list). Hover reveals actions; touch uses swipe.</p>
+    <p><b>Motion budget:</b> only on-screen <i>and</i> currently-playing discs animate; off-screen discs freeze; one shared ticker; <code>prefers-reduced-motion</code> respected. The arc is bound to the <b>real</b> playback position from the audio handler — true, not decorative.</p>
+    <p><b>The enabler (and the bridge to C1):</b> "Listening now" needs a <b>live now-playing presence broadcast</b> over the WebSocket (expiring "user X is playing track Y"), plus the roadmap's non-negotiables underneath it — <b>authenticate the main socket (A1)</b>, <b>WS-first delivery (A3)</b>, and <b>P2P Listen-Together (A4)</b>. Build that presence layer once and it powers this friend list <i>and</i> Listening Rooms. This surface is C1's front door.</p>
+  </div>
+
+  <div class="foot-note">
+    Aluta — Concept 05 (Hybrid). Same palette and tokens as your four concepts; grounded in the Technical Roadmap (§2 identity, Tier-B ★ items) and the Monetization &amp; Positioning brief (wedge, Together plan, moments, the "ads never in the moment" rule). A design reference for the friend-list rebuild and the C1 Listening-Rooms front door — not final visuals.
+  </div>
+</div>
+
+</body>
+</html>

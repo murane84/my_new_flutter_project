@@ -97,6 +97,8 @@ part 'home/home_phone_body.dart'; // phone layout body + expandable player sheet
 part 'home/home_banners.dart'; // live-session + call-return banners, live chip
 part 'home/home_menu.dart'; // header overflow menu (grouped submenus)
 part 'home/home_hub.dart'; // mobile two-tile accordion hub (Harmony / Circle) + badges
+part 'home/home_page_helpers_1.dart'; // HomePageState helpers (41 methods)
+part 'home/home_page_helpers_2.dart'; // HomePageState helpers (13 methods)
 
 String _formatFriendTimestamp(String raw) {
   if (raw.isEmpty) return '';
@@ -262,8 +264,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // reordering — new message, presence — while the Space page is open).
   int? _spaceOpenOriginId;
   final Map<int, GlobalKey> _spaceTileKeys = {};
-  GlobalKey _spaceTileKey(int id) =>
-      _spaceTileKeys.putIfAbsent(id, () => GlobalKey());
 
   // Drives the app-wide playlist drawer's slide/fade (hosted below the active
   // header — see _playlistDrawerHost).
@@ -288,13 +288,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // Chat header: tap the friend's avatar to expand their photo above the thread.
   bool _avatarExpanded = false;
   String _apiBase = '';
-
-  // Build a full avatar URL from a stored relative ref (/attachments/<id>).
-  String? _avatarFull(dynamic rel) {
-    final s = rel?.toString() ?? '';
-    if (s.isEmpty) return null;
-    return s.startsWith('http') ? s : '$_apiBase$s';
-  }
 
   Timer? _refreshTimer;
   Timer? _heartbeatTimer;
@@ -437,104 +430,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptForPhone());
   }
 
-  Future<void> _maybePromptForPhone() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      if (prefs.getBool('phone_prompt_dismissed') == true) return;
-      final me = await ApiService().getUserData();
-      final phone = (me['phone'] ?? '').toString().trim();
-      if (phone.isNotEmpty) return; // already has a number
-      if (!mounted) return;
-      _showAddPhoneDialog();
-    } catch (_) {/* never block the app on this */}
-  }
-
-  void _showAddPhoneDialog() {
-    final ctrl = TextEditingController();
-    bool saving = false;
-    showDialog<void>(
-      context: context,
-      builder: (dctx) => StatefulBuilder(
-        builder: (dctx, setLocal) {
-          final scheme = Theme.of(dctx).colorScheme;
-          Future<void> dismiss() async {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setBool('phone_prompt_dismissed', true);
-            if (dctx.mounted) Navigator.pop(dctx);
-          }
-
-          Future<void> save() async {
-            if (ctrl.text.trim().isEmpty) {
-              showToast(context, 'Enter your phone number.',
-                  type: ToastType.error);
-              return;
-            }
-            setLocal(() => saving = true);
-            final res =
-                await ApiService().updateProfile(phone: ctrl.text.trim());
-            if (res['success'] == true) {
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.setBool('phone_prompt_dismissed', true);
-              if (dctx.mounted) Navigator.pop(dctx);
-              if (mounted) {
-                showToast(context, 'Saved — friends can now find you.',
-                    type: ToastType.success);
-              }
-            } else {
-              setLocal(() => saving = false);
-              if (mounted) {
-                showToast(context,
-                    (res['message'] ?? 'Could not save your number.').toString(),
-                    type: ToastType.error);
-              }
-            }
-          }
-
-          return AlertDialog(
-            title: const Text('Add your phone number'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'So friends who have your number can find you on Aluta. '
-                  'It stays private — only used for contact matching.',
-                  style: TextStyle(
-                      fontSize: 13, color: scheme.onSurfaceVariant),
-                ),
-                const SizedBox(height: 14),
-                IntlPhoneField(
-                  initialCountryCode: 'TZ',
-                  decoration: InputDecoration(
-                    labelText: 'Phone number',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onChanged: (p) => ctrl.text = p.completeNumber,
-                  invalidNumberMessage: 'Enter a valid phone number',
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: saving ? null : dismiss,
-                child: const Text('Not now'),
-              ),
-              FilledButton(
-                onPressed: saving ? null : save,
-                child: saving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2.4))
-                    : const Text('Add'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -578,35 +473,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
     playlistDrawerBus.toggle?.call();
   }
-
-  /// Web: the "lite" player holds its queue in memory, so from a chat we show a
-  /// live bottom sheet of that queue — with a full transport strip (seek +
-  /// shuffle/repeat/prev/play/next) and tap-to-jump — mirroring how the native
-  /// playlist drawer is reachable from a chat.
-  void _showWebQueueSheet() {
-    final queue = playbackBus.webQueue?.call() ?? const [];
-    if (queue.isEmpty) {
-      showToast(
-        context,
-        'No music loaded yet — add songs in the Music panel first.',
-        type: ToastType.info,
-      );
-      return;
-    }
-    final scheme = Theme.of(context).colorScheme;
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      useRootNavigator: true,
-      backgroundColor: scheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => const _WebQueueSheet(),
-    );
-  }
-
 
 
   bool _handlingExpiry = false;
@@ -706,21 +572,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
   }
 
-  // Called on ANY touch/pointer down anywhere in the app. Immediately recovers
-  // the session if we're offline, and keeps presence fresh (throttled to 30s)
-  // so the user never has to log out / back in just to reconnect.
-  void _onUserActivity() {
-    if (!_serverReachable || !_isCurrentUserOnline) {
-      _autoReconnect();
-      return;
-    }
-    final now = DateTime.now();
-    if (now.difference(_lastActivityPing).inSeconds >= 30) {
-      _lastActivityPing = now;
-      _sendHeartbeat();
-    }
-  }
-
   // ── Persistence ───────────────────────────────────────────────────────────
 
   Future<void> _loadLayoutState() async {
@@ -731,13 +582,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
       _isMusicFullScreen = prefs.getBool('isMusicFullScreen') ?? false;
       _isChatFullScreen = prefs.getBool('isChatFullScreen') ?? false;
     });
-  }
-
-  void _saveLayoutState() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('musicPanelWidth', _musicPanelWidth);
-    await prefs.setBool('isMusicFullScreen', _isMusicFullScreen);
-    await prefs.setBool('isChatFullScreen', _isChatFullScreen);
   }
 
   // ── Data ──────────────────────────────────────────────────────────────────
@@ -1026,81 +870,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
     );
   }
 
-  // ── App-wide notification socket (Listen Together invites, etc.) ──────────
-  void _startNotifyWs() {
-    final id = _myUserId;
-    if (id == null) return;
-    _notifyWs?.close();
-    _notifyWs = WebSocketManager(
-      userId: id.toString(),
-      onEventReceived: _handleNotification,
-      onDisconnected: () {},
-    );
-    _notifyWs!.connect();
-
-    // Wire the voice-call service to this always-on socket: it sends call
-    // signaling out through here, and asks us to surface the call screen.
-    CallService.instance.sendSignal = (msg) => _notifyWs?.sendEvent(msg);
-    CallService.instance.onShowCallUI = _openCallScreen;
-    // Group (mesh) calling rides the same socket.
-    GroupCallService.instance.sendSignal = (msg) => _notifyWs?.sendEvent(msg);
-    GroupCallService.instance.onShowUI = _openGroupCallScreen;
-    // Live "now playing" presence rides the same socket: emit what I'm playing
-    // (server fans it to friends only) and begin watching local playback.
-    NowPlayingPresence.instance.emitSink = (msg) => _notifyWs?.sendEvent(msg);
-    NowPlayingPresence.instance.start();
-    // The mesh's "smaller id offers" rule needs our OWN id on every entry
-    // path. startGroupCall()/joinRoom() set it, but accept() (answering an
-    // incoming ring) does not — so on a fresh launch the acceptor's myId was
-    // null, _maybeOffer() bailed out, and any peer with a higher id sat
-    // waiting for an offer that never came → no audio. Set it here once the
-    // user is known; _reset() deliberately preserves it across calls.
-    GroupCallService.instance.myId = id;
-    // Group-call signaling carries only bare user ids, so the call service
-    // resolves each participant's name/phone/avatar through this from our own
-    // friend list + group rosters — proper identities on every entry path
-    // (start/join/accept), on mobile, desktop and web.
-    GroupCallService.instance.resolveIdentity = _identityForUser;
-
-    // Bridge calls to the system telecom stack so a car / Bluetooth device can
-    // answer & hang up (and route call audio over hands-free). Android-only and
-    // fully additive — a system answer/end just drives the existing engine.
-    TelecomService.instance.init();
-    TelecomService.instance.onAnswer = (id) {
-      if (id.startsWith('grp_')) {
-        GroupCallService.instance.accept();
-      } else {
-        CallService.instance.acceptCall();
-      }
-    };
-    TelecomService.instance.onDisconnect = (id) {
-      if (id.startsWith('grp_')) {
-        GroupCallService.instance.leave();
-      } else {
-        CallService.instance.hangUp();
-      }
-    };
-
-    // Accept/Decline tapped on the ringing NOTIFICATION (app backgrounded but
-    // still running): route it into the live call engine. This is what gives
-    // the receiver working call controls without opening the app first.
-    onCallAction = _handleCallNotificationAction;
-    // Tapping a message notification (app alive/backgrounded) → open that thread.
-    onMessageTap = _handleMessageTap;
-    // If the app was launched cold by tapping Accept on a call notification
-    // (app was killed), pick that up once and reconnect the call — after the
-    // first frame so the root navigator exists. Guarded so socket reconnects
-    // don't re-trigger it.
-    if (!_callLaunchConsumed) {
-      _callLaunchConsumed = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _consumeCallLaunch();
-        // …and if it was a message notification that launched us, open its thread.
-        _consumeMessageLaunch();
-      });
-    }
-  }
-
   /// Open the sender's thread from a tapped message notification. Uses the
   /// loaded friend list when available (so avatar/phone are correct), else a
   /// minimal record from the payload — ChatPage fetches the rest by id.
@@ -1146,11 +915,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
     openChat(friend, jumpToMessageId: jump);
   }
 
-  Future<void> _consumeMessageLaunch() async {
-    final payload = await consumeMessageLaunchAction();
-    if (payload != null) _handleMessageTap(payload);
-  }
-
   bool _callLaunchConsumed = false;
 
   /// Handle Accept/Decline tapped on the ringing notification while the app is
@@ -1172,40 +936,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
       } else {
         CallService.instance.declineCall();
       }
-    }
-  }
-
-  /// Cold-start: the app was launched by tapping a call notification (killed
-  /// app, so the WebRTC offer was missed). Depending on WHAT was tapped:
-  ///   • Accept  → reconnect and auto-answer (prepareAcceptFromNotification).
-  ///   • Decline → hang up.
-  ///   • the body (no action) → show the in-app ringing screen with
-  ///     Accept/Decline, since tapping the body dismisses the notification and
-  ///     the full-screen intent was blocked (MIUI etc.).
-  Future<void> _consumeCallLaunch() async {
-    final launch = await consumeCallLaunchAction();
-    if (launch == null) return;
-    final isGroup = launch.payload['group'] == true;
-    if (isGroup) {
-      // Group: opening the group shows the "call in progress · Join" banner.
-      return;
-    }
-    final cid = int.tryParse('${launch.payload['caller_id'] ?? ''}');
-    if (cid == null) return;
-    final action = launch.actionId;
-    if (action == kCallDecline) {
-      CallService.instance.showIncomingFromNotification(
-          cid, (launch.payload['caller_name'] ?? '').toString());
-      CallService.instance.declineCall();
-      return;
-    }
-    _openCallScreen();
-    if (action == kCallAccept) {
-      CallService.instance.prepareAcceptFromNotification(cid);
-    } else {
-      // Body tap → show the ring screen so the user can act on the call.
-      CallService.instance.showIncomingFromNotification(
-          cid, (launch.payload['caller_name'] ?? '').toString());
     }
   }
 
@@ -1238,94 +968,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
         });
     if (mounted) setState(() {});
   }
-
-  Future<void> _startGroupCall(Map g) async {
-    final room = (g['id'] as num?)?.toInt();
-    final myId = _myUserId;
-    if (room == null || myId == null) return;
-    if (!ConnectionStatus.instance.isOnline) {
-      if (mounted) {
-        showToast(context, 'No internet — can’t start a group call',
-            type: ToastType.info);
-      }
-      return;
-    }
-    final members = <GroupParticipant>[];
-    for (final m in (g['members'] as List?) ?? const []) {
-      if (m is! Map) continue;
-      final id = (m['user_id'] as num?)?.toInt();
-      if (id == null || id == myId) continue;
-      members.add(GroupParticipant(
-        id,
-        (m['username'] ?? '').toString(),
-        m['avatar_url'] as String?,
-        phone: m['phone'] as String?,
-      ));
-    }
-    final ok = await GroupCallService.instance.startGroupCall(
-      room: room,
-      title: (g['title'] ?? 'Group').toString(),
-      myId: myId,
-      myName: _username.isNotEmpty ? _username : 'Aluta user',
-      members: members,
-    );
-    if (!ok && mounted) {
-      showToast(context, 'You’re already in a call', type: ToastType.info);
-    }
-  }
-
-  /// Join an ONGOING group call from the "call in progress · Join" banner — a
-  /// member who missed or declined the ring reconnecting. Same member wiring as
-  /// [_startGroupCall] but routes to joinRoom() (announces a join, not a start).
-  Future<void> _joinGroupCall(Map g) async {
-    final room = (g['id'] as num?)?.toInt();
-    final myId = _myUserId;
-    if (room == null || myId == null) return;
-    if (GroupCallService.instance.isActive) {
-      // Already in a call — just resurface the screen.
-      _openGroupCallScreen();
-      return;
-    }
-    if (!ConnectionStatus.instance.isOnline) {
-      if (mounted) {
-        showToast(context, 'No internet — can’t join the call',
-            type: ToastType.info);
-      }
-      return;
-    }
-    final members = <GroupParticipant>[];
-    for (final m in (g['members'] as List?) ?? const []) {
-      if (m is! Map) continue;
-      final id = (m['user_id'] as num?)?.toInt();
-      if (id == null || id == myId) continue;
-      members.add(GroupParticipant(
-        id,
-        (m['username'] ?? '').toString(),
-        m['avatar_url'] as String?,
-        phone: m['phone'] as String?,
-      ));
-    }
-    final title = (g['title'] ??
-            GroupCallService.instance.ongoingCalls.value[room] ??
-            'Group')
-        .toString();
-    await GroupCallService.instance.joinRoom(
-      room: room,
-      title: title,
-      myId: myId,
-      myName: _username.isNotEmpty ? _username : 'Aluta user',
-      members: members,
-    );
-  }
-
-  /// One row inside the group header's ⋮ options menu.
-  Widget _groupMenuRow(IconData icon, String label, ColorScheme scheme) => Row(
-        children: [
-          Icon(icon, size: 20, color: scheme.primary),
-          const SizedBox(width: 12),
-          Text(label),
-        ],
-      );
 
   /// Show the full-screen call UI (for an incoming ring or an outgoing call).
   void _openCallScreen() {
@@ -1592,116 +1234,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
   }
 
-  /// Show the "Listen together?" prompt anywhere in the app and, on accept,
-  /// open the live session popup as a listener.
-  Future<void> _showLiveInvite(Map<String, dynamic> event) async {
-    final data = (event['data'] as Map?)?.cast<String, dynamic>();
-    if (data == null) return;
-    final sessionId = data['session_id']?.toString();
-    if (sessionId == null) return;
-    final track =
-        (data['track'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
-    final rawHostName = data['host_username']?.toString() ?? 'Someone';
-    // Show the host by the name the user has for them in their friend list /
-    // phone book (saved contact name), falling back to the app username — so the
-    // "listening with …" label matches everything else the user sees.
-    final hostName =
-        _contactDisplayName(_friendPhoneById(data['host_id']), rawHostName);
-
-    final accept = await showGeneralDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Dismiss',
-      barrierColor: Colors.black.withAlpha(120),
-      transitionDuration: const Duration(milliseconds: 260),
-      pageBuilder: (_, _, _) => _LiveInviteDialog(
-        hostName: hostName,
-        trackTitle: (track['title'] ?? 'a song').toString(),
-      ),
-      transitionBuilder: (_, anim, _, child) => FadeTransition(
-        opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
-        child: ScaleTransition(
-          scale: Tween<double>(begin: 0.9, end: 1.0).animate(
-            CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
-          ),
-          child: child,
-        ),
-      ),
-    );
-    if (accept != true) {
-      // Explicit Decline (false) → tell the host so they can end or keep
-      // waiting. Barrier-dismiss (null) leaves it pending, no notification.
-      if (accept == false) {
-        ApiService().declineLiveSession(sessionId);
-      }
-      return;
-    }
-
-    final token = await getToken();
-    final myUserId = _myUserId;
-    if (token == null || myUserId == null || !mounted) return;
-
-    // Guard against ending up with two listener controllers fighting over the
-    // same user socket. If a session is already active (e.g. a previous screen
-    // is stuck reconnecting after a network drop):
-    //   • same session → this is a re-invite for the room we're already in.
-    //     Just surface the existing screen; its own reconnect handles rejoining
-    //     — spinning up a second controller would make the two sockets duel
-    //     (empty queue, no audio).
-    //   • different session → leave the stale one cleanly first.
-    if (activeLiveSession != null) {
-      final already = activeLiveSession!.controller.sessionId;
-      if (already != null && already == sessionId) {
-        _reopenLiveSession();
-        return;
-      }
-      await endActiveLiveSession();
-      ref.read(liveSessionProvider.notifier).stop();
-      if (!mounted) return;
-    }
-
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      fullscreenDialog: true,
-      builder: (_) => LiveSessionScreen.listener(
-        token: token,
-        myUserId: myUserId,
-        sessionId: sessionId,
-        track: track,
-        peerName: hostName,
-        myName: _username.isNotEmpty ? _username : null,
-      ),
-    ));
-  }
-
-  /// Host side: a friend declined our Listen Together invite. Let the host
-  /// decide whether to end the (still-open) session or keep waiting.
-  Future<void> _showLiveDeclined(Map<String, dynamic> event) async {
-    if (!mounted || activeLiveSession == null) return;
-    // Record the decline on the thread (and suppress the end-of-session log).
-    activeLiveSession?.controller.markDeclined();
-    final data =
-        (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
-    final who = (data['listener_username'] ?? 'Your friend').toString();
-    final end = await showDialog<bool>(
-      context: context,
-      builder: (dctx) => AlertDialog(
-        title: const Text('Invite declined'),
-        content: Text('$who declined your Listen Together invite.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dctx, false),
-            child: const Text('Dismiss'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dctx, true),
-            child: const Text('End session'),
-          ),
-        ],
-      ),
-    );
-    if (end == true) await _endLiveSession();
-  }
-
   Future<void> _loadUserData() async {
     appBusy.begin();
     try {
@@ -1780,147 +1312,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_kFriendsCache, jsonEncode(friends));
-    } catch (_) {}
-  }
-
-  /// Keep a good last-message preview when a fetch returns an EMPTY one — e.g.
-  /// the last message was purged server-side after both devices cached it
-  /// (store-and-forward). Without this, a background refresh blanks the preview
-  /// under a friend's / group's name even though the message still lives in the
-  /// local chat cache.
-  void _preservePreviews(List<Map<String, dynamic>> fresh,
-      List<Map<String, dynamic>> prev) {
-    if (prev.isEmpty) return;
-    final byId = {for (final p in prev) p['id'].toString(): p};
-    for (final f in fresh) {
-      final lm = (f['last_message'] ?? '').toString().trim();
-      if (lm.isNotEmpty) continue;
-      final p = byId[f['id'].toString()];
-      if (p == null) continue;
-      final plm = (p['last_message'] ?? '').toString().trim();
-      if (plm.isEmpty) continue;
-      f['last_message'] = p['last_message'];
-      if ((f['last_timestamp'] ?? '').toString().trim().isEmpty) {
-        f['last_timestamp'] = p['last_timestamp'];
-      }
-    }
-  }
-
-  /// A friend-list preview string for a cached chat message.
-  String _previewFromCachedMessage(Map<String, dynamic> m) {
-    final type = (m['message_type'] ?? 'text').toString();
-    switch (type) {
-      case 'image':
-        return '📷 Photo';
-      case 'audio':
-        return '🎤 Voice';
-      case 'video':
-        return '🎬 Video';
-      case 'gif':
-        return 'GIF';
-      case 'file':
-        return '📎 File';
-      case 'location':
-        return '📍 Location';
-      case 'contact':
-        return '👤 Contact';
-      case 'live':
-        return _livePreview((m['content'] ?? '').toString().trim());
-      case 'call':
-        return _callPreview((m['content'] ?? '').toString().trim(),
-            (m['media_duration'] as num?)?.toInt() ?? 0);
-      default:
-        return (m['content'] ?? '').toString().trim();
-    }
-  }
-
-  // Friendly friend-list label for a "listen together" (live) outcome token.
-  String _livePreview(String outcome) {
-    switch (outcome) {
-      case 'listened':
-        return '🎧 Listened together';
-      case 'declined':
-        return '🎧 Listen together declined';
-      case 'noanswer':
-        return '🎧 Listen together — no answer';
-      default:
-        return '🎧 Listen together';
-    }
-  }
-
-  // Friendly friend-list label for a call-log outcome. A connected call
-  // (secs > 0) just reads "Call"; otherwise the reason is spelled out.
-  String _callPreview(String outcome, int secs) {
-    if (secs > 0) return '📞 Call';
-    switch (outcome) {
-      case 'declined':
-        return '📞 Call declined';
-      case 'busy':
-        return '📞 Line busy';
-      case 'unreachable':
-        return '📞 Unreachable';
-      case 'failed':
-        return '📞 Call failed';
-      case 'cancelled':
-        return '📞 Call cancelled';
-      case 'noanswer':
-        return '📞 No answer';
-      default: // 'missed' / unknown
-        return '📞 Missed call';
-    }
-  }
-
-  /// Make the DURABLE LOCAL chat cache the primary source of each row's
-  /// last-message preview. The server copy is only used when it carries a
-  /// strictly NEWER message (a fresh message to a chat that isn't open, which
-  /// the local cache hasn't seen yet) — so previews survive server purge and
-  /// offline, yet still update live. Mutates [items] in place.
-  Future<void> _hydratePreviewsFromCache(
-      List<Map<String, dynamic>> items, {required bool group}) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final myId = prefs.getString('my_user_id');
-      if (myId == null) return;
-      for (final f in items) {
-        final id = f['id'];
-        final key =
-            group ? 'chat_cache_${myId}_g$id' : 'chat_cache_${myId}_$id';
-        final raw = prefs.getString(key);
-        if (raw == null) continue;
-        dynamic list;
-        try {
-          list = jsonDecode(raw);
-        } catch (_) {
-          continue;
-        }
-        if (list is! List || list.isEmpty) continue;
-        // Newest non-purged cached message for this chat.
-        Map? m;
-        for (int i = list.length - 1; i >= 0; i--) {
-          final x = list[i];
-          if (x is Map && x['purged'] != true) {
-            m = x;
-            break;
-          }
-        }
-        if (m == null) continue;
-        final localPrev =
-            _previewFromCachedMessage(Map<String, dynamic>.from(m));
-        if (localPrev.trim().isEmpty) continue;
-        final localTs =
-            DateTime.tryParse((m['timestamp'] ?? m['created_at'] ?? '').toString());
-        final serverPrev = (f['last_message'] ?? '').toString().trim();
-        final serverTs =
-            DateTime.tryParse((f['last_timestamp'] ?? '').toString());
-        // Prefer local unless the server clearly has a newer message.
-        final serverIsNewer = serverPrev.isNotEmpty &&
-            serverTs != null &&
-            (localTs == null || serverTs.isAfter(localTs));
-        if (serverIsNewer) continue;
-        f['last_message'] = localPrev;
-        final ts = (m['timestamp'] ?? m['created_at'] ?? '').toString();
-        if (ts.isNotEmpty) f['last_timestamp'] = ts;
-      }
     } catch (_) {}
   }
 
@@ -2017,15 +1408,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
   }
 
-  List<Map<String, dynamic>> _applyGroupQuery(
-      List<Map<String, dynamic>> groups, String query) {
-    final q = query.toLowerCase();
-    if (q.isEmpty) return groups;
-    return groups
-        .where((g) => (g['title'] as String? ?? '').toLowerCase().contains(q))
-        .toList();
-  }
-
   // ── Auto-reconnect (WhatsApp style) ──────────────────────────────────────
 
   bool _reconnecting = false;
@@ -2077,39 +1459,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   String _searchQuery = '';
 
-  /// Filter the friend list by the search query. Matches the app username AND
-  /// the SHOWN name (saved phone-book name) so searching by how you know them
-  /// works even if their app username differs. Empty query → the full list.
-  List<Map<String, dynamic>> _applyFriendQuery(
-      List<Map<String, dynamic>> friends, String query) {
-    final q = query.toLowerCase();
-    if (q.isEmpty) return friends;
-    return friends.where((f) {
-      final username = (f['username'] as String? ?? '').toLowerCase();
-      final shown = _contactDisplayName(
-              f['phone']?.toString(), f['username'] as String? ?? '')
-          .toLowerCase();
-      return username.contains(q) || shown.contains(q);
-    }).toList();
-  }
-
   void _filterFriends(String query) {
     setState(() {
       _searchQuery = query;
       _filteredFriends = _applyFriendQuery(_allFriends, query);
       _filteredGroups = _applyGroupQuery(_groups, query);
     });
-  }
-
-  /// Clear the search so BOTH friends and groups return to their full lists and
-  /// the search box empties. Called when a chat is opened, so coming back shows
-  /// the whole list (and groups don't stay filtered out by a stale query). The
-  /// caller wraps this in setState.
-  void _clearSearchState() {
-    _searchQuery = '';
-    _searchCtrl.clear();
-    _filteredFriends = _allFriends;
-    _filteredGroups = _groups;
   }
 
   // ── Share-into-Aluta (pick a chat to send a shared photo) ─────────────────
@@ -2133,73 +1488,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     if (mounted) setState(() {});
   }
 
-  /// User tapped a recipient while a share is pending: grab the images, clear
-  /// the inbox, and open that chat — it sends them via the preview flow.
-  void _sendShareTo({Map<String, dynamic>? friend, Map<String, dynamic>? group}) {
-    final paths = List<String>.from(ShareInbox.instance.pending);
-    ShareInbox.instance.clear();
-    _shareToSend = paths.isEmpty ? null : paths;
-    if (friend != null) {
-      openChat(friend);
-    } else if (group != null) {
-      openGroupInPanel(group);
-    }
-  }
-
   void _cancelShare() {
     ShareInbox.instance.clear();
     setState(() => _shareToSend = null);
-  }
-
-  /// The name to SHOW for a friend/contact: their SAVED phone-book name when we
-  /// have that number saved on this device, otherwise their app username. Same
-  /// priority the group message headers use, now applied to the friend list and
-  /// DMs so a person reads the same everywhere.
-  String _contactDisplayName(String? phone, String username) {
-    // Resolve the saved phone-book name by the friend's phone; if that's not
-    // set, fall back to the username — for phone-registered users the username
-    // IS a number, so a saved contact still matches. nameFor ignores strings
-    // with too few digits, so a real-name username safely returns null.
-    final p = (phone ?? '').trim();
-    final saved = ContactNames.instance.nameFor(p.isNotEmpty ? p : username);
-    if (saved != null && saved.isNotEmpty) return saved;
-    return username;
-  }
-
-  /// Friendly one-line preview for a conversation's last message. Location and
-  /// contact shares store JSON in the message body; show a label in the chat
-  /// list instead of the raw JSON.
-  String _previewText(String raw) {
-    final s = raw.trim();
-    // Safety net: a call / listen-together log whose raw outcome token leaked
-    // into the preview (e.g. a server last_message that carries no type).
-    final mapped = mapOutcomeToken(s);
-    if (mapped != null) return mapped;
-    if (s.startsWith('{') && s.endsWith('}')) {
-      try {
-        final j = jsonDecode(s);
-        if (j is Map) {
-          if (j['lat'] is num && j['lng'] is num) return '📍 Location';
-          if (j.containsKey('phones') &&
-              (j.containsKey('name') || j.containsKey('phone'))) {
-            return '👤 Contact';
-          }
-        }
-      } catch (_) {/* not our JSON — show as-is */}
-    }
-    return raw;
-  }
-
-  /// The saved phone number for a friend by their user id, looked up in the
-  /// loaded friend list — so a live-session host (identified only by id/username
-  /// in the invite) can still be shown by the user's saved contact name.
-  String? _friendPhoneById(dynamic id) {
-    if (id == null) return null;
-    final key = id.toString();
-    for (final f in _allFriends) {
-      if (f['id']?.toString() == key) return f['phone'] as String?;
-    }
-    return null;
   }
 
   /// Resolve a user id → {name, phone, avatar} from the app's own data so a
@@ -2237,30 +1528,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// the friend-list avatar rings. Silent on failure.
   static const _kStoriesCache = 'cached_stories_v1';
 
-  /// Drop expired stories (past 24h) so a cached feed clears on time; keep my
-  /// own group even when empty so the "Your story" tile still shows.
-  List<StoryGroup> _activeStoryGroups(List<StoryGroup> groups) {
-    final now = DateTime.now();
-    final out = <StoryGroup>[];
-    for (final g in groups) {
-      final live = g.stories.where((s) {
-        final exp = s.expiresAt ?? s.createdAt?.add(const Duration(hours: 24));
-        return exp == null || exp.isAfter(now);
-      }).toList();
-      if (live.isEmpty && !g.isMe) continue;
-      out.add(StoryGroup(
-        authorId: g.authorId,
-        username: g.username,
-        avatarUrl: g.avatarUrl,
-        phone: g.phone,
-        isMe: g.isMe,
-        hasUnseen: g.hasUnseen,
-        stories: live,
-      ));
-    }
-    return out;
-  }
-
   Future<void> _loadCachedStories() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -2296,49 +1563,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
   }
 
-  /// Hybrid status pre-download: cache PHOTOS eagerly (small, instant + offline)
-  /// and VIDEOS only on Wi-Fi when the user allows it — so viewing a status is
-  /// instant and works offline without burning mobile data on unopened videos.
-  void _prefetchStories(List<StoryGroup> groups) async {
-    if (kIsWeb) return;
-    try {
-      final conn = await Connectivity().checkConnectivity();
-      final onWifi = conn.contains(ConnectivityResult.wifi);
-      final hasNet = conn.any((r) => r != ConnectivityResult.none);
-      if (!hasNet) return;
-      final prefs = await SharedPreferences.getInstance();
-      final videoOnWifi = prefs.getBool('status_dl_videos_wifi') ?? true;
-      int budget = 24; // cap downloads per pass
-      for (final g in groups) {
-        if (g.isMe) continue;
-        for (final st in g.stories) {
-          if (budget <= 0) return;
-          final rel = st.mediaUrl;
-          if (rel == null || rel.trim().isEmpty) continue;
-          final url = rel.startsWith('http') ? rel : '$_apiBase$rel';
-          final isVideo = st.kind == 'video';
-          // Videos: only when enabled AND on Wi-Fi. Photos: any connection.
-          if (isVideo && (!videoOnWifi || !onWifi)) continue;
-          if (await MediaStore.instance.cached(url) != null) continue;
-          budget--;
-          MediaStore.instance.getFile(url, mediaAuthHeaders(url)).ignore();
-        }
-      }
-    } catch (_) {}
-  }
-
-  /// Manual add-friend — works everywhere, including desktop/web with no
-  /// phone-book to scan: look someone up by their exact username or phone and
-  /// add them to your circle, then refresh the list.
-  void _showAddFriend() {
-    showAddFriendSheet(
-      context,
-      onAdded: () {
-        if (mounted) _fetchFriends();
-      },
-    );
-  }
-
   /// Repaint the friend list when a friend starts / stops / changes what
   /// they're listening to (driven by NowPlayingPresence).
   void _onPresenceChanged() {
@@ -2356,98 +1580,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
       if (mounted) setState(() {});
     });
     if (!was && mounted) setState(() {});
-  }
-
-  /// The single contextual line under a friend's name, in priority order:
-  /// live track → typing… → last message (styled for unread).
-  Widget _tileSubtitle(ColorScheme scheme, Color textColor, String? npLine,
-      bool typing, String lastMsg, bool hasUnread) {
-    if (npLine != null) {
-      final npStyle = TextStyle(
-          fontSize: 12.5,
-          color: scheme.primary,
-          fontWeight: FontWeight.w600);
-      return Row(
-        children: [
-          Icon(Icons.graphic_eq_rounded, size: 14, color: scheme.primary),
-          const SizedBox(width: 5),
-          Expanded(child: _scrollingText(npLine, npStyle)),
-        ],
-      );
-    }
-    if (typing) {
-      return Text(
-        'typing…',
-        style: TextStyle(
-            fontSize: 12.5,
-            color: scheme.primary,
-            fontStyle: FontStyle.italic,
-            fontWeight: FontWeight.w600),
-      );
-    }
-    return Text(
-      lastMsg,
-      style: TextStyle(
-        fontSize: 12.5,
-        color: hasUnread ? textColor.withAlpha(200) : textColor.withAlpha(110),
-        fontWeight: hasUnread ? FontWeight.w500 : FontWeight.normal,
-      ),
-      overflow: TextOverflow.ellipsis,
-      maxLines: 1,
-    );
-  }
-
-  /// A single-line label that gently scrolls (marquee) ONLY when the text is too
-  /// long to fit — short titles render as plain, still text. Used for the live
-  /// track under a friend in the "Listening now" zone so long "Title — Artist"
-  /// strings are fully readable without truncation.
-  Widget _scrollingText(String text, TextStyle style) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final tp = TextPainter(
-          text: TextSpan(text: text, style: style),
-          maxLines: 1,
-          textDirection: TextDirection.ltr,
-        )..layout();
-        final overflows = tp.width > constraints.maxWidth;
-        if (!overflows) {
-          return Text(text,
-              style: style, maxLines: 1, overflow: TextOverflow.clip);
-        }
-        return SizedBox(
-          height: (style.fontSize ?? 13) + 5,
-          child: Marquee(
-            text: text,
-            style: style,
-            blankSpace: 44,
-            velocity: 26,
-            startPadding: 0,
-            pauseAfterRound: const Duration(seconds: 1),
-            accelerationDuration: const Duration(milliseconds: 350),
-            decelerationDuration: const Duration(milliseconds: 350),
-            showFadingOnlyWhenScrolling: true,
-            fadingEdgeStartFraction: 0.06,
-            fadingEdgeEndFraction: 0.12,
-          ),
-        );
-      },
-    );
-  }
-
-  /// One-shot: ask the server whether the signed-in user must (re-)accept the
-  /// current Privacy Policy + Terms, and if so present the blocking consent
-  /// gate. Fails OPEN — a null/failed status never blocks entry to the app.
-  Future<void> _ensurePolicyAccepted() async {
-    if (_policyChecked) return;
-    _policyChecked = true;
-    final status = await ApiService().fetchPolicyStatus();
-    if (!mounted || status == null) return;
-    if (status['needs_acceptance'] != true) return;
-    await showPolicyGate(
-      context,
-      status: status,
-      onLogout: _signOutFromGate,
-    );
   }
 
   /// Sign out directly from the consent gate when the user declines to accept.
@@ -2468,89 +1600,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
       MaterialPageRoute(builder: (_) => const AuthPage()),
       (route) => false,
     );
-  }
-
-  /// The active story group for a friend id (null if none), used to draw the
-  /// coloured "unseen" / grey "seen" ring on their conversation tile.
-  StoryGroup? _friendStory(dynamic id) {
-    if (id == null) return null;
-    final key = id.toString();
-    for (final g in _storyGroups) {
-      if (!g.isMe && g.authorId.toString() == key) return g;
-    }
-    return null;
-  }
-
-  /// Open a friend's story straight from their conversation tile.
-  Future<void> _openFriendStory(StoryGroup g) async {
-    await Navigator.push(
-      navigatorKey.currentContext ?? context,
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => StoryViewerScreen(
-          groups: [g],
-          startGroup: 0,
-          apiBase: _apiBase,
-          myUserId: _myUserId,
-        ),
-      ),
-    );
-    _fetchStories();
-  }
-
-  /// A friend-list avatar, wrapped in a story ring when they have an active
-  /// status: a colourful gradient while unseen, a neutral grey once viewed.
-  /// Tapping the ring opens their story (the rest of the tile opens the chat).
-  /// Wrap [avatar] in a status ring for [story] — a colourful gradient while
-  /// unseen, a neutral grey once viewed — or return it unchanged when there's
-  /// no active story. Shared by the friend-list tiles and the DM chat header.
-  Widget _statusRing(Widget avatar, StoryGroup? story) {
-    if (story == null) return avatar;
-    final scheme = Theme.of(context).colorScheme;
-    final gradient = story.hasUnseen
-        ? const LinearGradient(
-            colors: [Color(0xFFF9A825), Color(0xFFE91E63), Color(0xFF7B1FA2)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          )
-        : null;
-    return Container(
-      padding: const EdgeInsets.all(2.5),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: gradient,
-        color: gradient == null ? Colors.grey.shade400 : null,
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(2),
-        decoration:
-            BoxDecoration(shape: BoxShape.circle, color: scheme.surface),
-        child: avatar,
-      ),
-    );
-  }
-
-  Widget _storyRingAvatar(
-      Map<String, dynamic> f, String name, bool isOnline) {
-    final avatar = InitialsAvatar(
-      name: name,
-      radius: 22,
-      isOnline: isOnline,
-      imageUrl: _avatarFull(f['avatar_url']),
-    );
-    final story = _friendStory(f['id']);
-    Widget core = story == null
-        ? avatar
-        : GestureDetector(
-            onTap: () => _openFriendStory(story),
-            child: _statusRing(avatar, story),
-          );
-    // Listening right now → wrap in a slowly spinning coral "record" ring.
-    final id = (f['id'] as num?)?.toInt();
-    if (id != null && NowPlayingPresence.instance.trackFor(id) != null) {
-      core = SpinningVinylRing(key: ValueKey('np-$id'), child: core);
-    }
-    return core;
   }
 
   // ── Chat open/close ───────────────────────────────────────────────────────
@@ -2592,19 +1641,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _refreshGroupCallState(conv);
   }
 
-  /// Poll the backend for whether a group call is live in [conv] and seed the
-  /// ongoing-call flag (drives the in-group Join banner).
-  Future<void> _refreshGroupCallState(Map<String, dynamic> conv) async {
-    final cid = (conv['id'] as num?)?.toInt();
-    if (cid == null) return;
-    final state = await ApiService().getGroupCallState(cid);
-    if (state == null) return;
-    final active = state['active'] == true;
-    final title =
-        (state['title'] ?? conv['title'] ?? 'Group call').toString();
-    GroupCallService.instance.setOngoingFromServer(cid, title, active);
-  }
-
   void _closeGroupPanel() => setState(() => _activeGroup = null);
 
   /// Open the group info / settings sheet for the active group (tapped from the
@@ -2637,115 +1673,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _fetchGroups();
   }
 
-  /// Read the phone's address book, match numbers against registered users, and
-  /// auto-add the matches as friends. Android/iOS only.
-  Future<void> _findFriendsFromContacts() async {
-    final mobile = !kIsWeb &&
-        (defaultTargetPlatform == TargetPlatform.android ||
-            defaultTargetPlatform == TargetPlatform.iOS);
-    if (!mobile) {
-      if (mounted) {
-        showToast(context, 'Contact sync is only available on the phone app.',
-            type: ToastType.info);
-      }
-      return;
-    }
-    try {
-      final granted = await FlutterContacts.requestPermission(readonly: true);
-      if (!granted) {
-        if (mounted) {
-          showToast(context, 'Contacts permission denied.',
-              type: ToastType.error);
-        }
-        return;
-      }
-      if (mounted) {
-        showToast(context, 'Checking your contacts…', type: ToastType.info);
-      }
-      final contacts =
-          await FlutterContacts.getContacts(withProperties: true);
-      // Contacts are authorised now — populate the phonebook-name map too so
-      // group headers immediately show saved names.
-      ContactNames.instance.ensureLoaded();
-      // Default region for LOCAL (no country code) contact numbers = the
-      // device's country. Numbers already in +international form are parsed as
-      // written. Everything is normalised to E.164 so matching is correct
-      // across countries.
-      IsoCode region = IsoCode.TZ;
-      final cc =
-          WidgetsBinding.instance.platformDispatcher.locale.countryCode;
-      if (cc != null) {
-        try {
-          region = IsoCode.values.byName(cc.toUpperCase());
-        } catch (_) {/* keep default */}
-      }
-      final phoneSet = <String>{};
-      for (final c in contacts) {
-        for (final p in c.phones) {
-          final raw = p.number.trim();
-          if (raw.isEmpty) continue;
-          try {
-            final parsed = PhoneNumber.parse(raw, callerCountry: region);
-            if (parsed.isValid()) {
-              phoneSet.add(parsed.international); // +<cc><number>
-            } else {
-              phoneSet.add(raw); // fall back to raw (server tail-match may hit)
-            }
-          } catch (_) {
-            phoneSet.add(raw);
-          }
-        }
-      }
-      final phones = phoneSet.toList();
-      if (phones.isEmpty) {
-        if (mounted) {
-          showToast(context, 'No phone numbers found in your contacts.',
-              type: ToastType.info);
-        }
-        return;
-      }
-      final res = await ApiService().syncContacts(phones);
-      final added = (res['added'] as num?)?.toInt() ?? 0;
-      final matched = (res['matched'] as List?)?.length ?? 0;
-      if (!mounted) return;
-      showToast(
-        context,
-        matched == 0
-            ? 'None of your contacts are on Aluta yet.'
-            : 'Found $matched on Aluta · added $added new friend${added == 1 ? '' : 's'}.',
-        type: ToastType.success,
-      );
-      _fetchFriends(); // refresh the list with any newly-added friends
-      // The user has just opted into contact features → NOW (on demand, never at
-      // launch) set up the Android "Connected apps" rows (Aluta call/message
-      // under matched contacts). Runs once per session; a no-op off Android.
-      ConnectedContactsService.instance.refresh();
-    } catch (e) {
-      if (mounted) {
-        showToast(context, 'Could not sync contacts.', type: ToastType.error);
-      }
-    }
-  }
-
-  // Direct call to a friend's saved phone number (tel: dialer).
-  Future<void> _callNumber(String? phone, String name) async {
-    final p = (phone ?? '').trim();
-    if (p.isEmpty) {
-      if (mounted) {
-        showToast(context, '$name has no phone number saved',
-            type: ToastType.info);
-      }
-      return;
-    }
-    try {
-      await launchUrl(Uri(scheme: 'tel', path: p));
-    } catch (_) {
-      if (mounted) {
-        showToast(context, 'Could not start the call', type: ToastType.error);
-      }
-    }
-  }
-
   /// Ask whether to call over the internet (Aluta) or the device dialer, then
   /// route accordingly. Same chooser the chat screen uses, so every call button
   /// in the app offers the choice.
@@ -2768,75 +1695,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
         name: _activeFriendName ?? 'This user',
         avatar: _activeFriendAvatar,
         phone: _activeFriendPhone,
-      ),
-    );
-  }
-
-  void _showCallChoice({
-    required int friendId,
-    required String name,
-    String? avatar,
-    String? phone,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
-    final online = ConnectionStatus.instance.isOnline;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        margin: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 10),
-                width: 36,
-                height: 3,
-                decoration: BoxDecoration(
-                  color: scheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Call $name',
-                      style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: scheme.onSurface)),
-                ),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: Icon(Icons.wifi_calling_3_rounded,
-                    color: online ? scheme.primary : scheme.onSurfaceVariant),
-                title: Text(online
-                    ? 'Aluta call (over the internet)'
-                    : 'Aluta call — you’re offline'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _startAlutaCall(friendId, name, avatar, phone);
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.phone_rounded, color: scheme.onSurface),
-                title: const Text('Phone call (uses your carrier)'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _callNumber(phone, name);
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -2869,30 +1727,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
         friend['avatar_url'] as String?,
         (friend['phone'] as String?) ?? (number.isNotEmpty ? number : null),
       );
-    }
-  }
-
-  Future<void> _startAlutaCall(
-      int friendId, String name, String? avatar, String? phone) async {
-    if (!ConnectionStatus.instance.isOnline) {
-      if (mounted) {
-        showToast(context, 'No internet — starting a phone call instead',
-            type: ToastType.info);
-      }
-      _callNumber(phone, name);
-      return;
-    }
-    if (friendId <= 0) return;
-    final ok = await CallService.instance.startCall(
-      peerId: friendId,
-      peerName: name,
-      peerAvatar: avatar,
-      myName: _username.isNotEmpty ? _username : 'Aluta user',
-      myAvatar: _myAvatar,
-      fallbackPhone: phone,
-    );
-    if (!ok && mounted) {
-      showToast(context, 'You’re already in a call', type: ToastType.info);
     }
   }
 
@@ -2997,116 +1831,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
     );
   }
 
-  // ── Panel helpers ─────────────────────────────────────────────────────────
-
-  // Returns an always-in-tree panel container.
-  // ClipRect hides the overflow; OverflowBox lets the child render at minRenderWidth
-  // even when containerWidth < minRenderWidth — preserving widget state.
-  Widget _animatedPanel({
-    required double containerWidth,
-    required double minRenderWidth,
-    required Widget child,
-    Duration duration = const Duration(milliseconds: 300),
-  }) {
-    final visible = containerWidth > 0.5;
-    // Fade out quickly when collapsing to prevent OverflowBox visual artifact
-    final opacity = (containerWidth / minRenderWidth).clamp(0.0, 1.0);
-
-    return AnimatedContainer(
-      // Zero duration while the user is actively dragging the divider, so the
-      // panel tracks the pointer 1:1 (no chasing/lag); the smooth 300ms tween is
-      // kept for collapse/expand toggles.
-      duration: duration,
-      curve: Curves.easeInOut,
-      width: containerWidth,
-      // Round the clip to match the inner card so there are NO triangular corner
-      // gaps — previously a rectangular hard-edge clip cut the card's shadow into
-      // hard dark wedges at the corners. The shadow lives on THIS container now
-      // (outside the clip), so it renders as a soft halo instead.
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: visible
-            ? [
-                BoxShadow(
-                  color: Theme.of(context).shadowColor.withAlpha(30),
-                  blurRadius: 12,
-                ),
-              ]
-            : const [],
-      ),
-      child: IgnorePointer(
-        ignoring: !visible,
-        child: AnimatedOpacity(
-          opacity: opacity,
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeIn,
-          child: OverflowBox(
-            minWidth: 0,
-            maxWidth: max(containerWidth, minRenderWidth),
-            alignment: Alignment.centerLeft,
-            child: SizedBox(
-              width: max(containerWidth, minRenderWidth),
-              child: child,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _panelDecor(BuildContext context, Widget child,
-      {bool isMusicPanel = false, EdgeInsetsGeometry? padding}) {
-    final theme = Theme.of(context);
-    // Both the music panel and the chat panels now follow the app's Light/Dark
-    // theme (the music stage no longer forces a fixed near-black), so toggling
-    // the theme recolours the player just like the chat area. PlayerTheme still
-    // tints the controls with the chosen accent.
-    final scheme = theme.colorScheme;
-    final isDark = scheme.brightness == Brightness.dark;
-    final bgColor = scheme.surface;
-
-    // In LIGHT mode the music panel's white layer takes on a faint breath of
-    // the chosen accent (a soft diagonal wash) so it feels themed instead of
-    // plain white. Dark mode keeps its usual near-black stage, and the chat
-    // panels are left untouched.
-    final Gradient? musicWash = (isMusicPanel && !isDark)
-        ? LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color.alphaBlend(scheme.primary.withAlpha(24), scheme.surface),
-              Color.alphaBlend(scheme.primary.withAlpha(12), scheme.surface),
-            ],
-          )
-        : null;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: musicWash == null ? bgColor : null,
-        gradient: musicWash,
-        // Rounded on ALL FOUR corners so the panel reads as one floating card —
-        // the bottom corners emerge from the footer just like the top corners
-        // emerge from the header (both sit on the same surfaceContainerHighest
-        // background), for a smoother, symmetric look.
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: theme.shadowColor.withAlpha(35),
-            blurRadius: 12,
-            offset: const Offset(0, 0),
-          ),
-        ],
-      ),
-      // Clip the child to the rounded shape so scrolling content can never
-      // paint into the corners (which was flickering faint pockets at the top
-      // during a fast scroll; the same clip now also cleans the bottom corners).
-      clipBehavior: Clip.antiAlias,
-      padding: padding ?? const EdgeInsets.all(14),
-      child: child,
-    );
-  }
-
   // ── Music panel ───────────────────────────────────────────────────────────
 
   Widget _buildMusicHeader(BuildContext context) {
@@ -3137,40 +1861,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
         ),
       ],
-    );
-  }
-
-  Widget _buildMusicContent(BuildContext context) {
-    // Now Playing is a dark "stage" regardless of app Light/Dark mode; the
-    // accent colours its controls (PlayerTheme).
-    return PlayerTheme(
-      child: Builder(builder: (context) {
-    final scheme = Theme.of(context).colorScheme;
-    return _panelDecor(
-      context,
-      Stack(
-        children: [
-          Column(
-            children: [
-              _buildMusicHeader(context),
-              const SizedBox(height: 10),
-              Expanded(
-                child: kIsWeb
-                    ? WebMusicPanel(
-                        key: _webMusicPanelKey, textColor: scheme.onSurface)
-                    : MusicControls(
-                        key: _musicPanelKey, textColor: scheme.onSurface),
-              ),
-            ],
-          ),
-          // The playlist takes over the whole panel as a page (covers the
-          // "Now Playing" header); its own header + back arrow return here.
-          Positioned.fill(child: _playlistDrawerHost(context, music: true)),
-        ],
-      ),
-      isMusicPanel: true,
-    );
-      }),
     );
   }
 
@@ -3234,87 +1924,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
                 ),
               ),
             ),
-    );
-  }
-
-  /// The DM header's trailing controls (Wallpaper · Playlist · Call) folded
-  /// into ONE connected 3D pill — the same segmented treatment as the Our Space
-  /// header cluster — instead of three loose icon buttons.
-  Widget _dmHeaderCluster(ColorScheme scheme) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final name = _contactDisplayName(_activeFriendPhone, _activeFriendName ?? '');
-    Widget seg(IconData icon, String tip, VoidCallback onTap,
-            {bool active = false}) =>
-        Tooltip(
-          message: tip,
-          child: InkResponse(
-            onTap: onTap,
-            radius: 22,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              child: Icon(icon,
-                  size: 20,
-                  color: active ? scheme.primary : scheme.onSurfaceVariant),
-            ),
-          ),
-        );
-    Widget divider() => Container(
-        width: 1, height: 20, color: scheme.outlineVariant.withValues(alpha: 0.5));
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(13),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [scheme.surfaceContainerHigh, scheme.surfaceContainer]
-              : [Colors.white, scheme.surfaceContainerHighest],
-        ),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.30)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.36 : 0.10),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(13),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            seg(Icons.wallpaper_rounded, 'Wallpaper', () {
-              showChatWallpaperSheet(
-                context,
-                convKey: chatConvKey(
-                    friendId: int.tryParse(_activeFriendId ?? '') ?? 0),
-                title: name,
-              );
-            }),
-            divider(),
-            ValueListenableBuilder<bool>(
-              valueListenable: playlistDrawerBus.isOpen,
-              builder: (_, open, _) => seg(
-                Icons.queue_music_rounded,
-                open ? 'Hide playlist' : 'Playlist',
-                _openChatPlaylist,
-                active: open,
-              ),
-            ),
-            divider(),
-            seg(Icons.call_rounded, 'Call $name', () {
-              _showCallChoice(
-                friendId: int.tryParse(_activeFriendId ?? '') ?? -1,
-                name: _contactDisplayName(
-                    _activeFriendPhone, _activeFriendName ?? 'This user'),
-                avatar: _activeFriendAvatar,
-                phone: _activeFriendPhone,
-              );
-            }),
-          ],
-        ),
-      ),
     );
   }
 
@@ -3663,73 +2272,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
     );
   }
 
-  /// Inside an open GROUP: a "Group call in progress · Join" bar shown when a
-  /// call is ringing/ongoing in THIS group and the user isn't in it yet — so a
-  /// member who missed or declined the ring can still reconnect. Backed by
-  /// GroupCallService.ongoingCalls (seeded from the ring + a REST check on open).
-  Widget _buildGroupJoinBanner(BuildContext context) {
-    final g = _activeGroup;
-    if (g == null) return const SizedBox.shrink();
-    final room = (g['id'] as num?)?.toInt();
-    if (room == null) return const SizedBox.shrink();
-    return ValueListenableBuilder<Map<int, String>>(
-      valueListenable: GroupCallService.instance.ongoingCalls,
-      builder: (context, ongoing, _) {
-        final call = GroupCallService.instance;
-        // If I'm already in this room's call, the global return bar covers it.
-        final inThisCall = call.isActive && call.room == room;
-        if (!ongoing.containsKey(room) || inThisCall) {
-          return const SizedBox.shrink();
-        }
-        return Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Material(
-            color: const Color(0xFF1F8B4C),
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => _joinGroupCall(g),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-                child: Row(
-                  children: [
-                    const Icon(Icons.call_rounded,
-                        size: 18, color: Colors.white),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Text(
-                        'Group call in progress',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => _joinGroupCall(g),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor: Colors.white.withAlpha(38),
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        minimumSize: const Size(0, 32),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: const Text('Join',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 12)),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildChatContent(BuildContext context, {bool phone = false}) {
     final scheme = Theme.of(context).colorScheme;
     final textColor = scheme.onSurface;
@@ -3825,176 +2367,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
       _isMusicFullScreen ||
       _playerExpanded ||
       MediaQuery.of(context).size.width >= 640;
-
-  /// The playlist drawer, hosted BELOW the active header so the header (and the
-  /// chat's playlist toggle) stay visible above it. Slides/fades in from the
-  /// right on [_playlistDrawerCtrl]; swipe right or tap the scrim to close.
-  /// [music] hosts live on the music surface, the other on the chat surface —
-  /// only the front-most one builds content, so it's never duplicated.
-  Widget _playlistDrawerHost(BuildContext context, {required bool music}) {
-    final builder = playlistDrawerBus.contentBuilder;
-    if (builder == null) return const SizedBox.shrink();
-    return AnimatedBuilder(
-      animation: _playlistDrawerCtrl,
-      builder: (context, _) {
-        final t = _playlistDrawerCtrl.value;
-        if (t <= 0.001 || music != _musicIsFront) {
-          return const SizedBox.shrink();
-        }
-        // Tell the playlist body which surface it's on: chat surface (music:false)
-        // has the app now-playing bar, so the body drops its inline strip there.
-        playlistDrawerBus.hostIsChatSurface = !music;
-        final scheme = Theme.of(context).colorScheme;
-        final eased = Curves.easeOutCubic.transform(t);
-        // Music surface: the playlist is a full PAGE, not a drawer. It fills the
-        // whole panel (the Positioned.fill host already covers the "Now Playing"
-        // header), needs no scrim. It slides in from the LEFT to its resting
-        // position (so the motion agrees with the back ← arrow) and fades as it
-        // goes; tapping the arrow reverses it back out to the left. The
-        // overlay's own header (back arrow + controls) becomes the page's top bar.
-        if (music) {
-          return IgnorePointer(
-            ignoring: t < 0.05,
-            child: Opacity(
-              opacity: eased,
-              child: FractionalTranslation(
-                translation: Offset(-(1 - eased) * 0.12, 0),
-                child: Material(
-                  // Transparent so only the overlay's own rounded card shows
-                  // (no square surface behind its rounded corners).
-                  color: Colors.transparent,
-                  child: ValueListenableBuilder<int>(
-                    valueListenable: playlistDrawerBus.revision,
-                    builder: (c, _, _) => builder(c),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }
-        return LayoutBuilder(
-          builder: (ctx, cons) {
-            final isPhone = cons.maxWidth < 520;
-            final double panelW =
-                isPhone ? cons.maxWidth : cons.maxWidth.clamp(0.0, 460.0).toDouble();
-            // Full-width (phone): sharp corners so no dimmed layer peeks through
-            // the rounding. Narrower (desktop): keep the soft left "curtain" edge.
-            final bool fullWidth = panelW >= cons.maxWidth - 0.5;
-            final BorderRadius panelRadius = fullWidth
-                ? BorderRadius.zero
-                : const BorderRadius.only(
-                    topLeft: Radius.circular(18),
-                    bottomLeft: Radius.circular(18),
-                  );
-            return Stack(
-              children: [
-                // Dim scrim — fades with the drawer; tap to close.
-                Positioned.fill(
-                  child: IgnorePointer(
-                    ignoring: t < 0.05,
-                    child: Opacity(
-                      opacity: 0.5 * eased,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => playlistDrawerBus.close?.call(),
-                        child: const ColoredBox(color: Colors.black),
-                      ),
-                    ),
-                  ),
-                ),
-                // The sliding panel — glides in from the right edge.
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FractionalTranslation(
-                    translation: Offset(1 - eased, 0),
-                    // A passive Listener (not a GestureDetector) tracks a RIGHT
-                    // swipe to close the drawer like a curtain. Because it never
-                    // enters the gesture arena, it works EVERYWHERE on the panel
-                    // — including over the swipe-to-delete rows — without blocking
-                    // taps, vertical scrolling, or the rows' left-swipe delete.
-                    child: Listener(
-                      onPointerDown: (e) {
-                        _drawerPointer = e.pointer;
-                        _drawerSwipeDx = 0;
-                        _drawerSwipeDy = 0;
-                      },
-                      onPointerMove: (e) {
-                        if (e.pointer != _drawerPointer) return;
-                        _drawerSwipeDx += e.delta.dx;
-                        _drawerSwipeDy += e.delta.dy;
-                      },
-                      onPointerUp: (e) {
-                        if (e.pointer != _drawerPointer) return;
-                        // Rightward + clearly horizontal = a close swipe.
-                        if (_drawerSwipeDx > 64 &&
-                            _drawerSwipeDx > _drawerSwipeDy.abs() * 1.4) {
-                          playlistDrawerBus.close?.call();
-                        }
-                        _drawerPointer = null;
-                        _drawerSwipeDx = 0;
-                        _drawerSwipeDy = 0;
-                      },
-                      onPointerCancel: (e) {
-                        if (e.pointer == _drawerPointer) {
-                          _drawerPointer = null;
-                          _drawerSwipeDx = 0;
-                          _drawerSwipeDy = 0;
-                        }
-                      },
-                      child: SizedBox(
-                        width: panelW,
-                        height: double.infinity,
-                        child: Material(
-                          color: scheme.surface,
-                          elevation: 16,
-                          shadowColor: Colors.black.withAlpha(120),
-                          borderRadius: panelRadius,
-                          clipBehavior: Clip.antiAlias,
-                          child: ValueListenableBuilder<int>(
-                            valueListenable: playlistDrawerBus.revision,
-                            builder: (c, _, _) => builder(c),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  /// The header status dot. Normally a solid [color] dot; while any background
-  /// task is running (see [appBusy]) it becomes a small spinner in the same
-  /// colour, so the user can see the app IS working (not frozen). Fixed 11×11
-  /// footprint so the pill doesn't jump between states.
-  Widget _statusDot(Color color) {
-    return SizedBox(
-      width: 11,
-      height: 11,
-      child: ValueListenableBuilder<int>(
-        valueListenable: appBusy.count,
-        builder: (_, busy, _) {
-          if (busy > 0) {
-            return CircularProgressIndicator(
-              strokeWidth: 1.6,
-              valueColor: AlwaysStoppedAnimation<Color>(color),
-            );
-          }
-          return Center(
-            child: Container(
-              width: 7,
-              height: 7,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-            ),
-          );
-        },
-      ),
-    );
-  }
 
 
   // ── Draggable divider ─────────────────────────────────────────────────────
@@ -4113,8 +2485,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
     if (!mounted) return;
     setState(() => _isTogether = plan['is_together'] == true);
   }
-
-
 
 
   void _reopenLiveSession() {
@@ -4357,255 +2727,6 @@ class HomePageState extends rp.ConsumerState<HomePage>
           ],
         ),
       ),
-    );
-  }
-
-  // Seek row for the now-playing bar: elapsed · slim seekable bar · remaining.
-  // Driven by playClockNotifier so only this row rebuilds each tick, not the
-  // chat surface. Horizontal drag / tap scrubs; taps bubble up to expand.
-  Widget _barProgress(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final timeStyle = TextStyle(
-      fontSize: 9.5,
-      height: 1.0,
-      color: scheme.onSurface.withAlpha(150),
-      fontWeight: FontWeight.w600,
-      fontFeatures: const [FontFeature.tabularFigures()],
-    );
-    return ValueListenableBuilder<PlayClock>(
-      valueListenable: playClockNotifier,
-      builder: (_, clock, _) {
-        final durMs = clock.duration.inMilliseconds;
-        final frac =
-            durMs > 0 ? (clock.position.inMilliseconds / durMs).clamp(0.0, 1.0) : 0.0;
-        var remaining = clock.duration - clock.position;
-        if (remaining < Duration.zero) remaining = Duration.zero;
-        return Row(
-          children: [
-            SizedBox(
-              width: 30,
-              child: Text(_fmtClock(clock.position), style: timeStyle),
-            ),
-            const SizedBox(width: 6),
-            Expanded(child: _seekTrack(context, frac)),
-            const SizedBox(width: 6),
-            SizedBox(
-              width: 34,
-              child: Text('-${_fmtClock(remaining)}',
-                  style: timeStyle, textAlign: TextAlign.right),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // The draggable track itself (bar + gradient fill). [frac] is 0..1.
-  Widget _seekTrack(BuildContext context, double frac) {
-    final scheme = Theme.of(context).colorScheme;
-    return LayoutBuilder(
-      builder: (ctx, cons) {
-        final w = cons.maxWidth;
-        void seekAt(double dx) {
-          if (w <= 0) return;
-          playbackBus.onSeekFraction?.call((dx / w).clamp(0.0, 1.0));
-        }
-
-        final f = frac.clamp(0.0, 1.0);
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onHorizontalDragStart: (d) => seekAt(d.localPosition.dx),
-          onHorizontalDragUpdate: (d) => seekAt(d.localPosition.dx),
-          child: SizedBox(
-            height: 22,
-            child: Center(
-              child: Stack(
-                alignment: Alignment.centerLeft,
-                children: [
-                  Container(
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: scheme.onSurface.withAlpha(40),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  FractionallySizedBox(
-                    widthFactor: f == 0 ? 0.001 : f,
-                    child: Container(
-                      height: 4,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: [
-                          Color.lerp(scheme.primary, Colors.white, 0.25)!,
-                          scheme.primary,
-                        ]),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // mm:ss (or h:mm:ss for long tracks).
-  String _fmtClock(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60);
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    if (h > 0) return '$h:${m.toString().padLeft(2, '0')}:$s';
-    return '$m:$s';
-  }
-
-  Widget _barBtn(BuildContext context, IconData icon, VoidCallback onTap,
-      {double size = 22, bool filled = false}) {
-    final scheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 2),
-        width: filled ? 40 : 34,
-        height: filled ? 40 : 34,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          // Soft brand tint for the primary play/pause button — a pink circle
-          // with a red glyph and thin ring, matching the voice-note button and
-          // composer mic instead of the solid-red FAB.
-          color: filled
-              ? scheme.primary.withAlpha(isDark ? 48 : 30)
-              : Colors.transparent,
-          border: filled
-              ? Border.all(
-                  color: scheme.primary.withAlpha(isDark ? 90 : 70), width: 1)
-              : null,
-        ),
-        child: Icon(
-          icon,
-          size: size,
-          color: filled
-              ? (isDark ? const Color(0xFFFF8A93) : scheme.primary)
-              : scheme.onSurface.withAlpha(200),
-        ),
-      ),
-    );
-  }
-
-
-  Widget _buildFooter(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return rp.Consumer(
-      builder: (context, ref, _) {
-        // Pure status strip: a connection dot + online-friends count on the
-        // left, profile pill on the right. The "Connected" label is dropped —
-        // seeing your online friends (plus the toast) already tells you you're
-        // back online, so the word was redundant.
-        final np = ref.watch(nowPlayingProvider);
-        // The wide two-pane layout already shows the music PANE (unless chat is
-        // maximised), so the footer pill would be redundant there.
-        final musicPaneVisible =
-            MediaQuery.of(context).size.width >= 640 && !_isChatFullScreen;
-        // The collapsed now-playing BAR is up only when a track is loaded and
-        // not dismissed; while it's up, the pill would just duplicate it.
-        final barShowing =
-            np.track.isNotEmpty && !_barDismissed && !_playerExpanded;
-        // Persistent entry point to the player: show the pill whenever the pane
-        // isn't on screen and neither the bar nor the full player is up —
-        // INCLUDING when no track is loaded yet (fresh launch scans the library
-        // lazily), so portrait always has a way into music. This was the gap:
-        // the pill used to require a loaded track, so a fresh phone had no music
-        // entry point until rotated to landscape (where the pane always shows).
-        final showMusicPill =
-            !_playerExpanded && !musicPaneVisible && !barShowing;
-        return Container(
-          // Fill the footer colour behind the system navigation bar area too,
-          // then SafeArea lifts the 44px status row up above the 3-button nav
-          // bar (or the gesture pill) so the footer — and, because this is the
-          // Scaffold's bottomNavigationBar, the whole body above it (chat
-          // composer + now-playing bar) — never hides under the system controls.
-          color: scheme.surfaceContainerHighest,
-          child: SafeArea(
-            top: false,
-            child: SizedBox(
-              height: 44,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-            children: [
-              // Song-detail chip on the FAR LEFT (only while a track is loaded
-              // and the bar is collapsed) — it balances the profile pill on the
-              // right for a clean two-pill footer. The old server-connection dot
-              // was removed: it duplicated the "N online" pill in the Messages
-              // header, and server config now lives in Tools & settings.
-              // Fixed-width pill (no Flexible — a flex here would split the row
-              // with the Spacer and leave the profile pill mid-row instead of
-              // far right). Hidden when the desktop music PANE is already on
-              // screen (wide layout, chat not maximised) — the pane makes the
-              // footer chip redundant — and when there's no real track.
-              if (showMusicPill) _footerMusicChip(scheme),
-
-              const Spacer(),
-
-              // ── Right: profile pill only (online count now sits by the dot) ─
-              // Tap the name (a pill-shaped button) to open your profile.
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () async {
-                    await showAppPopup(context, const ProfileScreen());
-                    // Refresh the cached username in case it changed.
-                    if (mounted) _loadUserData();
-                  },
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: scheme.primary.withAlpha(22),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: scheme.primary.withAlpha(70)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.person_rounded,
-                            size: 14, color: scheme.primary),
-                        const SizedBox(width: 5),
-                        Text(
-                          // Narrow layouts (phones, or a shrunk web window)
-                          // show just the first name so a full "First Last"
-                          // doesn't eat the footer's space; wide screens
-                          // (desktop) have room for the full name.
-                          MediaQuery.of(context).size.width < 640
-                              ? _username.trim().split(RegExp(r'\s+')).first
-                              : _username,
-                          style: TextStyle(
-                            color: scheme.onSurface,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(width: 3),
-                        Icon(Icons.expand_less_rounded,
-                            size: 14,
-                            color: scheme.onSurface.withAlpha(130)),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 

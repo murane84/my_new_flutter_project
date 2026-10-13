@@ -403,60 +403,148 @@ class _HeartGenieState extends State<_HeartGenie>
 
   Widget _card(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final a = widget.accent;
     return Material(
       color: Colors.transparent,
       child: Container(
-        width: (size.width * 0.82).clamp(240.0, 420.0),
-        constraints: BoxConstraints(maxHeight: size.height * 0.6),
-        padding: const EdgeInsets.fromLTRB(22, 26, 22, 22),
+        width: (size.width * 0.82).clamp(250.0, 420.0),
+        constraints: BoxConstraints(maxHeight: size.height * 0.62),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(26),
+          borderRadius: BorderRadius.circular(28),
+          // Deep, accent-TINTED dark glass — on-theme but never loud/noisy.
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
             colors: [
-              Color.lerp(widget.accent, Colors.white, 0.12)!,
-              widget.accent,
-              Color.lerp(widget.accent, Colors.black, 0.42)!,
+              Color.lerp(a, Colors.black, 0.70)!,
+              Color.lerp(a, Colors.black, 0.88)!,
             ],
-            stops: const [0.0, 0.5, 1.0],
           ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
           boxShadow: [
+            // soft coloured halo + grounding shadow
             BoxShadow(
-              color: widget.accent.withValues(alpha: 0.5),
-              blurRadius: 34,
-              offset: const Offset(0, 16),
+              color: a.withValues(alpha: 0.32),
+              blurRadius: 44,
+              spreadRadius: -8,
+              offset: const Offset(0, 20),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.5),
+              blurRadius: 22,
+              offset: const Offset(0, 10),
             ),
           ],
-          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const Icon(Icons.favorite_rounded, color: Colors.white, size: 26),
-            const SizedBox(height: 14),
-            Flexible(
-              child: SingleChildScrollView(
-                child: Text(
-                  widget.text,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      height: 1.4,
-                      fontWeight: FontWeight.w500),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: Stack(
+            children: [
+              // Gentle accent sheen along the top edge.
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 96,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [a.withValues(alpha: 0.30), Colors.transparent],
+                    ),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'tap outside to close',
-              style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
-                  fontSize: 10.5,
-                  letterSpacing: 0.3),
-            ),
+              // Faint decorative motifs tucked into two corners (like the
+              // chat wallpaper) — hearts, notes, sparkles.
+              const Positioned(top: 8, left: 10, child: _CardMotifs(flip: false)),
+              const Positioned(
+                  bottom: 8, right: 10, child: _CardMotifs(flip: true)),
+              // Content.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 22),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Glass heart badge.
+                    Container(
+                      padding: const EdgeInsets.all(11),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withValues(alpha: 0.12),
+                        border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.22)),
+                      ),
+                      child: Icon(Icons.favorite_rounded,
+                          size: 22,
+                          color: Color.lerp(a, Colors.white, 0.45)),
+                    ),
+                    const SizedBox(height: 16),
+                    Flexible(
+                      child: SingleChildScrollView(
+                        child: Text(
+                          widget.text,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.96),
+                            fontSize: 16.5,
+                            height: 1.5,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.close_fullscreen_rounded,
+                            size: 11,
+                            color: Colors.white.withValues(alpha: 0.5)),
+                        const SizedBox(width: 5),
+                        Text(
+                          'tap outside to close',
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.55),
+                              fontSize: 10.5,
+                              letterSpacing: 0.5),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Faint corner motifs for the genie card — a tiny scatter of hearts, music
+/// notes and sparkles echoing the chat wallpaper.
+class _CardMotifs extends StatelessWidget {
+  const _CardMotifs({required this.flip});
+  final bool flip;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Colors.white.withValues(alpha: 0.10);
+    final items = flip
+        ? const [Icons.music_note_rounded, Icons.favorite_rounded, Icons.auto_awesome_rounded]
+        : const [Icons.favorite_rounded, Icons.music_note_rounded, Icons.auto_awesome_rounded];
+    return IgnorePointer(
+      child: SizedBox(
+        width: 76,
+        height: 64,
+        child: Stack(
+          children: [
+            Positioned(left: 6, top: 8, child: Icon(items[0], size: 20, color: c)),
+            Positioned(left: 40, top: 2, child: Icon(items[1], size: 13, color: c)),
+            Positioned(left: 20, top: 34, child: Icon(items[2], size: 15, color: c)),
           ],
         ),
       ),

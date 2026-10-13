@@ -1005,7 +1005,16 @@ class _BubbleThemeSection extends StatelessWidget {
       ),
       builder: (ctx) {
         final current = sent ? bubbleSentColor : bubbleRecvColor;
-        return Padding(
+        Widget section(String label) => Padding(
+              padding: const EdgeInsets.only(top: 18, bottom: 10),
+              child: Text(label.toUpperCase(),
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      letterSpacing: 1.2,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurfaceVariant)),
+            );
+        return SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(18, 2, 18, 26),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1016,13 +1025,22 @@ class _BubbleThemeSection extends StatelessWidget {
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
                       color: scheme.onSurface)),
-              const SizedBox(height: 16),
+              section('Classic'),
               Wrap(
                 spacing: 12,
                 runSpacing: 12,
                 children: [
                   for (final v in bubblePalette)
                     _swatchCell(ctx, Color(v), current, sent),
+                ],
+              ),
+              section('Neon'),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  for (final v in bubbleNeonPalette)
+                    _swatchCell(ctx, Color(v), current, sent, glow: true),
                 ],
               ),
             ],
@@ -1032,9 +1050,10 @@ class _BubbleThemeSection extends StatelessWidget {
     );
   }
 
-  Widget _swatchCell(BuildContext ctx, Color c, Color current, bool sent) {
+  Widget _swatchCell(BuildContext ctx, Color c, Color current, bool sent,
+      {bool glow = false}) {
     final selected = _sameColour(c, current);
-    final light = c.computeLuminance() > 0.5;
+    final light = bubbleTextOn(c).computeLuminance() < 0.5;
     return GestureDetector(
       onTap: () {
         if (sent) {
@@ -1056,6 +1075,16 @@ class _BubbleThemeSection extends StatelessWidget {
                 : Colors.black.withAlpha(30),
             width: selected ? 2.5 : 1,
           ),
+          // Neon swatches glow like the colour they set.
+          boxShadow: glow
+              ? [
+                  BoxShadow(
+                    color: c.withValues(alpha: 0.55),
+                    blurRadius: 12,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
         ),
         child: selected
             ? Icon(Icons.check_rounded,

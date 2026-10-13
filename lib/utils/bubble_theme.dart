@@ -93,21 +93,67 @@ int _argb(Color c) =>
     (((c.g * 255).round() & 0xff) << 8) |
     ((c.b * 255).round() & 0xff);
 
-/// A readable text colour for content painted on [bg]: near-black on light
-/// bubbles, near-white on dark ones.
-Color bubbleTextOn(Color bg) => bg.computeLuminance() > 0.5
-    ? const Color(0xFF17191C)
-    : const Color(0xFFF4F1F2);
+/// WCAG contrast ratio between two opaque colours (1 = none, 21 = max).
+double bubbleContrast(Color a, Color b) {
+  final la = a.computeLuminance(), lb = b.computeLuminance();
+  final hi = la > lb ? la : lb, lo = la > lb ? lb : la;
+  return (hi + 0.05) / (lo + 0.05);
+}
 
-/// A muted variant of the on-bubble text colour, for timestamps/sublabels.
-Color bubbleMutedOn(Color bg) =>
-    bubbleTextOn(bg).withAlpha(bg.computeLuminance() > 0.5 ? 140 : 165);
+Color _bestOn(Color bg, List<Color> candidates) {
+  var best = candidates.first;
+  var bestC = 0.0;
+  for (final c in candidates) {
+    final r = bubbleContrast(Color.alphaBlend(c, bg), bg);
+    if (r > bestC) {
+      bestC = r;
+      best = c;
+    }
+  }
+  return best;
+}
 
-/// A link colour that stays legible on [bg] and still reads as a link: a
-/// strong blue on light bubbles, a soft sky blue on dark ones.
-Color bubbleLinkOn(Color bg) => bg.computeLuminance() > 0.5
-    ? const Color(0xFF0B57D0)
-    : const Color(0xFF9FD0FF);
+/// A readable text colour for content painted on [bg]: whichever of near-black
+/// or near-white contrasts MORE with it. (A plain luminance cut-off picked white
+/// on mid tones like amber or teal, where it was hard to read.)
+Color bubbleTextOn(Color bg) =>
+    _bestOn(bg, const [Color(0xFF17191C), Color(0xFFF4F1F2)]);
+
+/// A muted variant of the on-bubble text colour, for timestamps, "edited" and
+/// the sent/delivered ticks — faded, but never below a readable contrast.
+Color bubbleMutedOn(Color bg) {
+  final base = bubbleTextOn(bg);
+  for (var a = 0.6; a < 1.0; a += 0.05) {
+    final c = base.withValues(alpha: a);
+    if (bubbleContrast(Color.alphaBlend(c, bg), bg) >= 3.4) return c;
+  }
+  return base;
+}
+
+/// The blue "read" double-tick, picked to stand out on [bg]. On a bubble that
+/// is itself blue (so no blue would show), it falls back to the full-strength
+/// text colour — still clearly brighter than the muted unread ticks.
+Color bubbleReadTickOn(Color bg) {
+  const blues = [
+    Color(0xFF1565C0),
+    Color(0xFF0D47A1),
+    Color(0xFF64B5F6),
+    Color(0xFF9FD0FF),
+  ];
+  final b = _bestOn(bg, blues);
+  return bubbleContrast(Color.alphaBlend(b, bg), bg) >= 3.0
+      ? b
+      : bubbleTextOn(bg);
+}
+
+/// A link colour that stays legible on [bg] and still reads as a link (blue
+/// when one contrasts enough, else the text colour; links are underlined).
+Color bubbleLinkOn(Color bg) {
+  final b = _bestOn(bg, const [Color(0xFF0B57D0), Color(0xFF9FD0FF)]);
+  return bubbleContrast(Color.alphaBlend(b, bg), bg) >= 3.5
+      ? b
+      : bubbleTextOn(bg);
+}
 
 /// A hairline border that lifts a custom bubble off the wallpaper without
 /// fighting its colour.
@@ -117,6 +163,24 @@ Color bubbleBorderOn(Color bg) => bg.computeLuminance() > 0.5
 
 /// The curated palette offered in the picker — a spectrum of calm, saturated
 /// tones plus a neutral ramp, so a choice always looks intentional.
+/// Neon collection: vivid, glowing tones. Text, time and ticks on them are
+/// picked by contrast (see [bubbleTextOn] / [bubbleMutedOn]), so they stay
+/// readable even on the brightest ones.
+const List<int> bubbleNeonPalette = <int>[
+  0xFFFF2E97, // electric pink
+  0xFFFF00E5, // hot magenta
+  0xFFB026FF, // neon purple
+  0xFF7A00FF, // electric violet
+  0xFF00B3FF, // laser blue
+  0xFF00F0FF, // cyan
+  0xFF00FFC6, // aqua mint
+  0xFF39FF14, // neon green
+  0xFFC6FF00, // acid lime
+  0xFFFFF000, // electric yellow
+  0xFFFF6A00, // neon orange
+  0xFFFF073A, // neon red
+];
+
 const List<int> bubblePalette = <int>[
   0xFFEF5F6B, // rose red
   0xFFE2557B, // raspberry

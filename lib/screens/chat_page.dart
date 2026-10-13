@@ -2714,14 +2714,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       quoteMaxWidth = (mp.width + 20).clamp(160.0, bubbleMax);
     }
     // Muted + "read" accent for the timestamp/ticks, tuned per bubble.
-    final sentMuted = onSent.withAlpha(isDark ? 160 : 150);
-    // Read receipt: a blue double-tick, so it stands out against the red/rose
-    // sender bubble instead of blending in like the old brand-red tick did.
-    final sentRead =
-        isDark ? const Color(0xFF6FB1FF) : const Color(0xFF1976D2);
-    // Delivery ticks: neutral gray while sent/delivered, blue once read.
-    final tickGray =
-        isDark ? const Color(0xFFB3ACAE) : const Color(0xFF8C8A8E);
+    // Derived from the ACTUAL bubble colour (default or custom, light or dark)
+    // so the time and ticks always stay readable — fixed greys/blues vanished
+    // on some custom colours and after switching theme.
+    final sentMuted = bubbleMutedOn(sentBubble);
+    final recvMuted = bubbleMutedOn(recvBubble);
+    // Read receipt: a blue double-tick that contrasts with this bubble.
+    final sentRead = bubbleReadTickOn(sentBubble);
+    // Sent/delivered ticks: the muted colour; read ones switch to sentRead.
+    final tickGray = sentMuted;
     // Subtle border to lift each bubble off the wallpaper.
     final bubbleBorder = customBubbles
         ? bubbleBorderOn(isMe ? sentBubble : recvBubble)
@@ -3062,9 +3063,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                     style: TextStyle(
                                       fontSize: 9.5,
                                       fontStyle: FontStyle.italic,
-                                      color: isMe
-                                          ? sentMuted
-                                          : scheme.onSurface.withAlpha(110),
+                                      color: isMe ? sentMuted : recvMuted,
                                     ),
                                   ),
                                   const SizedBox(width: 5),
@@ -3073,9 +3072,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                   _timeOnly(msg['timestamp'] ?? ''),
                                   style: TextStyle(
                                     fontSize: 10.5,
-                                    color: isMe
-                                        ? sentMuted
-                                        : scheme.onSurface.withAlpha(120),
+                                    color: isMe ? sentMuted : recvMuted,
                                   ),
                                 ),
                                 if (isMe) ...[

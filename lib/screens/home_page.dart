@@ -25,7 +25,7 @@ import 'theme_provider.dart';
 import 'music_controls.dart';
 import 'web_music_panel.dart';
 import 'chat_page.dart';
-import 'chat/formatted_text.dart' show stripMessageFormatting;
+import 'chat/formatted_text.dart' show previewSpans;
 import 'group_screens.dart';
 import 'user_profile_sheet.dart';
 import 'device_link.dart';

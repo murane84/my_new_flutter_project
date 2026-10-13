@@ -1638,19 +1638,28 @@ extension _HomeFriendListView on HomePageState {
                     ],
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    lastMsg.isEmpty ? 'Tap to open the group' : lastMsg,
-                    style: TextStyle(
+                  Builder(builder: (context) {
+                    final base = TextStyle(
                       fontSize: 12.5,
                       color: hasUnread
                           ? textColor.withAlpha(200)
                           : textColor.withAlpha(110),
                       fontWeight:
                           hasUnread ? FontWeight.w500 : FontWeight.normal,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
+                    );
+                    return Text.rich(
+                      lastMsg.isEmpty
+                          ? TextSpan(
+                              text: 'Tap to open the group', style: base)
+                          : TextSpan(
+                              style: base,
+                              children: previewSpans(lastMsg, base,
+                                  codeBg: textColor.withValues(alpha: 0.12),
+                                  highlightBg: const Color(0x66FFC107))),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    );
+                  }),
                 ],
               ),
             ),

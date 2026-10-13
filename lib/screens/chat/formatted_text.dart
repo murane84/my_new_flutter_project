@@ -624,3 +624,111 @@ String stripMessageFormatting(String text) {
   s = _applyFractions(s);
   return s.replaceAll(RegExp(r'\s+'), ' ').trim();
 }
+
+// ── Styled one-line preview (chat list) ─────────────────────────────────────
+List<InlineSpan> _previewInline(
+  String s,
+  TextStyle base, {
+  required Color codeBg,
+  required Color highlightBg,
+}) {
+  List<InlineSpan> recurse(String inner, TextStyle st) =>
+      _previewInline(inner, st, codeBg: codeBg, highlightBg: highlightBg);
+
+  final out = <InlineSpan>[];
+  var cursor = 0;
+  while (cursor < s.length) {
+    _Found? found;
+    for (var i = cursor; i < s.length; i++) {
+      final m = _markerAt(s, i);
+      if (m == null) continue;
+      final close = s.indexOf(m.token, i + m.token.length);
+      if (close < 0 || close <= i + m.token.length) continue;
+      final inner = s.substring(i + m.token.length, close);
+      if (inner.trim().isEmpty) continue;
+      if (m.wordGuard && (inner.startsWith(' ') || inner.endsWith(' '))) {
+        continue;
+      }
+      found = _Found(i, close, m, inner);
+      break;
+    }
+    if (found == null) {
+      out.add(TextSpan(text: _applyFractions(s.substring(cursor)), style: base));
+      break;
+    }
+    if (found.start > cursor) {
+      out.add(TextSpan(
+          text: _applyFractions(s.substring(cursor, found.start)),
+          style: base));
+    }
+    switch (found.marker.kind) {
+      case 'code':
+        out.add(TextSpan(
+          text: found.inner,
+          style: base.copyWith(
+              fontFamily: 'monospace',
+              fontFamilyFallback: const ['monospace', 'Courier'],
+              background: Paint()..color = codeBg),
+        ));
+        break;
+      case 'highlight':
+        out.addAll(recurse(
+            found.inner, base.copyWith(background: Paint()..color = highlightBg)));
+        break;
+      case 'underline':
+        out.addAll(recurse(
+            found.inner,
+            base.copyWith(
+                decoration:
+                    _mergeDec(base.decoration, TextDecoration.underline))));
+        break;
+      case 'bold':
+        out.addAll(
+            recurse(found.inner, base.copyWith(fontWeight: FontWeight.w700)));
+        break;
+      case 'italic':
+        out.addAll(
+            recurse(found.inner, base.copyWith(fontStyle: FontStyle.italic)));
+        break;
+      case 'strike':
+        out.addAll(recurse(
+            found.inner,
+            base.copyWith(
+                decoration:
+                    _mergeDec(base.decoration, TextDecoration.lineThrough))));
+        break;
+      case 'spoiler':
+        // In a tiny list preview, just show the words (styled plain).
+        out.addAll(recurse(found.inner, base));
+        break;
+    }
+    cursor = found.close + found.marker.token.length;
+  }
+  return out;
+}
+
+/// Inline-styled spans for a single-line chat-list preview: *bold* _italic_
+/// etc. render, markers are gone, blocks collapse to one line, fractions apply.
+/// No links/recognizers (safe in a list that rebuilds constantly).
+List<InlineSpan> previewSpans(
+  String text,
+  TextStyle base, {
+  required Color codeBg,
+  required Color highlightBg,
+}) {
+  final oneLine = text
+      .split('\n')
+      .map((l) {
+        final q = _quoteRe.firstMatch(l);
+        if (q != null) return q.group(1) ?? '';
+        final b = _bulletRe.firstMatch(l);
+        if (b != null) return '• ${b.group(1) ?? ''}';
+        final n = _numberRe.firstMatch(l);
+        if (n != null) return '${n.group(1) ?? ''}. ${n.group(2) ?? ''}';
+        return l;
+      })
+      .join('  ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  return _previewInline(oneLine, base, codeBg: codeBg, highlightBg: highlightBg);
+}

@@ -702,8 +702,7 @@ extension _HomePageHelpers1 on HomePageState {
         }
       } catch (_) {/* not our JSON — show as-is */}
     }
-    // Strip formatting markers so the preview reads cleanly (no *…* _…_ etc.).
-    return stripMessageFormatting(raw);
+    return raw;
   }
 
   /// The saved phone number for a friend by their user id, looked up in the
@@ -812,13 +811,18 @@ extension _HomePageHelpers1 on HomePageState {
             fontWeight: FontWeight.w600),
       );
     }
-    return Text(
-      lastMsg,
-      style: TextStyle(
-        fontSize: 12.5,
-        color: hasUnread ? textColor.withAlpha(200) : textColor.withAlpha(110),
-        fontWeight: hasUnread ? FontWeight.w500 : FontWeight.normal,
-      ),
+    final base = TextStyle(
+      fontSize: 12.5,
+      color: hasUnread ? textColor.withAlpha(200) : textColor.withAlpha(110),
+      fontWeight: hasUnread ? FontWeight.w500 : FontWeight.normal,
+    );
+    // Render the message's formatting (*bold* _italic_ …) right in the preview.
+    return Text.rich(
+      TextSpan(
+          style: base,
+          children: previewSpans(lastMsg, base,
+              codeBg: textColor.withValues(alpha: 0.12),
+              highlightBg: const Color(0x66FFC107))),
       overflow: TextOverflow.ellipsis,
       maxLines: 1,
     );

@@ -28,9 +28,10 @@ class HeartBubble extends StatefulWidget {
   /// haptic + a little rising-hearts burst). Null = gesture disabled.
   final VoidCallback? onLoveBack;
 
-  /// A note longer than this (or spanning several lines) opens the genie card
-  /// instead of revealing inside the heart.
-  static const int longThreshold = 120;
+  /// A note longer than this (or spanning more than one line) opens the genie
+  /// card instead of revealing inside the heart — a heart only holds a few
+  /// words cleanly.
+  static const int longThreshold = 42;
 
   @override
   State<HeartBubble> createState() => _HeartBubbleState();
@@ -79,8 +80,8 @@ class _HeartBubbleState extends State<HeartBubble>
   }
 
   bool get _isLong =>
-      widget.text.length > HeartBubble.longThreshold ||
-      '\n'.allMatches(widget.text).length >= 3;
+      widget.text.trim().length > HeartBubble.longThreshold ||
+      widget.text.contains('\n');
 
   void _onTap() {
     if (_isLong) {

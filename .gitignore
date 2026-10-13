@@ -105,3 +105,9 @@ _to_delete/
 android/app/build/
 my_aluta_api/webapp/downloads/ 
 ~$*
+
+# Local scratch (not part of the app)
+/Claude outputs/
+/_stale_locks/
+/external/
+/test/*.mp4

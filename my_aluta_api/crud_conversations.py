@@ -257,8 +257,14 @@ def purge_cached_conversation(db: Session, conversation_id: int) -> int:
                 Message.is_deleted.is_(False),
                 # Photos are never purged: the server keeps them so the user
                 # can always (re)download the picture, even long after both
-                # sides have cached it locally. Only text/other media is swept.
+                # sides have cached it locally.
                 Message.message_type != "image",
+                # Text (and call/live/location/contact logs) is never purged
+                # either. The cached pointer is per USER, not per device, so
+                # once one device acked, a user's other devices (phone + web +
+                # desktop) fetched an empty tombstone and showed blank bubbles.
+                # Text is tiny; only media bytes are worth sweeping.
+                Message.media_url.isnot(None),
             )
             .all()
         )
@@ -287,7 +293,7 @@ def purge_cached_conversation(db: Session, conversation_id: int) -> int:
                     continue
                 if asset is not None:
                     asset.data = None
-            m.content = None
+            # Keep `content` (a caption) — only the media goes.
             m.media_url = None
             m.media_name = None
             m.media_mime = None

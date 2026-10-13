@@ -2937,6 +2937,31 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                               ),
                             ],
                           ),
+                        // ── Text the server swept before THIS device saved
+                        // it (older store-and-forward behaviour): say so instead
+                        // of showing an empty bubble with only a time. ──
+                        if (!tomb &&
+                            msgType == 'text' &&
+                            msg['purged'] == true &&
+                            content.trim().isEmpty)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.history_toggle_off_rounded,
+                                  size: 15, color: textColor.withAlpha(120)),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  'Message not saved on this device',
+                                  style: TextStyle(
+                                    color: textColor.withAlpha(160),
+                                    fontStyle: FontStyle.italic,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         // ── Quoted reply (tap to jump to original) ─────
                         if (!tomb && quotedText != null)
                           GestureDetector(

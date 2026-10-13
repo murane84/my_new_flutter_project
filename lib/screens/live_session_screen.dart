@@ -382,10 +382,16 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       isRoom: widget.isRoom,
     );
     // Broadcast that a live co-listening session is active so ambient UI
-    // (the persistent banner / bars) can reflect it.
-    providerContainer
+    // (the persistent banner / bars) can reflect it. Deferred to a microtask:
+    // this runs inside initState (the widget tree is building), and Riverpod
+    // forbids changing a provider mid-build ("Tried to modify a provider while
+    // the widget tree was building"). activeLiveSession above is already set,
+    // so anything reacting to the announcement still finds the controller.
+    final peer = widget.peerName;
+    final asHost = _isHost;
+    Future.microtask(() => providerContainer
         .read(liveSessionProvider.notifier)
-        .start(peer: widget.peerName, asHost: _isHost);
+        .start(peer: peer, asHost: asHost));
     _start();
     WidgetsBinding.instance.addPostFrameCallback((_) => _bindFlagCallbacks());
   }
@@ -1048,7 +1054,10 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     // If we're just minimising, leave the session (controller, notifier,
     // activeLiveSession) fully intact — only detach this screen.
     if (!_minimizing) {
-      providerContainer.read(liveSessionProvider.notifier).stop();
+      // Deferred for the same reason as start(): dispose runs while the tree
+      // is being rebuilt, when providers must not be modified.
+      Future.microtask(
+          () => providerContainer.read(liveSessionProvider.notifier).stop());
       activeLiveSession = null;
       _c.dispose();
     }

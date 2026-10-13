@@ -237,6 +237,31 @@ extension _ChatPageHelpers2 on _ChatPageState {
     _lastComposerText = newText;
   }
 
+  // Desktop keyboards can't long-press a key for ½, so auto-convert a typed
+  // "1/2" (etc.) to its glyph the moment a boundary char (space/punctuation,
+  // not a digit or '/') is typed after it. Enter is left to the list handler.
+  static final RegExp _fractionTrail = RegExp(r'(\d{1,3})/(\d{1,3})$');
+  void _maybeFractionReplace() {
+    final text = _ctrl.text;
+    if (text.length != _lastComposerText.length + 1) return; // single insert
+    final sel = _ctrl.selection;
+    if (!sel.isValid || !sel.isCollapsed) return;
+    final caret = sel.baseOffset;
+    if (caret <= 0 || caret > text.length) return;
+    final boundary = text[caret - 1];
+    if (boundary == '\n' || RegExp(r'[0-9/]').hasMatch(boundary)) return;
+    final before = text.substring(0, caret - 1);
+    final m = _fractionTrail.firstMatch(before);
+    if (m == null) return;
+    final glyph = fractionGlyph(m.group(0)!);
+    if (glyph == null) return;
+    // Don't convert if a digit sits right before the fraction (e.g. 51/2).
+    if (m.start > 0 && RegExp(r'\d').hasMatch(before[m.start - 1])) return;
+    final newText =
+        text.substring(0, m.start) + glyph + text.substring(caret - 1);
+    _applyComposerEdit(newText, m.start + glyph.length + 1);
+  }
+
   void _showErrorSnack(String msg) =>
       showToast(context, msg, type: ToastType.error);
 

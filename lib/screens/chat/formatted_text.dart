@@ -19,6 +19,10 @@ const Map<String, String> _fractionGlyphs = {
 };
 final RegExp _fractionRe = RegExp(r'\b(\d{1,3})/(\d{1,3})\b');
 
+/// The unicode glyph for a simple fraction like "1/2" → "½", or null if there
+/// isn't a dedicated one. Used by the composer's live auto-convert.
+String? fractionGlyph(String frac) => _fractionGlyphs[frac];
+
 String _applyFractions(String s) {
   if (!s.contains('/')) return s;
   return s.replaceAllMapped(

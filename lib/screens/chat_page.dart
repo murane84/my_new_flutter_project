@@ -1088,6 +1088,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   void _onTextChanged() {
     if (!_applyingListEdit) _maybeContinueList();
+    if (!_applyingListEdit) _maybeFractionReplace();
     setState(() {});
     _markActivity();
     if (!_iTyping && !_isGroup) {

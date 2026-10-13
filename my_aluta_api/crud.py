@@ -276,6 +276,9 @@ def list_preview(msg) -> str:
     # Deleted-for-everyone keeps its row (tombstone) with blank content.
     if getattr(msg, "is_deleted", False):
         return "This message was deleted"
+    # A heart/secret note NEVER previews its content (list + push stay secret).
+    if (getattr(msg, "message_type", None) or "").lower() == "heart":
+        return "❤️ Secret message"
     content = (msg.content or "").strip()
     if content:
         return content

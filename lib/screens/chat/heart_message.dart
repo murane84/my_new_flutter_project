@@ -1,0 +1,391 @@
+import 'package:flutter/material.dart';
+import 'package:visibility_detector/visibility_detector.dart';
+
+/// A "secret heart" message bubble (message_type == 'heart'). Arrives covered
+/// with a soft "tap to open" shimmer and a gentle heartbeat pulse that runs
+/// ONLY while it's scrolled into view. Tapping reveals the note: a short note
+/// shows inside the heart; a long one blooms a scrollable "genie" card that
+/// collapses back into the heart on tap-outside / swipe / back.
+class HeartBubble extends StatefulWidget {
+  const HeartBubble({
+    super.key,
+    required this.text,
+    required this.isMe,
+    required this.accent,
+    this.bonded = false,
+    this.heartKeySeed,
+  });
+
+  final String text;
+  final bool isMe;
+  final Color accent;
+  final bool bonded;
+  final String? heartKeySeed;
+
+  /// A note longer than this (or spanning several lines) opens the genie card
+  /// instead of revealing inside the heart.
+  static const int longThreshold = 120;
+
+  @override
+  State<HeartBubble> createState() => _HeartBubbleState();
+}
+
+class _HeartBubbleState extends State<HeartBubble>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _beat = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1400));
+  late final Animation<double> _scale = TweenSequence<double>([
+    // lub-dub: two quick beats then rest.
+    TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.07), weight: 8),
+    TweenSequenceItem(tween: Tween(begin: 1.07, end: 1.0), weight: 10),
+    TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.05), weight: 7),
+    TweenSequenceItem(tween: Tween(begin: 1.05, end: 1.0), weight: 10),
+    TweenSequenceItem(tween: ConstantTween(1.0), weight: 55),
+  ]).animate(_beat);
+
+  final GlobalKey _heartKey = GlobalKey();
+  bool _revealedInHeart = false;
+  bool _visible = false;
+  bool _reduceMotion = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    _syncBeat();
+  }
+
+  void _syncBeat() {
+    if (_visible && !_reduceMotion && !_revealedInHeart) {
+      if (!_beat.isAnimating) _beat.repeat();
+    } else {
+      if (_beat.isAnimating) {
+        _beat.stop();
+        _beat.value = 0;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _beat.dispose();
+    super.dispose();
+  }
+
+  bool get _isLong =>
+      widget.text.length > HeartBubble.longThreshold ||
+      '\n'.allMatches(widget.text).length >= 3;
+
+  void _onTap() {
+    if (_isLong) {
+      final box = _heartKey.currentContext?.findRenderObject() as RenderBox?;
+      Rect origin;
+      if (box != null && box.hasSize) {
+        final tl = box.localToGlobal(Offset.zero);
+        origin = tl & box.size;
+      } else {
+        origin = Rect.zero;
+      }
+      showHeartGenie(context,
+          originRect: origin, text: widget.text, accent: widget.accent);
+    } else {
+      setState(() => _revealedInHeart = !_revealedInHeart);
+      _syncBeat();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final revealed = _revealedInHeart && !_isLong;
+    return VisibilityDetector(
+      key: Key('heart-${widget.heartKeySeed ?? widget.text.hashCode}'),
+      onVisibilityChanged: (info) {
+        final v = info.visibleFraction > 0.15;
+        if (v != _visible) {
+          _visible = v;
+          if (mounted) _syncBeat();
+        }
+      },
+      child: GestureDetector(
+        onTap: _onTap,
+        child: AnimatedBuilder(
+          animation: _scale,
+          builder: (context, _) => Transform.scale(
+            scale: revealed ? 1.0 : _scale.value,
+            child: _heart(revealed),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _heart(bool revealed) {
+    return SizedBox(
+      key: _heartKey,
+      width: 160,
+      height: 142,
+      child: CustomPaint(
+        painter: _HeartPainter(widget.accent),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 30, 20, 34),
+          child: Center(
+            child: revealed
+                ? SingleChildScrollView(
+                    child: Text(
+                      widget.text,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13.5,
+                          height: 1.2,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.lock_rounded,
+                          color: Colors.white, size: 20),
+                      const SizedBox(height: 4),
+                      Text(
+                        _isLong ? 'tap to open' : 'tap to reveal',
+                        style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.95),
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.3),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeartPainter extends CustomPainter {
+  _HeartPainter(this.accent);
+  final Color accent;
+
+  static Path heartPath(Size s) {
+    final w = s.width, h = s.height;
+    final path = Path();
+    path.moveTo(0.5 * w, 0.34 * h);
+    path.cubicTo(0.16 * w, -0.05 * h, -0.28 * w, 0.36 * h, 0.5 * w, 0.95 * h);
+    path.cubicTo(1.28 * w, 0.36 * h, 0.84 * w, -0.05 * h, 0.5 * w, 0.34 * h);
+    path.close();
+    return path;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = heartPath(size);
+    final rect = Offset.zero & size;
+    final grad = LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        Color.lerp(accent, Colors.white, 0.22)!,
+        accent,
+        Color.lerp(accent, Colors.black, 0.38)!,
+      ],
+      stops: const [0.0, 0.5, 1.0],
+    );
+    canvas.drawShadow(path.shift(const Offset(0, 4)), Colors.black54, 8, false);
+    canvas.drawPath(path, Paint()..shader = grad.createShader(rect));
+    // soft sheen
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..color = Colors.white.withValues(alpha: 0.25),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_HeartPainter old) => old.accent != accent;
+}
+
+/// Bloom a decorated "genie" card out of the heart at [originRect], with the
+/// note scrolling independently. Dismisses (collapsing back into the heart) on
+/// tap-outside, swipe-down, or the system/hardware back button.
+void showHeartGenie(
+  BuildContext context, {
+  required Rect originRect,
+  required String text,
+  required Color accent,
+}) {
+  final overlay = Overlay.of(context);
+  late OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (ctx) => _HeartGenie(
+      originRect: originRect,
+      text: text,
+      accent: accent,
+      onClosed: () => entry.remove(),
+    ),
+  );
+  overlay.insert(entry);
+}
+
+class _HeartGenie extends StatefulWidget {
+  const _HeartGenie({
+    required this.originRect,
+    required this.text,
+    required this.accent,
+    required this.onClosed,
+  });
+  final Rect originRect;
+  final String text;
+  final Color accent;
+  final VoidCallback onClosed;
+
+  @override
+  State<_HeartGenie> createState() => _HeartGenieState();
+}
+
+class _HeartGenieState extends State<_HeartGenie>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 320))
+    ..forward();
+  double _dragDy = 0;
+
+  Future<void> _close() async {
+    if (_c.isAnimating && _c.status == AnimationStatus.reverse) return;
+    await _c.reverse();
+    if (mounted) widget.onClosed();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    // Transform origin = the heart's centre on screen (0..1 alignment).
+    final oc = widget.originRect.center;
+    final alignX = size.width == 0 ? 0.0 : (oc.dx / size.width) * 2 - 1;
+    final alignY = size.height == 0 ? 0.0 : (oc.dy / size.height) * 2 - 1;
+    final origin = Alignment(alignX.clamp(-1.0, 1.0), alignY.clamp(-1.0, 1.0));
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _close();
+      },
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) {
+          final t = Curves.easeOutBack.transform(_c.value.clamp(0.0, 1.0));
+          final fade = _c.value.clamp(0.0, 1.0);
+          return Stack(
+            children: [
+              // Barrier.
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: _close,
+                  child: Container(
+                      color: Colors.black.withValues(alpha: 0.55 * fade)),
+                ),
+              ),
+              // Card, growing out of the heart.
+              Center(
+                child: Transform.translate(
+                  offset: Offset(0, _dragDy),
+                  child: Transform.scale(
+                    scale: (0.2 + 0.8 * t).clamp(0.0, 1.0),
+                    alignment: origin,
+                    child: Opacity(
+                      opacity: fade,
+                      child: GestureDetector(
+                        onVerticalDragUpdate: (d) =>
+                            setState(() => _dragDy += d.delta.dy),
+                        onVerticalDragEnd: (d) {
+                          if (_dragDy.abs() > 90 ||
+                              (d.primaryVelocity ?? 0).abs() > 700) {
+                            _close();
+                          } else {
+                            setState(() => _dragDy = 0);
+                          }
+                        },
+                        child: _card(context),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _card(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        width: (size.width * 0.82).clamp(240.0, 420.0),
+        constraints: BoxConstraints(maxHeight: size.height * 0.6),
+        padding: const EdgeInsets.fromLTRB(22, 26, 22, 22),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(26),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.lerp(widget.accent, Colors.white, 0.12)!,
+              widget.accent,
+              Color.lerp(widget.accent, Colors.black, 0.42)!,
+            ],
+            stops: const [0.0, 0.5, 1.0],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: widget.accent.withValues(alpha: 0.5),
+              blurRadius: 34,
+              offset: const Offset(0, 16),
+            ),
+          ],
+          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Icon(Icons.favorite_rounded, color: Colors.white, size: 26),
+            const SizedBox(height: 14),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Text(
+                  widget.text,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      height: 1.4,
+                      fontWeight: FontWeight.w500),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'tap outside to close',
+              style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontSize: 10.5,
+                  letterSpacing: 0.3),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

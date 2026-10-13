@@ -56,6 +56,7 @@ import 'package:just_audio/just_audio.dart' as ja;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'chat/formatted_text.dart';
+import 'chat/heart_message.dart';
 import 'package:float_column/float_column.dart';
 import 'package:linkify/linkify.dart' show linkify;
 import 'package:geolocator/geolocator.dart';
@@ -260,6 +261,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   // (show only while scrolling) instead of sitting over the row icons.
   final _pickerScrollCtrl = ScrollController();
   bool _showEmoji = false;
+  // Compose the next message as a secret heart (message_type 'heart').
+  bool _heartMode = false;
   // Which tab is showing in the emoji panel: 0 = emoji, 1 = GIF stickers.
   int _emojiTab = 0;
   bool _isAtBottom = true;
@@ -1115,17 +1118,23 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       content = '> $lines\n\n$text';
     }
 
+    final heart = _heartMode;
     _markActivity();
     _ctrl.clear();
-    setState(() => _replyTo = null);
+    setState(() {
+      _replyTo = null;
+      _heartMode = false;
+    });
 
     final tempId = _newTempId();
-    _insertOptimistic(_optimisticMsg(tempId, 'text', content));
+    _insertOptimistic(
+        _optimisticMsg(tempId, heart ? 'heart' : 'text', content));
 
     Future<void> attempt() async {
       try {
         final sent = await appBusy.run(() => ApiService().sendMessage(
             widget.friendId, content,
+            messageType: heart ? 'heart' : 'text',
             conversationId: widget.conversationId));
         _replaceOptimistic(tempId, sent);
         if (sent == null && mounted) {
@@ -2655,6 +2664,97 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     );
   }
 
+  // A secret-heart message (message_type 'heart'): the covered, pulsing heart
+  // that reveals the note on tap (short → in-heart, long → genie card).
+  Widget _buildHeartBubble(Map<String, dynamic> msg, bool isMe, bool isDark,
+      bool showAvatar, bool isFirst) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = (msg['content'] as String?) ?? '';
+    final accent = scheme.primary;
+    final msgId = msg['id'].toString();
+    final Map senderMap = (msg['sender'] as Map?) ?? const {};
+    final rxAvatar = _isGroup
+        ? (senderMap['avatar_url'] ?? '').toString()
+        : _friendAvatar;
+    final rxName =
+        _isGroup ? (senderMap['username'] ?? '').toString() : widget.friendName;
+    return Padding(
+      padding: EdgeInsets.only(
+          top: showAvatar ? 6 : 2, left: isMe ? 56 : 6, right: isMe ? 6 : 56),
+      child: Column(
+        crossAxisAlignment:
+            isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment:
+                isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (!isMe)
+                SizedBox(
+                  width: 30,
+                  child: showAvatar
+                      ? CircleAvatar(
+                          radius: 13,
+                          backgroundColor: scheme.primaryContainer,
+                          backgroundImage: rxAvatar.isNotEmpty
+                              ? authNetworkImageProvider(fullMediaUrl(rxAvatar),
+                                  mediaAuthHeaders(fullMediaUrl(rxAvatar)))
+                              : null,
+                          child: rxAvatar.isNotEmpty
+                              ? null
+                              : Text(
+                                  rxName.isNotEmpty
+                                      ? rxName[0].toUpperCase()
+                                      : '?',
+                                  style: TextStyle(
+                                      color: scheme.onPrimaryContainer,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold)),
+                        )
+                      : const SizedBox(),
+                ),
+              if (!isMe) const SizedBox(width: 4),
+              GestureDetector(
+                onLongPressStart: (d) =>
+                    _showMessageMenu(context, msg, anchor: d.globalPosition),
+                onSecondaryTapDown: (d) =>
+                    _showMessageMenu(context, msg, anchor: d.globalPosition),
+                child: HeartBubble(
+                  key: ValueKey('heart-$msgId'),
+                  text: text,
+                  isMe: isMe,
+                  accent: accent,
+                  bonded: _canHarmony,
+                  heartKeySeed: msgId,
+                ),
+              ),
+            ],
+          ),
+          if (showAvatar || isFirst)
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment:
+                    isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+                children: [
+                  Text(_timeOnly(msg['timestamp'] ?? ''),
+                      style: TextStyle(
+                          fontSize: 10.5, color: scheme.onSurfaceVariant)),
+                  if (isMe) ...[
+                    const SizedBox(width: 3),
+                    _buildStatusIcon(msg,
+                        muted: scheme.onSurfaceVariant, read: scheme.primary),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBubble(Map<String, dynamic> msg, bool isMe, bool isDark,
       bool showAvatar, bool isFirst, bool showTail) {
     final scheme = Theme.of(context).colorScheme;
@@ -2678,6 +2778,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     final reactions = tomb ? const <String>[] : _reactionsOf(msg);
     // Media attachment?
     final msgType = (msg['message_type'] as String?) ?? 'text';
+    if (!tomb && msgType == 'heart') {
+      return _buildHeartBubble(msg, isMe, isDark, showAvatar, isFirst);
+    }
     final mediaRel = msg['media_url'] as String?;
     // A pending (optimistic) media message has no server URL yet, but it IS a
     // media bubble — render it from its local preview / placeholder.
@@ -3451,6 +3554,24 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                         visualDensity: VisualDensity.compact,
                                       ),
                               ),
+                              // Secret-heart toggle — stays visible while
+                              // typing so you can mark a note as a secret ❤.
+                              IconButton(
+                                tooltip: _heartMode
+                                    ? 'Secret heart: on'
+                                    : 'Send as a secret heart',
+                                icon: Icon(
+                                  _heartMode
+                                      ? Icons.favorite_rounded
+                                      : Icons.favorite_border_rounded,
+                                  color: _heartMode
+                                      ? scheme.primary
+                                      : scheme.onSurfaceVariant,
+                                ),
+                                onPressed: () =>
+                                    setState(() => _heartMode = !_heartMode),
+                                visualDensity: VisualDensity.compact,
+                              ),
                               // Text field. Desktop: Enter=send, Shift+Enter=newline.
                               Expanded(
                                 child: Focus(
@@ -3484,7 +3605,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                       // Shift+Enter hint; on mobile it just
                                       // clutters the compact field, so there
                                       // we show a plain "Message" placeholder.
-                                      hintText: 'Message',
+                                      hintText: _heartMode
+                                          ? 'Secret message…'
+                                          : 'Message',
                                       hintMaxLines: 1,
                                       hintStyle: TextStyle(
                                           color: scheme.onSurfaceVariant

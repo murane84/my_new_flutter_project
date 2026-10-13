@@ -4369,12 +4369,12 @@ class _HoverChevronState extends State<_HoverChevron> {
           _HoverScope(hovering: _hover, child: widget.child),
           if (_hover)
             Positioned(
-              // Keep clear of the tail/beak on the sender's edge (the bubble
-              // ABOVE points its tail down at this same corner), so the hover
-              // chevron doesn't collide with it: tuck it inboard of the tail.
-              top: -4,
-              left: widget.isMe ? null : 44,
-              right: widget.isMe ? 12 : null,
+              // Sit ON the bubble's rounded top corner (overlapping inward),
+              // not floating above it — so it hugs the corner and never looks
+              // like it overflows its own bubble or hits the tail above.
+              top: 0,
+              left: widget.isMe ? null : 42,
+              right: widget.isMe ? 8 : null,
               child: GestureDetector(
                 onTapDown: (d) => widget.onOpen(d.globalPosition),
                 child: Container(

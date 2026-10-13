@@ -3535,13 +3535,26 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                               // Side actions collapse while typing so the
                               // field uses the full width; they re-appear when
                               // the text is sent / cleared.
-                              AnimatedSize(
-                                duration: const Duration(milliseconds: 180),
-                                curve: Curves.easeOut,
-                                alignment: Alignment.centerLeft,
+                              // Side actions DISSOLVE (fade + collapse) when
+                              // typing, leaving a clean box with just the heart
+                              // (left) and send (right).
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 220),
+                                switchInCurve: Curves.easeOut,
+                                switchOutCurve: Curves.easeIn,
+                                transitionBuilder: (child, anim) =>
+                                    SizeTransition(
+                                  axis: Axis.horizontal,
+                                  axisAlignment: -1,
+                                  sizeFactor: anim,
+                                  child:
+                                      FadeTransition(opacity: anim, child: child),
+                                ),
                                 child: hasText
-                                    ? const SizedBox.shrink()
+                                    ? const SizedBox.shrink(
+                                        key: ValueKey('emoji-off'))
                                     : IconButton(
+                                        key: const ValueKey('emoji-on'),
                                         tooltip:
                                             _showEmoji ? 'Keyboard' : 'Emoji',
                                         icon: Icon(
@@ -3624,13 +3637,23 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                   ),
                                 ),
                               ),
-                              AnimatedSize(
-                                duration: const Duration(milliseconds: 180),
-                                curve: Curves.easeOut,
-                                alignment: Alignment.centerRight,
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 220),
+                                switchInCurve: Curves.easeOut,
+                                switchOutCurve: Curves.easeIn,
+                                transitionBuilder: (child, anim) =>
+                                    SizeTransition(
+                                  axis: Axis.horizontal,
+                                  axisAlignment: 1,
+                                  sizeFactor: anim,
+                                  child:
+                                      FadeTransition(opacity: anim, child: child),
+                                ),
                                 child: hasText
-                                    ? const SizedBox(width: 4)
+                                    ? const SizedBox(
+                                        width: 4, key: ValueKey('trail-off'))
                                     : Row(
+                                        key: const ValueKey('trail-on'),
                                         mainAxisSize: MainAxisSize.min,
                                         crossAxisAlignment:
                                             CrossAxisAlignment.end,

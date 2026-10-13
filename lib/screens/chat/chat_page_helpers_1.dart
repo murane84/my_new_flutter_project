@@ -855,16 +855,26 @@ extension _ChatPageHelpers1 on _ChatPageState {
         ex['delivered'] = m['delivered'];
         ex['is_read'] = m['is_read'];
         ex['edited'] = m['edited'];
-        ex['is_deleted'] = m['is_deleted'];
         ex['reactions'] = m['reactions'];
         ex['pinned_until'] = m['pinned_until'];
-        // Store-and-forward: once the server has PURGED its copy after delivery
-        // it sends an emptied tombstone (purged:true) — keep OUR local content
-        // and media, which are now the durable copy. Otherwise take the
-        // server's content/media as before (covers real edits + media).
-        if (m['purged'] == true) {
+        // Deletion is a ONE-WAY latch: once tombstoned locally (optimistic
+        // delete) or on the server, it STAYS deleted. Otherwise a poll that
+        // races the server's delete would briefly un-delete the bubble (snap
+        // back to the original), then re-tombstone on the next poll.
+        final deleted = (m['is_deleted'] == true) || (ex['is_deleted'] == true);
+        ex['is_deleted'] = deleted;
+        if (deleted) {
+          // Keep it a tombstone — never restore the original content/media.
+          ex['content'] = '';
+          ex['message_type'] = 'text';
+          ex['media_url'] = null;
+        } else if (m['purged'] == true) {
+          // Store-and-forward: once the server PURGED its copy after delivery
+          // it sends an emptied tombstone (purged:true) — keep OUR local
+          // content/media, which are now the durable copy.
           ex['purged'] = true;
         } else {
+          // Otherwise take the server's content/media (real edits + media).
           ex['content'] = m['content'];
           ex['message_type'] = m['message_type'];
           ex['media_url'] = m['media_url'];

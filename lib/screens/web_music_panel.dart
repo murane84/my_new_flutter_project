@@ -1262,8 +1262,6 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                   active: _showVolume || _volume <= 0,
                 ),
               ),
-              // Share "listening now": tap = on/off, long-press = who sees it.
-              PresenceShareButton(color: accent, size: 20),
               _speedPill(theme, speedLabel),
             ],
           ),

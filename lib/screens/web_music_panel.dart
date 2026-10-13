@@ -722,8 +722,10 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.podcasts_rounded, size: 18, color: accent),
-              const SizedBox(height: 6),
+              // Share "listening now" with friends: tap = on/off, hold = who
+              // sees it. (Was a decorative icon that looked tappable.)
+              PresenceShareButton(color: accent, size: 19),
+              const SizedBox(height: 2),
               // Favourites need the account-backed library → not on web.
               GestureDetector(
                 onTap: () => _featureUnavailable('Favourites'),

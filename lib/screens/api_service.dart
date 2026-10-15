@@ -266,6 +266,273 @@ class ApiService {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Ozilane Key (auth.ozilane.com) — passwordless identity: link a phone, then
+  // recover a password / sign in by approving on the phone. No email or SMS.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Is the Ozilane integration configured on the server? (public)
+  Future<bool> ozilaneAvailable() async {
+    try {
+      final resp =
+          await http.get(Uri.parse('${await _baseUrl}/auth/ozilane/available'));
+      final b = _tryDecode(resp.body);
+      return resp.statusCode == 200 && b?['available'] == true;
+    } catch (e) {
+      _logger.e('ozilaneAvailable exception: $e');
+      return false;
+    }
+  }
+
+  /// Linked-phone status for the signed-in user.
+  Future<Map<String, dynamic>> ozilaneStatus() async {
+    try {
+      final t = await _getToken();
+      if (t == null) return {'configured': false, 'enrolled': false};
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/auth/ozilane/status'),
+        headers: _authHeaders(t),
+      );
+      final b = _tryDecode(resp.body);
+      if (resp.statusCode >= 200 && resp.statusCode < 300 && b != null) {
+        return Map<String, dynamic>.from(b);
+      }
+      return {'configured': false, 'enrolled': false};
+    } catch (e) {
+      _logger.e('ozilaneStatus exception: $e');
+      return {'configured': false, 'enrolled': false};
+    }
+  }
+
+  /// Begin linking a phone. On success returns {pairingUri, pairingUrl,
+  /// enrollmentId, expiresAt}. [backupCode] proves ownership when re-linking.
+  Future<Map<String, dynamic>> ozilaneLinkStart({String? backupCode}) async {
+    try {
+      final t = await _getToken();
+      if (t == null) {
+        return {'success': false, 'message': 'Please sign in again.'};
+      }
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/auth/ozilane/link/start'),
+        headers: _authHeaders(t),
+        body: jsonEncode({
+          if (backupCode != null && backupCode.isNotEmpty)
+            'backup_code': backupCode,
+        }),
+      );
+      final b = _tryDecode(resp.body);
+      if (resp.statusCode >= 200 && resp.statusCode < 300 && b != null) {
+        return {'success': true, ...Map<String, dynamic>.from(b)};
+      }
+      return {
+        'success': false,
+        'message': b?['detail'] ?? 'Could not start linking.',
+      };
+    } catch (e) {
+      _logger.e('ozilaneLinkStart exception: $e');
+      return {'success': false, 'message': 'Network error. Check your connection.'};
+    }
+  }
+
+  /// Poll an enrollment. Returns {status: PENDING|ACTIVE|REVOKED|EXPIRED, ...}.
+  Future<Map<String, dynamic>> ozilaneLinkStatus(String enrollmentId) async {
+    try {
+      final t = await _getToken();
+      if (t == null) return {'status': 'ERROR'};
+      final resp = await http.get(
+        Uri.parse(
+            '${await _baseUrl}/auth/ozilane/link/status?enrollment_id=${Uri.encodeQueryComponent(enrollmentId)}'),
+        headers: _authHeaders(t),
+      );
+      final b = _tryDecode(resp.body);
+      if (resp.statusCode >= 200 && resp.statusCode < 300 && b != null) {
+        return Map<String, dynamic>.from(b);
+      }
+      return {'status': 'ERROR'};
+    } catch (e) {
+      _logger.e('ozilaneLinkStatus exception: $e');
+      return {'status': 'ERROR'};
+    }
+  }
+
+  /// Unlink this account's phone.
+  Future<bool> ozilaneUnlink() async {
+    try {
+      final t = await _getToken();
+      if (t == null) return false;
+      final resp = await http.delete(
+        Uri.parse('${await _baseUrl}/auth/ozilane/link'),
+        headers: _authHeaders(t),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.e('ozilaneUnlink exception: $e');
+      return false;
+    }
+  }
+
+  // ---- pre-auth: phone-approval recovery + passwordless sign-in ----
+
+  Future<Map<String, dynamic>> _ozStart(String path, String identifier) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}$path'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'identifier': identifier}),
+      );
+      final b = _tryDecode(resp.body);
+      if (resp.statusCode >= 200 && resp.statusCode < 300 && b != null) {
+        return {
+          'success': true,
+          'challenge_id': b['challenge_id'],
+          'match_number': b['match_number'],
+          'expires_at': b['expires_at'],
+        };
+      }
+      return {'success': false, 'message': b?['detail'] ?? 'Could not start.'};
+    } catch (e) {
+      _logger.e('_ozStart exception: $e');
+      return {'success': false, 'message': 'Network error. Check your connection.'};
+    }
+  }
+
+  /// Poll a challenge → PENDING | APPROVED | DENIED | EXPIRED | CONSUMED | ERROR.
+  Future<String> _ozPoll(String path, String challengeId) async {
+    try {
+      final resp = await http.get(Uri.parse(
+          '${await _baseUrl}$path?challenge_id=${Uri.encodeQueryComponent(challengeId)}'));
+      final b = _tryDecode(resp.body);
+      if (resp.statusCode >= 200 && resp.statusCode < 300 && b != null) {
+        return (b['status'] ?? 'PENDING').toString();
+      }
+      return 'ERROR';
+    } catch (e) {
+      _logger.e('_ozPoll exception: $e');
+      return 'ERROR';
+    }
+  }
+
+  Future<Map<String, dynamic>> ozRecoverStart(String identifier) =>
+      _ozStart('/auth/ozilane/recover/start', identifier);
+  Future<String> ozRecoverStatus(String challengeId) =>
+      _ozPoll('/auth/ozilane/recover/status', challengeId);
+
+  Future<Map<String, dynamic>> ozRecoverConfirm({
+    required String challengeId,
+    required String newPassword,
+  }) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/auth/ozilane/recover/confirm'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(
+            {'challenge_id': challengeId, 'new_password': newPassword}),
+      );
+      final b = _tryDecode(resp.body);
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return {
+          'success': true,
+          'message': b?['message'] ?? 'Password updated.',
+          'email': b?['email'],
+        };
+      }
+      return {
+        'success': false,
+        'message': b?['detail'] ?? 'Could not reset password.',
+      };
+    } catch (e) {
+      _logger.e('ozRecoverConfirm exception: $e');
+      return {'success': false, 'message': 'Network error. Check your connection.'};
+    }
+  }
+
+  Future<Map<String, dynamic>> _ozCodeReset(
+    String path, {
+    required String identifier,
+    required String code,
+    required String newPassword,
+  }) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}$path'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'identifier': identifier,
+          'code': code,
+          'new_password': newPassword,
+        }),
+      );
+      final b = _tryDecode(resp.body);
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return {
+          'success': true,
+          'message': b?['message'] ?? 'Password updated.',
+          'email': b?['email'],
+        };
+      }
+      return {
+        'success': false,
+        'message': b?['detail'] ?? 'Invalid or expired code.',
+      };
+    } catch (e) {
+      _logger.e('_ozCodeReset exception: $e');
+      return {'success': false, 'message': 'Network error. Check your connection.'};
+    }
+  }
+
+  Future<Map<String, dynamic>> ozRecoverTotp({
+    required String identifier,
+    required String code,
+    required String newPassword,
+  }) =>
+      _ozCodeReset('/auth/ozilane/recover/totp',
+          identifier: identifier, code: code, newPassword: newPassword);
+
+  Future<Map<String, dynamic>> ozRecoverBackup({
+    required String identifier,
+    required String code,
+    required String newPassword,
+  }) =>
+      _ozCodeReset('/auth/ozilane/recover/backup',
+          identifier: identifier, code: code, newPassword: newPassword);
+
+  Future<Map<String, dynamic>> ozSignInStart(String identifier) =>
+      _ozStart('/auth/ozilane/signin/start', identifier);
+  Future<String> ozSignInStatus(String challengeId) =>
+      _ozPoll('/auth/ozilane/signin/status', challengeId);
+
+  /// Complete passwordless sign-in. Saves the tokens (like [login]) and returns
+  /// {success, username, access_token}.
+  Future<Map<String, dynamic>> ozSignInComplete(String challengeId) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/auth/ozilane/signin/complete'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'challenge_id': challengeId}),
+      );
+      final b = _tryDecode(resp.body);
+      if (resp.statusCode >= 200 && resp.statusCode < 300 && b != null) {
+        final token = (b['access_token'] ?? '').toString();
+        final refresh = (b['refresh_token'] ?? '').toString();
+        if (token.isNotEmpty) await saveToken(token);
+        if (refresh.isNotEmpty) await saveRefreshToken(refresh);
+        return {
+          'success': true,
+          'username': b['username'] ?? '',
+          'email': b['email'] ?? '',
+          'access_token': token,
+        };
+      }
+      return {
+        'success': false,
+        'message': b?['detail'] ?? 'Could not complete sign-in.',
+      };
+    } catch (e) {
+      _logger.e('ozSignInComplete exception: $e');
+      return {'success': false, 'message': 'Network error. Check your connection.'};
+    }
+  }
+
   // REGISTER
   Future<Map<String, dynamic>> register(
     String email,

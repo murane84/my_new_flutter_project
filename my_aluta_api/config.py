@@ -73,6 +73,19 @@ ZEPTOMAIL_API_URL = os.getenv(
     "ZEPTOMAIL_API_URL", "https://api.zeptomail.com/v1.1/email"
 )
 
+# ---------------------------------------------------------------------------
+# Ozilane Auth (auth.ozilane.com) — shared passwordless identity service.
+# Aluta is a *client platform*: users link their Ozilane Key phone and recover
+# a password / sign in / step up by approving on the phone. Set as Railway vars:
+#   OZILANE_AUTH_URL    = https://auth.ozilane.com
+#   OZILANE_AUTH_CLIENT = <clientId>.<secret>
+#     (created with:  npm run admin -- add-client aluta "Aluta")
+# The client secret is server-side only — it must never reach the app. If unset,
+# the Ozilane features are simply hidden and the other recovery paths still work.
+OZILANE_AUTH_URL = os.getenv(
+    "OZILANE_AUTH_URL", "https://auth.ozilane.com").rstrip("/")
+OZILANE_AUTH_CLIENT = os.getenv("OZILANE_AUTH_CLIENT")
+
 # Log which database backend is in use (never print credentials).
 try:
     _scheme = DATABASE_URL.split("://", 1)[0]

@@ -476,8 +476,8 @@ class LoginPageState extends State<LoginPage> {
                                           : null,
                                 ),
 
-                                // Forgot password → recover via authenticator
-                                // (Google Authenticator) code.
+                                // Forgot password → recover via an authenticator
+                                // (TOTP) code from any authenticator app.
                                 Align(
                                   alignment: Alignment.centerRight,
                                   child: TextButton(

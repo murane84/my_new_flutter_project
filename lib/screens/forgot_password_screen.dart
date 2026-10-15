@@ -7,7 +7,7 @@ import '../utils/brand_theme.dart';
 
 /// Recover a forgotten password two ways:
 ///   • Email code  — the backend emails a 6-digit code (works for everyone).
-///   • Authenticator — a current Google Authenticator (TOTP) code (only for
+///   • Authenticator — a current code from any authenticator app (TOTP; only for
 ///     users who enrolled 2FA in Profile → Security).
 /// Both end the same way: enter the code + a new password.
 enum _Method { email, authenticator }
@@ -202,8 +202,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           emailMode
                               ? 'We\'ll email a 6-digit code to your registered '
                                   'address. Enter it below with a new password.'
-                              : 'Enter the current 6-digit code from your Google '
-                                  'Authenticator app. This only works if you set '
+                              : 'Enter the current 6-digit code from your '
+                                  'authenticator app. This only works if you set '
                                   'up two-factor earlier (Profile → Security).',
                           style: TextStyle(
                               fontSize: 12.5,

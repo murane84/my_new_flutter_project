@@ -865,7 +865,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _twoFAOn
                         ? 'On — you can reset a forgotten password with your '
                             'authenticator code.'
-                        : 'Set up Google Authenticator so you can recover your '
+                        : 'Set up an authenticator app so you can recover your '
                             'account if you forget your password.',
                     style: TextStyle(
                         fontSize: 12, color: scheme.onSurfaceVariant),

@@ -262,9 +262,10 @@ class _TwoFactorSetupScreenState extends State<TwoFactorSetupScreen> {
         ),
         const SizedBox(height: 10),
         Text(
-          'Link Google Authenticator (or any TOTP app) to Aluta. It gives you '
-          'a way back in if you ever forget your password — you\'ll just enter '
-          'a 6-digit code from the app.',
+          'Link any authenticator app — Authy, Microsoft Authenticator, '
+          '1Password, or your own Ozilane Key — to Aluta. It gives you a way '
+          'back in if you ever forget your password: you just enter a 6-digit '
+          'code from the app.',
           textAlign: TextAlign.center,
           style: TextStyle(
               fontSize: 13.5, height: 1.45, color: scheme.onSurfaceVariant),
@@ -304,7 +305,7 @@ class _TwoFactorSetupScreenState extends State<TwoFactorSetupScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          '1. Scan this QR in Google Authenticator',
+          '1. Scan this QR with your authenticator app',
           style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
@@ -328,14 +329,18 @@ class _TwoFactorSetupScreenState extends State<TwoFactorSetupScreen> {
                 : QrImageView(
                     data: uri,
                     version: QrVersions.auto,
-                    size: 200,
+                    // Medium error correction (+ a touch more size) makes the
+                    // code far more forgiving for stricter third-party scanners
+                    // that choke on a dense, low-ECC QR.
+                    errorCorrectionLevel: QrErrorCorrectLevel.M,
+                    size: 216,
                     backgroundColor: Colors.white,
                   ),
           ),
         ),
         const SizedBox(height: 16),
         Text(
-          'Can\'t scan? Enter this key manually:',
+          'Can\'t scan? Add the account manually with this key:',
           style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
         ),
         const SizedBox(height: 6),
@@ -367,6 +372,26 @@ class _TwoFactorSetupScreenState extends State<TwoFactorSetupScreen> {
                     size: 18, color: scheme.onSurfaceVariant),
               ],
             ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        // For a custom/third-party app that can't scan but DOES accept an
+        // otpauth:// import, let the user copy the full setup link too.
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: uri));
+              showToast(context, 'Setup link copied', type: ToastType.info);
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: scheme.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              minimumSize: const Size(0, 36),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            icon: const Icon(Icons.link_rounded, size: 18),
+            label: const Text('Copy setup link (otpauth://)'),
           ),
         ),
         const SizedBox(height: 24),

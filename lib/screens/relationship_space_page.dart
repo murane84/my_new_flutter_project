@@ -1002,7 +1002,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       // Wider than the default popup so the two-column (summary rail + content)
       // layout has real room on desktop/web/tablet. Narrow screens still get a
       // near-full-width card and the single-column stack.
-      desktopMaxWidth: 940,
+      desktopMaxWidth: 1140,
       // The default close chip is suppressed; Minimize lives inside the grouped
       // cluster below so the top-right reads as ONE connected control.
       showClose: false,
@@ -1036,11 +1036,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             ? RefreshIndicator(
                 key: const ValueKey('dashboard'),
                 onRefresh: _load,
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-                  children: _mainSections(scheme, title, moments),
-                ),
+                child: _dashboardBody(scheme, title, moments),
               )
             : Padding(
                 key: const ValueKey('section'),

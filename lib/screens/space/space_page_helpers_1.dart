@@ -411,6 +411,80 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
     ];
   }
 
+  /// Dashboard body. Narrow (phone): the classic single-column stack. Wide
+  /// (tablet / desktop / web): a Facebook-style arrangement — the identity hero
+  /// spans the top like a cover photo, then the content splits into a wider
+  /// "feed" column (shared listening, the daily question, the monthly recap and
+  /// the feature tiles) beside a narrower right "rail" of lighter widgets (the
+  /// thinking-of-you nudge, the streak, the next upcoming plan). Cards that
+  /// don't apply collapse to nothing, so the columns stay tidy either way.
+  Widget _dashboardBody(
+      ColorScheme scheme, String title, List<Map<String, dynamic>> moments) {
+    final isPair = _partnerId != null;
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        // Two columns only when there's genuine width AND a partner (a solo
+        // space has too little to fill a rail, so it keeps the simple stack).
+        final twoCol = c.maxWidth >= 900 && isPair;
+        if (!twoCol) {
+          return ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+            children: _mainSections(scheme, title, moments),
+          );
+        }
+        // Wider primary "feed" column.
+        final feed = <Widget>[
+          _presenceHero(scheme),
+          _dailyQuestionCard(scheme),
+          _recapCard(scheme),
+          _tilesSection(scheme, moments),
+        ];
+        // Narrower contextual "rail". The pill carries no bottom margin of its
+        // own, so give it one to match the self-spaced cards below it.
+        final rail = <Widget>[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: _quickPill(scheme),
+          ),
+          _streakCard(scheme),
+          _upcomingPlanBanner(scheme),
+        ];
+        return ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            // Identity hero + any banners span the full width, cover-style.
+            _header(scheme, title),
+            _pendingPartnerBanner(scheme),
+            _milestoneBanner(scheme),
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 61,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: feed,
+                  ),
+                ),
+                const SizedBox(width: 18),
+                Expanded(
+                  flex: 39,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: rail,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   // ── feature tiles (each opens a floating card) ────────────────────────────
   Widget _tilesSection(ColorScheme scheme, List<Map<String, dynamic>> moments) {
     // Prefer the server COUNT fields (present in the light list payload too), so

@@ -10,6 +10,7 @@ import 'api_service.dart';
 import 'token_helper.dart' show mediaAuthHeaders;
 import 'auth_page.dart';
 import 'two_factor_setup_screen.dart';
+import 'link_ozilane_screen.dart';
 import '../services/biometric_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/popup_shell.dart';
@@ -667,6 +668,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _heading('Security', scheme),
               const SizedBox(height: 12),
               _twoFactorSection(scheme),
+              const SizedBox(height: 12),
+              _ozilaneSection(scheme),
               if (_bioAvailable) ...[
                 const SizedBox(height: 12),
                 _securitySection(scheme),
@@ -819,6 +822,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
         suffixIcon: IconButton(
           icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
           onPressed: toggle,
+        ),
+      ),
+    );
+  }
+
+  /// Link an Ozilane Key phone for passwordless sign-in and lockout-proof
+  /// password recovery — approve on the phone, no email or SMS needed.
+  Widget _ozilaneSection(ColorScheme scheme) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: _saving
+          ? null
+          : () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const LinkOzilaneScreen()),
+              ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest.withAlpha(90),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: scheme.primary.withAlpha(60)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.phonelink_lock_rounded, color: scheme.primary),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Ozilane Key',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 14)),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Link your phone to sign in or reset your password by '
+                    'approving on it — no email or SMS.',
+                    style: TextStyle(
+                        fontSize: 12, color: scheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
+          ],
         ),
       ),
     );

@@ -159,6 +159,68 @@ class _LinkOzilaneScreenState extends State<LinkOzilaneScreen> {
     if (ok) _loadStatus();
   }
 
+  Future<String?> _askCode(bool enable) async {
+    final ctrl = TextEditingController();
+    final v = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(enable
+            ? 'Turn on two-step sign-in'
+            : 'Turn off two-step sign-in'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Enter the current 6-digit code from Ozilane Key to confirm.',
+                style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 14),
+            TextField(
+              controller: ctrl,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              decoration: const InputDecoration(
+                  labelText: 'Code',
+                  counterText: '',
+                  border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+              child: const Text('Confirm')),
+        ],
+      ),
+    );
+    return (v == null || v.isEmpty) ? null : v;
+  }
+
+  Future<void> _toggleTwoStep(bool enable) async {
+    final code = await _askCode(enable);
+    if (code == null) return;
+    setState(() => _busy = true);
+    final res = await _api.ozTwoStepSet(enable: enable, code: code);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (res['success'] == true) {
+      setState(() =>
+          _status = {..._status, 'two_factor': res['enabled'] == true});
+      showToast(
+          context,
+          enable ? 'Two-step sign-in is on.' : 'Two-step sign-in is off.',
+          type: ToastType.success);
+    } else {
+      showToast(
+          context,
+          (res['message'] ?? 'Could not change two-step sign-in.').toString(),
+          type: ToastType.error);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -387,7 +449,16 @@ class _LinkOzilaneScreenState extends State<LinkOzilaneScreen> {
                 fontSize: 13, height: 1.4, color: scheme.onSurfaceVariant),
           ),
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 10),
+        SwitchListTile(
+          value: _status['two_factor'] == true,
+          onChanged: _busy ? null : (v) => _toggleTwoStep(v),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Two-step sign-in'),
+          subtitle: Text('Approve on this phone after your password.',
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+        ),
+        const SizedBox(height: 12),
         OutlinedButton.icon(
           onPressed: _busy ? null : _unlink,
           style: OutlinedButton.styleFrom(

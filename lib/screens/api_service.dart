@@ -503,12 +503,13 @@ class ApiService {
 
   /// Complete passwordless sign-in. Saves the tokens (like [login]) and returns
   /// {success, username, access_token}.
-  Future<Map<String, dynamic>> ozSignInComplete(String challengeId) async {
+  Future<Map<String, dynamic>> ozSignInComplete(String challengeId,
+      {bool trust = false}) async {
     try {
       final resp = await http.post(
         Uri.parse('${await _baseUrl}/auth/ozilane/signin/complete'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'challenge_id': challengeId}),
+        body: jsonEncode({'challenge_id': challengeId, 'trust': trust}),
       );
       final b = _tryDecode(resp.body);
       if (resp.statusCode >= 200 && resp.statusCode < 300 && b != null) {
@@ -516,6 +517,9 @@ class ApiService {
         final refresh = (b['refresh_token'] ?? '').toString();
         if (token.isNotEmpty) await saveToken(token);
         if (refresh.isNotEmpty) await saveRefreshToken(refresh);
+        if (b['trust_token'] != null) {
+          await saveTrustToken(b['trust_token'].toString());
+        }
         return {
           'success': true,
           'username': b['username'] ?? '',
@@ -529,6 +533,77 @@ class ApiService {
       };
     } catch (e) {
       _logger.e('ozSignInComplete exception: $e');
+      return {'success': false, 'message': 'Network error. Check your connection.'};
+    }
+  }
+
+  /// Turn two-step sign-in on/off (confirmed with a current Ozilane code).
+  Future<Map<String, dynamic>> ozTwoStepSet({
+    required bool enable,
+    required String code,
+  }) async {
+    try {
+      final t = await _getToken();
+      if (t == null) {
+        return {'success': false, 'message': 'Please sign in again.'};
+      }
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/auth/ozilane/twostep'),
+        headers: _authHeaders(t),
+        body: jsonEncode({'enable': enable, 'code': code}),
+      );
+      final b = _tryDecode(resp.body);
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return {'success': true, 'enabled': b?['enabled'] == true};
+      }
+      return {
+        'success': false,
+        'message': b?['detail'] ?? 'Could not change two-step sign-in.',
+      };
+    } catch (e) {
+      _logger.e('ozTwoStepSet exception: $e');
+      return {'success': false, 'message': 'Network error. Check your connection.'};
+    }
+  }
+
+  /// Finish a two-step sign-in with an Ozilane offline code or a backup code
+  /// when the phone can't approve (the password is re-checked server-side).
+  Future<Map<String, dynamic>> ozTwoStepCode({
+    required String email,
+    required String password,
+    required String code,
+    required String kind, // 'totp' | 'backup'
+    bool trust = false,
+  }) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/auth/ozilane/twostep/code'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email,
+          'password': password,
+          'code': code,
+          'kind': kind,
+          'trust': trust,
+        }),
+      );
+      final b = _tryDecode(resp.body);
+      if (resp.statusCode >= 200 && resp.statusCode < 300 && b != null) {
+        final token = (b['access_token'] ?? '').toString();
+        final refresh = (b['refresh_token'] ?? '').toString();
+        if (token.isNotEmpty) await saveToken(token);
+        if (refresh.isNotEmpty) await saveRefreshToken(refresh);
+        if (b['trust_token'] != null) {
+          await saveTrustToken(b['trust_token'].toString());
+        }
+        return {'success': true, 'username': b['username'] ?? ''};
+      }
+      return {
+        'success': false,
+        'message': b?['detail'] ?? 'Invalid or expired code.',
+      };
+    } catch (e) {
+      _logger.e('ozTwoStepCode exception: $e');
       return {'success': false, 'message': 'Network error. Check your connection.'};
     }
   }
@@ -569,14 +644,29 @@ class ApiService {
   // LOGIN
   Future<Map<String, dynamic>> login(String email, String password) async {
     try {
+      final trust = await getTrustToken();
       final response = await http.post(
         Uri.parse('${await _baseUrl}/auth/login'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password}),
+        body: jsonEncode({
+          'email': email,
+          'password': password,
+          if (trust != null && trust.isNotEmpty) 'trust_token': trust,
+        }),
       );
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
+        // Two-step sign-in: the linked phone must approve after the password.
+        if (data['two_step_required'] == true) {
+          return {
+            'success': false,
+            'two_step_required': true,
+            'challenge_id': data['challenge_id'],
+            'match_number': data['match_number'],
+            'email': data['email'] ?? email,
+          };
+        }
         final String token = data['access_token'] ?? '';
         if (token.isNotEmpty) {
           await saveToken(token);

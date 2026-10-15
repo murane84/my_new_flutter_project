@@ -14,6 +14,7 @@ import 'auth_page.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 import 'ozilane_approve_screen.dart';
+import 'two_step_verify_screen.dart';
 import 'token_helper.dart';
 import '../services/biometric_service.dart';
 import '../utils/snackbar_helper.dart';
@@ -113,6 +114,39 @@ class LoginPageState extends State<LoginPage> {
     }
   }
 
+  /// Second factor: the password was accepted but the account requires an
+  /// Ozilane Key approval. Hand off to the verify screen; on success finish the
+  /// session like a normal sign-in.
+  Future<void> _runTwoStep(Map result) async {
+    final res = await Navigator.push<Map>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TwoStepVerifyScreen(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+          challengeId: (result['challenge_id'] ?? '').toString(),
+          matchNumber: (result['match_number'] as num?)?.toInt(),
+        ),
+      ),
+    );
+    if (!mounted || res == null) return;
+    if (res['signedIn'] == true) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isLoggedIn', true);
+      await prefs.setString('username', (res['username'] ?? '').toString());
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (ctx, anim, sanim) => const HomePage(),
+          transitionsBuilder: (ctx, anim, sanim, child) =>
+              FadeTransition(opacity: anim, child: child),
+          transitionDuration: const Duration(milliseconds: 300),
+        ),
+      );
+    }
+  }
+
   Future<void> _performLogin() async {
     if (!_formKey.currentState!.validate()) return;
     if (!_online) {
@@ -129,6 +163,11 @@ class LoginPageState extends State<LoginPage> {
 
     if (!mounted) return;
     setState(() => _isLoading = false);
+
+    if (result['two_step_required'] == true) {
+      await _runTwoStep(result);
+      return;
+    }
 
     if (result['success'] == true) {
       final prefs = await SharedPreferences.getInstance();

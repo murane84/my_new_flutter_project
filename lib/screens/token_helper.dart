@@ -86,6 +86,45 @@ Future<void> removeRefreshToken() async {
   } catch (_) {/* best-effort */}
 }
 
+// ── Ozilane two-step device trust ───────────────────────────────────────────
+// A 30-day token proving this device already cleared two-step sign-in, so the
+// linked phone isn't asked to approve again. Sent on /auth/login.
+const String _trustKey = 'ozkey_trust_token';
+
+Future<void> saveTrustToken(String token) async {
+  try {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_trustKey, token);
+    } else {
+      await _storage.write(key: _trustKey, value: token);
+    }
+  } catch (_) {/* best-effort */}
+}
+
+Future<String?> getTrustToken() async {
+  try {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_trustKey);
+    }
+    return await _storage.read(key: _trustKey);
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<void> removeTrustToken() async {
+  try {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_trustKey);
+    } else {
+      await _storage.delete(key: _trustKey);
+    }
+  } catch (_) {/* best-effort */}
+}
+
 // ── Media auth ───────────────────────────────────────────────────────────────
 // In-memory copies of the access token AND our API origin, kept for widgets
 // that need them SYNCHRONOUSLY (image / file / audio widgets build without

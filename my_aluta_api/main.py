@@ -178,6 +178,10 @@ def ensure_media_schema():
         # notifier never double-fires). Added here in case love_capsules was
         # created by slice 1 before this column existed.
         "ALTER TABLE love_capsules ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ",
+        # Ozilane Key: opaque per-user subject, linked-at cache, two-step flag.
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_subject VARCHAR",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_linked_at TIMESTAMPTZ",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_2fa_enabled BOOLEAN DEFAULT FALSE",
     ]
     try:
         with engine.begin() as conn:

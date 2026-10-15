@@ -33,6 +33,17 @@ class User(Base):
     totp_secret = Column(String, nullable=True)
     totp_enabled = Column(Boolean, default=False, nullable=False)
 
+    # Ozilane Key (auth.ozilane.com) — passwordless identity + two-step sign-in.
+    # `ozkey_subject` is the opaque per-user id sent to the service (a random
+    # uuid, generated on first use — never a name/email). `ozkey_linked_at`
+    # caches when a phone was linked, so the sign-in gate is a fast local check.
+    # `ozkey_2fa_enabled` is the user's two-step choice (password, then a phone
+    # approval), mirroring Sweepercom.
+    ozkey_subject = Column(String, unique=True, index=True, nullable=True)
+    ozkey_linked_at = Column(DateTime(timezone=True), nullable=True)
+    ozkey_2fa_enabled = Column(
+        Boolean, default=False, nullable=False, server_default="false")
+
     # Legal consent: the highest Privacy Policy / Terms version this user has
     # accepted (see legal.py). 0 means "never accepted"; whenever the server's
     # CURRENT_POLICY_VERSION is higher than this, the app re-prompts the user to
@@ -978,3 +989,18 @@ class CoupleUnlock(Base):
     __table_args__ = (
         UniqueConstraint('pair_key', 'kind', name='_couple_unlock_uc'),
     )
+
+
+class OzkeyTrustedDevice(Base):
+    """A device the user chose to trust for 30 days, so two-step sign-in is
+    skipped on it. Only a hash of the opaque trust token is stored. Auto-created
+    by create_all; no ALTER."""
+    __tablename__ = "ozkey_trusted_devices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=False)
+    token_hash = Column(String, unique=True, index=True, nullable=False)
+    label = Column(String, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)

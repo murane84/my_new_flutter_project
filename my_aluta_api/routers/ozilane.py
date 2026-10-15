@@ -8,7 +8,7 @@ path keeps working even when the mail provider is down or out of credit.
 
 Aluta is a *client platform*: every call is server-to-server to
 auth.ozilane.com with the Bearer client credential. The user is represented
-there only by an opaque subject, "aluta-<id>".
+there only by an opaque, random per-user subject stored on the account.
 """
 from __future__ import annotations
 
@@ -26,8 +26,10 @@ from auth import (
     get_password_hash,
     create_tokens,
     get_user_by_email,
+    verify_password,
 )
 import ozilane_auth as oz
+from ozkey_identity import subject_for, issue_trust, sync_linked
 
 router = APIRouter(prefix="/auth/ozilane", tags=["Ozilane"])
 
@@ -37,18 +39,10 @@ _GENERIC_START = (
 )
 
 
-def _subject(user: User) -> str:
-    return f"aluta-{user.id}"
-
-
 def _user_from_subject(db: Session, subject: str) -> User | None:
-    if not subject or not subject.startswith("aluta-"):
+    if not subject:
         return None
-    try:
-        uid = int(subject.split("-", 1)[1])
-    except (ValueError, IndexError):
-        return None
-    return db.query(User).filter(User.id == uid).first()
+    return db.query(User).filter(User.ozkey_subject == subject).first()
 
 
 def _label(user: User) -> str:
@@ -94,12 +88,29 @@ def _set_password(db: Session, user: User, new_password: str) -> None:
     db.commit()
 
 
+def _complete_session(db: Session, user: User) -> dict:
+    """Mark the user online and mint a token pair (shared by sign-in paths)."""
+    user.is_online = True
+    user.last_login = datetime.now(timezone.utc)
+    access_token, refresh_token = create_tokens(user.email)
+    user.refresh_token = refresh_token
+    db.commit()
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "email": user.email,
+        "username": user.username,
+        "last_login": user.last_login.isoformat(),
+    }
+
+
 def _start(db: Session, identifier: str, request: Request, purpose: str) -> dict:
     user = _resolve(db, identifier)
     if not user:
         raise HTTPException(status_code=400, detail=_GENERIC_START)
     try:
-        ch = oz.start_challenge(_subject(user), _context(request), purpose)
+        ch = oz.start_challenge(subject_for(db, user), _context(request), purpose)
     except oz.OzAuthError as e:
         if e.code in ("not_enrolled", "not_found", "no_phone"):
             raise HTTPException(status_code=400, detail=_GENERIC_START)
@@ -134,6 +145,20 @@ class CodeReset(BaseModel):
 
 class ChallengeOnly(BaseModel):
     challenge_id: str
+    trust: bool | None = False
+
+
+class TwoStepSet(BaseModel):
+    enable: bool
+    code: str
+
+
+class TwoStepCode(BaseModel):
+    email: str
+    password: str
+    code: str
+    kind: str = "totp"  # 'totp' | 'backup'
+    trust: bool | None = False
 
 
 # ── availability (public — lets the sign-in/recovery screens show the UI) ──
@@ -144,19 +169,23 @@ def ozilane_available():
 
 # ── link management (signed-in user) ───────────────────────────────────────
 @router.get("/status")
-def ozilane_status(current_user: User = Depends(get_current_user)):
+def ozilane_status(db: Session = Depends(get_db),
+                   current_user: User = Depends(get_current_user)):
     if not oz.available():
-        return {"configured": False, "enrolled": False}
+        return {"configured": False, "enrolled": False, "two_factor": False}
     try:
-        info = oz.subject_info(_subject(current_user))
+        info = oz.subject_info(subject_for(db, current_user))
     except oz.OzAuthError as e:
         raise HTTPException(status_code=502, detail=e.message)
+    sync_linked(db, current_user, bool(info.get("enrolled")))
     info["configured"] = True
+    info["two_factor"] = bool(current_user.ozkey_2fa_enabled)
     return info
 
 
 @router.post("/link/start")
 def ozilane_link_start(payload: LinkStart,
+                       db: Session = Depends(get_db),
                        current_user: User = Depends(get_current_user)):
     authorization = (
         {"backupCode": payload.backup_code.strip()}
@@ -164,7 +193,7 @@ def ozilane_link_start(payload: LinkStart,
         else None
     )
     try:
-        return oz.start_enrollment(_subject(current_user),
+        return oz.start_enrollment(subject_for(db, current_user),
                                    _label(current_user), authorization)
     except oz.OzAuthError as e:
         if e.code == "proof_required":
@@ -178,19 +207,26 @@ def ozilane_link_start(payload: LinkStart,
 
 @router.get("/link/status")
 def ozilane_link_status(enrollment_id: str = Query(...),
+                        db: Session = Depends(get_db),
                         current_user: User = Depends(get_current_user)):
     try:
-        return oz.enrollment_status(enrollment_id)
+        st = oz.enrollment_status(enrollment_id)
     except oz.OzAuthError as e:
         raise HTTPException(status_code=502, detail=e.message)
+    if st.get("status") == "ACTIVE":
+        sync_linked(db, current_user, True)
+    return st
 
 
 @router.delete("/link")
-def ozilane_unlink(current_user: User = Depends(get_current_user)):
+def ozilane_unlink(db: Session = Depends(get_db),
+                   current_user: User = Depends(get_current_user)):
     try:
-        return oz.revoke(_subject(current_user))
+        res = oz.revoke(subject_for(db, current_user))
     except oz.OzAuthError as e:
         raise HTTPException(status_code=502, detail=e.message)
+    sync_linked(db, current_user, False)
+    return res
 
 
 # ── password recovery via phone approval ───────────────────────────────────
@@ -240,7 +276,7 @@ def oz_recover_totp(payload: CodeReset, db: Session = Depends(get_db)):
     if not user:
         raise generic
     try:
-        res = oz.verify_code(_subject(user), payload.code.strip())
+        res = oz.verify_code(subject_for(db, user), payload.code.strip())
     except oz.OzAuthError as e:
         raise HTTPException(status_code=502, detail=e.message)
     if not res.get("ok"):
@@ -262,7 +298,7 @@ def oz_recover_backup(payload: CodeReset, db: Session = Depends(get_db)):
     if not user:
         raise generic
     try:
-        res = oz.verify_backup_code(_subject(user), payload.code.strip())
+        res = oz.verify_backup_code(subject_for(db, user), payload.code.strip())
     except oz.OzAuthError as e:
         raise HTTPException(status_code=502, detail=e.message)
     if not res.get("ok"):
@@ -305,16 +341,58 @@ def oz_signin_complete(payload: ChallengeOnly, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=400,
                             detail="Account not found for this approval.")
-    user.is_online = True
-    user.last_login = datetime.now(timezone.utc)
-    access_token, refresh_token = create_tokens(user.email)
-    user.refresh_token = refresh_token
+    out = _complete_session(db, user)
+    if payload.trust:
+        out["trust_token"] = issue_trust(db, user)
+    return out
+
+
+# ── two-step sign-in (password, then a phone approval) ─────────────────────
+@router.post("/twostep")
+def oz_twostep(payload: TwoStepSet, db: Session = Depends(get_db),
+               current_user: User = Depends(get_current_user)):
+    """Turn two-step sign-in on/off. Requires a current Ozilane code (so a
+    hijacked session can't flip it) and a linked phone."""
+    if not current_user.ozkey_linked_at:
+        raise HTTPException(status_code=400,
+                            detail="Link a phone to Ozilane Key first.")
+    try:
+        res = oz.verify_code(subject_for(db, current_user), payload.code.strip())
+    except oz.OzAuthError as e:
+        raise HTTPException(status_code=502, detail=e.message)
+    if not res.get("ok"):
+        left = res.get("attemptsLeft")
+        raise HTTPException(
+            status_code=400,
+            detail=(f"That code is not right. {left} tries left."
+                    if left is not None else "That code is not right."))
+    current_user.ozkey_2fa_enabled = bool(payload.enable)
     db.commit()
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "email": user.email,
-        "username": user.username,
-        "last_login": user.last_login.isoformat(),
-    }
+    return {"enabled": current_user.ozkey_2fa_enabled}
+
+
+@router.post("/twostep/code")
+def oz_twostep_code(payload: TwoStepCode, db: Session = Depends(get_db)):
+    """Finish a two-step sign-in with an Ozilane offline code or a backup code
+    when the phone can't approve. The password is re-checked here."""
+    user = get_user_by_email(db, payload.email)
+    if not user or not verify_password(payload.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    subject = subject_for(db, user)
+    try:
+        res = (oz.verify_backup_code(subject, payload.code.strip())
+               if payload.kind == "backup"
+               else oz.verify_code(subject, payload.code.strip()))
+    except oz.OzAuthError as e:
+        raise HTTPException(status_code=502, detail=e.message)
+    if not res.get("ok"):
+        locked = res.get("lockedMinutes")
+        if locked:
+            raise HTTPException(status_code=429,
+                                detail=f"Too many tries. Locked for {locked} "
+                                       f"minutes.")
+        raise HTTPException(status_code=400, detail="Invalid or expired code.")
+    out = _complete_session(db, user)
+    if payload.trust:
+        out["trust_token"] = issue_trust(db, user)
+    return out

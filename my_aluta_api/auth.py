@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
@@ -56,6 +56,8 @@ class UserCreate(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+    # Optional device-trust token from a prior two-step sign-in (skips 2FA).
+    trust_token: str | None = None
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -293,28 +295,44 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
         "email": new_user.email
     }
 
-@router.post("/login", response_model=TokenResponse)
-def login_user(user: UserLogin, db: Session = Depends(get_db)):
+@router.post("/login")
+def login_user(user: UserLogin, request: Request, db: Session = Depends(get_db)):
     db_user = get_user_by_email(db, user.email)
     if not db_user or not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # Set the user to online and update their last seen timestamp
+    # Two-step sign-in (Ozilane Key): with it on + a phone linked, and this
+    # device not trusted, the linked phone must approve AFTER the right
+    # password. Returns a challenge instead of tokens; the app finishes via
+    # /auth/ozilane/signin/complete. Falls through to a normal sign-in when
+    # two-step is off, no phone is linked, the device is trusted, or the service
+    # is unreachable/unconfigured — so nobody is ever locked out.
+    from ozkey_identity import maybe_two_step
+    ctx: dict = {"place": "Aluta · sign in"}
+    if request.client:
+        ctx["ip"] = request.client.host
+    ua = request.headers.get("user-agent")
+    if ua:
+        ctx["userAgent"] = ua[:200]
+    step = maybe_two_step(db, db_user, ctx, user.trust_token)
+    if step:
+        return {"two_step_required": True, "email": db_user.email, **step}
+
+    # Normal completion.
     db_user.is_online = True
     db_user.last_login = datetime.now(timezone.utc)
     update_last_seen(db_user.id, db)
-
     access_token, refresh_token = create_tokens(db_user.email)
     db_user.refresh_token = refresh_token
     db.commit()
-
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        email=db_user.email,
-        username=db_user.username,
-        last_login=db_user.last_login
-    )
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "email": db_user.email,
+        "username": db_user.username,
+        "last_login": db_user.last_login.isoformat(),
+    }
 
 @router.post("/refresh")
 def refresh_access_token(

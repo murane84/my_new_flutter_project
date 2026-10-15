@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'api_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/brand_theme.dart';
+import 'ozilane_approve_screen.dart';
 
 /// Recover a forgotten password two ways:
 ///   • Email code  — the backend emails a 6-digit code (works for everyone).
@@ -33,6 +34,32 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _obscure = true;
   int _resendIn = 0; // cooldown seconds before another send is allowed
   Timer? _timer;
+  bool _ozAvailable = false;
+
+  @override
+  void initState() {
+    super.initState();
+    ApiService().ozilaneAvailable().then((v) {
+      if (mounted) setState(() => _ozAvailable = v);
+    });
+  }
+
+  Future<void> _goOzilane() async {
+    final res = await Navigator.push<Map>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OzilaneApproveScreen(
+          mode: OzMode.recover,
+          initialIdentifier: _email.text.trim(),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (res != null && res['recovered'] == true) {
+      // Hand the email back so the sign-in screen pre-fills it.
+      Navigator.pop(context, (res['email'] ?? _email.text.trim()).toString());
+    }
+  }
 
   @override
   void dispose() {
@@ -153,6 +180,34 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (_ozAvailable) ...[
+                  SizedBox(
+                    height: 50,
+                    child: FilledButton.icon(
+                      onPressed: _busy ? null : _goOzilane,
+                      icon: const Icon(Icons.phonelink_ring_rounded),
+                      label: const Text('Approve on Ozilane Key'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: scheme.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(children: [
+                    Expanded(child: Divider(color: scheme.outlineVariant)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text('or use a code',
+                          style: TextStyle(
+                              fontSize: 12, color: scheme.onSurfaceVariant)),
+                    ),
+                    Expanded(child: Divider(color: scheme.outlineVariant)),
+                  ]),
+                  const SizedBox(height: 16),
+                ],
                 // Method picker
                 SegmentedButton<_Method>(
                   segments: const [

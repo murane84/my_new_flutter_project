@@ -13,6 +13,7 @@ import 'theme_provider.dart';
 import 'auth_page.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
+import 'ozilane_approve_screen.dart';
 import 'token_helper.dart';
 import '../services/biometric_service.dart';
 import '../utils/snackbar_helper.dart';
@@ -49,6 +50,7 @@ class LoginPageState extends State<LoginPage> {
       }
     });
     _checkBioLogin();
+    _checkOzilane();
     _watchConnectivity();
   }
 
@@ -72,6 +74,43 @@ class LoginPageState extends State<LoginPage> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  bool _ozAvailable = false;
+
+  Future<void> _checkOzilane() async {
+    final v = await ApiService().ozilaneAvailable();
+    if (mounted) setState(() => _ozAvailable = v);
+  }
+
+  /// Passwordless sign-in: approve on the linked Ozilane Key phone. Tokens are
+  /// stored by ozSignInComplete; here we just finish the session + navigate.
+  Future<void> _signInWithPhone() async {
+    final res = await Navigator.push<Map>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OzilaneApproveScreen(
+          mode: OzMode.signIn,
+          initialIdentifier: _emailController.text.trim(),
+        ),
+      ),
+    );
+    if (!mounted || res == null) return;
+    if (res['signedIn'] == true) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isLoggedIn', true);
+      await prefs.setString('username', (res['username'] ?? '').toString());
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (ctx, anim, sanim) => const HomePage(),
+          transitionsBuilder: (ctx, anim, sanim, child) =>
+              FadeTransition(opacity: anim, child: child),
+          transitionDuration: const Duration(milliseconds: 300),
+        ),
+      );
+    }
   }
 
   Future<void> _performLogin() async {
@@ -583,6 +622,37 @@ class LoginPageState extends State<LoginPage> {
                                     ),
                                   ),
                                 ),
+                                // Passwordless: approve on the linked phone.
+                                if (_ozAvailable) ...[
+                                  const SizedBox(height: 14),
+                                  Center(
+                                    child: SizedBox(
+                                      width: 220,
+                                      child: OutlinedButton.icon(
+                                        onPressed: _isLoading
+                                            ? null
+                                            : _signInWithPhone,
+                                        icon: const Icon(
+                                            Icons.phonelink_ring_rounded,
+                                            size: 18),
+                                        label: const Text(
+                                            'Approve on Ozilane Key'),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: scheme.primary,
+                                          side: BorderSide(
+                                              color: scheme.primary
+                                                  .withAlpha(150)),
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 12),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(24),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                                 // One-tap fingerprint sign-in (own device)
                                 if (_bioLoginAvailable) ...[
                                   const SizedBox(height: 18),

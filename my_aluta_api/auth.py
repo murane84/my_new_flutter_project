@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
@@ -783,3 +783,61 @@ def link_poll(code: str, db: Session = Depends(get_db)):
         db.commit()
         return resp
     return {"status": "consumed"}
+
+
+# ---------------------------------------------------------------------------
+# Mail diagnostics (admin-only) — pinpoint WHY a reset code didn't arrive.
+# ---------------------------------------------------------------------------
+# Both require the server's SECRET_KEY in an `X-Admin-Secret` header, so they
+# never leak configuration or account-existence to the public:
+#   GET  /auth/mail/health[?email=...]  → is ZeptoMail wired up on the server?
+#                                         (and, if email given, is it a real
+#                                         registered account?)
+#   POST /auth/mail/test  {email}       → do a REAL send and return ZeptoMail's
+#                                         actual response, so an unverified
+#                                         sender / bad token shows up plainly.
+
+class MailTest(BaseModel):
+    email: EmailStr
+
+
+def _require_admin(secret: str | None) -> None:
+    if not secret or not hmac.compare_digest(secret, SECRET_KEY):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+@router.get("/mail/health")
+def mail_health(
+    email: str | None = Query(default=None),
+    x_admin_secret: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    _require_admin(x_admin_secret)
+    import config as _cfg
+    from mailer import mail_available
+    out = {
+        "mail_configured": mail_available(),
+        "token_present": bool(_cfg.ZEPTOMAIL_TOKEN),
+        "from_address": _cfg.ZEPTOMAIL_FROM,
+        "from_name": _cfg.ZEPTOMAIL_FROM_NAME,
+        "api_url": _cfg.ZEPTOMAIL_API_URL,
+    }
+    if email:
+        out["email_registered"] = bool(get_user_by_email(db, email))
+    return out
+
+
+@router.post("/mail/test")
+def mail_test(
+    payload: MailTest,
+    x_admin_secret: str | None = Header(default=None),
+):
+    _require_admin(x_admin_secret)
+    from mailer import send_email_debug
+    return send_email_debug(
+        payload.email,
+        "Aluta mail test",
+        "<p>This is a diagnostic test from Aluta. If you received it, "
+        "ZeptoMail sending is working.</p>",
+        text_body="Aluta mail test — ZeptoMail sending is working.",
+    )

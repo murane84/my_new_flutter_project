@@ -30,17 +30,26 @@ def _auth_header_value() -> str:
     return f"Zoho-enczapikey {tok}"
 
 
-def send_email(
+def send_email_debug(
     to_email: str,
     subject: str,
     html_body: str,
     text_body: str | None = None,
     to_name: str | None = None,
-) -> bool:
-    """Send one email via ZeptoMail. Returns True on a 2xx response."""
+) -> dict:
+    """Send one email via ZeptoMail and return a DETAILED result:
+    {ok, skipped, status, detail}. The diagnostics endpoints use this so the
+    real ZeptoMail response (e.g. an unverified-sender or bad-token 400) is
+    visible instead of being collapsed to a bare True/False."""
     if not mail_available():
         print("[mailer] ZeptoMail not configured; skipping send")
-        return False
+        return {
+            "ok": False,
+            "skipped": True,
+            "status": None,
+            "detail": "ZeptoMail not configured — ZEPTOMAIL_TOKEN / "
+                      "ZEPTOMAIL_FROM are not set on the server.",
+        }
 
     payload = {
         "from": {"address": ZEPTOMAIL_FROM, "name": ZEPTOMAIL_FROM_NAME or "Aluta"},
@@ -70,13 +79,36 @@ def send_email(
             data=json.dumps(payload),
             timeout=15,
         )
-        if 200 <= resp.status_code < 300:
-            return True
-        print(f"[mailer] send failed {resp.status_code}: {resp.text[:300]}")
-        return False
+        ok = 200 <= resp.status_code < 300
+        if not ok:
+            print(f"[mailer] send failed {resp.status_code}: {resp.text[:300]}")
+        return {
+            "ok": ok,
+            "skipped": False,
+            "status": resp.status_code,
+            "detail": resp.text[:500],
+        }
     except Exception as e:  # noqa: BLE001
         print(f"[mailer] exception: {e}")
-        return False
+        return {
+            "ok": False,
+            "skipped": False,
+            "status": None,
+            "detail": f"exception: {e}",
+        }
+
+
+def send_email(
+    to_email: str,
+    subject: str,
+    html_body: str,
+    text_body: str | None = None,
+    to_name: str | None = None,
+) -> bool:
+    """Send one email via ZeptoMail. Returns True on a 2xx response."""
+    return send_email_debug(
+        to_email, subject, html_body, text_body=text_body, to_name=to_name
+    )["ok"]
 
 
 def send_password_reset_code(to_email: str, username: str | None, code: str) -> bool:
@@ -99,6 +131,11 @@ def send_password_reset_code(to_email: str, username: str | None, code: str) -> 
         f"Hi {name}, your Aluta password reset code is {code}. "
         "It expires in 15 minutes. If you didn't request this, ignore this email."
     )
-    return send_email(
+    ok = send_email(
         to_email, subject, html_body, text_body=text_body, to_name=username
     )
+    print(
+        f"[mailer] password-reset code to {to_email}: "
+        f"{'sent' if ok else 'NOT sent (see the [mailer] line above for why)'}"
+    )
+    return ok

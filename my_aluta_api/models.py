@@ -44,6 +44,11 @@ class User(Base):
     ozkey_2fa_enabled = Column(
         Boolean, default=False, nullable=False, server_default="false")
 
+    # Admin-forced password change: set by a back-office reset, cleared when the
+    # user sets their own password. Prompts a forced change at next sign-in.
+    must_change_password = Column(
+        Boolean, default=False, nullable=False, server_default="false")
+
     # Legal consent: the highest Privacy Policy / Terms version this user has
     # accepted (see legal.py). 0 means "never accepted"; whenever the server's
     # CURRENT_POLICY_VERSION is higher than this, the app re-prompts the user to

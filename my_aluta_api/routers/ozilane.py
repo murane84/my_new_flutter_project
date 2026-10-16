@@ -102,6 +102,7 @@ def _complete_session(db: Session, user: User) -> dict:
         "email": user.email,
         "username": user.username,
         "last_login": user.last_login.isoformat(),
+        "must_change_password": bool(user.must_change_password),
     }
 
 

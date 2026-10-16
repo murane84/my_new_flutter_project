@@ -32,6 +32,7 @@ class UserOut(BaseModel):
     is_online: Optional[bool] = False
     phone: Optional[str] = None
     avatar_url: Optional[str] = None
+    must_change_password: Optional[bool] = False
 
     model_config = ConfigDict(from_attributes=True)
 

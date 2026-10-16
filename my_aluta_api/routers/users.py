@@ -235,6 +235,7 @@ def update_profile(
         ):
             raise HTTPException(status_code=400, detail="Current password is incorrect")
         current_user.hashed_password = get_password_hash(payload.new_password)
+        current_user.must_change_password = False
 
     db.commit()
     db.refresh(current_user)

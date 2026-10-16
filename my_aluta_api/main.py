@@ -182,6 +182,7 @@ def ensure_media_schema():
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_subject VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_linked_at TIMESTAMPTZ",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_2fa_enabled BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE",
     ]
     try:
         with engine.begin() as conn:

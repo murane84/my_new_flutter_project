@@ -15,6 +15,7 @@ import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 import 'ozilane_approve_screen.dart';
 import 'two_step_verify_screen.dart';
+import 'force_password_change_screen.dart';
 import 'token_helper.dart';
 import '../services/biometric_service.dart';
 import '../utils/snackbar_helper.dart';
@@ -174,6 +175,21 @@ class LoginPageState extends State<LoginPage> {
       await prefs.setBool('isLoggedIn', true);
       await prefs.setString('username', result['username'] ?? '');
       await saveToken(result['access_token'] ?? '');
+
+      // Admin-forced password change: the account was reset in the back office,
+      // so make them set their own password before entering the app.
+      if (result['must_change_password'] == true) {
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ForcePasswordChangeScreen(
+              currentPassword: _passwordController.text.trim(),
+            ),
+          ),
+        );
+        return;
+      }
 
       // Offer biometric quick-unlock now that we have a valid session + refresh
       // token to gate behind it. Never blocks sign-in.

@@ -680,6 +680,7 @@ class ApiService {
           'username': data['username'] ?? '',
           'access_token': token,
           'user_id': data['user_id'],
+          'must_change_password': data['must_change_password'] == true,
         };
       }
 

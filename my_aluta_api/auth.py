@@ -332,6 +332,7 @@ def login_user(user: UserLogin, request: Request, db: Session = Depends(get_db))
         "email": db_user.email,
         "username": db_user.username,
         "last_login": db_user.last_login.isoformat(),
+        "must_change_password": bool(db_user.must_change_password),
     }
 
 @router.post("/refresh")

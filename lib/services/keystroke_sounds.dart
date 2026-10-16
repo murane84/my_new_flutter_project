@@ -34,6 +34,7 @@ class KeystrokeSounds {
   final List<AudioPlayer> _deletePool = [];
   int _typeRr = 0;
   int _deleteRr = 0;
+  int _lastPlayMs = 0;
 
   /// A context that plays the tick WITHOUT grabbing audio focus, so music and
   /// other audio keep playing underneath it.
@@ -105,11 +106,19 @@ class KeystrokeSounds {
 
   void _trigger(List<AudioPlayer> pool, int Function() nextIndex) {
     if (!enabled || !_poolReady || pool.isEmpty) return;
+    // Bound how often we touch the native audio layer. Held/auto-repeat keys
+    // can fire far faster than anyone types, and hammering the platform
+    // channel was jamming the UI thread. A ~30ms floor (≈33/s) is well above
+    // human typing speed, so every real keystroke still ticks.
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastPlayMs < 30) return;
+    _lastPlayMs = now;
     final pl = pool[nextIndex() % pool.length];
-    // Re-trigger the already-loaded source. On Android low-latency (SoundPool)
-    // this replays from the start without reloading; elsewhere seek-to-zero
-    // keeps rapid repeats snappy.
-    pl.seek(Duration.zero).catchError((_) {});
+    // Just re-trigger the already-loaded source. In low-latency (SoundPool)
+    // mode resume() replays from the start on its own; after a normal play the
+    // ReleaseMode.stop resets the position, so resume() replays there too. We
+    // deliberately do NOT seek: seek isn't supported in low-latency mode and
+    // the extra per-keystroke platform call was the source of the overload.
     pl.resume().catchError((_) {});
   }
 

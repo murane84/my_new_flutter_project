@@ -74,6 +74,21 @@ class SongLibrary {
   static Future<List<SongModel>> refresh() => songs(force: true);
 
   static Future<List<SongModel>> _scan() async {
+    // Only scan when the audio permission is ALREADY granted. Calling
+    // querySongs() without it makes on_audio_query run its own permission
+    // request on this background/launch path, where the coroutine races and
+    // replies to the method channel twice ("Reply already submitted") — a
+    // native crash at launch. permissionsStatus() is a read-only check and
+    // never triggers that; the user-initiated music screen requests permission.
+    bool granted = false;
+    try {
+      granted = await _q.permissionsStatus();
+    } catch (_) {
+      granted = false;
+    }
+    if (!granted) {
+      return _cache ?? const <SongModel>[];
+    }
     final f = _q.querySongs();
     _inflight = f;
     try {

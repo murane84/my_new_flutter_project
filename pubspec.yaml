@@ -58,6 +58,11 @@ dependencies:
   just_audio: ^0.10.5
   just_audio_windows: ^0.2.0
   audioplayers: ^6.5.0
+  # Low-latency UI tick sounds (keystroke feedback). Native SoundPool-style
+  # mixing: play() is fire-and-forget and overlapping taps don't queue, so fast
+  # typing can't back up the audio layer the way per-keystroke audioplayers
+  # resume() calls did.
+  soundpool: ^2.4.0
   on_audio_query: ^2.9.0
   palette_generator: ^0.3.3
   audio_service: ^0.18.14

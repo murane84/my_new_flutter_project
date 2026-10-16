@@ -51,6 +51,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _bioAvailable = false;
   bool _bioOn = false;
   bool _twoFAOn = false;
+  bool _mustChangePw = false;
 
   @override
   void initState() {
@@ -177,6 +178,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _origPhone = data['phone']?.toString() ?? '';
       _origAvatar = data['avatar_url']?.toString() ?? '';
       _avatarUrl = _origAvatar;
+      _mustChangePw = data['must_change_password'] == true;
       if (unameUntouched) _username.text = _origUsername;
       if (phoneUntouched) _phone.text = _origPhone;
       _loading = false;
@@ -395,6 +397,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _currentPw.clear();
       _newPw.clear();
       _confirmPw.clear();
+      if (wantsPwChange && mounted) setState(() => _mustChangePw = false);
       _origUsername = _username.text.trim();
       _origPhone = _phone.text.trim();
       _origAvatar = _avatarUrl;
@@ -600,6 +603,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 phone,
               ],
               const SizedBox(height: 26),
+              if (_mustChangePw) ...[
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withAlpha(22),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: scheme.primary.withAlpha(70)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.lock_reset_rounded,
+                          color: scheme.primary, size: 22),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Your password was reset by an administrator. Please '
+                          'set your own password below to finish securing your '
+                          'account.',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              height: 1.4,
+                              color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
               _heading('Change password', scheme),
               const SizedBox(height: 4),
               Text('Leave blank to keep your current password',

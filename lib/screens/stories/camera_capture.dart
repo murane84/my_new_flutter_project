@@ -4,7 +4,6 @@ import 'dart:io' show Platform;
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 
 /// What a camera capture produced: the file plus whether it is a video (so the
 /// caller can route a recorded clip through the video pipeline and a still

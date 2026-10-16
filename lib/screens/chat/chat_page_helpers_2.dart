@@ -373,15 +373,27 @@ extension _ChatPageHelpers2 on _ChatPageState {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
+      // The camera opens the shared in-app camera, which can return a PHOTO or
+      // a recorded VIDEO (Photo/Video toggle, plus hold-to-record on mobile).
+      // A recorded clip is routed through the same compress+send path as a
+      // gallery video; a still goes to the image preview. The in-app camera
+      // also gives accurate, cause-specific messages (https-needed,
+      // allow-permission, in-use, or truly no camera).
+      if (source == ImageSource.camera) {
+        final r = await captureMedia(context);
+        if (r == null) return;
+        if (r.isVideo) {
+          await _processAndSendVideo(r.file);
+        } else {
+          final bytes = await r.file.readAsBytes();
+          await _previewAndSendImage(bytes, r.file.name, 'image/jpeg');
+        }
+        return;
+      }
       // Pick at high quality; the compress-on-upload step (or the HD toggle in
       // the preview) decides final size, so HD can send near-original quality.
-      // Camera goes through the shared capturePhoto helper so web/desktop get a
-      // real camera (not a file picker) and accurate, cause-specific messages
-      // (https-needed, allow-permission, in-use, or truly no camera).
-      final x = source == ImageSource.camera
-          ? await capturePhoto(context, imageQuality: 92, maxWidth: 2560)
-          : await ImagePicker()
-              .pickImage(source: source, imageQuality: 92, maxWidth: 2560);
+      final x = await ImagePicker()
+          .pickImage(source: source, imageQuality: 92, maxWidth: 2560);
       if (x == null) return;
       final bytes = await x.readAsBytes();
       await _previewAndSendImage(bytes, x.name, 'image/jpeg');

@@ -71,7 +71,7 @@ Future<void> showCreateStorySheet(
               tile(Icons.photo_library_rounded, 'Photo', 'gallery',
                   'Pick a picture from your gallery'),
               tile(Icons.photo_camera_rounded, 'Camera', 'camera',
-                  'Take a photo now'),
+                  'Take a photo or record a video'),
               tile(Icons.videocam_rounded, 'Video clip', 'video',
                   'A short clip (up to 30s)'),
               const SizedBox(height: 8),
@@ -123,6 +123,7 @@ Future<void> showCreateStorySheet(
 
   final picker = ImagePicker();
   XFile? file;
+  bool cameraVideo = false;
   try {
     if (choice == 'video') {
       file = await picker.pickVideo(
@@ -130,7 +131,11 @@ Future<void> showCreateStorySheet(
         maxDuration: const Duration(seconds: 30),
       );
     } else if (choice == 'camera') {
-      file = await capturePhoto(context, maxWidth: 1600);
+      // The in-app camera can take a photo or record a clip (up to 30s).
+      final r = await captureMedia(context,
+          maxVideoDuration: const Duration(seconds: 30));
+      file = r?.file;
+      cameraVideo = r?.isVideo ?? false;
     } else {
       file = await picker.pickImage(
         source: ImageSource.gallery,
@@ -143,7 +148,7 @@ Future<void> showCreateStorySheet(
   }
   if (file == null || !context.mounted) return;
 
-  final kind = choice == 'video' ? 'video' : 'photo';
+  final kind = (choice == 'video' || cameraVideo) ? 'video' : 'photo';
   await Navigator.push(
     context,
     MaterialPageRoute(

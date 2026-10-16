@@ -1466,6 +1466,18 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     try {
       final x = await ImagePicker().pickVideo(source: ImageSource.gallery);
       if (x == null) return;
+      await _processAndSendVideo(x);
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not pick video', type: ToastType.error);
+      }
+    }
+  }
+
+  /// Compress (mobile), cap-check and send a video FILE as a 'video' message.
+  /// Shared by the gallery picker and the in-app camera (recorded clips).
+  Future<void> _processAndSendVideo(XFile x) async {
+    try {
       final name0 = x.name;
       final ext =
           name0.contains('.') ? name0.split('.').last.toLowerCase() : 'mp4';
@@ -1528,7 +1540,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           ephemeral: bytes.length > 15 * 1024 * 1024);
     } catch (_) {
       if (mounted) {
-        showToast(context, 'Could not pick video', type: ToastType.error);
+        showToast(context, 'Could not send video', type: ToastType.error);
       }
     } finally {
       try {

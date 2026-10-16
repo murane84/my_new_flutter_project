@@ -2846,8 +2846,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     // `content`; the card renders it, so the raw text is suppressed below.
     final isLocation = !tomb && msgType == 'location';
     final isContact = !tomb && msgType == 'contact';
+    // A lone fraction — the auto-converted glyph "½" OR a still-raw "1/2" —
+    // renders big and bubble-less too, like a single emoji. Apply fraction
+    // glyphs first so the test (and the big Text below) use the glyph form
+    // regardless of whether the composer already converted it or the platform
+    // fired the auto-convert at all.
+    final emojiMain = applyFractions(mainText);
     final emojiOnly =
-        !tomb && !hasQuote && !isMedia && _isEmojiOnly(mainText);
+        !tomb && !hasQuote && !isMedia && _isEmojiOnly(emojiMain);
     // Image + caption: _imageCaption adapts per caption length — float (photo
     // left, text beside then below) when the text is long enough to fill the
     // side, else stacked under the photo — so there is never a blank gap. Both
@@ -3039,7 +3045,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                 // ── Emoji-only: no bubble, just big emoji ─────────────
                 if (emojiOnly)
                   Text(
-                    mainText,
+                    emojiMain,
                     style: const TextStyle(fontSize: 40, height: 1.2),
                   )
                 else

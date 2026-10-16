@@ -23,6 +23,11 @@ final RegExp _fractionRe = RegExp(r'\b(\d{1,3})/(\d{1,3})\b');
 /// isn't a dedicated one. Used by the composer's live auto-convert.
 String? fractionGlyph(String frac) => _fractionGlyphs[frac];
 
+/// Public: swap simple "1/2"-style fractions for their unicode glyphs.
+/// Used by the chat to spot a fraction-only message that should render big
+/// and bubble-less, the same as a lone emoji.
+String applyFractions(String s) => _applyFractions(s);
+
 String _applyFractions(String s) {
   if (!s.contains('/')) return s;
   return s.replaceAllMapped(

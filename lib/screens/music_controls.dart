@@ -701,16 +701,24 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       // footer button stuck showing "playing".
       // While a live session owns the ambient bar/notification, don't let the
       // (paused) local player overwrite the live play/pause state.
+      // At end-of-track just_audio PARKS with playing==true but
+      // processingState==completed — that is not real playback. Treat it as
+      // stopped everywhere (disc, footer, now-playing/presence) so the disc
+      // doesn't keep spinning (and we don't report a false "playing") after a
+      // song ends with no repeat, instead of relying on the delayed completion
+      // handler to pause.
+      final bool realPlaying =
+          s.playing && s.processingState != ProcessingState.completed;
       if (!_liveActive) {
         ref.read(nowPlayingProvider.notifier).update(
-            track: _trackName, artist: _artistName, playing: s.playing);
+            track: _trackName, artist: _artistName, playing: realPlaying);
         _pushMediaState(
             buffering: s.processingState == ProcessingState.loading ||
                 s.processingState == ProcessingState.buffering);
       }
       if (!mounted) return;
       setState(() {});
-      if (s.playing) {
+      if (realPlaying) {
         _discCtrl.repeat();
       } else {
         _discCtrl.stop();

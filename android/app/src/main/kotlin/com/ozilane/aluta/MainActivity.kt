@@ -19,6 +19,9 @@ import android.telecom.TelecomManager
 import com.ryanheise.audioservice.AudioServiceFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.FlutterInjector
+import android.media.SoundPool
+import android.media.AudioAttributes
 import android.content.ContentValues
 import android.os.Environment
 import android.provider.MediaStore
@@ -34,6 +37,10 @@ class MainActivity : AudioServiceFragmentActivity() {
     private val telecomChannel = "aluta/telecom"
     private val connectedContactsChannel = "aluta/connected_contacts"
     private val downloadsChannel = "aluta/downloads"
+    private val keystrokeChannel = "aluta/keystroke"
+    private var keystrokeSoundPool: SoundPool? = null
+    private var typeSoundId = 0
+    private var deleteSoundId = 0
 
     // Channel for the "Connected apps" (ContactsContract) integration, plus a
     // stash for an action tapped from the system Contacts app before Dart is
@@ -160,9 +167,75 @@ class MainActivity : AudioServiceFragmentActivity() {
                 else -> result.notImplemented()
             }
         }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, keystrokeChannel)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    // Build the SoundPool and preload the two tick sounds.
+                    "load" -> result.success(ensureKeystrokePool())
+                    // Fire a tick. SoundPool.play is a cheap, fire-and-forget
+                    // native call that mixes overlapping streams itself and never
+                    // takes audio focus, so fast typing can't jam the UI and the
+                    // music keeps playing underneath.
+                    "play" -> {
+                        val sp = keystrokeSoundPool
+                        val id = if (call.argument<String>("which") == "delete")
+                            deleteSoundId else typeSoundId
+                        if (sp != null && id != 0) {
+                            sp.play(id, 0.7f, 0.7f, 0, 0, 1.0f)
+                        }
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
         // If the app was cold-launched by tapping an Aluta row in the Contacts
         // app, stash that action for Dart to pick up via consumePendingAction.
         handleContactIntent(intent, deliver = false)
+    }
+
+    // ── Keystroke tick sounds (native SoundPool) ───────────────────────────
+    // SoundPool is purpose-built for short, frequent UI sounds: play() returns
+    // immediately and overlapping streams mix natively, so rapid typing never
+    // backs up the way a general audio player's per-keystroke calls did.
+    private fun ensureKeystrokePool(): Boolean {
+        if (keystrokeSoundPool != null) return true
+        return try {
+            val attrs = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+            val sp = SoundPool.Builder()
+                .setMaxStreams(6)
+                .setAudioAttributes(attrs)
+                .build()
+            typeSoundId = loadAssetSound(sp, "assets/sounds/type.wav")
+            deleteSoundId = loadAssetSound(sp, "assets/sounds/delete.wav")
+            keystrokeSoundPool = sp
+            true
+        } catch (e: Exception) {
+            keystrokeSoundPool = null
+            false
+        }
+    }
+
+    // Copy a Flutter asset to a cache file (assets can be stored compressed in
+    // the APK, so a direct file descriptor isn't guaranteed; a real file always
+    // loads), then hand it to SoundPool.
+    private fun loadAssetSound(sp: SoundPool, assetPath: String): Int {
+        val key = FlutterInjector.instance().flutterLoader()
+            .getLookupKeyForAsset(assetPath)
+        val outFile = File(cacheDir, "ks_" + assetPath.substringAfterLast('/'))
+        assets.open(key).use { input ->
+            FileOutputStream(outFile).use { output -> input.copyTo(output) }
+        }
+        return sp.load(outFile.absolutePath, 1)
+    }
+
+    override fun onDestroy() {
+        keystrokeSoundPool?.release()
+        keystrokeSoundPool = null
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -315,7 +315,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
   /// arrive, so a file bubble can show a live percentage. Returns the status
   /// and the full bytes (empty on non-200).
   Future<({int status, List<int> bytes})> _httpGetProgress(
-      String url, void Function(int received, int total)? onProgress) async {
+      String url, void Function(int received, int total)? onProgress,
+      {int expectedTotal = 0}) async {
     final client = http.Client();
     try {
       final req = http.Request('GET', Uri.parse(url))
@@ -324,13 +325,27 @@ extension _ChatPageHelpers3 on _ChatPageState {
       if (resp.statusCode != 200) {
         return (status: resp.statusCode, bytes: const <int>[]);
       }
-      final total = resp.contentLength ?? 0;
+      // Railway's edge can strip Content-Length (chunked re-encoding), which
+      // left the progress ring indeterminate — no percentage ever. Fall back
+      // to the message's known media_size so the percentage still works.
+      final headerTotal = resp.contentLength ?? 0;
+      final total = headerTotal > 0 ? headerTotal : expectedTotal;
       final out = <int>[];
       var received = 0;
-      await for (final chunk in resp.stream) {
+      // When we know the size, stop the moment the whole file is in: some
+      // proxies keep the socket open past the last byte, which otherwise left
+      // `await for` waiting forever (the bubble stuck "Downloading…" even
+      // though the file had fully arrived and saved). When the size is unknown
+      // we can't tell a held-open socket from a slow one, so guard with an
+      // inactivity timeout instead.
+      final stream = total > 0
+          ? resp.stream
+          : resp.stream.timeout(const Duration(seconds: 30));
+      await for (final chunk in stream) {
         out.addAll(chunk);
         received += chunk.length;
         if (onProgress != null) onProgress(received, total);
+        if (total > 0 && received >= total) break;
       }
       return (status: 200, bytes: out);
     } finally {
@@ -350,7 +365,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
     try {
       final ok = await _saveMediaToDevice(msg, onProgress: (received, total) {
         if (!mounted) return;
-        final q = total > 0 ? received / total : null;
+        final q =
+            total > 0 ? (received / total).clamp(0.0, 1.0).toDouble() : null;
         final prev = msg['__dlProgress'] as double?;
         if (q != null && prev != null && (q - prev).abs() < 0.01) return;
         rebuildWith(() => msg['__dlProgress'] = q);
@@ -406,8 +422,9 @@ extension _ChatPageHelpers3 on _ChatPageState {
             await Future.delayed(Duration(seconds: 2 * attempt));
           }
           try {
-            final r =
-                await appBusy.run(() => _httpGetProgress(url, onProgress));
+            final r = await appBusy.run(() => _httpGetProgress(
+                url, onProgress,
+                expectedTotal: (msg['media_size'] as num?)?.toInt() ?? 0));
             if (r.status == 200 && r.bytes.isNotEmpty) {
               bytes = r.bytes;
             } else if (r.status == 410 || r.status == 404) {

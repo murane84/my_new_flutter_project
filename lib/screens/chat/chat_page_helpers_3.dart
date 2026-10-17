@@ -66,11 +66,15 @@ extension _ChatPageHelpers3 on _ChatPageState {
       durationSecs: secs > 0 ? secs : null,
       caption: caption,
       posterUrl: '$url/thumb',
-      onFullscreen: () => _openVideo(url, msg),
+      // Fullscreen opens the in-thread media gallery (swipe through every
+      // photo/GIF/video here); its own control then opens the immersive player.
+      onFullscreen: () => _openImageViewer(url),
     );
   }
 
   void _openVideo(String url, Map<String, dynamic> msg) {
+    // Hush any inline gallery video playing behind the theater.
+    _galleryVideoPauseAll.value++;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     showDialog<void>(
       context: context,

@@ -414,6 +414,8 @@ class _ChatPageState extends State<ChatPage>
     // immediately; the /status poll may later refresh it.
     _friendAvatar = widget.friendAvatar;
     WidgetsBinding.instance.addObserver(this);
+    _viewerDismissCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 220));
     AppConfig.baseUrl.then((b) {
       if (mounted) setState(() => _apiBase = b);
     });
@@ -553,6 +555,7 @@ class _ChatPageState extends State<ChatPage>
     _scrollCtrl.dispose();
     _pickerScrollCtrl.dispose();
     _viewerPageCtrl?.dispose();
+    _viewerDismissCtrl?.dispose();
     _starTimer?.cancel();
     _quickStarsOn.dispose();
     if (_isGroup) {
@@ -1836,6 +1839,11 @@ class _ChatPageState extends State<ChatPage>
   int _viewerIndex = 0;
   bool _viewerChrome = true;
   PageController? _viewerPageCtrl;
+  // Interactive swipe/drag-to-dismiss for the in-thread media viewer: the
+  // stage follows the finger (or a desktop click-drag) down and fades, then
+  // settles smoothly — a spring back up, or a slide off — instead of a flip.
+  double _viewerDragDy = 0;
+  AnimationController? _viewerDismissCtrl;
 
   Future<void> _openImageViewer(String tappedUrl) async {
     // Gather EVERY image shared in this thread (chronological order) so the
@@ -1895,7 +1903,70 @@ class _ChatPageState extends State<ChatPage>
       _viewerImages = null;
       _viewerMsgs = const <Map<String, dynamic>?>[];
       _viewerProviders = const <ImageProvider>[];
+      _viewerDragDy = 0;
     });
+  }
+
+  // True when the media at viewer index [i] is a video (so the chrome can offer
+  // the "watch fullscreen" control that opens the immersive theater player).
+  bool _viewerIsVideo(int i) {
+    final m = (i >= 0 && i < _viewerMsgs.length) ? _viewerMsgs[i] : null;
+    return (m?['message_type'] as String?) == 'video';
+  }
+
+  // Release of a downward drag: animate the stage the rest of the way off to
+  // close, or spring it back up — a smooth settle, never an instant flip.
+  void _settleViewerDrag(bool close) {
+    final ctrl = _viewerDismissCtrl;
+    final startDy = _viewerDragDy;
+    final target = close ? MediaQuery.of(context).size.height : 0.0;
+    if (ctrl == null) {
+      setState(() => _viewerDragDy = 0);
+      if (close) _closeViewer();
+      return;
+    }
+    ctrl
+      ..stop()
+      ..duration = Duration(milliseconds: close ? 200 : 260);
+    final anim = Tween<double>(begin: startDy, end: target).animate(
+        CurvedAnimation(
+            parent: ctrl,
+            curve: close ? Curves.easeInCubic : Curves.easeOutCubic));
+    void tick() {
+      if (mounted) setState(() => _viewerDragDy = anim.value);
+    }
+    anim.addListener(tick);
+    ctrl.reset();
+    ctrl.forward().whenComplete(() {
+      anim.removeListener(tick);
+      if (close) _closeViewer();
+      if (mounted) setState(() => _viewerDragDy = 0);
+    });
+  }
+
+  // A left/right page chevron for the media viewer (desktop/tablet friendly;
+  // also handy on phones). Hidden at the ends and when chrome is tucked away.
+  Widget _viewerArrow(IconData icon, bool enabled, VoidCallback onTap) {
+    if (!enabled) return const SizedBox(width: 40);
+    return IgnorePointer(
+      ignoring: !_viewerChrome,
+      child: AnimatedOpacity(
+        opacity: _viewerChrome ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 200),
+        child: Material(
+          color: Colors.black.withAlpha(90),
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(icon, color: Colors.white, size: 28),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   // Web: files pasted via the browser paste event arrive here already as
@@ -2005,22 +2076,42 @@ class _ChatPageState extends State<ChatPage>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final stageColor = isDark ? Colors.black : Colors.white;
     void toggle() => setState(() => _viewerChrome = !_viewerChrome);
+    final dragProg = (_viewerDragDy / 400).clamp(0.0, 1.0);
+    final stageScale = 1 - dragProg * 0.06;
     return Positioned.fill(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        // Swipe the photo down to close the viewer (when not zoomed).
-        onVerticalDragEnd: (d) {
-          if ((d.primaryVelocity ?? 0) > 300) _closeViewer();
+        // The stage follows the finger (or a desktop click-drag) straight down
+        // and fades as it goes, then settles smoothly on release — a spring
+        // back up, or a slide the rest of the way off to close.
+        onVerticalDragUpdate: (d) {
+          final next = _viewerDragDy + d.delta.dy;
+          setState(() => _viewerDragDy = next < 0 ? 0 : next);
         },
-        child: ColoredBox(
-        color: stageColor,
+        onVerticalDragEnd: (d) {
+          final v = d.primaryVelocity ?? 0;
+          _settleViewerDrag(_viewerDragDy > 140 || v > 700);
+        },
         child: Stack(
+          fit: StackFit.expand,
           children: [
+            Positioned.fill(
+              child: ColoredBox(
+                color: stageColor.withValues(alpha: 1 - dragProg * 0.92),
+              ),
+            ),
+            Transform.translate(
+              offset: Offset(0, _viewerDragDy),
+              child: Transform.scale(
+                scale: stageScale,
+                child: Stack(
+                  children: [
             PhotoViewGallery.builder(
               pageController: _viewerPageCtrl,
               itemCount: imgs.length,
               onPageChanged: (p) => setState(() => _viewerIndex = p),
-              backgroundDecoration: BoxDecoration(color: stageColor),
+              backgroundDecoration:
+                  const BoxDecoration(color: Colors.transparent),
               loadingBuilder: (_, _) => Center(
                 child: SizedBox(
                   width: 28,
@@ -2128,6 +2219,13 @@ class _ChatPageState extends State<ChatPage>
                               ],
                             ),
                           ),
+                          if (msg != null && _viewerIsVideo(i))
+                            IconButton(
+                              tooltip: 'Watch fullscreen',
+                              onPressed: () => _openVideo(imgs[i], msg),
+                              icon: const Icon(Icons.fullscreen_rounded,
+                                  color: Colors.white),
+                            ),
                           IconButton(
                             tooltip: 'Reply',
                             onPressed: msg == null
@@ -2166,6 +2264,37 @@ class _ChatPageState extends State<ChatPage>
                 ),
               ),
             ),
+            // Left / right page arrows (tap to page through the media).
+            if (imgs.length > 1) ...[
+              Positioned(
+                left: 4,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: _viewerArrow(
+                    Icons.chevron_left_rounded,
+                    i > 0,
+                    () => _viewerPageCtrl?.previousPage(
+                        duration: const Duration(milliseconds: 260),
+                        curve: Curves.easeOut),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 4,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: _viewerArrow(
+                    Icons.chevron_right_rounded,
+                    i < imgs.length - 1,
+                    () => _viewerPageCtrl?.nextPage(
+                        duration: const Duration(milliseconds: 260),
+                        curve: Curves.easeOut),
+                  ),
+                ),
+              ),
+            ],
             // Position counter.
             if (imgs.length > 1)
               Positioned(
@@ -2242,9 +2371,13 @@ class _ChatPageState extends State<ChatPage>
                   ),
                 ),
               ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
-      )),
+      ),
     );
   }
 
@@ -4735,6 +4868,10 @@ class _FullMenuCardState extends State<_FullMenuCard> {
 /// A video page inside the fullscreen media gallery: cache-first init, tap the
 /// center button to play, tap the video to pause. Lives only while its page is
 /// built, so swiping away disposes the controller.
+// Bumped when the immersive theater player opens, so any inline gallery video
+// playing behind it pauses — only one video is ever heard at a time.
+final ValueNotifier<int> _galleryVideoPauseAll = ValueNotifier<int>(0);
+
 class _GalleryVideo extends StatefulWidget {
   const _GalleryVideo({super.key, required this.url});
   final String url;
@@ -4745,11 +4882,21 @@ class _GalleryVideo extends StatefulWidget {
 class _GalleryVideoState extends State<_GalleryVideo> {
   VideoPlayerController? _c;
   bool _error = false;
+  bool _duckedMusic = false; // we paused the song to play this clip's sound.
 
   @override
   void initState() {
     super.initState();
+    _galleryVideoPauseAll.addListener(_onPauseSignal);
     _init();
+  }
+
+  // The theater player is opening in front of us — step aside so we're not
+  // heard underneath it, and hand the song back.
+  void _onPauseSignal() {
+    _c?.pause();
+    _resumeMusicIfDucked();
+    if (mounted) setState(() {});
   }
 
   Future<void> _init() async {
@@ -4760,12 +4907,15 @@ class _GalleryVideoState extends State<_GalleryVideo> {
         f ??= await MediaStore.instance
             .getFile(widget.url, mediaAuthHeaders(widget.url));
         c = f != null
-            ? VideoPlayerController.file(f)
+            ? VideoPlayerController.file(f,
+                videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true))
             : VideoPlayerController.networkUrl(Uri.parse(widget.url),
-                httpHeaders: mediaAuthHeaders(widget.url));
+                httpHeaders: mediaAuthHeaders(widget.url),
+                videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true));
       } else {
         c = VideoPlayerController.networkUrl(Uri.parse(widget.url),
-            httpHeaders: mediaAuthHeaders(widget.url));
+            httpHeaders: mediaAuthHeaders(widget.url),
+            videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true));
       }
       await c.initialize();
       if (!mounted) {
@@ -4784,14 +4934,41 @@ class _GalleryVideoState extends State<_GalleryVideo> {
 
   @override
   void dispose() {
+    _galleryVideoPauseAll.removeListener(_onPauseSignal);
+    _resumeMusicIfDucked();
     _c?.dispose();
     super.dispose();
+  }
+
+  // Watching a clip with sound pauses the user's song and gives it back from
+  // the same spot when the clip is paused or this page goes away.
+  void _pauseMusicForVideo() {
+    try {
+      if (!_duckedMusic && (playbackBus.isPlaying?.call() ?? false)) {
+        playbackBus.onPause?.call();
+        _duckedMusic = true;
+      }
+    } catch (_) {}
+  }
+
+  void _resumeMusicIfDucked() {
+    if (!_duckedMusic) return;
+    _duckedMusic = false;
+    try {
+      playbackBus.onPlay?.call();
+    } catch (_) {}
   }
 
   void _toggle() {
     final c = _c;
     if (c == null) return;
-    c.value.isPlaying ? c.pause() : c.play();
+    if (c.value.isPlaying) {
+      c.pause();
+      _resumeMusicIfDucked();
+    } else {
+      _pauseMusicForVideo();
+      c.play();
+    }
   }
 
   @override
@@ -4970,15 +5147,18 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
         f ??= await MediaStore.instance
             .getFile(widget.url, mediaAuthHeaders(widget.url));
         c = f != null
-            ? VideoPlayerController.file(f)
+            ? VideoPlayerController.file(f,
+                videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true))
             : VideoPlayerController.networkUrl(
                 Uri.parse(widget.url),
                 httpHeaders: mediaAuthHeaders(widget.url),
+                videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
               );
       } else {
         c = VideoPlayerController.networkUrl(
           Uri.parse(widget.url),
           httpHeaders: mediaAuthHeaders(widget.url),
+          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
         );
       }
       await c.initialize();
@@ -4990,9 +5170,30 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
       c.addListener(_onTick);
       c.setLooping(true);
       c.play();
+      _pauseMusicForVideo();
     } catch (_) {
       if (mounted) setState(() => _error = true);
     }
+  }
+
+  // The immersive player owns the sound while it's open: pause the user's song
+  // on entry and give it back (from the same spot) when the player closes.
+  bool _duckedMusic = false;
+  void _pauseMusicForVideo() {
+    try {
+      if (!_duckedMusic && (playbackBus.isPlaying?.call() ?? false)) {
+        playbackBus.onPause?.call();
+        _duckedMusic = true;
+      }
+    } catch (_) {}
+  }
+
+  void _resumeMusicIfDucked() {
+    if (!_duckedMusic) return;
+    _duckedMusic = false;
+    try {
+      playbackBus.onPlay?.call();
+    } catch (_) {}
   }
 
   void _onTick() {
@@ -5082,6 +5283,7 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
 
   @override
   void dispose() {
+    _resumeMusicIfDucked();
     _c?.removeListener(_onTick);
     _c?.dispose();
     super.dispose();

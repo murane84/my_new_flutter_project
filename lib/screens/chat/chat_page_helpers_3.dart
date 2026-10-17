@@ -286,10 +286,11 @@ extension _ChatPageHelpers3 on _ChatPageState {
         await file.writeAsBytes(res.bodyBytes, flush: true);
       }
 
-      final result = await OpenFilex.open(
-        file.path,
-        type: mime.isNotEmpty ? mime : null,
-      );
+      // A generic/empty MIME can misroute an APK away from the installer, so
+      // let open_filex infer the type from the (now correct) extension instead.
+      final effMime =
+          (mime.isEmpty || mime == 'application/octet-stream') ? null : mime;
+      final result = await OpenFilex.open(file.path, type: effMime);
       if (result.type != ResultType.done) {
         // No installed app can open this type — let the user route it onward.
         await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));

@@ -71,36 +71,154 @@ extension _HomePageHelpers1 on HomePageState {
           if (dctx.mounted) Navigator.pop(dctx);
         }
 
-        return AlertDialog(
-          icon: Icon(Icons.shield_moon_rounded,
-              color: scheme.primary, size: 30),
-          title: const Text('Secure your account'),
-          content: const Text(
-            'Link your Ozilane Key so you can always recover your account — '
-            'even if an email code is slow to arrive. It takes a moment, and '
-            'then you can approve sign-ins and password resets right from your '
-            'phone.',
+        Widget feature(IconData icon, String text) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Icon(icon, size: 17, color: scheme.primary),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 5),
+                      child: Text(text,
+                          style: TextStyle(
+                              fontSize: 13, color: scheme.onSurface)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+
+        return Dialog(
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          clipBehavior: Clip.antiAlias,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: ConstrainedBox(
+            // Caps the width so it reads as a tidy card on tablet/desktop
+            // instead of stretching across the screen; full-width (minus the
+            // inset) on phones.
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Accent header band with a shield badge.
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        scheme.primary.withValues(alpha: 0.16),
+                        scheme.primary.withValues(alpha: 0.02),
+                      ],
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 62,
+                        height: 62,
+                        decoration: BoxDecoration(
+                          color: scheme.primary.withValues(alpha: 0.18),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.shield_moon_rounded,
+                            color: scheme.primary, size: 32),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        'Secure your account',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Link your Ozilane Key so you can always get back into '
+                        'your account — even when an email code is slow.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 13.5,
+                            height: 1.4,
+                            color: scheme.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 16),
+                      feature(Icons.lock_reset_rounded,
+                          'Recover your account anytime'),
+                      feature(Icons.verified_user_rounded,
+                          'Approve sign-ins right from your phone'),
+                      feature(Icons.bolt_rounded,
+                          'Works even when email is delayed'),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 14, 24, 18),
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          style: FilledButton.styleFrom(
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 13),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14)),
+                          ),
+                          onPressed: () async {
+                            // Snooze briefly so backing out doesn't re-prompt.
+                            await close(snoozeDays: 3);
+                            if (!mounted) return;
+                            Navigator.of(context).push(MaterialPageRoute(
+                                builder: (_) => const LinkOzilaneScreen()));
+                          },
+                          child: const Text('Set up now'),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          TextButton(
+                            onPressed: () => close(never: true),
+                            child: Text("Don't ask again",
+                                style: TextStyle(
+                                    color: scheme.onSurfaceVariant)),
+                          ),
+                          TextButton(
+                            onPressed: () => close(snoozeDays: 7),
+                            child: const Text('Later'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => close(never: true),
-              child: const Text("Don't ask again"),
-            ),
-            TextButton(
-              onPressed: () => close(snoozeDays: 7),
-              child: const Text('Later'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                // Snooze briefly so backing out doesn't re-prompt immediately.
-                await close(snoozeDays: 3);
-                if (!mounted) return;
-                Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => const LinkOzilaneScreen()));
-              },
-              child: const Text('Set up now'),
-            ),
-          ],
         );
       },
     );

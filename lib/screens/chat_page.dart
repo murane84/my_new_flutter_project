@@ -3337,45 +3337,96 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         // your phone book we show YOUR name for them; otherwise
                         // their app username (~) and number, WhatsApp-style. ──
                         if (_isGroup && !isMe && isFirst && rxName.isNotEmpty && !tomb)
-                          // Tap the sender header to open their profile details.
+                          // Sender identity gets its own zone — a coloured
+                          // accent tab, a quiet label typeface, and a hairline
+                          // that dissolves toward the edge — so it never reads
+                          // as the first line of the message. Tap to open the
+                          // member's profile.
                           GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onTap: () => _openMemberProfile(
                                 rxName, rxPhone, senderAvatar),
                             child: Padding(
                               padding:
-                                  const EdgeInsets.only(bottom: 3, right: 8),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.baseline,
-                                textBaseline: TextBaseline.alphabetic,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      headerName,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: _senderColor(
-                                            inPhonebook ? headerName : rxName,
-                                            isDark),
-                                      ),
+                                  const EdgeInsets.only(bottom: 6, right: 6),
+                              child: IntrinsicWidth(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      children: [
+                                        Container(
+                                          width: 3,
+                                          height: 12,
+                                          decoration: BoxDecoration(
+                                            color: _senderColor(
+                                                inPhonebook
+                                                    ? headerName
+                                                    : rxName,
+                                                isDark),
+                                            borderRadius:
+                                                BorderRadius.circular(2),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 7),
+                                        Flexible(
+                                          child: Text(
+                                            headerName,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: 0.25,
+                                              height: 1.0,
+                                              color: _senderColor(
+                                                  inPhonebook
+                                                      ? headerName
+                                                      : rxName,
+                                                  isDark),
+                                            ),
+                                          ),
+                                        ),
+                                        if (!inPhonebook &&
+                                            rxPhone.isNotEmpty) ...[
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            rxPhone,
+                                            style: TextStyle(
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w400,
+                                              letterSpacing: 0.2,
+                                              color: textColor.withAlpha(135),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
                                     ),
-                                  ),
-                                  // Only unsaved contacts show the raw number.
-                                  if (!inPhonebook && rxPhone.isNotEmpty) ...[
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      rxPhone,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w400,
-                                        color: textColor.withAlpha(150),
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      height: 1,
+                                      margin: const EdgeInsets.only(left: 10),
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            _senderColor(
+                                                    inPhonebook
+                                                        ? headerName
+                                                        : rxName,
+                                                    isDark)
+                                                .withAlpha(
+                                                    isDark ? 120 : 95),
+                                            Colors.transparent,
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ],
-                                ],
+                                ),
                               ),
                             ),
                           ),

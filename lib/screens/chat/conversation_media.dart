@@ -163,7 +163,7 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
                 Image(
                   image: authNetworkImageProvider(m.thumbUrl, m.headers),
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
+                  errorBuilder: (_, _, _) => Container(
                     color: scheme.surfaceContainerHighest,
                     child: Icon(Icons.broken_image_outlined,
                         color: scheme.onSurfaceVariant),
@@ -189,7 +189,7 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 6),
       itemCount: widget.links.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
+      separatorBuilder: (_, _) => const Divider(height: 1),
       itemBuilder: (_, i) {
         final l = widget.links[i];
         return ListTile(
@@ -226,7 +226,7 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 6),
       itemCount: widget.docs.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
+      separatorBuilder: (_, _) => const Divider(height: 1),
       itemBuilder: (_, i) {
         final d = widget.docs[i];
         return ListTile(

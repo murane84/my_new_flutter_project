@@ -137,7 +137,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                 )
               : ListView.separated(
                   itemCount: _results.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (_, i) {
                     final r = _results[i];
                     final isGroup = r['is_group'] == true;

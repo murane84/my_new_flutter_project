@@ -1511,46 +1511,61 @@ extension _ChatPageHelpers3 on _ChatPageState {
         // "received" bubble rather than a flat grey pill.
         final recvBubble =
             isDark ? const Color(0xFF241E20) : Colors.white;
-        return Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            decoration: BoxDecoration(
-              color: recvBubble,
-              // Rounded like a bubble, with a slightly tighter bottom-left
-              // corner echoing the received-bubble tail side.
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(18),
-                topRight: Radius.circular(18),
-                bottomRight: Radius.circular(18),
-                bottomLeft: Radius.circular(6),
+        final dots = Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            color: recvBubble,
+            // Rounded like a bubble, with a slightly tighter bottom-left
+            // corner echoing the received-bubble tail side.
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(18),
+              topRight: Radius.circular(18),
+              bottomRight: Radius.circular(18),
+              bottomLeft: Radius.circular(6),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(isDark ? 46 : 20),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withAlpha(isDark ? 46 : 20),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: List.generate(3, (i) => _Dot(delay: i * 200)),
+          ),
+        );
+        // DM: just the nudging dots — no "<name> is typing" (you know who it is).
+        if (!_isGroup) {
+          return Align(alignment: Alignment.centerLeft, child: dots);
+        }
+        // Group: who is typing — the typist's saved first name — on a dark,
+        // wallpaper-immune pill so it reads on any background.
+        final label = _groupTypingText;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            dots,
+            if (label.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.38),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: List.generate(3, (i) => _Dot(delay: i * 200)),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            '${widget.friendName} is typing…',
-            style: TextStyle(
-              fontSize: 11,
-              color: Theme.of(context)
-                  .colorScheme
-                  .onSurface
-                  .withAlpha(130),
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-        ],
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                      fontSize: 11,
+                      color: Colors.white,
+                      fontStyle: FontStyle.italic),
+                ),
+              ),
+            ],
+          ],
         );
       }),
     );

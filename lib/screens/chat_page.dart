@@ -224,6 +224,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   String _friendPhone = '';
   String _friendAvatar = '';
   String _myName = '';
+  String _myPhone = '';
+  Timer? _draftTimer;
   String? _myAvatar;
 
   /// The name to show for this friend in live-session labels (banner / pill /
@@ -247,6 +249,49 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       return '\${names[0]} and \${names[1]} are typing…';
     }
     return 'Several people are typing…';
+  }
+
+  // The display name for a group typist: the phonebook name THIS device saved
+  // for their number (first name only), falling back to the username they sent.
+  String _typistName(Map event) {
+    final phone = (event['phone'] ?? '').toString();
+    final sent = (event['name'] ?? '').toString();
+    String name = '';
+    if (phone.isNotEmpty) {
+      final pb = ContactNames.instance.nameFor(phone);
+      if (pb != null && pb.trim().isNotEmpty) name = pb;
+    }
+    if (name.isEmpty) name = sent;
+    if (name.trim().isEmpty) return 'Someone';
+    return name.trim().split(RegExp(r'\s+')).first; // first name only
+  }
+
+  String get _draftKey => 'draft_$_convKey';
+
+  // Restore the unsent draft for this conversation (survives leaving the chat
+  // or the app). Only fills an empty composer so it never clobbers live typing.
+  Future<void> _loadDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final d = prefs.getString(_draftKey) ?? '';
+      if (d.isNotEmpty && _ctrl.text.isEmpty && mounted) {
+        _ctrl.text = d;
+        _ctrl.selection = TextSelection.collapsed(offset: d.length);
+        setState(() {});
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final t = _ctrl.text;
+      if (t.trim().isEmpty) {
+        await prefs.remove(_draftKey);
+      } else {
+        await prefs.setString(_draftKey, t);
+      }
+    } catch (_) {}
   }
 
   List<Map<String, dynamic>> _messages = [];
@@ -376,6 +421,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       if (mounted) setState(() => _apiBase = b);
     });
     _ctrl.addListener(_onTextChanged);
+    _loadDraft();
     _scrollCtrl.addListener(_onScroll);
     // Mirror the app-wide connection status so this banner never disagrees
     // with the home footer dot / header badge.
@@ -498,6 +544,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     for (final t in _groupTyperTimers.values) {
       t.cancel();
     }
+    _draftTimer?.cancel();
+    _saveDraft();
     _keepAliveTimer?.cancel();
     _connectivitySub?.cancel();
     _recordTimer?.cancel();
@@ -516,6 +564,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _sendActivePresence(false);
     _ws.close();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      _saveDraft();
+    }
   }
 
   @override
@@ -572,6 +630,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       if (freshId != null && freshId.isNotEmpty) _myId = freshId;
       final un = (user['username'] ?? '').toString();
       if (un.isNotEmpty) _myName = un;
+      final ph = (user['phone'] ?? '').toString();
+      if (ph.isNotEmpty) _myPhone = ph;
       final av = (user['avatar_url'] as String?)?.trim();
       if (av != null && av.isNotEmpty) _myAvatar = av;
     }
@@ -897,9 +957,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         if (_isGroup && convId == _cid.toString() && uid.toString() != _myId) {
           final tid = int.tryParse(uid.toString());
           if (tid != null) {
-            final name = (event['name'] ?? '').toString();
-            setState(() =>
-                _groupTypers[tid] = name.isNotEmpty ? name : 'Someone');
+            setState(() => _groupTypers[tid] = _typistName(event));
             _groupTyperTimers[tid]?.cancel();
             _groupTyperTimers[tid] = Timer(const Duration(seconds: 4), () {
               if (!mounted) return;
@@ -1184,7 +1242,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       _iTyping = true;
       try {
         if (_isGroup) {
-          _ws.sendEvent({'type': 'typing', 'conv': _cid, 'name': _myName});
+          _ws.sendEvent({
+            'type': 'typing',
+            'conv': _cid,
+            'name': _myName,
+            'phone': _myPhone,
+          });
         } else {
           _ws.sendEvent({'type': 'typing', 'to': widget.friendId});
         }
@@ -1194,6 +1257,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _typingTimer = Timer(const Duration(seconds: 2), () {
       _iTyping = false;
     });
+    _draftTimer?.cancel();
+    _draftTimer = Timer(const Duration(milliseconds: 400), _saveDraft);
     _lastComposerText = _ctrl.text;
   }
 
@@ -1217,6 +1282,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       _replyTo = null;
       _heartMode = false;
     });
+    _saveDraft(); // text now empty → clears the stored draft
 
     final tempId = _newTempId();
     _insertOptimistic(

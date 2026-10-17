@@ -332,6 +332,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                         finally:
                             db.close()
                         name = str(data.get("name") or "")
+                        phone = str(data.get("phone") or "")
                         for m in members:
                             if int(m) == int(user_id):
                                 continue
@@ -340,6 +341,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                                 "user_id": int(user_id),
                                 "conversation_id": str(cid),
                                 "name": name,
+                                "phone": phone,
                             })
                     except Exception:
                         pass

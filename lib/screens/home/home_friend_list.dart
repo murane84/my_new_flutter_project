@@ -1588,6 +1588,9 @@ extension _HomeFriendListView on HomePageState {
     final hasUnread = unread > 0;
     final avatar = _avatarFull(g['avatar_url']);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Live "typing…" on the GROUP tile when a member is typing in this group.
+    final isTyping =
+        _groupTypingTimers.containsKey((g['id'] as num?)?.toInt() ?? -1);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
@@ -1639,6 +1642,17 @@ extension _HomeFriendListView on HomePageState {
                   ),
                   const SizedBox(height: 2),
                   Builder(builder: (context) {
+                    if (isTyping) {
+                      return Text(
+                        'typing…',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: scheme.primary,
+                          fontStyle: FontStyle.italic,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      );
+                    }
                     final base = TextStyle(
                       fontSize: 12.5,
                       color: hasUnread

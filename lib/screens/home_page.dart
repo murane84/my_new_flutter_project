@@ -183,6 +183,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // tile. A short-lived one-shot timer per active typer (no periodic polling):
   // the timer's presence IS the "typing" state, and it self-clears after 5s.
   final Map<int, Timer> _typingTimers = {};
+  // Groups being typed in right now → a live "typing…" line on the GROUP
+  // tile, keyed by the group's conversation id (a separate id space from DM
+  // user ids, so a group never lights up a friend's DM row). Self-clears 5s.
+  final Map<int, Timer> _groupTypingTimers = {};
   // When a chat is opened from a message notification, the id of the message to
   // scroll to + highlight once the thread loads (null for normal opens). Passed
   // to ChatPage; cleared to null on every ordinary open so it fires once.
@@ -448,6 +452,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     NowPlayingPresence.instance.removeListener(_onPresenceChanged);
     NowPlayingPresence.instance.stopReceiving();
     for (final t in _typingTimers.values) {
+      t.cancel();
+    }
+    for (final t in _groupTypingTimers.values) {
       t.cancel();
     }
     _playlistDrawerCtrl.dispose();
@@ -1180,8 +1187,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
     // A friend is typing to me → show a live "typing…" line on their tile.
     if (type == 'typing') {
-      final uid = (event['user_id'] as num?)?.toInt();
-      if (uid != null) _setFriendTyping(uid);
+      // Group typing carries a conversation_id → light the GROUP tile, not the
+      // sender's DM row (which would wrongly suggest the reply lands in the DM).
+      // DM typing has no conversation_id → light the friend's DM tile as before.
+      final convRaw = (event['conversation_id'] ?? '').toString();
+      final convId = int.tryParse(convRaw);
+      if (convId != null) {
+        _setGroupTyping(convId);
+      } else {
+        final uid = (event['user_id'] as num?)?.toInt();
+        if (uid != null) _setFriendTyping(uid);
+      }
       return;
     }
     // A new chat message arriving on the per-user notify socket. When the app
@@ -1584,6 +1600,18 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _typingTimers[id]?.cancel();
     _typingTimers[id] = Timer(const Duration(seconds: 5), () {
       _typingTimers.remove(id);
+      if (mounted) setState(() {});
+    });
+    if (!was && mounted) setState(() {});
+  }
+
+  /// Mark group [convId] as having a live typer and auto-clear after 5s. Keyed
+  /// by conversation id so it drives the group tile, never a DM row.
+  void _setGroupTyping(int convId) {
+    final was = _groupTypingTimers.containsKey(convId);
+    _groupTypingTimers[convId]?.cancel();
+    _groupTypingTimers[convId] = Timer(const Duration(seconds: 5), () {
+      _groupTypingTimers.remove(convId);
       if (mounted) setState(() {});
     });
     if (!was && mounted) setState(() {});

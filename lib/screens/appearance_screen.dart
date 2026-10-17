@@ -104,6 +104,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
       title: 'Appearance',
       icon: Icons.palette_outlined,
       edgeToEdge: true,
+      desktopMaxWidth: 1040,
       headerAction: Padding(
         padding: const EdgeInsets.only(right: 6),
         child: HeaderActionButton(
@@ -194,9 +195,24 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                   ],
                 ),
           const SizedBox(height: 10),
-          const _KeystrokeSoundSection(),
-          const SizedBox(height: 10),
-          const _MessageTonesSection(),
+          isWide
+              ? const IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: _KeystrokeSoundSection()),
+                      SizedBox(width: 12),
+                      Expanded(child: _MessageTonesSection()),
+                    ],
+                  ),
+                )
+              : const Column(
+                  children: [
+                    _KeystrokeSoundSection(),
+                    SizedBox(height: 10),
+                    _MessageTonesSection(),
+                  ],
+                ),
           if (_showGuide) ...[
             const SizedBox(height: 8),
             Text(
@@ -220,6 +236,14 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
             ),
           ],
           const SizedBox(height: 18),
+          isWide
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
           _sectionLabel(scheme, 'WALLPAPER CLARITY'),
           const SizedBox(height: 4),
           ValueListenableBuilder<double>(
@@ -254,7 +278,14 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 18),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 24),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
           _sectionLabel(scheme, 'THEME COLOUR STRENGTH'),
           const SizedBox(height: 4),
           ValueListenableBuilder<double>(
@@ -290,6 +321,86 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
               ],
             ),
           ),
+                        ],
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+          _sectionLabel(scheme, 'WALLPAPER CLARITY'),
+          const SizedBox(height: 4),
+          ValueListenableBuilder<double>(
+            valueListenable: wallpaperClarity,
+            builder: (_, v, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Text('Faint',
+                        style: TextStyle(
+                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                    Expanded(
+                      child: Slider(
+                        value: v,
+                        onChanged: (nv) => setWallpaperClarity(nv),
+                      ),
+                    ),
+                    Text('Clear',
+                        style: TextStyle(
+                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                  ],
+                ),
+                if (_showGuide)
+                  Text(
+                    'How strongly chat & Space wallpapers show through. Slide '
+                    'toward Clear for a vivid picture, or Faint for a subtle '
+                    'backdrop. Buttons and cards always stay sharp on top.',
+                    style: TextStyle(
+                        fontSize: 12, color: scheme.onSurfaceVariant),
+                  ),
+              ],
+            ),
+          ),
+                    const SizedBox(height: 18),
+          _sectionLabel(scheme, 'THEME COLOUR STRENGTH'),
+          const SizedBox(height: 4),
+          ValueListenableBuilder<double>(
+            valueListenable: motifStrength,
+            builder: (_, v, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Text('Soft',
+                        style: TextStyle(
+                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                    Expanded(
+                      child: Slider(
+                        value: v,
+                        onChanged: (nv) => setMotifStrength(nv),
+                      ),
+                    ),
+                    Text('Bold',
+                        style: TextStyle(
+                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                  ],
+                ),
+                if (_showGuide)
+                  Text(
+                    'How concentrated the default theme-colour backdrop (the '
+                    'hearts-and-glow motif shown when a chat or Space has no '
+                    'photo wallpaper) appears. Slide toward Bold for richer '
+                    'colour — it is entirely your call.',
+                    style: TextStyle(
+                        fontSize: 12, color: scheme.onSurfaceVariant),
+                  ),
+              ],
+            ),
+          ),
+                  ],
+                ),
           if (_showGuide) ...[
             const SizedBox(height: 18),
             Container(

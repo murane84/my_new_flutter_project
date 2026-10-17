@@ -2861,20 +2861,33 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           if (showAvatar || isFirst)
             Padding(
               padding: const EdgeInsets.only(top: 3),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment:
-                    isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-                children: [
-                  Text(_timeOnly(msg['timestamp'] ?? ''),
-                      style: TextStyle(
-                          fontSize: 10.5, color: scheme.onSurfaceVariant)),
-                  if (isMe) ...[
-                    const SizedBox(width: 3),
-                    _buildStatusIcon(msg,
-                        muted: scheme.onSurfaceVariant, read: scheme.primary),
-                  ],
-                ],
+              child: Align(
+                alignment:
+                    isMe ? Alignment.centerRight : Alignment.centerLeft,
+                // The secret heart floats directly on the wallpaper, so its
+                // timestamp gets a translucent pill + light text to stay
+                // readable on any background (light or dark wallpaper).
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.38),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(_timeOnly(msg['timestamp'] ?? ''),
+                          style: const TextStyle(
+                              fontSize: 10.5, color: Colors.white)),
+                      if (isMe) ...[
+                        const SizedBox(width: 3),
+                        _buildStatusIcon(msg,
+                            muted: Colors.white70, read: Colors.white),
+                      ],
+                    ],
+                  ),
+                ),
               ),
             ),
         ],

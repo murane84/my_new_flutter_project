@@ -4007,39 +4007,23 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                 child: hasText
                                     ? const SizedBox(
                                         width: 4, key: ValueKey('trail-off'))
-                                    : Row(
+                                    : Padding(
                                         key: const ValueKey('trail-on'),
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.end,
-                                        children: [
-                                          IconButton(
-                                            tooltip: 'Listen together',
-                                            icon: Icon(Icons.headphones_rounded,
-                                                color: scheme.primary),
-                                            onPressed: _startListenTogether,
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                          ),
-                                          IconButton(
-                                            tooltip: 'Attach',
-                                            icon: Icon(Icons.attach_file_rounded,
-                                                color: scheme.onSurfaceVariant),
-                                            onPressed: _openAttachSheet,
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                          ),
-                                          IconButton(
-                                            tooltip: 'Camera',
-                                            icon: Icon(Icons.camera_alt_rounded,
-                                                color: scheme.onSurfaceVariant),
-                                            onPressed: () =>
-                                                _pickImage(ImageSource.camera),
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                          ),
-                                          const SizedBox(width: 4),
-                                        ],
+                                        padding:
+                                            const EdgeInsets.only(right: 2),
+                                        child: IconButton(
+                                          // One quiet "+" opens Share, which
+                                          // already holds Camera, Listen
+                                          // together, Gallery, Video and more —
+                                          // so the resting field keeps its full
+                                          // width instead of being boxed in by
+                                          // a row of icons.
+                                          tooltip: 'Share',
+                                          icon: Icon(Icons.add_rounded,
+                                              color: scheme.onSurfaceVariant),
+                                          onPressed: _openAttachSheet,
+                                          visualDensity: VisualDensity.compact,
+                                        ),
                                       ),
                               ),
                             ],

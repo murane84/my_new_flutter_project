@@ -167,7 +167,7 @@ class _AttachSheetState extends State<AttachSheet> {
 
   Widget _title(ColorScheme scheme) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 18, 24, 4),
+      padding: EdgeInsets.fromLTRB(20, widget.compact ? 12 : 18, 20, 2),
       child: Align(
         alignment: Alignment.centerLeft,
         child: Text(
@@ -202,7 +202,7 @@ class _AttachSheetState extends State<AttachSheet> {
     ];
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 6),
+      padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
       child: LayoutBuilder(
         builder: (context, c) {
           // Keep tiles compact at any width: target ~86px cells, 4-per-row on a

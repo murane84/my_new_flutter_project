@@ -3592,7 +3592,13 @@ class _ChatPageState extends State<ChatPage>
                             child: Padding(
                               padding:
                                   const EdgeInsets.only(bottom: 6, right: 6),
-                              child: IntrinsicWidth(
+                              // Cap the sender header so a long name + number
+                              // can't stretch a media bubble wider than its
+                              // media (which leaves a blank gap on desktop).
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                    maxWidth: isMedia ? 248 : 320),
+                                child: IntrinsicWidth(
                                 child: Column(
                                   crossAxisAlignment:
                                       CrossAxisAlignment.stretch,
@@ -3670,6 +3676,7 @@ class _ChatPageState extends State<ChatPage>
                                     ),
                                   ],
                                 ),
+                              ),
                               ),
                             ),
                           ),

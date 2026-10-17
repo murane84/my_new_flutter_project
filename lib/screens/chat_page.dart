@@ -240,6 +240,11 @@ class _ChatPageState extends State<ChatPage>
   bool _friendTyping = false;
   String _friendPresenceKind = 'typing'; // 'typing' | 'recording'
   Timer? _dmTypingTimer;
+  // Choreography between an incoming message and the typing indicator: when a
+  // message lands we hand the indicator's spot to the bubble, and if the friend
+  // keeps typing the indicator rises back BELOW it a beat later.
+  DateTime? _lastRxAt;
+  Timer? _typingReshowTimer;
   final Map<int, ({String avatar, String kind})> _groupTypers = {};
   final Map<int, Timer> _groupTyperTimers = {};
   Timer? _recordPresenceTimer;
@@ -261,6 +266,65 @@ class _ChatPageState extends State<ChatPage>
         _ws.sendEvent({'type': 'typing', 'to': widget.friendId, 'kind': kind});
       }
     } catch (_) {}
+  }
+
+  // Drop whoever just sent a message from the "typing" state (pure mutation —
+  // call inside a setState) so their indicator fades out as the bubble arrives.
+  void _clearTypist(String? senderId) {
+    if (_isGroup) {
+      final tid = int.tryParse(senderId ?? '');
+      if (tid != null && _groupTypers.remove(tid) != null) {
+        _groupTyperTimers[tid]?.cancel();
+        _groupTyperTimers.remove(tid);
+      }
+    } else {
+      _friendTyping = false;
+      _dmTypingTimer?.cancel();
+    }
+  }
+
+  // Show the DM typing indicator — but if it arrives right on the heels of an
+  // incoming message, wait a beat so it rises below the new bubble instead of
+  // flashing in lock-step with it.
+  void _showDmTyping(String kind) {
+    void apply() {
+      if (!mounted) return;
+      setState(() {
+        _friendTyping = true;
+        _friendPresenceKind = kind;
+      });
+      _dmTypingTimer?.cancel();
+      _dmTypingTimer = Timer(const Duration(seconds: 5), () {
+        if (mounted) setState(() => _friendTyping = false);
+      });
+    }
+
+    final since = _lastRxAt == null
+        ? const Duration(hours: 1)
+        : DateTime.now().difference(_lastRxAt!);
+    _typingReshowTimer?.cancel();
+    if (!_friendTyping && since < const Duration(milliseconds: 400)) {
+      _typingReshowTimer = Timer(const Duration(milliseconds: 280), apply);
+    } else {
+      apply();
+    }
+  }
+
+  // One-shot fade+rise for a freshly-arrived bubble, so it eases into the spot
+  // the typing indicator just vacated rather than snapping in.
+  Widget _animateInWrap(Map<String, dynamic> msg, Widget child) {
+    if (msg['__animateIn'] != true) return child;
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('in-${msg['id']}'),
+      tween: Tween<double>(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      builder: (_, t, c) => Opacity(
+        opacity: t.clamp(0.0, 1.0),
+        child: Transform.translate(offset: Offset(0, (1 - t) * 8), child: c),
+      ),
+      child: child,
+    );
   }
 
   String get _draftKey => 'draft_$_convKey';
@@ -544,6 +608,7 @@ class _ChatPageState extends State<ChatPage>
       t.cancel();
     }
     _dmTypingTimer?.cancel();
+    _typingReshowTimer?.cancel();
     _draftTimer?.cancel();
     _saveDraft();
     _keepAliveTimer?.cancel();
@@ -860,10 +925,24 @@ class _ChatPageState extends State<ChatPage>
           setState(() {
             final id = msg['id'].toString();
             if (!_messages.any((m) => m['id'].toString() == id)) {
+              if (incoming) {
+                // Hand the typing indicator's spot to the real message: fade
+                // the bubble in, and clear the typist so the indicator fades
+                // out (it re-rises below the bubble if they keep typing).
+                msg['__animateIn'] = true;
+                _clearTypist(msg['sender_id']?.toString());
+                _lastRxAt = DateTime.now();
+              }
               _messages.insert(0, msg);
               inserted = true;
             }
           });
+          if (incoming && inserted) {
+            // Let the fade play once, then retire the flag so scrolling the
+            // bubble back into view doesn't replay it.
+            Timer(const Duration(milliseconds: 360),
+                () => msg['__animateIn'] = false);
+          }
           if (incoming) {
             // Soft ding for a new message in the chat you're looking at
             // (gated by the Message tones setting).
@@ -959,24 +1038,30 @@ class _ChatPageState extends State<ChatPage>
           final tid = int.tryParse(uid.toString());
           if (tid != null) {
             final avatar = (event['avatar'] ?? '').toString();
-            setState(() => _groupTypers[tid] = (avatar: avatar, kind: kind));
-            _groupTyperTimers[tid]?.cancel();
-            _groupTyperTimers[tid] = Timer(const Duration(seconds: 5), () {
+            void apply() {
               if (!mounted) return;
-              setState(() => _groupTypers.remove(tid));
-              _groupTyperTimers.remove(tid);
-            });
+              setState(() => _groupTypers[tid] = (avatar: avatar, kind: kind));
+              _groupTyperTimers[tid]?.cancel();
+              _groupTyperTimers[tid] = Timer(const Duration(seconds: 5), () {
+                if (!mounted) return;
+                setState(() => _groupTypers.remove(tid));
+                _groupTyperTimers.remove(tid);
+              });
+            }
+
+            final since = _lastRxAt == null
+                ? const Duration(hours: 1)
+                : DateTime.now().difference(_lastRxAt!);
+            if (!_groupTypers.containsKey(tid) &&
+                since < const Duration(milliseconds: 400)) {
+              Timer(const Duration(milliseconds: 280), apply);
+            } else {
+              apply();
+            }
           }
         }
       } else if (uid.toString() == widget.friendId.toString()) {
-        setState(() {
-          _friendTyping = true;
-          _friendPresenceKind = kind;
-        });
-        _dmTypingTimer?.cancel();
-        _dmTypingTimer = Timer(const Duration(seconds: 5), () {
-          if (mounted) setState(() => _friendTyping = false);
-        });
+        _showDmTyping(kind);
       }
     }
     // NOTE: `live_invite` is handled globally in HomePage's notification socket
@@ -4482,8 +4567,10 @@ class _ChatPageState extends State<ChatPage>
                             children: [
                               if (showDate)
                                 _buildDateSeparator(dateLabel),
-                              _buildBubble(msg, isMe, isDark, showAvatar,
-                                  isFirst, showTail),
+                              _animateInWrap(
+                                  msg,
+                                  _buildBubble(msg, isMe, isDark, showAvatar,
+                                      isFirst, showTail)),
                             ],
                           );
                         },

@@ -2976,7 +2976,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                       if (isMe) ...[
                         const SizedBox(width: 3),
                         _buildStatusIcon(msg,
-                            muted: Colors.white70, read: Colors.white),
+                            // Read ticks stay the universal blue (like every
+                            // other bubble), just a light blue so they read
+                            // clearly on the dark timestamp pill.
+                            muted: Colors.white70,
+                            read: const Color(0xFF9FD0FF)),
                       ],
                     ],
                   ),

@@ -1477,32 +1477,10 @@ class _ChatPageState extends State<ChatPage>
           defaultTargetPlatform == TargetPlatform.iOS);
 
   void _openAttachSheet() {
-    // If the keyboard is up, dismissing it slides the composer (and the "+")
-    // back down. Capturing the anchor now would pin the menu to the raised
-    // position, so it floats high once the keyboard is gone. Instead tuck the
-    // keyboard away first and wait for the composer to settle, THEN anchor.
-    final hadKeyboard = MediaQuery.of(context).viewInsets.bottom > 1;
+    // Dismiss the keyboard and open immediately — the menu reads the "+"
+    // position live (see _showGeniePanel), so it follows the composer down as
+    // the keyboard retracts instead of pinning to the raised spot.
     FocusScope.of(context).unfocus();
-    if (hadKeyboard) {
-      Future.delayed(const Duration(milliseconds: 310), () {
-        if (mounted) _presentAttachMenu();
-      });
-    } else {
-      _presentAttachMenu();
-    }
-  }
-
-  void _presentAttachMenu() {
-    // Anchor to the composer's "+" so the menu rises straight out of it (and
-    // is swallowed back into it on dismiss), with a tail pointing down to it.
-    Rect anchor;
-    final ro = _attachBtnKey.currentContext?.findRenderObject();
-    if (ro is RenderBox && ro.hasSize) {
-      anchor = ro.localToGlobal(Offset.zero) & ro.size;
-    } else {
-      final sz = MediaQuery.of(context).size;
-      anchor = Rect.fromLTWH(sz.width - 60, sz.height - 120, 44, 44);
-    }
 
     // Run an action after closing the menu (the close plays the genie reverse).
     void act(VoidCallback fn) {
@@ -1511,9 +1489,9 @@ class _ChatPageState extends State<ChatPage>
     }
 
     _showGeniePanel(
-      anchor: anchor,
+      anchorKey: _attachBtnKey,
       label: 'Attach',
-      builder: (ctx) {
+      builder: (ctx, anchor) {
         final topInset = MediaQuery.of(ctx).padding.top;
         return ConstrainedBox(
           constraints: BoxConstraints(

@@ -293,9 +293,15 @@ extension _ChatPageHelpers2 on _ChatPageState {
   // it scales up from the button on open and collapses back into it on
   // dismiss, with a tail pointing down to it. A full-screen tap layer closes
   // it reliably on every platform — desktop/web included — not just by swipe.
+  // A menu that genies out of a screen anchor (the composer's "+" button).
+  // The anchor is read LIVE from [anchorKey] on every build, and the build
+  // depends on MediaQuery, so as the keyboard retracts and the composer slides
+  // down the menu follows the button to its real resting place — no timing
+  // guesswork. It collapses back into the button on dismiss, with a tail
+  // pointing at it; a full-screen tap layer closes it on every platform.
   Future<void> _showGeniePanel({
-    required Rect anchor,
-    required WidgetBuilder builder,
+    required GlobalKey anchorKey,
+    required Widget Function(BuildContext, Rect) builder,
     String label = 'Menu',
   }) {
     final scheme = Theme.of(context).colorScheme;
@@ -307,48 +313,60 @@ extension _ChatPageHelpers2 on _ChatPageState {
       barrierColor: Colors.transparent,
       transitionDuration: const Duration(milliseconds: 260),
       pageBuilder: (ctx, a1, a2) {
-        final screen = MediaQuery.of(ctx).size;
-        const margin = 8.0;
-        const radius = 20.0;
-        const tailW = 20.0;
-        const tailH = 10.0;
-        // On a phone the card is CENTRED and capped so it never stretches to the
-        // screen edges; on wide screens it hugs the "+" as before. Either way
-        // the tail aims at the "+" as far as the straight bottom edge allows.
-        final narrow = screen.width < 520;
-        final cardW = narrow
-            ? (screen.width - 48).clamp(240.0, 320.0)
-            : 340.0;
-        final double cardRight;
-        if (narrow) {
-          final left = (screen.width - cardW) / 2;
-          cardRight = screen.width - left;
-        } else {
-          cardRight = (anchor.right + 8).clamp(120.0, screen.width - margin);
-        }
-        final rightInset = screen.width - cardRight;
-        final bottomInset = screen.height - anchor.top + 6;
-        final tailFromRight = (cardRight - anchor.center.dx)
-            .clamp(radius + tailW / 2, cardW - radius - tailW / 2);
-        // A subtle gray in dark mode so the card is clearly visible against the
-        // dark thread; plain surface on light.
-        final cardColor = isDark
-            ? Color.alphaBlend(
-                Colors.white.withValues(alpha: 0.09), scheme.surface)
-            : scheme.surface;
         return Material(
           type: MaterialType.transparency,
           child: AnimatedBuilder(
             animation: a1,
             builder: (context, _) {
+              // Read screen + "+" position EACH build. Touching viewInsets
+              // registers a keyboard dependency so this rebuilds (and re-reads
+              // the button) throughout the keyboard animation.
+              final mq = MediaQuery.of(context);
+              final screen = mq.size;
+              // ignore: unused_local_variable
+              final kbTick = mq.viewInsets.bottom;
+              Rect anchor;
+              final ro = anchorKey.currentContext?.findRenderObject();
+              if (ro is RenderBox && ro.attached && ro.hasSize) {
+                anchor = ro.localToGlobal(Offset.zero) & ro.size;
+              } else {
+                anchor = Rect.fromLTWH(
+                    screen.width - 60, screen.height - 120, 44, 44);
+              }
+
+              const margin = 8.0;
+              const radius = 20.0;
+              const tailW = 20.0;
+              const tailH = 10.0;
+              // Phone: centred + capped so it never reaches the edges. Wide:
+              // hug the "+". Either way the tail aims at the "+".
+              final narrow = screen.width < 520;
+              final cardW =
+                  narrow ? (screen.width - 48).clamp(240.0, 320.0) : 340.0;
+              final double cardRight;
+              if (narrow) {
+                final left = (screen.width - cardW) / 2;
+                cardRight = screen.width - left;
+              } else {
+                cardRight =
+                    (anchor.right + 8).clamp(120.0, screen.width - margin);
+              }
+              final rightInset = screen.width - cardRight;
+              final bottomInset = screen.height - anchor.top + 6;
+              final tailFromRight = (cardRight - anchor.center.dx)
+                  .clamp(radius + tailW / 2, cardW - radius - tailW / 2);
+              final cardColor = isDark
+                  ? Color.alphaBlend(
+                      Colors.white.withValues(alpha: 0.09), scheme.surface)
+                  : scheme.surface;
+
               final v = a1.value.clamp(0.0, 1.0);
               final t = Curves.easeOutCubic.transform(v);
               final tb = Curves.easeOutBack.transform(v);
               return Stack(
                 children: [
                   // Tap anywhere outside the card to dismiss (works on desktop
-                  // and web, where there is no swipe-to-close). A faint scrim —
-                  // no blur — so the card simply lifts off the thread.
+                  // and web too). A faint scrim, no blur.
                   Positioned.fill(
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
@@ -370,15 +388,16 @@ extension _ChatPageHelpers2 on _ChatPageState {
                         child: Material(
                           color: cardColor,
                           elevation: 12,
-                          shadowColor: Colors.black.withValues(
-                              alpha: isDark ? 0.6 : 0.22),
+                          shadowColor: Colors.black
+                              .withValues(alpha: isDark ? 0.6 : 0.22),
                           shape: _MenuBubbleBorder(
                             radius: radius,
                             tailWidth: tailW,
                             tailHeight: tailH,
                             tailFromRight: tailFromRight,
                           ),
-                          child: SizedBox(width: cardW, child: builder(ctx)),
+                          child: SizedBox(
+                              width: cardW, child: builder(context, anchor)),
                         ),
                       ),
                     ),

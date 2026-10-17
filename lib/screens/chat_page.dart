@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:ui' as ui;
 
 import '../services/fcm_service.dart' show ActiveChat;
+import '../services/notif_service.dart' show cancelConversationNotifications;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, compute, kIsWeb;
 import 'package:flutter/services.dart';
@@ -365,6 +366,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       ActiveChat.instance.enterGroup(_cid.toString());
     } else {
       ActiveChat.instance.enterDm(widget.friendId.toString());
+    }
+    // Opening the chat clears any pending banners for it (you're reading it now).
+    if (_isGroup) {
+      cancelConversationNotifications(conversationId: _cid.toString());
+    } else {
+      cancelConversationNotifications(senderId: widget.friendId.toString());
     }
 
     _statusTimer = Timer.periodic(

@@ -343,6 +343,31 @@ Future<void> cancelDiaryReminder(int entryId) async {
   } catch (_) {/* best-effort */}
 }
 
+const _msgGroupKey = 'aluta_messages_group';
+
+/// A stable per-conversation notification id. Keeps ONE banner per chat (a new
+/// message from the same sender replaces the old instead of piling up),
+/// prevents different chats from clobbering each other (they used to share a
+/// fixed id), and lets a chat's banner be cancelled when you open it.
+int messageNotifId({String? senderId, String? conversationId}) {
+  final key = (conversationId != null && conversationId.isNotEmpty)
+      ? 'c:$conversationId'
+      : 's:${senderId ?? ''}';
+  return 100000 + (key.hashCode.abs() % 800000);
+}
+
+/// Cancel the banner for one conversation — called when the user opens it, so a
+/// message they're now reading stops showing in the shade.
+Future<void> cancelConversationNotifications(
+    {String? senderId, String? conversationId}) async {
+  if (kIsWeb) return;
+  try {
+    if (!_ready) await initNotifications();
+    await _fln.cancel(
+        id: messageNotifId(senderId: senderId, conversationId: conversationId));
+  } catch (_) {/* best-effort */}
+}
+
 Future<void> showMessageNotification({
   required String title,
   required String body,
@@ -375,8 +400,11 @@ Future<void> showMessageNotification({
         if (messageId != null && messageId.isNotEmpty) 'message_id': messageId,
       });
     }
+    final notifId = (hasGroup || hasSender)
+        ? messageNotifId(senderId: senderId, conversationId: conversationId)
+        : id;
     await _fln.show(
-      id: id,
+      id: notifId,
       title: title,
       body: body,
       payload: payload,
@@ -387,6 +415,9 @@ Future<void> showMessageNotification({
           importance: Importance.high,
           priority: Priority.high,
           icon: '@mipmap/launcher_icon',
+          // Grouped so Android bundles multiple chats into one stack in the
+          // shade; the per-conversation id keeps one banner per sender.
+          groupKey: _msgGroupKey,
         ),
       ),
     );

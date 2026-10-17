@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
+import '../screens/home_page.dart' show playbackBus;
+
 import '../services/media_store.dart';
 
 /// A data-friendly video tile that plays from the DEVICE, never by live
@@ -80,6 +82,7 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
   Duration _posterPos = const Duration(milliseconds: 1200);
   Timer? _dwellTimer;
   double _frac = 0;
+  bool _duckedMusic = false; // we paused the song for this video's sound.
 
   static const double _glimpseFraction = 0.25;
   static const int _maxGlimpseLoops = 2;
@@ -93,6 +96,7 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
   @override
   void dispose() {
     _dwellTimer?.cancel();
+    _resumeMusicIfDucked();
     final c = _c;
     if (c != null) {
       c.removeListener(_tick);
@@ -120,10 +124,14 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
     if (!kIsWeb && _file == null) return; // native needs a local file first
     _initing = true;
     final c = (!kIsWeb && _file != null)
-        ? VideoPlayerController.file(_file!)
+        ? VideoPlayerController.file(
+            _file!,
+            videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+          )
         : VideoPlayerController.networkUrl(
             Uri.parse(widget.url),
             httpHeaders: widget.headers,
+            videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
           );
     try {
       await c.initialize().timeout(const Duration(seconds: 25));
@@ -176,6 +184,14 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
         } else {
           c.seekTo(Duration.zero);
         }
+      }
+    }
+    // A watched clip that just reached its end → give the song back.
+    if (_tapped && _duckedMusic && !c.value.isPlaying) {
+      final dur = c.value.duration;
+      if (dur > Duration.zero &&
+          c.value.position >= dur - const Duration(milliseconds: 250)) {
+        _resumeMusicIfDucked();
       }
     }
     final p = c.value.isPlaying;
@@ -234,10 +250,34 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
           c.seekTo(_posterPos);
         } else {
           c.pause();
+          _resumeMusicIfDucked();
         }
         if (mounted) setState(() {});
       }
     }
+  }
+
+  // ── Music coexistence ──────────────────────────────────────────────────
+  // Videos are created with mixWithOthers, so a SILENT glimpse never disturbs
+  // the user's song. When the user taps to watch WITH SOUND we pause the song
+  // ourselves (so the two don't overlap) and resume it from the exact spot the
+  // moment the video pauses, ends, is scrolled away, or this bubble is gone —
+  // no hunting for the play button.
+  void _pauseMusicForVideo() {
+    try {
+      if (!_duckedMusic && (playbackBus.isPlaying?.call() ?? false)) {
+        playbackBus.onPause?.call();
+        _duckedMusic = true;
+      }
+    } catch (_) {}
+  }
+
+  void _resumeMusicIfDucked() {
+    if (!_duckedMusic) return;
+    _duckedMusic = false;
+    try {
+      playbackBus.onPlay?.call();
+    } catch (_) {}
   }
 
   Future<void> _playWithSound() async {
@@ -247,11 +287,13 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
     if (!_tapped) {
       _tapped = true;
       _glimpsing = false;
+      _pauseMusicForVideo();
       await c.setVolume(1);
       await c.seekTo(Duration.zero);
       await c.play();
     } else if (c.value.isPlaying) {
       await c.pause();
+      _resumeMusicIfDucked();
     } else {
       // Replay from the start if we're sitting at the end.
       final pos = c.value.position;
@@ -260,6 +302,7 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
           pos >= dur - const Duration(milliseconds: 250)) {
         await c.seekTo(Duration.zero);
       }
+      _pauseMusicForVideo();
       await c.play();
     }
     if (mounted) setState(() {});

@@ -224,7 +224,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   String _friendPhone = '';
   String _friendAvatar = '';
   String _myName = '';
-  String _myPhone = '';
   Timer? _draftTimer;
   String? _myAvatar;
 
@@ -235,35 +234,32 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   /// consistent with everything else the user sees for this contact.
   String get _livePeerLabel =>
       ContactNames.instance.nameFor(_friendPhone) ?? widget.friendName;
+  // In-thread presence: avatar-anchored dots (typing) or a mic (recording),
+  // no names. DM tracks the friend; groups track each member.
   bool _friendTyping = false;
-  // Group typing: userId -> display name, with a per-user expiry timer.
-  final Map<int, String> _groupTypers = {};
+  String _friendPresenceKind = 'typing'; // 'typing' | 'recording'
+  Timer? _dmTypingTimer;
+  final Map<int, ({String avatar, String kind})> _groupTypers = {};
   final Map<int, Timer> _groupTyperTimers = {};
+  Timer? _recordPresenceTimer;
   bool get _showTyping =>
       _friendTyping || (_isGroup && _groupTypers.isNotEmpty);
-  String get _groupTypingText {
-    final names = _groupTypers.values.toList();
-    if (names.isEmpty) return '';
-    if (names.length == 1) return '\${names.first} is typing…';
-    if (names.length == 2) {
-      return '\${names[0]} and \${names[1]} are typing…';
-    }
-    return 'Several people are typing…';
-  }
 
-  // The display name for a group typist: the phonebook name THIS device saved
-  // for their number (first name only), falling back to the username they sent.
-  String _typistName(Map event) {
-    final phone = (event['phone'] ?? '').toString();
-    final sent = (event['name'] ?? '').toString();
-    String name = '';
-    if (phone.isNotEmpty) {
-      final pb = ContactNames.instance.nameFor(phone);
-      if (pb != null && pb.trim().isNotEmpty) name = pb;
-    }
-    if (name.isEmpty) name = sent;
-    if (name.trim().isEmpty) return 'Someone';
-    return name.trim().split(RegExp(r'\s+')).first; // first name only
+  // Emit my presence (typing / recording) to the thread's peers. Groups also
+  // carry my avatar so the indicator can show who it is without a name.
+  void _sendPresence(String kind) {
+    try {
+      if (_isGroup) {
+        _ws.sendEvent({
+          'type': 'typing',
+          'conv': _cid,
+          'kind': kind,
+          'avatar': _myAvatar ?? '',
+        });
+      } else {
+        _ws.sendEvent({'type': 'typing', 'to': widget.friendId, 'kind': kind});
+      }
+    } catch (_) {}
   }
 
   String get _draftKey => 'draft_$_convKey';
@@ -544,11 +540,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     for (final t in _groupTyperTimers.values) {
       t.cancel();
     }
+    _dmTypingTimer?.cancel();
     _draftTimer?.cancel();
     _saveDraft();
     _keepAliveTimer?.cancel();
     _connectivitySub?.cancel();
     _recordTimer?.cancel();
+    _recordPresenceTimer?.cancel();
     _recorder.dispose();
     _ctrl.dispose();
     _scrollCtrl.dispose();
@@ -630,8 +628,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       if (freshId != null && freshId.isNotEmpty) _myId = freshId;
       final un = (user['username'] ?? '').toString();
       if (un.isNotEmpty) _myName = un;
-      final ph = (user['phone'] ?? '').toString();
-      if (ph.isNotEmpty) _myPhone = ph;
       final av = (user['avatar_url'] as String?)?.trim();
       if (av != null && av.isNotEmpty) _myAvatar = av;
     }
@@ -952,14 +948,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     } else if (type == 'typing') {
       final uid = event['user_id'];
       final convId = event['conversation_id']?.toString();
+      final kind = (event['kind'] ?? 'typing').toString();
       if (convId != null && convId.isNotEmpty) {
-        // Group typing for THIS thread (ignore my own and other conversations).
+        // Group presence for THIS thread (ignore my own and other conversations).
         if (_isGroup && convId == _cid.toString() && uid.toString() != _myId) {
           final tid = int.tryParse(uid.toString());
           if (tid != null) {
-            setState(() => _groupTypers[tid] = _typistName(event));
+            final avatar = (event['avatar'] ?? '').toString();
+            setState(() => _groupTypers[tid] = (avatar: avatar, kind: kind));
             _groupTyperTimers[tid]?.cancel();
-            _groupTyperTimers[tid] = Timer(const Duration(seconds: 4), () {
+            _groupTyperTimers[tid] = Timer(const Duration(seconds: 5), () {
               if (!mounted) return;
               setState(() => _groupTypers.remove(tid));
               _groupTyperTimers.remove(tid);
@@ -967,8 +965,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           }
         }
       } else if (uid.toString() == widget.friendId.toString()) {
-        setState(() => _friendTyping = true);
-        Future.delayed(const Duration(seconds: 3), () {
+        setState(() {
+          _friendTyping = true;
+          _friendPresenceKind = kind;
+        });
+        _dmTypingTimer?.cancel();
+        _dmTypingTimer = Timer(const Duration(seconds: 5), () {
           if (mounted) setState(() => _friendTyping = false);
         });
       }
@@ -1238,20 +1240,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     if (!_applyingListEdit) _maybeFractionReplace();
     setState(() {});
     _markActivity();
-    if (!_iTyping) {
+    if (!_iTyping && !_isRecording) {
       _iTyping = true;
-      try {
-        if (_isGroup) {
-          _ws.sendEvent({
-            'type': 'typing',
-            'conv': _cid,
-            'name': _myName,
-            'phone': _myPhone,
-          });
-        } else {
-          _ws.sendEvent({'type': 'typing', 'to': widget.friendId});
-        }
-      } catch (_) {}
+      _sendPresence('typing');
     }
     _typingTimer?.cancel();
     _typingTimer = Timer(const Duration(seconds: 2), () {
@@ -1754,6 +1745,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       );
       _recordMs = 0;
       setState(() => _isRecording = true);
+      // Tell peers I'm recording (refreshed so their indicator stays alive).
+      _iTyping = false;
+      _sendPresence('recording');
+      _recordPresenceTimer?.cancel();
+      _recordPresenceTimer = Timer.periodic(
+          const Duration(seconds: 2), (_) => _sendPresence('recording'));
       _recordTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
         if (mounted) setState(() => _recordMs += 200);
       });
@@ -1764,6 +1761,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   Future<void> _cancelRecording() async {
     _recordTimer?.cancel();
+    _recordPresenceTimer?.cancel();
     try {
       final p = await _recorder.stop();
       if (p != null) {
@@ -1782,6 +1780,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   Future<void> _stopAndSendRecording() async {
     _recordTimer?.cancel();
+    _recordPresenceTimer?.cancel();
     final durationMs = _recordMs;
     setState(() => _isRecording = false);
     try {
@@ -4240,13 +4239,23 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         reverse: true,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 4, vertical: 8),
-                        itemCount: _messages.length + (_showTyping ? 1 : 0),
+                        itemCount: _messages.length + 1,
                         itemBuilder: (ctx, i) {
-                          // Typing indicator at top (index 0 in reversed list)
-                          if (_showTyping && i == 0) {
-                            return _buildTypingIndicator();
+                          // Reversed list: index 0 is the bottom. A persistent
+                          // slot for the typing/recording indicator, which
+                          // grows in and shrinks out smoothly, sitting right
+                          // after the last message.
+                          if (i == 0) {
+                            return AnimatedSize(
+                              duration: const Duration(milliseconds: 220),
+                              curve: Curves.easeOutCubic,
+                              alignment: Alignment.bottomLeft,
+                              child: _showTyping
+                                  ? _buildTypingIndicator()
+                                  : const SizedBox.shrink(),
+                            );
                           }
-                          final msgIdx = _showTyping ? i - 1 : i;
+                          final msgIdx = i - 1;
                           final msg = _messages[msgIdx];
                           final isMe =
                               msg['sender_id'].toString() == _myId;
@@ -4386,20 +4395,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         fontSize: 15, fontWeight: FontWeight.bold)),
                 Text(
                   _isGroup
-                      ? (_groupTypers.isNotEmpty
-                          ? _groupTypingText
-                          : '${widget.memberCount} members')
-                      : _friendTyping
-                          ? 'typing…'
-                          : _isFriendOnline
-                              ? 'online'
-                              : _lastSeen.isNotEmpty
-                                  ? 'last seen ${formatLastSeen(_lastSeen)}'
-                                  : 'offline',
+                      ? '${widget.memberCount} members'
+                      : _isFriendOnline
+                          ? 'online'
+                          : _lastSeen.isNotEmpty
+                              ? 'last seen ${formatLastSeen(_lastSeen)}'
+                              : 'offline',
                   style: TextStyle(
                     fontSize: 11,
-                    color: ((!_isGroup && (_friendTyping || _isFriendOnline)) ||
-                            (_isGroup && _groupTypers.isNotEmpty))
+                    color: (!_isGroup && _isFriendOnline)
                         ? Colors.green
                         : Theme.of(context)
                             .colorScheme

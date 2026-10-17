@@ -316,7 +316,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                     try:
                         await notify_user(
                             int(to),
-                            {"type": "typing", "user_id": int(user_id)},
+                            {
+                                "type": "typing",
+                                "user_id": int(user_id),
+                                "kind": str(data.get("kind") or "typing"),
+                            },
                         )
                     except Exception:
                         pass
@@ -331,8 +335,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                             members = cc.member_ids(db, cid)
                         finally:
                             db.close()
-                        name = str(data.get("name") or "")
-                        phone = str(data.get("phone") or "")
+                        kind = str(data.get("kind") or "typing")
+                        avatar = str(data.get("avatar") or "")
                         for m in members:
                             if int(m) == int(user_id):
                                 continue
@@ -340,8 +344,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                                 "type": "typing",
                                 "user_id": int(user_id),
                                 "conversation_id": str(cid),
-                                "name": name,
-                                "phone": phone,
+                                "kind": kind,
+                                "avatar": avatar,
                             })
                     except Exception:
                         pass

@@ -1499,75 +1499,115 @@ extension _ChatPageHelpers3 on _ChatPageState {
   }
 
   Widget _buildTypingIndicator() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final scheme = Theme.of(context).colorScheme;
+    final recvBubble = isDark ? const Color(0xFF241E20) : Colors.white;
+
+    // Who to show: group -> each typing member (avatar + kind); DM -> friend.
+    final who = _isGroup
+        ? _groupTypers.values.toList()
+        : <({String avatar, String kind})>[
+            (avatar: _friendAvatar, kind: _friendPresenceKind)
+          ];
+    if (who.isEmpty) return const SizedBox.shrink();
+    final anyRecording = who.any((w) => w.kind == 'recording');
+    final shown = who.take(3).toList();
+
+    Widget avatarCircle(String rel) {
+      final full = rel.isNotEmpty ? fullMediaUrl(rel) : '';
+      return Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: scheme.surfaceContainerHighest,
+          border: Border.all(color: scheme.primary.withAlpha(90), width: 1.5),
+        ),
+        child: ClipOval(
+          child: full.isEmpty
+              ? Icon(Icons.person_rounded,
+                  size: 18, color: scheme.onSurfaceVariant)
+              : Image(
+                  image: authNetworkImageProvider(full, mediaAuthHeaders(full)),
+                  width: 30,
+                  height: 30,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => Icon(Icons.person_rounded,
+                      size: 18, color: scheme.onSurfaceVariant),
+                ),
+        ),
+      );
+    }
+
+    final avatarStack = SizedBox(
+      width: 30 + (shown.length - 1) * 16.0,
+      height: 30,
+      child: Stack(
+        children: [
+          for (var i = 0; i < shown.length; i++)
+            Positioned(left: i * 16.0, child: avatarCircle(shown[i].avatar)),
+        ],
+      ),
+    );
+
     return Padding(
-      // Top gap gives the indicator room to breathe below the last bubble
-      // (the list is reversed, so this padding sits ABOVE the indicator,
-      // between it and the most recent message). Was tight before.
-      padding: const EdgeInsets.only(left: 44, top: 12, bottom: 6),
-      child: Builder(builder: (context) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        // Match the incoming-message bubble: clean white on light, charcoal on
-        // dark, with the same soft drop-shadow — so the dots read as a real
-        // "received" bubble rather than a flat grey pill.
-        final recvBubble =
-            isDark ? const Color(0xFF241E20) : Colors.white;
-        final dots = Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-          decoration: BoxDecoration(
-            color: recvBubble,
-            // Rounded like a bubble, with a slightly tighter bottom-left
-            // corner echoing the received-bubble tail side.
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(18),
-              topRight: Radius.circular(18),
-              bottomRight: Radius.circular(18),
-              bottomLeft: Radius.circular(6),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(isDark ? 46 : 20),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: List.generate(3, (i) => _Dot(delay: i * 200)),
-          ),
-        );
-        // DM: just the nudging dots — no "<name> is typing" (you know who it is).
-        if (!_isGroup) {
-          return Align(alignment: Alignment.centerLeft, child: dots);
-        }
-        // Group: who is typing — the typist's saved first name — on a dark,
-        // wallpaper-immune pill so it reads on any background.
-        final label = _groupTypingText;
-        return Row(
+      padding: const EdgeInsets.only(left: 12, top: 10, bottom: 6),
+      child: TweenAnimationBuilder<double>(
+        key: ValueKey('typing-${anyRecording ? 'rec' : 'dot'}-${shown.length}'),
+        tween: Tween(begin: 0.0, end: 1.0),
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutBack,
+        builder: (context, t, child) {
+          final c = t.clamp(0.0, 1.0);
+          return Opacity(
+            opacity: c,
+            child: Transform.scale(
+                scale: 0.92 + 0.08 * c,
+                alignment: Alignment.bottomLeft,
+                child: child),
+          );
+        },
+        child: Row(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            dots,
-            if (label.isNotEmpty) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.38),
-                  borderRadius: BorderRadius.circular(12),
+            avatarStack,
+            const SizedBox(width: 2),
+            CustomPaint(
+                size: const Size(6, 14), painter: _TypingTail(recvBubble)),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(
+                color: recvBubble,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(14),
+                  topRight: Radius.circular(14),
+                  bottomRight: Radius.circular(14),
+                  bottomLeft: Radius.circular(4),
                 ),
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                      fontSize: 11,
-                      color: Colors.white,
-                      fontStyle: FontStyle.italic),
-                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(isDark ? 46 : 20),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
               ),
-            ],
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: anyRecording
+                    ? const _RecordingPulse(key: ValueKey('rec'))
+                    : Row(
+                        key: const ValueKey('dots'),
+                        mainAxisSize: MainAxisSize.min,
+                        children:
+                            List.generate(3, (i) => _Dot(delay: i * 200)),
+                      ),
+              ),
+            ),
           ],
-        );
-      }),
+        ),
+      ),
     );
   }
 
@@ -1687,4 +1727,56 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 ),
               );
   }
+}
+
+// A small speech-bubble tail (beak) pointing left toward the typist's avatar.
+class _TypingTail extends CustomPainter {
+  final Color color;
+  _TypingTail(this.color);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    final path = Path()
+      ..moveTo(size.width, 2)
+      ..lineTo(0, size.height / 2)
+      ..lineTo(size.width, size.height - 2)
+      ..close();
+    canvas.drawPath(path, p);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TypingTail old) => old.color != color;
+}
+
+// A gently pulsing mic shown in the presence bubble while a peer records audio.
+class _RecordingPulse extends StatefulWidget {
+  const _RecordingPulse({super.key});
+  @override
+  State<_RecordingPulse> createState() => _RecordingPulseState();
+}
+
+class _RecordingPulseState extends State<_RecordingPulse>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 850),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: 18,
+        child: FadeTransition(
+          opacity: Tween<double>(begin: 0.45, end: 1.0).animate(_c),
+          child:
+              const Icon(Icons.mic_rounded, size: 18, color: Colors.redAccent),
+        ),
+      );
 }

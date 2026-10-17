@@ -333,6 +333,15 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                         db = SessionLocal()
                         try:
                             members = cc.member_ids(db, cid)
+                            sender = (
+                                db.query(User)
+                                .filter(User.id == int(user_id))
+                                .first()
+                            )
+                            sender_phone = (sender.phone or "") if sender else ""
+                            sender_name = (
+                                (sender.username or "") if sender else ""
+                            )
                         finally:
                             db.close()
                         kind = str(data.get("kind") or "typing")
@@ -340,12 +349,16 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                         for m in members:
                             if int(m) == int(user_id):
                                 continue
+                            # phone + name let each recipient show the typer's
+                            # own phone-book first name on the group tile.
                             await notify_user(int(m), {
                                 "type": "typing",
                                 "user_id": int(user_id),
                                 "conversation_id": str(cid),
                                 "kind": kind,
                                 "avatar": avatar,
+                                "phone": sender_phone,
+                                "name": sender_name,
                             })
                     except Exception:
                         pass

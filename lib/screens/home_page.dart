@@ -187,6 +187,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // tile, keyed by the group's conversation id (a separate id space from DM
   // user ids, so a group never lights up a friend's DM row). Self-clears 5s.
   final Map<int, Timer> _groupTypingTimers = {};
+  // The first name of whoever is typing in each group (phonebook-resolved), so
+  // the group tile can say "Belyner typing…" rather than a bare "typing…".
+  final Map<int, String> _groupTypingNames = {};
   // When a chat is opened from a message notification, the id of the message to
   // scroll to + highlight once the thread loads (null for normal opens). Passed
   // to ChatPage; cleared to null on every ordinary open so it fires once.
@@ -1193,7 +1196,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final convRaw = (event['conversation_id'] ?? '').toString();
       final convId = int.tryParse(convRaw);
       if (convId != null) {
-        _setGroupTyping(convId);
+        // Prefer the recipient's own phonebook name for this friend; fall back
+        // to the app username. Show just the first name on the tile.
+        final phone = (event['phone'] ?? '').toString();
+        final uname = (event['name'] ?? '').toString();
+        final saved =
+            phone.isNotEmpty ? ContactNames.instance.nameFor(phone) : null;
+        final full = (saved != null && saved.isNotEmpty) ? saved : uname;
+        final first = full.trim().isEmpty
+            ? ''
+            : full.trim().split(RegExp(r'\s+')).first;
+        _setGroupTyping(convId, first);
       } else {
         final uid = (event['user_id'] as num?)?.toInt();
         if (uid != null) _setFriendTyping(uid);
@@ -1607,11 +1620,15 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   /// Mark group [convId] as having a live typer and auto-clear after 5s. Keyed
   /// by conversation id so it drives the group tile, never a DM row.
-  void _setGroupTyping(int convId) {
+  void _setGroupTyping(int convId, [String typerName = '']) {
     final was = _groupTypingTimers.containsKey(convId);
     _groupTypingTimers[convId]?.cancel();
+    if (typerName.isNotEmpty) {
+      _groupTypingNames[convId] = typerName;
+    }
     _groupTypingTimers[convId] = Timer(const Duration(seconds: 5), () {
       _groupTypingTimers.remove(convId);
+      _groupTypingNames.remove(convId);
       if (mounted) setState(() {});
     });
     if (!was && mounted) setState(() {});

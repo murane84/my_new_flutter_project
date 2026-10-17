@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
+
+import '../services/fcm_service.dart' show ActiveChat;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, compute, kIsWeb;
 import 'package:flutter/services.dart';
@@ -357,6 +359,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _loadMySpaces();
     _loadSavedMediaKeys();
     KeystrokeSounds.instance.init();
+    // Tell the notifier which conversation is on screen, so a foreground push
+    // for THIS chat doesn't pop a redundant banner while the user reads it.
+    if (_isGroup) {
+      ActiveChat.instance.enterGroup(_cid.toString());
+    } else {
+      ActiveChat.instance.enterDm(widget.friendId.toString());
+    }
 
     _statusTimer = Timer.periodic(
       const Duration(seconds: 10),
@@ -459,6 +468,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _viewerPageCtrl?.dispose();
     _starTimer?.cancel();
     _quickStarsOn.dispose();
+    if (_isGroup) {
+      ActiveChat.instance.leaveGroup(_cid.toString());
+    } else {
+      ActiveChat.instance.leaveDm(widget.friendId.toString());
+    }
     _ws.close();
     super.dispose();
   }
@@ -3911,6 +3925,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final scheme = Theme.of(context).colorScheme;
+    // Returning from a pushed screen makes this the current route again — keep
+    // the active-chat marker in sync so suppression stays correct.
+    if (ModalRoute.of(context)?.isCurrent ?? true) {
+      if (_isGroup) {
+        ActiveChat.instance.enterGroup(_cid.toString());
+      } else {
+        ActiveChat.instance.enterDm(widget.friendId.toString());
+      }
+    }
     // On phones the conversation goes edge-to-edge and flush at the bottom (only
     // its top corners round, meeting the header); on wider screens it stays an
     // inset, fully-rounded card within the split panel.

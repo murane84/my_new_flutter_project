@@ -12,12 +12,56 @@ bool get fcmSupported =>
     (defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS);
 
+/// Tracks the ONE conversation the user is actively viewing in the foreground,
+/// so a foreground FCM for that same conversation doesn't also raise a banner —
+/// the in-app delivery already showed the message and played its tone. Every
+/// other conversation still notifies normally.
+class ActiveChat {
+  ActiveChat._();
+  static final ActiveChat instance = ActiveChat._();
+
+  String? _dmFriendId; // open DM's friend id (matches a DM push's sender_id)
+  String? _convId; // open group's conversation id
+
+  void enterDm(String friendId) {
+    _dmFriendId = friendId;
+    _convId = null;
+  }
+
+  void enterGroup(String conversationId) {
+    _convId = conversationId;
+    _dmFriendId = null;
+  }
+
+  // Clear only if still the active one, so returning from a nested chat/screen
+  // doesn't wipe the chat beneath it.
+  void leaveDm(String friendId) {
+    if (_dmFriendId == friendId) _dmFriendId = null;
+  }
+
+  void leaveGroup(String conversationId) {
+    if (_convId == conversationId) _convId = null;
+  }
+
+  /// True when an incoming message belongs to the conversation on screen.
+  bool suppresses({String? senderId, String? convId}) {
+    if (convId != null && convId.isNotEmpty) {
+      return _convId != null && _convId == convId;
+    }
+    if (senderId != null && senderId.isNotEmpty) {
+      return _dmFriendId != null && _dmFriendId == senderId;
+    }
+    return false;
+  }
+}
+
 /// Turn an FCM data payload into a local notification. Shared by the foreground
 /// listener (below) and the background isolate handler (in main.dart), so a
 /// message/call is shown the same way whether the app is open, backgrounded, or
 /// terminated. The server sends DATA-only pushes, so the client always controls
 /// how they're displayed.
-Future<void> handleFcmData(Map<String, dynamic> data) async {
+Future<void> handleFcmData(Map<String, dynamic> data,
+    {bool foreground = false}) async {
   try {
     final type = (data['type'] ?? '').toString();
     if (type == 'call_offer') {
@@ -60,6 +104,13 @@ Future<void> handleFcmData(Map<String, dynamic> data) async {
       final groupTitle = (data['group_title'] ?? '').toString();
       final messageId = (data['message_id'] ?? '').toString();
       final isGroup = convId.isNotEmpty;
+      // If the app is in the foreground AND the user is already reading this
+      // exact conversation, don't pop a redundant banner for it — they were
+      // notified in-app the instant it arrived. All other chats still notify.
+      if (foreground &&
+          ActiveChat.instance.suppresses(senderId: senderId, convId: convId)) {
+        return;
+      }
       // For a group message show the group name as the title and "Sender: text"
       // as the body; a tap opens the GROUP thread (via conversation_id) instead
       // of a DM with the sender.
@@ -97,7 +148,7 @@ class FcmService {
       // singleton, so these listeners live for the whole run — no need to keep /
       // cancel the subscriptions.
       FirebaseMessaging.onMessage.listen((m) {
-        handleFcmData(m.data);
+        handleFcmData(m.data, foreground: true);
       });
       // Rotated token → re-register with the backend.
       fm.onTokenRefresh.listen((t) {

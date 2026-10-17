@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+
+import 'link_ozilane_screen.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -429,6 +431,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Nudge users who have no phone number saved to add one (so friends can
     // discover them via contacts). Shown after the first frame; dismissible.
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptForPhone());
+    // After the first frame, nudge users who haven't linked a recovery key.
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _maybePromptRecoverySetup());
   }
 
   @override

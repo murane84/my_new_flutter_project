@@ -28,6 +28,84 @@ extension _HomePageHelpers1 on HomePageState {
     } catch (_) {/* never block the app on this */}
   }
 
+  // Nudge the user to link a recovery key (Ozilane Key) if they have none, so a
+  // slow/unpaid email can never lock them out. One-time, dismissible, snoozable;
+  // yields to the add-phone prompt so the two never stack.
+  Future<void> _maybePromptRecoverySetup() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('recovery_prompt_never') == true) return;
+      final until = prefs.getInt('recovery_prompt_snooze_until') ?? 0;
+      if (DateTime.now().millisecondsSinceEpoch < until) return;
+
+      // Let the add-phone prompt take this launch if it still applies.
+      if (prefs.getBool('phone_prompt_dismissed') != true) {
+        final me = await ApiService().getUserData();
+        if ((me['phone'] ?? '').toString().trim().isEmpty) return;
+      }
+
+      if (!await ApiService().ozilaneAvailable()) return;
+      final status = await ApiService().ozilaneStatus();
+      if (status['enrolled'] == true) return; // already has a key linked
+      if (!mounted) return;
+      _showRecoverySetupDialog();
+    } catch (_) {/* never block the app on this */}
+  }
+
+  void _showRecoverySetupDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (dctx) {
+        final scheme = Theme.of(dctx).colorScheme;
+        Future<void> close({int? snoozeDays, bool never = false}) async {
+          final prefs = await SharedPreferences.getInstance();
+          if (never) {
+            await prefs.setBool('recovery_prompt_never', true);
+          } else if (snoozeDays != null) {
+            await prefs.setInt(
+                'recovery_prompt_snooze_until',
+                DateTime.now()
+                    .add(Duration(days: snoozeDays))
+                    .millisecondsSinceEpoch);
+          }
+          if (dctx.mounted) Navigator.pop(dctx);
+        }
+
+        return AlertDialog(
+          icon: Icon(Icons.shield_moon_rounded,
+              color: scheme.primary, size: 30),
+          title: const Text('Secure your account'),
+          content: const Text(
+            'Link your Ozilane Key so you can always recover your account — '
+            'even if an email code is slow to arrive. It takes a moment, and '
+            'then you can approve sign-ins and password resets right from your '
+            'phone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => close(never: true),
+              child: const Text("Don't ask again"),
+            ),
+            TextButton(
+              onPressed: () => close(snoozeDays: 7),
+              child: const Text('Later'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                // Snooze briefly so backing out doesn't re-prompt immediately.
+                await close(snoozeDays: 3);
+                if (!mounted) return;
+                Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => const LinkOzilaneScreen()));
+              },
+              child: const Text('Set up now'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showAddPhoneDialog() {
     final ctrl = TextEditingController();
     bool saving = false;

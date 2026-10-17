@@ -1475,9 +1475,22 @@ class _ChatPageState extends State<ChatPage>
           defaultTargetPlatform == TargetPlatform.iOS);
 
   void _openAttachSheet() {
-    // Tuck the keyboard away so the floating menu measures + positions cleanly.
+    // If the keyboard is up, dismissing it slides the composer (and the "+")
+    // back down. Capturing the anchor now would pin the menu to the raised
+    // position, so it floats high once the keyboard is gone. Instead tuck the
+    // keyboard away first and wait for the composer to settle, THEN anchor.
+    final hadKeyboard = MediaQuery.of(context).viewInsets.bottom > 1;
     FocusScope.of(context).unfocus();
+    if (hadKeyboard) {
+      Future.delayed(const Duration(milliseconds: 310), () {
+        if (mounted) _presentAttachMenu();
+      });
+    } else {
+      _presentAttachMenu();
+    }
+  }
 
+  void _presentAttachMenu() {
     // Anchor to the composer's "+" so the menu rises straight out of it (and
     // is swallowed back into it on dismiss), with a tail pointing down to it.
     Rect anchor;

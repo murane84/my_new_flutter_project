@@ -195,6 +195,8 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                 ),
           const SizedBox(height: 10),
           const _KeystrokeSoundSection(),
+          const SizedBox(height: 10),
+          const _MessageTonesSection(),
           if (_showGuide) ...[
             const SizedBox(height: 8),
             Text(
@@ -839,7 +841,7 @@ class _KeystrokeSoundSection extends StatefulWidget {
 }
 
 class _KeystrokeSoundSectionState extends State<_KeystrokeSoundSection> {
-  bool _on = KeystrokeSounds.instance.enabled;
+  bool _on = KeystrokeSounds.instance.keystrokesEnabled;
   bool _loaded = false;
 
   @override
@@ -852,14 +854,14 @@ class _KeystrokeSoundSectionState extends State<_KeystrokeSoundSection> {
     await KeystrokeSounds.instance.init();
     if (!mounted) return;
     setState(() {
-      _on = KeystrokeSounds.instance.enabled;
+      _on = KeystrokeSounds.instance.keystrokesEnabled;
       _loaded = true;
     });
   }
 
   Future<void> _set(bool v) async {
     setState(() => _on = v);
-    await KeystrokeSounds.instance.setEnabled(v);
+    await KeystrokeSounds.instance.setKeystrokesEnabled(v);
     if (v) {
       // Tiny confirmation so you hear what you just enabled.
       KeystrokeSounds.instance.playType();
@@ -896,6 +898,99 @@ class _KeystrokeSoundSectionState extends State<_KeystrokeSoundSection> {
                           ? 'Loading…'
                           : (_on
                               ? 'Soft tick on type, tock on delete'
+                              : 'Off'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 12, color: scheme.onSurfaceVariant)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              height: 24,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Switch(
+                  value: _on,
+                  onChanged: _loaded ? _set : null,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Settings card: light tones when a message is sent (whoosh) or arrives in the
+/// open chat (ding). Independent of keystroke sounds; on by default.
+class _MessageTonesSection extends StatefulWidget {
+  const _MessageTonesSection();
+
+  @override
+  State<_MessageTonesSection> createState() => _MessageTonesSectionState();
+}
+
+class _MessageTonesSectionState extends State<_MessageTonesSection> {
+  bool _on = KeystrokeSounds.instance.messagesEnabled;
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    await KeystrokeSounds.instance.init();
+    if (!mounted) return;
+    setState(() {
+      _on = KeystrokeSounds.instance.messagesEnabled;
+      _loaded = true;
+    });
+  }
+
+  Future<void> _set(bool v) async {
+    setState(() => _on = v);
+    await KeystrokeSounds.instance.setMessagesEnabled(v);
+    if (v) {
+      // Tiny confirmation so you hear what you just enabled.
+      KeystrokeSounds.instance.playSent();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return DecoratedBox(
+      decoration: _raisedCardDecoration(scheme, isDark),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        child: Row(
+          children: [
+            _accentIconChip(scheme, Icons.notifications_active_rounded),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Message tones',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface)),
+                  const SizedBox(height: 2),
+                  Text(
+                      !_loaded
+                          ? 'Loading…'
+                          : (_on
+                              ? 'Whoosh on send, ding on receive'
                               : 'Off'),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

@@ -39,8 +39,7 @@ class MainActivity : AudioServiceFragmentActivity() {
     private val downloadsChannel = "aluta/downloads"
     private val keystrokeChannel = "aluta/keystroke"
     private var keystrokeSoundPool: SoundPool? = null
-    private var typeSoundId = 0
-    private var deleteSoundId = 0
+    private val keystrokeSoundIds = HashMap<String, Int>()
 
     // Channel for the "Connected apps" (ContactsContract) integration, plus a
     // stash for an action tapped from the system Contacts app before Dart is
@@ -178,8 +177,7 @@ class MainActivity : AudioServiceFragmentActivity() {
                     // music keeps playing underneath.
                     "play" -> {
                         val sp = keystrokeSoundPool
-                        val id = if (call.argument<String>("which") == "delete")
-                            deleteSoundId else typeSoundId
+                        val id = keystrokeSoundIds[call.argument<String>("which")] ?: 0
                         if (sp != null && id != 0) {
                             sp.play(id, 0.7f, 0.7f, 0, 0, 1.0f)
                         }
@@ -209,8 +207,10 @@ class MainActivity : AudioServiceFragmentActivity() {
                 .setMaxStreams(6)
                 .setAudioAttributes(attrs)
                 .build()
-            typeSoundId = loadAssetSound(sp, "assets/sounds/type.wav")
-            deleteSoundId = loadAssetSound(sp, "assets/sounds/delete.wav")
+            keystrokeSoundIds["type"] = loadAssetSound(sp, "assets/sounds/type.wav")
+            keystrokeSoundIds["delete"] = loadAssetSound(sp, "assets/sounds/delete.wav")
+            keystrokeSoundIds["sent"] = loadAssetSound(sp, "assets/sounds/sent.wav")
+            keystrokeSoundIds["received"] = loadAssetSound(sp, "assets/sounds/received.wav")
             keystrokeSoundPool = sp
             true
         } catch (e: Exception) {

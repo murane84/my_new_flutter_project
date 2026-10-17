@@ -741,13 +741,18 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         // Incoming = from someone else (a friend in a DM, any member in a group).
         final incoming = _isGroup ? (sId != _myId) : (rId == _myId);
         if (inThread) {
+          var inserted = false;
           setState(() {
             final id = msg['id'].toString();
             if (!_messages.any((m) => m['id'].toString() == id)) {
               _messages.insert(0, msg);
+              inserted = true;
             }
           });
           if (incoming) {
+            // Soft ding for a new message in the chat you're looking at
+            // (gated by the Message tones setting).
+            if (inserted) KeystrokeSounds.instance.playReceived();
             if (_isAtBottom) {
               _scrollToBottom();
               if (_isGroup) {
@@ -1221,7 +1226,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         _messages[idx]['status'] = 'failed';
       }
     });
-    if (sent != null) _saveMessagesCache();
+    if (sent != null) {
+      _saveMessagesCache();
+      // Light whoosh once the message is actually sent (Message tones setting).
+      KeystrokeSounds.instance.playSent();
+    }
   }
 
   // Re-run a failed send (tapped from the retry marker in the tick slot).

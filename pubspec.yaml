@@ -212,3 +212,5 @@ flutter:
     - assets/images/auth_background.jpg
     - assets/sounds/type.wav
     - assets/sounds/delete.wav
+    - assets/sounds/sent.wav
+    - assets/sounds/received.wav

@@ -5,53 +5,66 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show MethodChannel;
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Optional subtle typing feedback: a soft "tick" when a character is typed and
-/// a slightly duller "tock" when one is deleted. Off by default; toggled in
-/// Appearance settings.
+/// In-app sound effects, with two INDEPENDENT switches:
 ///
-/// On Android the ticks run through a tiny native SoundPool bridge
+///  * Keystroke sounds — a soft tick/tock while typing (off by default; many
+///    people find key clicks distracting).
+///  * Message tones — a light "whoosh" when your message is sent and a soft
+///    ding when one arrives in the chat you're viewing (on by default).
+///
+/// On Android everything runs through a tiny native SoundPool bridge
 /// (`aluta/keystroke`): SoundPool is built for short, frequent UI sounds —
-/// play() is fire-and-forget and overlapping streams mix natively, so fast or
-/// long typing can't back up the audio layer and jam the UI thread (which a
-/// general audio player's per-keystroke calls did). It also never takes audio
-/// focus, so the music keeps playing underneath.
-///
-/// Off Android (desktop / web) there's no SoundPool, so it falls back to a
-/// small low-latency audioplayers pool — those platforms have the headroom.
+/// play() is fire-and-forget, overlaps mix natively, and it never takes audio
+/// focus — so fast typing can't jam the UI and the music keeps playing. Off
+/// Android (desktop / web) it falls back to a small low-latency audioplayers
+/// pool. (Class name kept for import stability; it's really the app's sound hub.)
 class KeystrokeSounds {
   KeystrokeSounds._();
   static final KeystrokeSounds instance = KeystrokeSounds._();
 
-  static const String prefKey = 'keystroke_sounds';
+  // Preference keys (kept separate so the two switches are independent).
+  static const String prefKey = 'keystroke_sounds'; // typing ticks
+  static const String prefMessages = 'message_tones'; // sent / received
+
   static const MethodChannel _ch = MethodChannel('aluta/keystroke');
 
   bool get _useNative => !kIsWeb && Platform.isAndroid;
 
-  bool enabled = false;
+  bool keystrokesEnabled = false;
+  bool messagesEnabled = true;
+
   bool _loaded = false;
   bool _loading = false;
-  int _lastPlayMs = 0;
+  int _lastTypeMs = 0;
 
-  // Non-Android fallback pool (desktop / web).
-  final List<AudioPlayer> _typePool = [];
-  final List<AudioPlayer> _deletePool = [];
-  int _typeRr = 0;
-  int _deleteRr = 0;
+  // Non-Android fallback players, keyed by sound name.
+  final Map<String, List<AudioPlayer>> _pools = {};
+  final Map<String, int> _rr = {};
 
-  /// Load the saved preference (and warm the engine if on).
+  /// Load both saved preferences (and warm the engine if either is on).
   Future<void> init() async {
     try {
       final p = await SharedPreferences.getInstance();
-      enabled = p.getBool(prefKey) ?? false;
+      keystrokesEnabled = p.getBool(prefKey) ?? false;
+      messagesEnabled = p.getBool(prefMessages) ?? true;
     } catch (_) {}
-    if (enabled) await _ensureLoaded();
+    if (keystrokesEnabled || messagesEnabled) await _ensureLoaded();
   }
 
-  Future<void> setEnabled(bool value) async {
-    enabled = value;
+  Future<void> setKeystrokesEnabled(bool value) async {
+    keystrokesEnabled = value;
     try {
       final p = await SharedPreferences.getInstance();
       await p.setBool(prefKey, value);
+    } catch (_) {}
+    if (value) await _ensureLoaded();
+  }
+
+  Future<void> setMessagesEnabled(bool value) async {
+    messagesEnabled = value;
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setBool(prefMessages, value);
     } catch (_) {}
     if (value) await _ensureLoaded();
   }
@@ -64,8 +77,8 @@ class KeystrokeSounds {
         final ok = await _ch.invokeMethod<bool>('load');
         _loaded = ok ?? false;
       } else {
-        await _buildFallbackPool();
-        _loaded = _typePool.isNotEmpty;
+        await _buildFallbackPools();
+        _loaded = _pools.isNotEmpty;
       }
     } catch (_) {
       _loaded = false;
@@ -91,30 +104,46 @@ class KeystrokeSounds {
     return pl;
   }
 
-  Future<void> _buildFallbackPool() async {
-    for (var i = 0; i < 2; i++) {
-      _typePool.add(await _voice('sounds/type.wav'));
-      _deletePool.add(await _voice('sounds/delete.wav'));
-    }
+  Future<void> _buildFallbackPools() async {
+    // Typing needs overlap (2 voices); message tones are infrequent (1 each).
+    _pools['type'] = [await _voice('sounds/type.wav'), await _voice('sounds/type.wav')];
+    _pools['delete'] =
+        [await _voice('sounds/delete.wav'), await _voice('sounds/delete.wav')];
+    _pools['sent'] = [await _voice('sounds/sent.wav')];
+    _pools['received'] = [await _voice('sounds/received.wav')];
   }
 
-  void _play(String which, List<AudioPlayer> pool, int Function() rr) {
-    if (!enabled || !_loaded) return;
-    // A tiny rate floor: auto-repeating/held keys can fire far faster than
-    // anyone types. ~18ms (≈55/s) is well above human typing, so every real
-    // keystroke still ticks.
-    final now = DateTime.now().millisecondsSinceEpoch;
-    if (now - _lastPlayMs < 18) return;
-    _lastPlayMs = now;
+  void _fire(String which) {
+    if (!_loaded) return;
     if (_useNative) {
-      // Fire and forget; a failed tick must never surface.
       _ch.invokeMethod('play', {'which': which}).catchError((_) {});
     } else {
-      if (pool.isEmpty) return;
-      pool[rr() % pool.length].resume().catchError((_) {});
+      final pool = _pools[which];
+      if (pool == null || pool.isEmpty) return;
+      final i = (_rr[which] ?? 0);
+      _rr[which] = i + 1;
+      pool[i % pool.length].resume().catchError((_) {});
     }
   }
 
-  void playType() => _play('type', _typePool, () => _typeRr++);
-  void playDelete() => _play('delete', _deletePool, () => _deleteRr++);
+  // ── Typing ticks (throttled: held/auto-repeat keys can't flood) ──────────
+  void _tick(String which) {
+    if (!keystrokesEnabled) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastTypeMs < 18) return; // ~55/s, well above human typing
+    _lastTypeMs = now;
+    _fire(which);
+  }
+
+  void playType() => _tick('type');
+  void playDelete() => _tick('delete');
+
+  // ── Message tones (no throttle; they're infrequent) ──────────────────────
+  void playSent() {
+    if (messagesEnabled) _fire('sent');
+  }
+
+  void playReceived() {
+    if (messagesEnabled) _fire('received');
+  }
 }

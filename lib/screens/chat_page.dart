@@ -65,6 +65,7 @@ import '../services/keystroke_sounds.dart';
 import 'package:float_column/float_column.dart';
 import 'package:linkify/linkify.dart' show linkify;
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart' as geocoding;
 import 'package:flutter_contacts/flutter_contacts.dart';
 import '../utils/app_config.dart';
 import '../utils/loose_url_linkifier.dart';
@@ -1565,11 +1566,70 @@ class _ChatPageState extends State<ChatPage>
         return;
       }
       if (mounted) showToast(context, 'Getting your location…');
-      final pos = await Geolocator.getCurrentPosition()
-          .timeout(const Duration(seconds: 15));
+
+      // A high-accuracy GPS fix can stall indoors, so try progressively: a
+      // recent cached fix (instant), then a fresh high-accuracy one capped at
+      // 12s, then a looser network fix. Whichever we end up with is sent.
+      Position? pos;
+      try {
+        pos = await Geolocator.getLastKnownPosition();
+      } catch (_) {}
+      try {
+        pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 12),
+          ),
+        );
+      } on TimeoutException {
+        // keep the cached fix if we have one
+      } catch (_) {
+        try {
+          pos = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.medium,
+              timeLimit: Duration(seconds: 8),
+            ),
+          );
+        } catch (_) {}
+      }
+
+      if (pos == null) {
+        if (mounted) {
+          showToast(context,
+              'Could not get your location — move to open sky and retry',
+              type: ToastType.error);
+        }
+        return;
+      }
+
+      // Best-effort reverse geocode to a readable address. Never blocks the
+      // send — coordinates alone are enough if the geocoder is unavailable.
+      String address = '';
+      try {
+        final marks = await geocoding
+            .placemarkFromCoordinates(pos.latitude, pos.longitude)
+            .timeout(const Duration(seconds: 5));
+        if (marks.isNotEmpty) {
+          final m = marks.first;
+          address = [
+            m.name,
+            m.subLocality,
+            m.locality,
+            m.administrativeArea,
+            m.country,
+          ]
+              .where((p) => p != null && p.trim().isNotEmpty)
+              .map((p) => p!.trim())
+              .toSet()
+              .join(', ');
+        }
+      } catch (_) {}
+
       final payload = jsonEncode({
         'lat': pos.latitude,
         'lng': pos.longitude,
+        if (address.isNotEmpty) 'address': address,
       });
       await _sendStructured('location', payload);
     } catch (_) {

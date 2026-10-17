@@ -1356,16 +1356,20 @@ extension _ChatPageHelpers3 on _ChatPageState {
   Widget _locationContent(Map<String, dynamic> msg, bool isMe, Color textColor,
       ColorScheme scheme) {
     double? lat, lng;
+    String address = '';
     try {
       final j = jsonDecode((msg['content'] ?? '{}').toString());
       if (j is Map) {
         lat = (j['lat'] as num?)?.toDouble();
         lng = (j['lng'] as num?)?.toDouble();
+        address = (j['address'] ?? '').toString();
       }
     } catch (_) {}
     final coords = (lat != null && lng != null)
         ? '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}'
         : 'Shared location';
+    // Lead with the address when we have it; fall back to raw coordinates.
+    final detail = address.isNotEmpty ? address : coords;
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: (lat != null && lng != null) ? () => _openMap(lat!, lng!) : null,
@@ -1399,9 +1403,18 @@ extension _ChatPageHelpers3 on _ChatPageState {
                           fontSize: 14,
                           color: textColor)),
                   const SizedBox(height: 2),
-                  Text(coords,
+                  Text(detail,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                          fontSize: 12, color: textColor.withAlpha(170))),
+                          fontSize: 12, color: textColor.withAlpha(185))),
+                  if (address.isNotEmpty)
+                    Text(coords,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 10.5,
+                            color: textColor.withAlpha(120))),
                   const SizedBox(height: 4),
                   const Text('Open in Maps',
                       style: TextStyle(

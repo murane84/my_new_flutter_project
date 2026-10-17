@@ -60,6 +60,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'chat/formatted_text.dart';
 import 'chat/heart_message.dart';
+import 'chat/conversation_media.dart';
 import '../services/keystroke_sounds.dart';
 import 'package:float_column/float_column.dart';
 import 'package:linkify/linkify.dart' show linkify;
@@ -2679,6 +2680,98 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     });
   }
 
+  // Open the per-conversation Media / Links / Docs browser. Pulls a window of
+  // history, sorts shared items into the three tabs, and — when the user taps
+  // an item — jumps back to that message in the thread so playback / saving
+  // reuses the thread's own handling. Links open directly.
+  Future<void> _openMediaBrowser() async {
+    List<Map<String, dynamic>> msgs = const [];
+    try {
+      if (_isGroup) {
+        msgs = await ApiService()
+            .fetchConversationMessages(_cid, skip: 0, limit: 300);
+      } else {
+        final uid = int.tryParse(_myId ?? '') ?? 0;
+        msgs = await ApiService()
+            .fetchMessagesBetween(uid, widget.friendId, skip: 0, limit: 300);
+      }
+    } catch (_) {}
+    if (!mounted) return;
+
+    String shortDate(String iso) {
+      final d = DateTime.tryParse(iso)?.toLocal();
+      if (d == null) return '';
+      const mon = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      return '${d.day} ${mon[d.month - 1]} ${d.year}';
+    }
+
+    final media = <MediaItem>[];
+    final links = <LinkItem>[];
+    final docs = <DocItem>[];
+    final linkRe = RegExp(r'https?://[^\s]+');
+
+    for (final m in msgs) {
+      final id = m['id']?.toString() ?? '';
+      if (id.isEmpty) continue;
+      final type = (m['message_type'] ?? '').toString();
+      final rel = (m['media_url'] ?? '').toString();
+      final content = (m['content'] ?? '').toString();
+      final ts = (m['timestamp'] ?? '').toString();
+
+      if ((type == 'image' || type == 'video') && rel.isNotEmpty) {
+        final full = fullMediaUrl(rel);
+        final thumb = type == 'video' ? '$full/thumb' : full;
+        media.add(MediaItem(
+          messageId: id,
+          thumbUrl: thumb,
+          headers: mediaAuthHeaders(thumb),
+          isVideo: type == 'video',
+        ));
+      } else if (type == 'file' || type == 'document' || type == 'song') {
+        final name = (m['media_name'] as String?)?.trim();
+        final size = (m['media_size'] as num?)?.toInt();
+        docs.add(DocItem(
+          messageId: id,
+          name: (name == null || name.isEmpty)
+              ? (type == 'song' ? 'Song' : 'File')
+              : name,
+          sizeLabel: (size != null && size > 0) ? _fmtBytes(size) : '',
+          icon: type == 'song'
+              ? Icons.music_note_rounded
+              : _fileIcon(name ?? ''),
+          dateLabel: shortDate(ts),
+        ));
+      }
+      // A link can ride on any text message or caption.
+      for (final match in linkRe.allMatches(content)) {
+        links.add(LinkItem(
+          messageId: id,
+          url: match.group(0)!,
+          snippet: content.trim(),
+          dateLabel: shortDate(ts),
+        ));
+      }
+    }
+
+    if (!mounted) return;
+    final jumpId = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => ConversationMediaScreen(
+          title: _isGroup ? widget.groupTitle : widget.friendName,
+          media: media,
+          links: links,
+          docs: docs,
+        ),
+      ),
+    );
+    if (jumpId != null && jumpId.isNotEmpty && mounted) {
+      _jumpToMessage(jumpId);
+    }
+  }
+
   // ── Build helpers ─────────────────────────────────────────────────────────
 
   static String _fmtCallDur(int secs) {
@@ -4264,9 +4357,23 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             tooltip: 'More',
             icon: const Icon(Icons.more_vert_rounded),
             onSelected: (v) {
-              if (v == 'wallpaper') _openChatWallpaperSheet();
+              if (v == 'wallpaper') {
+                _openChatWallpaperSheet();
+              } else if (v == 'media') {
+                _openMediaBrowser();
+              }
             },
             itemBuilder: (_) => const [
+              PopupMenuItem<String>(
+                value: 'media',
+                child: Row(
+                  children: [
+                    Icon(Icons.perm_media_outlined, size: 20),
+                    SizedBox(width: 12),
+                    Text('Media, links & docs'),
+                  ],
+                ),
+              ),
               PopupMenuItem<String>(
                 value: 'wallpaper',
                 child: Row(

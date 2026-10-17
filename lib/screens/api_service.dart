@@ -2701,6 +2701,32 @@ class ApiService {
   }
 
   /// A page of a conversation's messages (same shape as DM messages).
+  /// Search the user's messages (DMs + groups) by content. Returns recent
+  /// matches first, each enriched with the thread it belongs to.
+  Future<List<Map<String, dynamic>>> searchMessages(String q,
+      {int limit = 40}) async {
+    final term = q.trim();
+    if (term.length < 2) return [];
+    try {
+      final token = await _getToken();
+      if (token == null) return [];
+      final uri = Uri.parse(
+          '${await _baseUrl}/messages/search?q=${Uri.encodeQueryComponent(term)}&limit=$limit');
+      final resp = await http.get(uri, headers: _authHeaders(token));
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final body = jsonDecode(resp.body);
+        if (body is List) {
+          return body
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+        }
+      }
+    } catch (e) {
+      _logger.e('searchMessages exception: $e');
+    }
+    return [];
+  }
+
   Future<List<Map<String, dynamic>>> fetchConversationMessages(
     int cid, {
     int skip = 0,

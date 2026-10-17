@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'link_ozilane_screen.dart';
+import 'message_search_screen.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -2817,6 +2818,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Search messages',
+            icon: const Icon(Icons.search_rounded),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const MessageSearchScreen())),
+          ),
           // Single overflow menu with GROUPED submenus, so adding new actions
           // nests them under a parent instead of making the menu grow taller.
           _buildOverflowMenu(context, themeProvider, scheme),

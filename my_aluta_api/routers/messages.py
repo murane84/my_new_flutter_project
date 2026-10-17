@@ -148,6 +148,93 @@ def send_message(message: schemas.MessageCreate, background: BackgroundTasks, db
 
     return validated_message
 
+
+# 🔎 SEARCH MESSAGES (across the user's DMs + groups)
+@router.get("/search")
+def search_messages(
+    q: str = Query(..., min_length=2),
+    limit: int = 40,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Full-text-ish search over the current user's message content, across both
+    DMs and the groups they belong to. Returns recent matches first, each
+    enriched with enough context (DM friend, or group) for the client to open
+    the right thread and jump to the message."""
+    from sqlalchemy import or_
+    from models import ConversationMember, Conversation
+
+    term = (q or "").strip()
+    if len(term) < 2:
+        return []
+    me = current_user.id
+    conv_ids = [
+        c for (c,) in db.query(ConversationMember.conversation_id)
+        .filter(ConversationMember.user_id == me).all()
+    ]
+    cond = or_(Message.sender_id == me, Message.receiver_id == me)
+    if conv_ids:
+        cond = or_(cond, Message.conversation_id.in_(conv_ids))
+
+    rows = (
+        db.query(Message)
+        .filter(Message.is_deleted == False)  # noqa: E712
+        .filter(Message.content.ilike(f"%{term}%"))
+        .filter(cond)
+        .order_by(Message.timestamp.desc())
+        .limit(min(max(limit, 1), 100))
+        .all()
+    )
+
+    conv_cache: dict = {}
+    user_cache: dict = {}
+
+    def _conv(cid):
+        if cid is None:
+            return None
+        if cid not in conv_cache:
+            conv_cache[cid] = (
+                db.query(Conversation).filter(Conversation.id == cid).first()
+            )
+        return conv_cache[cid]
+
+    def _user(uid):
+        if uid is None:
+            return ("", "")
+        if uid not in user_cache:
+            u = db.query(User).filter(User.id == uid).first()
+            user_cache[uid] = (
+                (u.username or "") if u else "",
+                (u.avatar_url or "") if u else "",
+            )
+        return user_cache[uid]
+
+    out = []
+    for m in rows:
+        c = _conv(m.conversation_id)
+        is_group = bool(c and c.is_group)
+        item = {
+            "id": m.id,
+            "content": m.content or "",
+            "timestamp": m.timestamp.isoformat() if m.timestamp else None,
+            "sender_id": m.sender_id,
+            "is_group": is_group,
+            "conversation_id": m.conversation_id,
+        }
+        if is_group:
+            item["group_title"] = c.title or "Group"
+            item["group_avatar"] = c.avatar_url or ""
+        else:
+            friend_id = m.receiver_id if m.sender_id == me else m.sender_id
+            if friend_id is None:
+                friend_id = m.sender_id if m.sender_id != me else m.receiver_id
+            name, avatar = _user(friend_id)
+            item["friend_id"] = friend_id
+            item["friend_name"] = name
+            item["friend_avatar"] = avatar
+        out.append(item)
+    return out
+
 # 2️⃣ MESSAGE DELIVERED (auto when fetching messages)
 @router.get("/{friend_id}/all_messages", response_model=List[schemas.MessageWithSender])
 def get_all_messages_with_friend(friend_id: int, skip: int = 0, limit: int = 20, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

@@ -144,7 +144,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
           const SizedBox(height: 18),
           _accentHeader(context, theme, scheme),
           const SizedBox(height: 12),
-          ..._accentGroups(context, theme, scheme),
+          ..._accentGroups(context, theme, scheme, isWide),
           if (_showGuide) ...[
             const SizedBox(height: 8),
             Text(
@@ -502,9 +502,11 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     );
   }
 
-  // The accents, grouped into labelled colour families of clean dots.
-  List<Widget> _accentGroups(
-      BuildContext context, ThemeProvider theme, ColorScheme scheme) {
+  // The accents, grouped into labelled colour families of clean dots. On wide
+  // screens the family blocks flow side by side so they fill the width instead
+  // of hugging the left; on mobile they stack (and already fill a phone).
+  List<Widget> _accentGroups(BuildContext context, ThemeProvider theme,
+      ColorScheme scheme, bool isWide) {
     final groups = <({String title, List<_Accent> items})>[
       (title: 'Reds & pinks', items: _accents.sublist(0, 6)),
       (title: 'Purples', items: _accents.sublist(6, 10)),
@@ -514,26 +516,47 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
       (title: 'Neutral', items: _accents.sublist(21, 22)),
       (title: 'Neon', items: _accents.sublist(22)),
     ];
+
+    Widget block(({String title, List<_Accent> items}) g) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              g.title,
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
+                  color: scheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 14,
+              runSpacing: 14,
+              children: [
+                for (final a in g.items) _accentDot(context, theme, scheme, a),
+              ],
+            ),
+          ],
+        );
+
+    if (isWide) {
+      // Each family is a fixed-width block; they wrap across the full width.
+      return [
+        Wrap(
+          spacing: 30,
+          runSpacing: 22,
+          children: [
+            for (final g in groups) SizedBox(width: 300, child: block(g)),
+          ],
+        ),
+      ];
+    }
+    // Narrow (mobile): stack the families; dots already fill the phone width.
     final out = <Widget>[];
     for (var i = 0; i < groups.length; i++) {
-      final g = groups[i];
       if (i > 0) out.add(const SizedBox(height: 14));
-      out.add(Text(
-        g.title,
-        style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.2,
-            color: scheme.onSurfaceVariant),
-      ));
-      out.add(const SizedBox(height: 10));
-      out.add(Wrap(
-        spacing: 14,
-        runSpacing: 14,
-        children: [
-          for (final a in g.items) _accentDot(context, theme, scheme, a),
-        ],
-      ));
+      out.add(block(groups[i]));
     }
     return out;
   }

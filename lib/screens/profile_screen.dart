@@ -515,7 +515,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return AppPopupShell(
       title: 'Profile',
       icon: Icons.person_rounded,
-      desktopMaxWidth: 780,
+      desktopMaxWidth: 1080,
       edgeToEdge: true,
       builder: (context, isWide) => _body(context, isWide),
     );
@@ -550,6 +550,162 @@ class _ProfileScreenState extends State<ProfileScreen> {
         () => setState(() => _obscureConf = !_obscureConf),
         Icons.lock_reset_outlined);
 
+    final emailTile = _ReadonlyTile(
+      icon: Icons.email_outlined,
+      label: 'Email (cannot be changed)',
+      value: _email,
+    );
+
+    final banner = _mustChangePw
+        ? Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: scheme.primary.withAlpha(22),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: scheme.primary.withAlpha(70)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.lock_reset_rounded,
+                      color: scheme.primary, size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Your password was reset by an administrator. Please '
+                      'set your own password below to finish securing your '
+                      'account.',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          height: 1.4,
+                          color: scheme.onSurfaceVariant),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        : const SizedBox.shrink();
+
+    final matchRow = _confirmPw.text.isNotEmpty
+        ? Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  pwMatch ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                  size: 14,
+                  color: pwMatch ? Colors.green : Colors.redAccent,
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  pwMatch ? 'Passwords match' : 'Passwords do not match',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: pwMatch ? Colors.green : Colors.redAccent,
+                  ),
+                ),
+              ],
+            ),
+          )
+        : const SizedBox.shrink();
+
+    final saveButton = FilledButton(
+      onPressed: (_saving || !_hasChanges) ? null : _save,
+      style: FilledButton.styleFrom(
+        backgroundColor: scheme.primary,
+        disabledBackgroundColor: scheme.primary.withAlpha(60),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+      ),
+      child: _saving
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2.5, color: Colors.white),
+            )
+          : const Text('Save changes'),
+    );
+
+    // The editable identity + password column (left pane on wide screens).
+    List<Widget> editBlocks() => [
+          emailTile,
+          const SizedBox(height: 22),
+          _heading('Your details', scheme),
+          const SizedBox(height: 12),
+          username,
+          const SizedBox(height: 14),
+          phone,
+          const SizedBox(height: 26),
+          banner,
+          _heading('Change password', scheme),
+          const SizedBox(height: 4),
+          Text('Leave blank to keep your current password',
+              style:
+                  TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 12),
+          curPw,
+          const SizedBox(height: 14),
+          newPw,
+          const SizedBox(height: 14),
+          confPw,
+          matchRow,
+          const SizedBox(height: 22),
+          saveButton,
+        ];
+
+    // Security + account-management column (right pane on wide screens).
+    List<Widget> securityBlocks() => [
+          _heading('Security', scheme),
+          const SizedBox(height: 12),
+          _twoFactorSection(scheme),
+          const SizedBox(height: 12),
+          _ozilaneSection(scheme),
+          if (_bioAvailable) ...[
+            const SizedBox(height: 12),
+            _securitySection(scheme),
+          ],
+          const SizedBox(height: 26),
+          _dangerZone(scheme),
+        ];
+
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _avatarPicker(scheme),
+        const SizedBox(height: 20),
+        if (isWide)
+          // Two columns: fill the desktop width instead of a lone narrow
+          // strip — edit panel on the left, security/account on the right.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: editBlocks(),
+                ),
+              ),
+              const SizedBox(width: 36),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: securityBlocks(),
+                ),
+              ),
+            ],
+          )
+        else ...[
+          ...editBlocks(),
+          const SizedBox(height: 22),
+          ...securityBlocks(),
+        ],
+      ],
+    );
+
     return Stack(
       children: [
         // Faint, centred logo watermark behind the profile form. Decorative
@@ -570,149 +726,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         AbsorbPointer(
-      absorbing: _saving,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _avatarPicker(scheme),
-              const SizedBox(height: 20),
-              _ReadonlyTile(
-                icon: Icons.email_outlined,
-                label: 'Email (cannot be changed)',
-                value: _email,
-              ),
-              const SizedBox(height: 22),
-              _heading('Your details', scheme),
-              const SizedBox(height: 12),
-              if (isWide)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: username),
-                    const SizedBox(width: 16),
-                    Expanded(child: phone),
-                  ],
-                )
-              else ...[
-                username,
-                const SizedBox(height: 14),
-                phone,
-              ],
-              const SizedBox(height: 26),
-              if (_mustChangePw) ...[
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: scheme.primary.withAlpha(22),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: scheme.primary.withAlpha(70)),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.lock_reset_rounded,
-                          color: scheme.primary, size: 22),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Your password was reset by an administrator. Please '
-                          'set your own password below to finish securing your '
-                          'account.',
-                          style: TextStyle(
-                              fontSize: 12.5,
-                              height: 1.4,
-                              color: scheme.onSurfaceVariant),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-              ],
-              _heading('Change password', scheme),
-              const SizedBox(height: 4),
-              Text('Leave blank to keep your current password',
-                  style: TextStyle(
-                      fontSize: 12, color: scheme.onSurfaceVariant)),
-              const SizedBox(height: 12),
-              if (isWide)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: curPw),
-                    const SizedBox(width: 12),
-                    Expanded(child: newPw),
-                    const SizedBox(width: 12),
-                    Expanded(child: confPw),
-                  ],
-                )
-              else ...[
-                curPw,
-                const SizedBox(height: 14),
-                newPw,
-                const SizedBox(height: 14),
-                confPw,
-              ],
-              if (_confirmPw.text.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      pwMatch
-                          ? Icons.check_circle_rounded
-                          : Icons.cancel_rounded,
-                      size: 14,
-                      color: pwMatch ? Colors.green : Colors.redAccent,
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      pwMatch ? 'Passwords match' : 'Passwords do not match',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: pwMatch ? Colors.green : Colors.redAccent,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 22),
-              FilledButton(
-                onPressed: (_saving || !_hasChanges) ? null : _save,
-                style: FilledButton.styleFrom(
-                  backgroundColor: scheme.primary,
-                  disabledBackgroundColor: scheme.primary.withAlpha(60),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                child: _saving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2.5, color: Colors.white),
-                      )
-                    : const Text('Save changes'),
-              ),
-              const SizedBox(height: 22),
-              _heading('Security', scheme),
-              const SizedBox(height: 12),
-              _twoFactorSection(scheme),
-              const SizedBox(height: 12),
-              _ozilaneSection(scheme),
-              if (_bioAvailable) ...[
-                const SizedBox(height: 12),
-                _securitySection(scheme),
-              ],
-              const SizedBox(height: 26),
-              _dangerZone(scheme),
-            ],
+          absorbing: _saving,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+            child: Form(
+              key: _formKey,
+              child: content,
+            ),
           ),
-        ),
-      ),
         ),
       ],
     );

@@ -197,7 +197,8 @@ class ChatPage extends StatefulWidget {
   State<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
+class _ChatPageState extends State<ChatPage>
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   // True when this screen is showing a GROUP conversation (vs a 1:1 DM).
   bool get _isGroup => widget.isGroup && widget.conversationId != null;
   int get _cid => widget.conversationId ?? 0;

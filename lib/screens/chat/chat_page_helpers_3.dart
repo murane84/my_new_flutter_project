@@ -787,13 +787,21 @@ extension _ChatPageHelpers3 on _ChatPageState {
     if (rawId == null) return;
     final mid = rawId is int ? rawId : int.tryParse(rawId.toString()) ?? 0;
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // A slightly slower, eased slide-up than the stock sheet for a more
+    // deliberate, premium entrance.
+    final animCtrl = BottomSheet.createAnimationController(this);
+    animCtrl.duration = const Duration(milliseconds: 440);
+    animCtrl.reverseDuration = const Duration(milliseconds: 280);
 
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
+      transitionAnimationController: animCtrl,
       builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.62,
+        initialChildSize: 0.6,
         minChildSize: 0.4,
         maxChildSize: 0.94,
         expand: false,
@@ -801,33 +809,53 @@ extension _ChatPageHelpers3 on _ChatPageState {
           margin: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: scheme.surface,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(isDark ? 110 : 40),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
           clipBehavior: Clip.antiAlias,
           child: FutureBuilder<Map<String, dynamic>?>(
             future: ApiService().messageInfo(_cid, mid),
             builder: (c, snap) {
               final handle = Container(
-                margin: const EdgeInsets.symmetric(vertical: 10),
-                width: 36,
-                height: 3,
+                margin: const EdgeInsets.only(top: 10, bottom: 2),
+                width: 40,
+                height: 4,
                 decoration: BoxDecoration(
                   color: scheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(3),
                 ),
               );
+
               if (snap.connectionState == ConnectionState.waiting) {
+                // Show the card's own shape immediately (handle + title +
+                // skeleton rows) so loading reads as "filling in", not a
+                // blank sheet with a lone spinner.
                 return Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     handle,
-                    const Padding(
-                      padding: EdgeInsets.all(40),
-                      child: CircularProgressIndicator(),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: Text('Message info',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: scheme.onSurface)),
                     ),
+                    const SizedBox(height: 14),
+                    const Divider(height: 1),
+                    for (int k = 0; k < 4; k++) _infoSkeletonRow(scheme),
                   ],
                 );
               }
+
               final data = snap.data;
               if (data == null) {
                 return Column(
@@ -842,47 +870,89 @@ extension _ChatPageHelpers3 on _ChatPageState {
                   ],
                 );
               }
+
               final read = (data['read'] as List?) ?? const [];
               final delivered = (data['delivered'] as List?) ?? const [];
               final sent = (data['sent'] as List?) ?? const [];
+              final total = read.length + delivered.length + sent.length;
+
               return Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   handle,
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
+                  const SizedBox(height: 8),
+                  Center(
                     child: Text('Message info',
                         style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                             color: scheme.onSurface)),
                   ),
-                  const Divider(height: 1),
-                  Flexible(
-                    child: ListView(
-                      controller: scrollCtrl,
-                      padding: const EdgeInsets.only(bottom: 16),
-                      children: [
-                        _infoSection('Read by', Icons.done_all_rounded,
-                            const Color(0xFF1976D2), read, scheme),
-                        _infoSection(
-                            'Delivered to',
-                            Icons.done_all_rounded,
-                            scheme.onSurfaceVariant,
-                            delivered,
-                            scheme),
-                        _infoSection('Not yet received', Icons.check_rounded,
-                            scheme.onSurfaceVariant, sent, scheme),
-                        if (read.isEmpty && delivered.isEmpty && sent.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Center(
-                              child: Text('No other members in this group yet.',
-                                  style: TextStyle(
-                                      color: scheme.onSurfaceVariant)),
-                            ),
+                  const SizedBox(height: 3),
+                  // One-line summary so the headline fact — how many have
+                  // seen it — reads at a glance.
+                  if (total > 0)
+                    Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.done_all_rounded,
+                              size: 14, color: Color(0xFF1976D2)),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Seen by ${read.length} of $total',
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w500,
+                                color: scheme.onSurfaceVariant),
                           ),
-                      ],
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  const Divider(height: 1),
+                  // Content fades + rises in as a unit once the data lands.
+                  Flexible(
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: 1),
+                      duration: const Duration(milliseconds: 360),
+                      curve: Curves.easeOutCubic,
+                      builder: (_, t, child) => Opacity(
+                        opacity: t.clamp(0.0, 1.0),
+                        child: Transform.translate(
+                          offset: Offset(0, (1 - t) * 14),
+                          child: child,
+                        ),
+                      ),
+                      child: ListView(
+                        controller: scrollCtrl,
+                        padding: const EdgeInsets.only(bottom: 16),
+                        children: [
+                          _infoSection('Read by', Icons.done_all_rounded,
+                              const Color(0xFF1976D2), read, scheme),
+                          _infoSection(
+                              'Delivered to',
+                              Icons.done_all_rounded,
+                              scheme.onSurfaceVariant,
+                              delivered,
+                              scheme),
+                          _infoSection('Not yet received', Icons.schedule_rounded,
+                              scheme.onSurfaceVariant, sent, scheme),
+                          if (read.isEmpty &&
+                              delivered.isEmpty &&
+                              sent.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Center(
+                                child: Text(
+                                    'No other members in this group yet.',
+                                    style: TextStyle(
+                                        color: scheme.onSurfaceVariant)),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -891,10 +961,48 @@ extension _ChatPageHelpers3 on _ChatPageState {
           ),
         ),
       ),
+    ).whenComplete(animCtrl.dispose);
+  }
+
+  /// A single shimmer-free skeleton row shown while message info loads.
+  Widget _infoSkeletonRow(ColorScheme scheme) {
+    Widget bar(double w, double h) => Container(
+          width: w,
+          height: h,
+          decoration: BoxDecoration(
+            color: scheme.onSurfaceVariant.withAlpha(28),
+            borderRadius: BorderRadius.circular(6),
+          ),
+        );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: scheme.onSurfaceVariant.withAlpha(28),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              bar(120, 11),
+              const SizedBox(height: 7),
+              bar(80, 9),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
   /// One category block inside the Message-info sheet. Hidden when empty.
+  /// The header is a soft tinted pill with a count chip; rows cascade in.
   Widget _infoSection(String title, IconData icon, Color color, List members,
       ColorScheme scheme) {
     if (members.isEmpty) return const SizedBox.shrink();
@@ -902,29 +1010,56 @@ extension _ChatPageHelpers3 on _ChatPageState {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-          child: Row(
-            children: [
-              Icon(icon, size: 18, color: color),
-              const SizedBox(width: 8),
-              Text(
-                '$title · ${members.length}',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                  letterSpacing: 0.2,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(10, 6, 8, 6),
+            decoration: BoxDecoration(
+              color: color.withAlpha(22),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 16, color: color),
+                const SizedBox(width: 7),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                    letterSpacing: 0.2,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 7),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: color.withAlpha(38),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${members.length}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: color,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        ...members.map((m) => _infoMemberTile(m, scheme)),
+        ...members.asMap().entries.map(
+            (e) => _infoMemberTile(e.value, scheme, color, e.key)),
       ],
     );
   }
 
-  Widget _infoMemberTile(dynamic m, ColorScheme scheme) {
+  Widget _infoMemberTile(
+      dynamic m, ColorScheme scheme, Color accent, int index) {
     final username = (m['username'] ?? 'User').toString();
     final phone = (m['phone'] ?? '').toString();
     // Prefer the user's phonebook-saved name over the raw DB username.
@@ -934,20 +1069,30 @@ extension _ChatPageHelpers3 on _ChatPageState {
     final avatarRel = (m['avatar_url'] ?? '').toString();
     final avatar = avatarRel.isNotEmpty ? fullMediaUrl(avatarRel) : null;
     final ts = (m['timestamp'] ?? '').toString();
-    return ListTile(
+
+    final tile = ListTile(
       dense: true,
-      leading: CircleAvatar(
-        radius: 18,
-        backgroundColor: scheme.primaryContainer,
-        backgroundImage: avatar != null
-            ? authNetworkImageProvider(avatar, mediaAuthHeaders(avatar))
-            : null,
-        child: avatar == null
-            ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
-                style: TextStyle(color: scheme.onPrimaryContainer))
-            : null,
+      leading: Container(
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: accent.withAlpha(110), width: 1.5),
+        ),
+        child: CircleAvatar(
+          radius: 17,
+          backgroundColor: scheme.primaryContainer,
+          backgroundImage: avatar != null
+              ? authNetworkImageProvider(avatar, mediaAuthHeaders(avatar))
+              : null,
+          child: avatar == null
+              ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                  style: TextStyle(color: scheme.onPrimaryContainer))
+              : null,
+        ),
       ),
-      title: Text(name, overflow: TextOverflow.ellipsis),
+      title: Text(name,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: phone.isNotEmpty
           ? Text(phone,
               style: TextStyle(
@@ -956,8 +1101,25 @@ extension _ChatPageHelpers3 on _ChatPageState {
       trailing: ts.isNotEmpty
           ? Text(_infoTime(ts),
               style: TextStyle(
-                  fontSize: 11, color: scheme.onSurfaceVariant))
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: scheme.onSurfaceVariant))
           : null,
+    );
+
+    // Cascade: later rows arrive a touch after earlier ones.
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 300 + index * 70),
+      curve: Curves.easeOutCubic,
+      builder: (_, t, child) => Opacity(
+        opacity: t.clamp(0.0, 1.0),
+        child: Transform.translate(
+          offset: Offset((1 - t) * 10, 0),
+          child: child,
+        ),
+      ),
+      child: tile,
     );
   }
 

@@ -309,11 +309,23 @@ extension _ChatPageHelpers2 on _ChatPageState {
       pageBuilder: (ctx, a1, a2) {
         final screen = MediaQuery.of(ctx).size;
         const margin = 8.0;
-        const tailH = 9.0;
-        final rightInset =
-            (screen.width - anchor.right).clamp(margin, screen.width - 80);
-        final bottomInset = screen.height - anchor.top + 4;
-        final tailPadRight = (anchor.width / 2 - 10).clamp(2.0, 140.0);
+        const radius = 20.0;
+        const tailW = 20.0;
+        const tailH = 10.0;
+        // Nudge the card a touch past the button so the tail lands on a straight
+        // part of the bottom edge and points right at the "+".
+        final cardRight =
+            (anchor.right + 8).clamp(120.0, screen.width - margin);
+        final rightInset = screen.width - cardRight;
+        final bottomInset = screen.height - anchor.top + 6;
+        final tailFromRight =
+            (cardRight - anchor.center.dx).clamp(radius + tailW / 2, 160.0);
+        // A subtle gray in dark mode so the card is clearly visible against the
+        // dark thread; plain surface on light.
+        final cardColor = isDark
+            ? Color.alphaBlend(
+                Colors.white.withValues(alpha: 0.09), scheme.surface)
+            : scheme.surface;
         return Material(
           type: MaterialType.transparency,
           child: AnimatedBuilder(
@@ -325,21 +337,15 @@ extension _ChatPageHelpers2 on _ChatPageState {
               return Stack(
                 children: [
                   // Tap anywhere outside the card to dismiss (works on desktop
-                  // and web, where there is no swipe-to-close).
+                  // and web, where there is no swipe-to-close). A faint scrim —
+                  // no blur — so the card simply lifts off the thread.
                   Positioned.fill(
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: () => Navigator.of(ctx).pop(),
-                      child: Opacity(
-                        opacity: t,
-                        child: BackdropFilter(
-                          filter: ui.ImageFilter.blur(
-                              sigmaX: 7 * t, sigmaY: 7 * t),
-                          child: Container(
-                            color: Colors.black.withValues(
-                                alpha: (isDark ? 0.34 : 0.20) * t),
-                          ),
-                        ),
+                      child: Container(
+                        color: Colors.black.withValues(
+                            alpha: (isDark ? 0.28 : 0.12) * t),
                       ),
                     ),
                   ),
@@ -351,20 +357,18 @@ extension _ChatPageHelpers2 on _ChatPageState {
                       child: Transform.scale(
                         alignment: Alignment.bottomRight,
                         scale: 0.16 + 0.84 * tb,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Flexible(child: builder(ctx)),
-                            Padding(
-                              padding: EdgeInsets.only(right: tailPadRight),
-                              child: CustomPaint(
-                                size: const Size(20, tailH),
-                                painter: _GenieTail(
-                                    color: scheme.surface, isDark: isDark),
-                              ),
-                            ),
-                          ],
+                        child: Material(
+                          color: cardColor,
+                          elevation: 12,
+                          shadowColor: Colors.black.withValues(
+                              alpha: isDark ? 0.6 : 0.22),
+                          shape: _MenuBubbleBorder(
+                            radius: radius,
+                            tailWidth: tailW,
+                            tailHeight: tailH,
+                            tailFromRight: tailFromRight,
+                          ),
+                          child: builder(ctx),
                         ),
                       ),
                     ),

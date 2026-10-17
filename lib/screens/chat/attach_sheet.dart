@@ -123,18 +123,24 @@ class _AttachSheetState extends State<AttachSheet> {
     // mobile) and no more, so there is never an empty white void beneath it.
     return Container(
       constraints: BoxConstraints(maxHeight: media.size.height * 0.82),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(26),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(
-                alpha: scheme.brightness == Brightness.dark ? 0.40 : 0.12),
-            blurRadius: 24,
-            offset: const Offset(0, -6),
-          ),
-        ],
-      ),
+      // When anchored as a floating menu the bubble around us (with its tail)
+      // provides the colour + shadow, so we stay transparent and let it clip
+      // us; as a bottom sheet we draw our own rounded card.
+      decoration: widget.compact
+          ? null
+          : BoxDecoration(
+              color: scheme.surface,
+              borderRadius: BorderRadius.circular(26),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(
+                      alpha:
+                          scheme.brightness == Brightness.dark ? 0.40 : 0.12),
+                  blurRadius: 24,
+                  offset: const Offset(0, -6),
+                ),
+              ],
+            ),
       child: Builder(builder: (context) {
         final inner = SingleChildScrollView(
           child: Column(

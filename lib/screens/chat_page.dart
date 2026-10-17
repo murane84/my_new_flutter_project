@@ -4881,27 +4881,61 @@ class _FullMenuCardState extends State<_FullMenuCard> {
 /// A video page inside the fullscreen media gallery: cache-first init, tap the
 /// center button to play, tap the video to pause. Lives only while its page is
 /// built, so swiping away disposes the controller.
-// A small downward tail at the bottom of the attach menu that points to the
-// composer's "+" button, so the floating card reads as belonging to it.
-class _GenieTail extends CustomPainter {
-  _GenieTail({required this.color, required this.isDark});
-  final Color color;
-  final bool isDark;
+// The attach menu's background as ONE seamless bubble: a rounded card with a
+// downward tail merged into its bottom edge (like a chat bubble's beak), so the
+// tail never reads as a separate, broken triangle. Drawn by a Material so it
+// carries the card colour, elevation shadow, and clips its content.
+class _MenuBubbleBorder extends ShapeBorder {
+  const _MenuBubbleBorder({
+    required this.radius,
+    required this.tailWidth,
+    required this.tailHeight,
+    required this.tailFromRight,
+  });
+  final double radius;
+  final double tailWidth;
+  final double tailHeight;
+  final double tailFromRight; // tail centre, measured in from the right edge.
+
   @override
-  void paint(Canvas canvas, Size size) {
+  EdgeInsetsGeometry get dimensions => EdgeInsets.only(bottom: tailHeight);
+
+  Path _shape(Rect rect) {
+    final body = Rect.fromLTWH(
+        rect.left, rect.top, rect.width, rect.height - tailHeight);
     final path = Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width / 2, size.height)
-      ..close();
-    canvas.drawShadow(
-        path, Colors.black.withValues(alpha: isDark ? 0.4 : 0.16), 2.5, false);
-    canvas.drawPath(path, Paint()..color = color);
+      ..addRRect(RRect.fromRectAndRadius(body, Radius.circular(radius)));
+    // Keep the tail on the straight part of the bottom edge so it merges
+    // cleanly with the card instead of fighting a rounded corner.
+    final minX = body.left + radius + tailWidth / 2;
+    final maxX = body.right - radius - tailWidth / 2;
+    var cx = body.right - tailFromRight;
+    if (maxX >= minX) {
+      cx = cx.clamp(minX, maxX);
+    } else {
+      cx = (body.left + body.right) / 2;
+    }
+    // Overlap the body edge slightly so there is no hairline seam.
+    path.moveTo(cx - tailWidth / 2, body.bottom - 1);
+    path.lineTo(cx + tailWidth / 2, body.bottom - 1);
+    path.lineTo(cx, body.bottom + tailHeight);
+    path.close();
+    return path;
   }
 
   @override
-  bool shouldRepaint(covariant _GenieTail old) =>
-      old.color != color || old.isDark != isDark;
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) => _shape(rect);
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) => _shape(rect);
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {}
+  @override
+  ShapeBorder scale(double t) => _MenuBubbleBorder(
+        radius: radius * t,
+        tailWidth: tailWidth * t,
+        tailHeight: tailHeight * t,
+        tailFromRight: tailFromRight * t,
+      );
 }
 
 // Bumped when the immersive theater player opens, so any inline gallery video

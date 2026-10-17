@@ -121,31 +121,17 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
         children: [
           _sectionLabel(scheme, 'APP THEME'),
           const SizedBox(height: 8),
-          SegmentedButton<ThemeMode>(
-            style: SegmentedButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            ),
-            segments: const [
-              ButtonSegment(
-                value: ThemeMode.system,
-                icon: Icon(Icons.brightness_auto_rounded, size: 18),
-                label: Text('System'),
-              ),
-              ButtonSegment(
-                value: ThemeMode.light,
-                icon: Icon(Icons.light_mode_rounded, size: 18),
-                label: Text('Light'),
-              ),
-              ButtonSegment(
-                value: ThemeMode.dark,
-                icon: Icon(Icons.dark_mode_rounded, size: 18),
-                label: Text('Dark'),
-              ),
+          Row(
+            children: [
+              _themeCard(theme, scheme, ThemeMode.system,
+                  Icons.brightness_auto_rounded, 'System'),
+              const SizedBox(width: 10),
+              _themeCard(theme, scheme, ThemeMode.light,
+                  Icons.light_mode_rounded, 'Light'),
+              const SizedBox(width: 10),
+              _themeCard(theme, scheme, ThemeMode.dark,
+                  Icons.dark_mode_rounded, 'Dark'),
             ],
-            selected: {theme.themeMode},
-            showSelectedIcon: false,
-            onSelectionChanged: (s) => theme.setThemeMode(s.first),
           ),
           if (_showGuide) ...[
             const SizedBox(height: 8),
@@ -156,15 +142,9 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
             ),
           ],
           const SizedBox(height: 18),
-          _sectionLabel(scheme, 'ACCENT'),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              for (final a in _accents) _swatch(context, theme, scheme, a),
-            ],
-          ),
+          _accentHeader(context, theme, scheme),
+          const SizedBox(height: 12),
+          ..._accentGroups(context, theme, scheme),
           if (_showGuide) ...[
             const SizedBox(height: 8),
             Text(
@@ -442,39 +422,153 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
         ),
       );
 
-  Widget _swatch(BuildContext context, ThemeProvider theme, ColorScheme scheme,
-      _Accent a) {
+  // A compact light/dark/system picker card (replaces the segmented bar).
+  Widget _themeCard(ThemeProvider theme, ColorScheme scheme, ThemeMode mode,
+      IconData icon, String label) {
+    final selected = theme.themeMode == mode;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => theme.setThemeMode(mode),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: selected
+                ? scheme.primary.withAlpha(30)
+                : scheme.surfaceContainerHighest.withAlpha(110),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected
+                  ? scheme.primary
+                  : scheme.outlineVariant.withAlpha(90),
+              width: selected ? 1.6 : 1,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon,
+                  size: 22,
+                  color: selected ? scheme.primary : scheme.onSurfaceVariant),
+              const SizedBox(height: 8),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                      color: selected ? scheme.primary : scheme.onSurface)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ACCENT header: the label plus the currently-selected colour's name, so the
+  // per-swatch labels can go and the grid reads as a clean set of dots.
+  Widget _accentHeader(
+      BuildContext context, ThemeProvider theme, ColorScheme scheme) {
+    final current = _accents.firstWhere(
+      (a) => a.color.toARGB32() == theme.accent.toARGB32(),
+      orElse: () => _accents.first,
+    );
+    return Row(
+      children: [
+        _sectionLabel(scheme, 'ACCENT'),
+        const SizedBox(width: 10),
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: current.color,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(color: current.color.withAlpha(130), blurRadius: 6),
+            ],
+          ),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            current.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: scheme.onSurface),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // The accents, grouped into labelled colour families of clean dots.
+  List<Widget> _accentGroups(
+      BuildContext context, ThemeProvider theme, ColorScheme scheme) {
+    final groups = <({String title, List<_Accent> items})>[
+      (title: 'Reds & pinks', items: _accents.sublist(0, 6)),
+      (title: 'Purples', items: _accents.sublist(6, 10)),
+      (title: 'Blues & cyans', items: _accents.sublist(10, 15)),
+      (title: 'Greens', items: _accents.sublist(15, 18)),
+      (title: 'Yellows & oranges', items: _accents.sublist(18, 21)),
+      (title: 'Neutral', items: _accents.sublist(21, 22)),
+      (title: 'Neon', items: _accents.sublist(22)),
+    ];
+    final out = <Widget>[];
+    for (var i = 0; i < groups.length; i++) {
+      final g = groups[i];
+      if (i > 0) out.add(const SizedBox(height: 14));
+      out.add(Text(
+        g.title,
+        style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2,
+            color: scheme.onSurfaceVariant),
+      ));
+      out.add(const SizedBox(height: 10));
+      out.add(Wrap(
+        spacing: 14,
+        runSpacing: 14,
+        children: [
+          for (final a in g.items) _accentDot(context, theme, scheme, a),
+        ],
+      ));
+    }
+    return out;
+  }
+
+  // A single clean accent dot: colour circle, glow, ring + check when picked.
+  Widget _accentDot(BuildContext context, ThemeProvider theme,
+      ColorScheme scheme, _Accent a) {
     final selected = theme.accent.toARGB32() == a.color.toARGB32();
-    return GestureDetector(
-      onTap: () => theme.setAccent(a.color),
-      child: SizedBox(
-        width: 52,
-        child: Column(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: a.color,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: selected ? scheme.onSurface : Colors.transparent,
-                  width: 3,
-                ),
+    return Tooltip(
+      message: a.name,
+      waitDuration: const Duration(milliseconds: 500),
+      child: GestureDetector(
+        onTap: () => theme.setAccent(a.color),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: a.color,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: selected ? scheme.onSurface : Colors.transparent,
+              width: selected ? 3 : 0,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: a.color.withAlpha(selected ? 150 : 55),
+                blurRadius: selected ? 14 : 6,
+                spreadRadius: selected ? 1 : 0,
               ),
-              child: selected
-                  ? const Icon(Icons.check, color: Colors.white, size: 18)
-                  : null,
-            ),
-            const SizedBox(height: 5),
-            Text(
-              a.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant),
-            ),
-          ],
+            ],
+          ),
+          child: selected
+              ? const Icon(Icons.check_rounded, color: Colors.white, size: 20)
+              : null,
         ),
       ),
     );

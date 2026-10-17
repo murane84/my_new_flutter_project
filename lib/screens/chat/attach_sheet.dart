@@ -17,6 +17,7 @@ class AttachSheet extends StatefulWidget {
   const AttachSheet({
     super.key,
     required this.isMobile,
+    this.compact = false,
     required this.onGallery,
     required this.onVideo,
     required this.onCamera,
@@ -29,6 +30,10 @@ class AttachSheet extends StatefulWidget {
 
   /// Only Android/iOS have a device gallery to show the quick strip for.
   final bool isMobile;
+
+  /// When anchored as a floating menu (not a bottom sheet), drop the bottom
+  /// SafeArea + keyboard inset padding so the card hugs its content.
+  final bool compact;
 
   final VoidCallback onGallery;
   final VoidCallback onVideo;
@@ -130,23 +135,27 @@ class _AttachSheetState extends State<AttachSheet> {
           ),
         ],
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _title(scheme),
-                _optionsGrid(scheme),
-                if (widget.isMobile) _recentSection(scheme),
-                const SizedBox(height: 10),
-              ],
-            ),
+      child: Builder(builder: (context) {
+        final inner = SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _title(scheme),
+              _optionsGrid(scheme),
+              if (widget.isMobile) _recentSection(scheme),
+              const SizedBox(height: 10),
+            ],
           ),
-        ),
-      ),
+        );
+        if (widget.compact) return inner;
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+            child: inner,
+          ),
+        );
+      }),
     );
   }
 

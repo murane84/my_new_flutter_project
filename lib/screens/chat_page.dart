@@ -1390,38 +1390,48 @@ class _ChatPageState extends State<ChatPage>
           defaultTargetPlatform == TargetPlatform.iOS);
 
   void _openAttachSheet() {
-    // Run an action after closing the sheet (so the picker/preview isn't shown
-    // behind it).
+    // Tuck the keyboard away so the floating menu measures + positions cleanly.
+    FocusScope.of(context).unfocus();
+
+    // Anchor to the composer's "+" so the menu rises straight out of it (and
+    // is swallowed back into it on dismiss), with a tail pointing down to it.
+    Rect anchor;
+    final ro = _attachBtnKey.currentContext?.findRenderObject();
+    if (ro is RenderBox && ro.hasSize) {
+      anchor = ro.localToGlobal(Offset.zero) & ro.size;
+    } else {
+      final sz = MediaQuery.of(context).size;
+      anchor = Rect.fromLTWH(sz.width - 60, sz.height - 120, 44, 44);
+    }
+
+    // Run an action after closing the menu (the close plays the genie reverse).
     void act(VoidCallback fn) {
       Navigator.of(context).pop();
       fn();
     }
 
-    // Appears from the chat screen itself (a scale + fade pop), rather than
-    // sliding up from the footer as a bottom sheet.
-    _showPopPanel(
+    _showGeniePanel(
+      anchor: anchor,
       label: 'Attach',
       builder: (ctx) {
-        final media = MediaQuery.of(ctx);
-        return Center(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-                16, media.padding.top + 24, 16, media.padding.bottom + 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 460),
-              child: AttachSheet(
-                isMobile: _isMobile,
-                onGallery: () => act(() => _pickGalleryImages()),
-                onVideo: () => act(_pickVideo),
-                onCamera: () => act(() => _pickImage(ImageSource.camera)),
-                onLocation: () => act(_shareLocation),
-                onContact: () => act(_shareContact),
-                onDocument: () => act(_pickDocument),
-                onListenTogether: () => act(_startListenTogether),
-                onPickPhoto: (bytes, name) =>
-                    act(() => _previewAndSendImage(bytes, name, 'image/jpeg')),
-              ),
-            ),
+        final topInset = MediaQuery.of(ctx).padding.top;
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 340,
+            maxHeight: (anchor.top - topInset - 24).clamp(200.0, 560.0),
+          ),
+          child: AttachSheet(
+            isMobile: _isMobile,
+            compact: true,
+            onGallery: () => act(() => _pickGalleryImages()),
+            onVideo: () => act(_pickVideo),
+            onCamera: () => act(() => _pickImage(ImageSource.camera)),
+            onLocation: () => act(_shareLocation),
+            onContact: () => act(_shareContact),
+            onDocument: () => act(_pickDocument),
+            onListenTogether: () => act(_startListenTogether),
+            onPickPhoto: (bytes, name) =>
+                act(() => _previewAndSendImage(bytes, name, 'image/jpeg')),
           ),
         );
       },
@@ -1844,6 +1854,8 @@ class _ChatPageState extends State<ChatPage>
   // settles smoothly — a spring back up, or a slide off — instead of a flip.
   double _viewerDragDy = 0;
   AnimationController? _viewerDismissCtrl;
+  // Anchors the attach menu so it rises out of the composer's "+" button.
+  final GlobalKey _attachBtnKey = GlobalKey();
 
   Future<void> _openImageViewer(String tappedUrl) async {
     // Gather EVERY image shared in this thread (chronological order) so the
@@ -4146,6 +4158,7 @@ class _ChatPageState extends State<ChatPage>
                                         padding:
                                             const EdgeInsets.only(right: 2),
                                         child: IconButton(
+                                          key: _attachBtnKey,
                                           // One quiet "+" opens Share, which
                                           // already holds Camera, Listen
                                           // together, Gallery, Video and more —
@@ -4868,6 +4881,29 @@ class _FullMenuCardState extends State<_FullMenuCard> {
 /// A video page inside the fullscreen media gallery: cache-first init, tap the
 /// center button to play, tap the video to pause. Lives only while its page is
 /// built, so swiping away disposes the controller.
+// A small downward tail at the bottom of the attach menu that points to the
+// composer's "+" button, so the floating card reads as belonging to it.
+class _GenieTail extends CustomPainter {
+  _GenieTail({required this.color, required this.isDark});
+  final Color color;
+  final bool isDark;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..close();
+    canvas.drawShadow(
+        path, Colors.black.withValues(alpha: isDark ? 0.4 : 0.16), 2.5, false);
+    canvas.drawPath(path, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(covariant _GenieTail old) =>
+      old.color != color || old.isDark != isDark;
+}
+
 // Bumped when the immersive theater player opens, so any inline gallery video
 // playing behind it pauses — only one video is ever heard at a time.
 final ValueNotifier<int> _galleryVideoPauseAll = ValueNotifier<int>(0);

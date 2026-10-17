@@ -289,7 +289,12 @@ extension _ChatPageHelpers2 on _ChatPageState {
   // Shared presenter for the chat's floating popups (attach sheet, message
   // menu): a frosted-blur backdrop with a spring scale + slide-up, all wrapped
   // in a Material so text/ink render properly (no raw-overlay default style).
-  Future<void> _showPopPanel({
+  // A menu that genies out of a screen anchor (the composer's "+" button):
+  // it scales up from the button on open and collapses back into it on
+  // dismiss, with a tail pointing down to it. A full-screen tap layer closes
+  // it reliably on every platform — desktop/web included — not just by swipe.
+  Future<void> _showGeniePanel({
+    required Rect anchor,
     required WidgetBuilder builder,
     String label = 'Menu',
   }) {
@@ -300,38 +305,67 @@ extension _ChatPageHelpers2 on _ChatPageState {
       barrierDismissible: true,
       barrierLabel: label,
       barrierColor: Colors.transparent,
-      transitionDuration: const Duration(milliseconds: 240),
+      transitionDuration: const Duration(milliseconds: 260),
       pageBuilder: (ctx, a1, a2) {
+        final screen = MediaQuery.of(ctx).size;
+        const margin = 8.0;
+        const tailH = 9.0;
+        final rightInset =
+            (screen.width - anchor.right).clamp(margin, screen.width - 80);
+        final bottomInset = screen.height - anchor.top + 4;
+        final tailPadRight = (anchor.width / 2 - 10).clamp(2.0, 140.0);
         return Material(
           type: MaterialType.transparency,
           child: AnimatedBuilder(
             animation: a1,
             builder: (context, _) {
-              final t = Curves.easeOutCubic.transform(a1.value.clamp(0.0, 1.0));
-              final tb =
-                  Curves.easeOutBack.transform(a1.value.clamp(0.0, 1.0));
+              final v = a1.value.clamp(0.0, 1.0);
+              final t = Curves.easeOutCubic.transform(v);
+              final tb = Curves.easeOutBack.transform(v);
               return Stack(
                 children: [
+                  // Tap anywhere outside the card to dismiss (works on desktop
+                  // and web, where there is no swipe-to-close).
                   Positioned.fill(
-                    child: Opacity(
-                      opacity: t,
-                      child: BackdropFilter(
-                        filter:
-                            ui.ImageFilter.blur(sigmaX: 8 * t, sigmaY: 8 * t),
-                        child: Container(
-                          color: Colors.black
-                              .withValues(alpha: (isDark ? 0.32 : 0.22) * t),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => Navigator.of(ctx).pop(),
+                      child: Opacity(
+                        opacity: t,
+                        child: BackdropFilter(
+                          filter: ui.ImageFilter.blur(
+                              sigmaX: 7 * t, sigmaY: 7 * t),
+                          child: Container(
+                            color: Colors.black.withValues(
+                                alpha: (isDark ? 0.34 : 0.20) * t),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                  Opacity(
-                    opacity: t,
-                    child: Transform.translate(
-                      offset: Offset(0, (1 - t) * 20),
+                  Positioned(
+                    right: rightInset,
+                    bottom: bottomInset,
+                    child: Opacity(
+                      opacity: t,
                       child: Transform.scale(
-                        scale: 0.92 + 0.08 * tb,
-                        child: builder(ctx),
+                        alignment: Alignment.bottomRight,
+                        scale: 0.16 + 0.84 * tb,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Flexible(child: builder(ctx)),
+                            Padding(
+                              padding: EdgeInsets.only(right: tailPadRight),
+                              child: CustomPaint(
+                                size: const Size(20, tailH),
+                                painter: _GenieTail(
+                                    color: scheme.surface, isDark: isDark),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),

@@ -98,7 +98,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
     final isMine = msg['sender_id']?.toString() == _myId;
     final owned = isMine || _savedMediaKeys.contains(msg['media_url'] as String?);
     return GestureDetector(
-      onTap: () => _openUrl(url),
+      onTap: () => _openUrl(url, msg),
       child: Container(
         constraints: const BoxConstraints(maxWidth: 244),
         padding: const EdgeInsets.all(8),
@@ -240,31 +240,97 @@ extension _ChatPageHelpers3 on _ChatPageState {
     return Icons.insert_drive_file_rounded;
   }
 
-  Future<void> _openUrl(String url) async {
-    // Attachments are auth-protected now, so an external browser can't fetch
-    // them. Download the bytes WITH our token, then hand the file to the system
-    // sheet (open / save / share) — same pattern as saving an image.
+  Future<void> _openUrl(String url, Map<String, dynamic> msg) async {
+    // Attachments are auth-protected, so we download the bytes WITH our token,
+    // save them under the file's REAL name (with extension), and OPEN them with
+    // the system viewer — a PDF opens in a PDF app, an APK goes to the package
+    // installer. Only if nothing can open it do we fall back to a share sheet.
     try {
       if (mounted) showToast(context, 'Opening…');
-      final res = await http.get(Uri.parse(url), headers: mediaAuthHeaders(url));
-      if (res.statusCode != 200) {
-        if (mounted) {
-          showToast(context, 'Could not open file', type: ToastType.error);
-        }
-        return;
+      final mime = ((msg['media_mime'] as String?) ?? '').trim();
+      // The URL's last segment is a server key with no extension, so prefer the
+      // stored file name; derive the extension from the MIME if it's missing.
+      // Without the right extension Android can't match a viewer (the "BIN").
+      var name = ((msg['media_name'] as String?) ?? '').trim();
+      if (name.isEmpty) {
+        final seg = Uri.parse(url).pathSegments;
+        name = seg.isNotEmpty ? seg.last : '';
       }
-      var name = Uri.parse(url).pathSegments.isNotEmpty
-          ? Uri.parse(url).pathSegments.last
-          : '';
+      name = name.replaceAll(RegExp(r'[\\/:*?"<>|]+'), '_').trim();
       if (name.isEmpty) {
         name = 'aluta_file_${DateTime.now().millisecondsSinceEpoch}';
       }
+      if (!name.contains('.')) {
+        final ext = _extForMime(mime);
+        if (ext.isNotEmpty) name = '$name$ext';
+      }
+
+      // Reuse the on-device copy if present; otherwise fetch it now.
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/$name');
-      await file.writeAsBytes(res.bodyBytes, flush: true);
-      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+      File? cached;
+      try {
+        cached = await MediaStore.instance.cached(url);
+      } catch (_) {}
+      if (cached != null) {
+        await file.writeAsBytes(await cached.readAsBytes(), flush: true);
+      } else {
+        final res =
+            await http.get(Uri.parse(url), headers: mediaAuthHeaders(url));
+        if (res.statusCode != 200) {
+          if (mounted) {
+            showToast(context, 'Could not open file', type: ToastType.error);
+          }
+          return;
+        }
+        await file.writeAsBytes(res.bodyBytes, flush: true);
+      }
+
+      final result = await OpenFilex.open(
+        file.path,
+        type: mime.isNotEmpty ? mime : null,
+      );
+      if (result.type != ResultType.done) {
+        // No installed app can open this type — let the user route it onward.
+        await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+      }
     } catch (_) {
-      if (mounted) showToast(context, 'Could not open file', type: ToastType.error);
+      if (mounted) {
+        showToast(context, 'Could not open file', type: ToastType.error);
+      }
+    }
+  }
+
+  // Fallback extension for a file whose stored name lost its suffix, so the
+  // system opener can still identify the type.
+  String _extForMime(String mime) {
+    switch (mime.toLowerCase()) {
+      case 'application/pdf':
+        return '.pdf';
+      case 'application/vnd.android.package-archive':
+        return '.apk';
+      case 'application/msword':
+        return '.doc';
+      case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+        return '.docx';
+      case 'application/vnd.ms-excel':
+        return '.xls';
+      case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+        return '.xlsx';
+      case 'application/vnd.ms-powerpoint':
+        return '.ppt';
+      case 'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+        return '.pptx';
+      case 'text/plain':
+        return '.txt';
+      case 'application/zip':
+        return '.zip';
+      case 'audio/mpeg':
+        return '.mp3';
+      case 'video/mp4':
+        return '.mp4';
+      default:
+        return '';
     }
   }
 

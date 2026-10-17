@@ -66,6 +66,7 @@ import 'package:float_column/float_column.dart';
 import 'package:linkify/linkify.dart' show linkify;
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart' as geocoding;
+import 'package:open_filex/open_filex.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import '../utils/app_config.dart';
 import '../utils/loose_url_linkifier.dart';

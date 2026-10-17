@@ -101,6 +101,9 @@ dependencies:
   geolocator: ^13.0.1
   # Reverse-geocode shared coordinates into a readable address for the card.
   geocoding: ^3.0.0
+  # Open received documents/APKs with the system viewer/installer (not a
+  # share sheet), so a PDF opens in a PDF app and an APK goes to the installer.
+  open_filex: ^4.3.4
   # WhatsApp-grade photo viewer: per-image pinch-zoom with correct swipe-vs-zoom
   # gesture arbitration in a paged gallery (the chat image viewer).
   photo_view: ^0.15.0

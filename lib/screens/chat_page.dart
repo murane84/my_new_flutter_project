@@ -1417,7 +1417,6 @@ class _ChatPageState extends State<ChatPage>
         final topInset = MediaQuery.of(ctx).padding.top;
         return ConstrainedBox(
           constraints: BoxConstraints(
-            maxWidth: 340,
             maxHeight: (anchor.top - topInset - 24).clamp(200.0, 560.0),
           ),
           child: AttachSheet(

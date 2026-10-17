@@ -312,14 +312,24 @@ extension _ChatPageHelpers2 on _ChatPageState {
         const radius = 20.0;
         const tailW = 20.0;
         const tailH = 10.0;
-        // Nudge the card a touch past the button so the tail lands on a straight
-        // part of the bottom edge and points right at the "+".
-        final cardRight =
-            (anchor.right + 8).clamp(120.0, screen.width - margin);
+        // On a phone the card is CENTRED and capped so it never stretches to the
+        // screen edges; on wide screens it hugs the "+" as before. Either way
+        // the tail aims at the "+" as far as the straight bottom edge allows.
+        final narrow = screen.width < 520;
+        final cardW = narrow
+            ? (screen.width - 48).clamp(240.0, 320.0)
+            : 340.0;
+        final double cardRight;
+        if (narrow) {
+          final left = (screen.width - cardW) / 2;
+          cardRight = screen.width - left;
+        } else {
+          cardRight = (anchor.right + 8).clamp(120.0, screen.width - margin);
+        }
         final rightInset = screen.width - cardRight;
         final bottomInset = screen.height - anchor.top + 6;
-        final tailFromRight =
-            (cardRight - anchor.center.dx).clamp(radius + tailW / 2, 160.0);
+        final tailFromRight = (cardRight - anchor.center.dx)
+            .clamp(radius + tailW / 2, cardW - radius - tailW / 2);
         // A subtle gray in dark mode so the card is clearly visible against the
         // dark thread; plain surface on light.
         final cardColor = isDark
@@ -368,7 +378,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
                             tailHeight: tailH,
                             tailFromRight: tailFromRight,
                           ),
-                          child: builder(ctx),
+                          child: SizedBox(width: cardW, child: builder(ctx)),
                         ),
                       ),
                     ),

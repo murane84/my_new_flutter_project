@@ -209,8 +209,8 @@ class _AttachSheetState extends State<AttachSheet> {
           // phone, more columns on wide screens. The aspect ratio is derived
           // from the real content height so cells never grow tall and leave
           // gaps between the rows.
-          const target = 86.0;
-          const contentH = 82.0;
+          const target = 74.0;
+          const contentH = 72.0;
           final cols = (c.maxWidth / target).floor().clamp(4, 8);
           final cellW = c.maxWidth / cols;
           final aspect = cellW / contentH;
@@ -237,8 +237,8 @@ class _AttachSheetState extends State<AttachSheet> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 52,
-            height: 52,
+            width: 46,
+            height: 46,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               // Glossy, top-lit gradient fill + a soft colored glow gives each
@@ -261,9 +261,9 @@ class _AttachSheetState extends State<AttachSheet> {
                 ),
               ],
             ),
-            child: Icon(o.icon, color: Colors.white, size: 25),
+            child: Icon(o.icon, color: Colors.white, size: 22),
           ),
-          const SizedBox(height: 7),
+          const SizedBox(height: 6),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2),
             child: Text(
@@ -272,7 +272,7 @@ class _AttachSheetState extends State<AttachSheet> {
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 11.5,
+                fontSize: 11,
                 height: 1.0,
                 color: scheme.onSurface.withAlpha(210),
                 fontWeight: FontWeight.w600,

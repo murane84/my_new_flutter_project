@@ -5140,6 +5140,74 @@ class _GalleryVideoState extends State<_GalleryVideo> {
     }
   }
 
+  String _fmtDur(Duration d) {
+    final s = d.inSeconds;
+    return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+  }
+
+  // A slim play/scrub bar at the bottom of the clip — ticking time + a
+  // draggable seek slider — the same transport the fullscreen player has.
+  Widget _galleryControls(VideoPlayerController c) {
+    final dur = c.value.duration;
+    final pos = c.value.position;
+    final totalMs =
+        dur.inMilliseconds <= 0 ? 1.0 : dur.inMilliseconds.toDouble();
+    final curMs = pos.inMilliseconds.toDouble().clamp(0.0, totalMs);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 22, 8, 6),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [Color(0xCC000000), Color(0x00000000)],
+        ),
+      ),
+      child: Row(
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _toggle,
+            child: Icon(
+                c.value.isPlaying
+                    ? Icons.pause_rounded
+                    : Icons.play_arrow_rounded,
+                color: Colors.white,
+                size: 24),
+          ),
+          const SizedBox(width: 6),
+          Text(_fmtDur(pos),
+              style: const TextStyle(color: Colors.white, fontSize: 11)),
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 2.5,
+                activeTrackColor: Colors.white,
+                inactiveTrackColor: Colors.white30,
+                thumbColor: Colors.white,
+                overlayColor: Colors.white24,
+                thumbShape:
+                    const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape:
+                    const RoundSliderOverlayShape(overlayRadius: 12),
+              ),
+              child: Slider(
+                min: 0,
+                max: totalMs,
+                value: curMs,
+                onChanged: (v) {
+                  c.seekTo(Duration(milliseconds: v.round()));
+                  setState(() {});
+                },
+              ),
+            ),
+          ),
+          Text(_fmtDur(dur),
+              style: const TextStyle(color: Colors.white, fontSize: 11)),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = _c;
@@ -5189,6 +5257,12 @@ class _GalleryVideoState extends State<_GalleryVideo> {
                       color: Colors.white, size: 40),
                 ),
               ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _galleryControls(c),
             ),
           ],
         ),
@@ -5294,14 +5368,45 @@ class _ChatVideoPlayer extends StatefulWidget {
   State<_ChatVideoPlayer> createState() => _ChatVideoPlayerState();
 }
 
-class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
+class _ChatVideoPlayerState extends State<_ChatVideoPlayer>
+    with SingleTickerProviderStateMixin {
   VideoPlayerController? _c;
   bool _error = false;
+  double _dragDy = 0; // live drag-to-dismiss offset
+  AnimationController? _settleCtrl;
 
   @override
   void initState() {
     super.initState();
+    _settleCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 200));
     _init();
+  }
+
+  // Release of a downward drag: pop to close past the threshold, else spring
+  // the view back into place.
+  void _settleDrag(bool close) {
+    if (close) {
+      Navigator.pop(context);
+      return;
+    }
+    final ctrl = _settleCtrl;
+    final start = _dragDy;
+    if (ctrl == null || start == 0) {
+      setState(() => _dragDy = 0);
+      return;
+    }
+    ctrl.reset();
+    final anim = Tween<double>(begin: start, end: 0.0)
+        .animate(CurvedAnimation(parent: ctrl, curve: Curves.easeOut));
+    void tick() {
+      if (mounted) setState(() => _dragDy = anim.value);
+    }
+    anim.addListener(tick);
+    ctrl.forward().whenComplete(() {
+      anim.removeListener(tick);
+      if (mounted) setState(() => _dragDy = 0);
+    });
   }
 
   Future<void> _init() async {
@@ -5452,6 +5557,7 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
 
   @override
   void dispose() {
+    _settleCtrl?.dispose();
     _resumeMusicIfDucked();
     _c?.removeListener(_onTick);
     _c?.dispose();
@@ -5466,6 +5572,7 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
     final stageColor = isDark ? Colors.black : Colors.white;
     final onStage = isDark ? Colors.white70 : Colors.black54;
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () {
         if (c == null || !c.value.isInitialized) return;
         if (c.value.isPlaying) {
@@ -5475,10 +5582,23 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
         }
         setState(() {});
       },
+      // Swipe down — or click-hold and drag down on desktop — to dismiss.
+      onVerticalDragUpdate: (d) {
+        setState(() => _dragDy = (_dragDy + d.delta.dy).clamp(-60.0, 600.0));
+      },
+      onVerticalDragEnd: (d) {
+        final v = d.primaryVelocity ?? 0;
+        _settleDrag(_dragDy > 120 || v > 700);
+      },
       child: Stack(
         fit: StackFit.expand,
         children: [
-          Container(color: stageColor),
+          Transform.translate(
+            offset: Offset(0, _dragDy),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Container(color: stageColor),
           if (_error)
             Center(
               child: Padding(
@@ -5518,10 +5638,15 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
           Positioned(
             top: 40,
             right: 16,
-            child: IconButton(
-              icon: Icon(Icons.close_rounded,
-                  color: isDark ? Colors.white : Colors.black87),
-              onPressed: () => Navigator.pop(context),
+            child: Material(
+              color: Colors.black.withValues(alpha: 0.42),
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: IconButton(
+                tooltip: 'Close',
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
             ),
           ),
           if (widget.onKeep != null && !(c?.value.isPlaying ?? false))
@@ -5557,6 +5682,9 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
                 ),
               ),
             ),
+        ],
+      ),
+          ),
         ],
       ),
     );

@@ -311,12 +311,36 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
             etype = data.get("type")
             if etype == "typing":
                 to = data.get("to")
+                conv = data.get("conv")
                 if to is not None:
                     try:
                         await notify_user(
                             int(to),
                             {"type": "typing", "user_id": int(user_id)},
                         )
+                    except Exception:
+                        pass
+                elif conv is not None:
+                    # Group typing → fan out to the other members of the group.
+                    try:
+                        cid = int(conv)
+                        from database import SessionLocal
+                        import crud_conversations as cc
+                        db = SessionLocal()
+                        try:
+                            members = cc.member_ids(db, cid)
+                        finally:
+                            db.close()
+                        name = str(data.get("name") or "")
+                        for m in members:
+                            if int(m) == int(user_id):
+                                continue
+                            await notify_user(int(m), {
+                                "type": "typing",
+                                "user_id": int(user_id),
+                                "conversation_id": str(cid),
+                                "name": name,
+                            })
                     except Exception:
                         pass
             elif etype == "active_conv":

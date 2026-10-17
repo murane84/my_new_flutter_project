@@ -233,6 +233,20 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   String get _livePeerLabel =>
       ContactNames.instance.nameFor(_friendPhone) ?? widget.friendName;
   bool _friendTyping = false;
+  // Group typing: userId -> display name, with a per-user expiry timer.
+  final Map<int, String> _groupTypers = {};
+  final Map<int, Timer> _groupTyperTimers = {};
+  bool get _showTyping =>
+      _friendTyping || (_isGroup && _groupTypers.isNotEmpty);
+  String get _groupTypingText {
+    final names = _groupTypers.values.toList();
+    if (names.isEmpty) return '';
+    if (names.length == 1) return '\${names.first} is typing…';
+    if (names.length == 2) {
+      return '\${names[0]} and \${names[1]} are typing…';
+    }
+    return 'Several people are typing…';
+  }
 
   List<Map<String, dynamic>> _messages = [];
 
@@ -480,6 +494,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _statusTimer?.cancel();
     _pollTimer?.cancel();
     _typingTimer?.cancel();
+    for (final t in _groupTyperTimers.values) {
+      t.cancel();
+    }
     _keepAliveTimer?.cancel();
     _connectivitySub?.cancel();
     _recordTimer?.cancel();
@@ -872,7 +889,25 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         });
       }
     } else if (type == 'typing') {
-      if (event['user_id'].toString() == widget.friendId.toString()) {
+      final uid = event['user_id'];
+      final convId = event['conversation_id']?.toString();
+      if (convId != null && convId.isNotEmpty) {
+        // Group typing for THIS thread (ignore my own and other conversations).
+        if (_isGroup && convId == _cid.toString() && uid.toString() != _myId) {
+          final tid = int.tryParse(uid.toString());
+          if (tid != null) {
+            final name = (event['name'] ?? '').toString();
+            setState(() =>
+                _groupTypers[tid] = name.isNotEmpty ? name : 'Someone');
+            _groupTyperTimers[tid]?.cancel();
+            _groupTyperTimers[tid] = Timer(const Duration(seconds: 4), () {
+              if (!mounted) return;
+              setState(() => _groupTypers.remove(tid));
+              _groupTyperTimers.remove(tid);
+            });
+          }
+        }
+      } else if (uid.toString() == widget.friendId.toString()) {
         setState(() => _friendTyping = true);
         Future.delayed(const Duration(seconds: 3), () {
           if (mounted) setState(() => _friendTyping = false);
@@ -1144,12 +1179,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     if (!_applyingListEdit) _maybeFractionReplace();
     setState(() {});
     _markActivity();
-    if (!_iTyping && !_isGroup) {
-      // Typing indicators are DM-only for now (group typing needs per-member
-      // fan-out — deferred).
+    if (!_iTyping) {
       _iTyping = true;
       try {
-        _ws.sendEvent({'type': 'typing', 'to': widget.friendId});
+        if (_isGroup) {
+          _ws.sendEvent({'type': 'typing', 'conv': _cid, 'name': _myName});
+        } else {
+          _ws.sendEvent({'type': 'typing', 'to': widget.friendId});
+        }
       } catch (_) {}
     }
     _typingTimer?.cancel();
@@ -4027,13 +4064,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         reverse: true,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 4, vertical: 8),
-                        itemCount: _messages.length + (_friendTyping ? 1 : 0),
+                        itemCount: _messages.length + (_showTyping ? 1 : 0),
                         itemBuilder: (ctx, i) {
                           // Typing indicator at top (index 0 in reversed list)
-                          if (_friendTyping && i == 0) {
+                          if (_showTyping && i == 0) {
                             return _buildTypingIndicator();
                           }
-                          final msgIdx = _friendTyping ? i - 1 : i;
+                          final msgIdx = _showTyping ? i - 1 : i;
                           final msg = _messages[msgIdx];
                           final isMe =
                               msg['sender_id'].toString() == _myId;
@@ -4173,7 +4210,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         fontSize: 15, fontWeight: FontWeight.bold)),
                 Text(
                   _isGroup
-                      ? '${widget.memberCount} members'
+                      ? (_groupTypers.isNotEmpty
+                          ? _groupTypingText
+                          : '${widget.memberCount} members')
                       : _friendTyping
                           ? 'typing…'
                           : _isFriendOnline
@@ -4183,7 +4222,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                   : 'offline',
                   style: TextStyle(
                     fontSize: 11,
-                    color: (!_isGroup && (_friendTyping || _isFriendOnline))
+                    color: ((!_isGroup && (_friendTyping || _isFriendOnline)) ||
+                            (_isGroup && _groupTypers.isNotEmpty))
                         ? Colors.green
                         : Theme.of(context)
                             .colorScheme

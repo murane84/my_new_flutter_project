@@ -12,6 +12,7 @@ from models import User, Conversation, ConversationMember, Friend
 from websocket_manager import (
     connected_users, disconnect_user, notify_user,
     set_now_playing, clear_now_playing,
+    set_active_conv, clear_active_conv,
 )
 from push import send_push_to_user, _tokens_for
 
@@ -318,6 +319,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                         )
                     except Exception:
                         pass
+            elif etype == "active_conv":
+                # The client reports which conversation it is actively viewing
+                # (e.g. "dm:42" / "grp:7"), or null when it leaves. We skip the
+                # new-message push for that chat while it's on screen.
+                try:
+                    set_active_conv(int(user_id), data.get("conv"))
+                except Exception:
+                    pass
             elif etype in _CALL_SIGNALS:
                 # Aluta voice-call signaling (WebRTC). Relay the whole payload
                 # to the target user, stamping who it's `from`, so the two
@@ -459,5 +468,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
             # tell friends so the "Listening now" zone drops them.
             try:
                 await _now_playing_update(uid, None, False, caller_name)
+            except Exception:
+                pass
+            # No sockets left → not actively viewing any chat.
+            try:
+                clear_active_conv(uid)
             except Exception:
                 pass

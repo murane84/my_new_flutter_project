@@ -201,6 +201,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   bool get _isGroup => widget.isGroup && widget.conversationId != null;
   int get _cid => widget.conversationId ?? 0;
 
+  // Key the backend uses to skip a redundant push for the chat on screen.
+  String get _activeConvKey => _isGroup ? 'grp:$_cid' : 'dm:${widget.friendId}';
+
+  void _sendActivePresence(bool active) {
+    try {
+      _ws.sendEvent(
+          {'type': 'active_conv', 'conv': active ? _activeConvKey : null});
+    } catch (_) {}
+  }
+
   // Per-conversation wallpaper key: 'd<friendId>' for a DM, 'g<cid>' for a group.
   String get _convKey => _isGroup
       ? chatConvKey(conversationId: _cid)
@@ -376,7 +386,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
     _statusTimer = Timer.periodic(
       const Duration(seconds: 10),
-      (_) => _checkOnlineStatus(),
+      (_) {
+        _checkOnlineStatus();
+        // Refresh presence so the backend keeps suppressing this chat's push
+        // while it's open (short TTL; leaving lets it expire quickly).
+        _sendActivePresence(true);
+      },
     );
 
     _ws = WebSocketManager(
@@ -480,6 +495,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     } else {
       ActiveChat.instance.leaveDm(widget.friendId.toString());
     }
+    _sendActivePresence(false);
     _ws.close();
     super.dispose();
   }

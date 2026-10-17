@@ -218,8 +218,12 @@ def send_message(
     # Best-effort push to the other members.
     preview = crud.list_preview(msg)
     is_group = bool(conv.is_group)
+    from websocket_manager import is_viewing
     for uid in members:
         if uid == current_user.id:
+            continue
+        # Skip members who are actively viewing this group thread right now.
+        if is_viewing(int(uid), f"grp:{cid}"):
             continue
         background.add_task(
             send_push_to_user,

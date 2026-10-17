@@ -105,17 +105,22 @@ def send_message(message: schemas.MessageCreate, background: BackgroundTasks, db
     # Push (best-effort, after the response) so the receiver is woken when their
     # app is backgrounded or closed and the WebSocket is dead. A short type +
     # sender + preview is enough for the client to build the local notification.
-    background.add_task(
-        send_push_to_user,
-        int(message.receiver_id),
-        {
-            "type": "new_message",
-            "sender_id": str(current_user.id),
-            "sender_name": current_user.username or "New message",
-            "message_id": str(db_message.id),
-            "body": crud.list_preview(db_message),
-        },
-    )
+    # Skip the push if the recipient is actively viewing this exact DM in the
+    # foreground — they're already reading it in-app (live WS delivery + tone),
+    # so a banner would just be noise. Every other chat still gets pushed.
+    from websocket_manager import is_viewing
+    if not is_viewing(int(message.receiver_id), f"dm:{current_user.id}"):
+        background.add_task(
+            send_push_to_user,
+            int(message.receiver_id),
+            {
+                "type": "new_message",
+                "sender_id": str(current_user.id),
+                "sender_name": current_user.username or "New message",
+                "message_id": str(db_message.id),
+                "body": crud.list_preview(db_message),
+            },
+        )
 
     # Harmony: a song shared with a BONDED partner flows into their soundtrack
     # (Our Playlist), de-duped, source=share — the "reminds me of you" feed.

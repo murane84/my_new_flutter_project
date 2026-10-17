@@ -60,6 +60,49 @@ def get_now_playing_for(owner_id: int, viewer_id: int) -> Optional[dict]:
     return entry["track"]
 
 
+# ── Active-conversation presence ─────────────────────────────────────────────
+# user_id -> {"conv": "<key>", "ts": epoch}. The conversation a user is actively
+# viewing in the foreground (e.g. "dm:42" or "grp:7"), so a new-message FCM push
+# for that exact chat is skipped — they're already reading it in-app. Ephemeral
+# and single-replica like `now_playing`; a multi-replica deploy would move this
+# to Redis. Auto-expires so a crashed client never permanently silences a chat.
+active_conv: Dict[int, dict] = {}
+ACTIVE_CONV_TTL = 20  # seconds; the chat refreshes every 10s. Short so
+#                     leaving a chat restores pushes within <=20s even if the
+#                     explicit 'leave' signal is ever dropped.
+
+
+def set_active_conv(user_id: int, conv) -> None:
+    conv = str(conv).strip() if conv is not None else ""
+    if not conv:
+        active_conv.pop(int(user_id), None)
+        return
+    active_conv[int(user_id)] = {"conv": conv, "ts": time.time()}
+
+
+def clear_active_conv(user_id: int) -> None:
+    active_conv.pop(int(user_id), None)
+
+
+def get_active_conv(user_id: int) -> Optional[str]:
+    entry = active_conv.get(int(user_id))
+    if not entry:
+        return None
+    if time.time() - entry["ts"] > ACTIVE_CONV_TTL:
+        active_conv.pop(int(user_id), None)
+        return None
+    return entry["conv"]
+
+
+def is_viewing(user_id: int, conv_key: str) -> bool:
+    """True when the user is actively viewing conv_key (fresh). Used to skip a
+    redundant push for the chat already open on their screen."""
+    try:
+        return get_active_conv(int(user_id)) == str(conv_key)
+    except Exception:
+        return False
+
+
 # Will be set in main.py at startup
 main_loop = None
 

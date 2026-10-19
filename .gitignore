@@ -111,3 +111,6 @@ my_aluta_api/webapp/downloads/
 /_stale_locks/
 /external/
 /test/*.mp4
+
+# local repo backup bundle (contains pre-purge history, never commit)
+aluta-repo-backup-*.bundle

@@ -87,6 +87,25 @@ subprojects {
 /**
  * 🧹 Clean
  */
+/**
+ * Kotlin 2.2 dropped language/apiVersion below 1.8. Some plugins (e.g. sentry_flutter)
+ * still request 1.6, which now fails to compile. Raise ONLY the modules that explicitly
+ * ask for < 1.8 up to 1.8 and leave modern plugins on the compiler default.
+ * projectsEvaluated runs after each plugin has applied its own kotlinOptions, so the
+ * floor is applied last and wins.
+ */
+gradle.projectsEvaluated {
+    val floor = org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_1_8
+    rootProject.subprojects.forEach { sp ->
+        sp.tasks.withType<KotlinCompile>().configureEach {
+            compilerOptions {
+                if ((languageVersion.orNull ?: floor) < floor) languageVersion.set(floor)
+                if ((apiVersion.orNull ?: floor) < floor) apiVersion.set(floor)
+            }
+        }
+    }
+}
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }

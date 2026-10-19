@@ -92,9 +92,15 @@ class KeystrokeSounds {
     try {
       await pl.setReleaseMode(ReleaseMode.stop);
     } catch (_) {}
-    try {
-      await pl.setPlayerMode(PlayerMode.lowLatency);
-    } catch (_) {}
+    // Low-latency (WebAudio) replays a preloaded buffer from the start on
+    // every resume(), which is ideal for web. Desktop only has the media-
+    // player backend; forcing low-latency there changes nothing useful, and
+    // the rewind in _replay handles replay, so keep the default mode off-web.
+    if (kIsWeb) {
+      try {
+        await pl.setPlayerMode(PlayerMode.lowLatency);
+      } catch (_) {}
+    }
     try {
       await pl.setVolume(0.6);
     } catch (_) {}
@@ -122,8 +128,19 @@ class KeystrokeSounds {
       if (pool == null || pool.isEmpty) return;
       final i = (_rr[which] ?? 0);
       _rr[which] = i + 1;
-      pool[i % pool.length].resume().catchError((_) {});
+      _replay(pool[i % pool.length]);
     }
+  }
+
+  Future<void> _replay(AudioPlayer p) async {
+    // Desktop's media-player backend leaves a finished clip at its end
+    // position, so a bare resume() is silent after the first play - rewind
+    // first. Web's low-latency buffer restarts from the top and seek() is
+    // unsupported there, so skip the rewind off-web.
+    try {
+      if (!kIsWeb) await p.seek(Duration.zero);
+      await p.resume();
+    } catch (_) {}
   }
 
   // ── Typing ticks (throttled: held/auto-repeat keys can't flood) ──────────

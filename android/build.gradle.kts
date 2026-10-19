@@ -10,10 +10,11 @@ plugins {
 /**
  * 🔒 Force ALL builds into ONE root (prevents C: vs D: conflict)
  */
-rootProject.buildDir = file(rootDir.parentFile.resolve("build"))
+val sharedBuildDir = rootDir.parentFile.resolve("build")
+rootProject.layout.buildDirectory.set(sharedBuildDir)
 
 subprojects {
-    buildDir = rootProject.buildDir.resolve(name)
+    layout.buildDirectory.set(sharedBuildDir.resolve(name))
 }
 
 /**
@@ -49,24 +50,7 @@ subprojects {
     }
 
                 // 🔕 Disable lint completely (Flutter-safe)
-                androidExt.lintOptions.apply {
-                    isAbortOnError = false
-                    isCheckReleaseBuilds = false
-                    isIgnoreWarnings = true
-                    isCheckDependencies = false
-                    isQuiet = true
-
-                    disable(
-                        "WrongConstant",
-                        "NewApi",
-                        "ObsoleteSdkInt",
-                        "UnsafeOptInUsageError",
-                        "ForegroundServiceType",
-                        "ForegroundServicePermission",
-                        "InlinedApi",
-                        "GradleDependency"
-                    )
-                }
+                // lint disabled via the task-disabling block below (AGP 8.11 removed lintOptions isX setters)
 
                 // 🛑 Disable all lint tasks
                 tasks.matching {
@@ -85,7 +69,9 @@ subprojects {
 
         // ✅ Kotlin JVM 17 everywhere
         tasks.withType<KotlinCompile>().configureEach {
-            kotlinOptions.jvmTarget = "17"
+            compilerOptions {
+                jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+            }
         }
 
         // 🚀 Disable verify / check tasks (Flutter never uses them)
@@ -102,5 +88,5 @@ subprojects {
  * 🧹 Clean
  */
 tasks.register<Delete>("clean") {
-    delete(rootProject.buildDir)
+    delete(rootProject.layout.buildDirectory)
 }

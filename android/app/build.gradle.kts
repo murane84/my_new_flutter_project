@@ -44,9 +44,7 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+    // Kotlin jvmTarget 17 is set centrally in android/build.gradle.kts (AGP 8.11 / Kotlin 2.2 compilerOptions)
 
     buildTypes {
         release {

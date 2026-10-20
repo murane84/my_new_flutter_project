@@ -62,6 +62,7 @@ import 'chat/formatted_text.dart';
 import 'chat/heart_message.dart';
 import 'chat/conversation_media.dart';
 import '../services/keystroke_sounds.dart';
+import '../services/heart_lock.dart';
 import 'package:float_column/float_column.dart';
 import 'package:linkify/linkify.dart' show linkify;
 import 'package:geolocator/geolocator.dart';
@@ -496,6 +497,7 @@ class _ChatPageState extends State<ChatPage>
     _loadMySpaces();
     _loadSavedMediaKeys();
     KeystrokeSounds.instance.init();
+    HeartLock.instance.init();
     // Tell the notifier which conversation is on screen, so a foreground push
     // for THIS chat doesn't pop a redundant banner while the user reads it.
     if (_isGroup) {

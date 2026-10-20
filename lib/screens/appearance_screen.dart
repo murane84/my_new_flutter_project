@@ -6,6 +6,8 @@ import '../utils/popup_shell.dart';
 import '../utils/app_config.dart';
 import '../utils/chat_background.dart';
 import '../services/keystroke_sounds.dart';
+import '../services/biometric_service.dart';
+import '../services/heart_lock.dart';
 import '../utils/bubble_theme.dart';
 import '../services/wallpapers_service.dart';
 import '../widgets/wallpaper_gallery.dart';
@@ -193,6 +195,8 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                     _MessageTonesSection(),
                   ],
                 ),
+          const SizedBox(height: 10),
+          const _SecretHeartLockSection(),
           if (_showGuide) ...[
             const SizedBox(height: 8),
             Text(
@@ -1061,6 +1065,112 @@ class _StatusMediaSectionState extends State<_StatusMediaSection> {
 }
 
 /// Settings card: optional subtle key/delete sounds while typing in chat.
+class _SecretHeartLockSection extends StatefulWidget {
+  const _SecretHeartLockSection();
+
+  @override
+  State<_SecretHeartLockSection> createState() =>
+      _SecretHeartLockSectionState();
+}
+
+class _SecretHeartLockSectionState extends State<_SecretHeartLockSection> {
+  bool _on = HeartLock.instance.enabled;
+  bool _loaded = false;
+  bool _available = false;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    await HeartLock.instance.init();
+    final avail = await BiometricService.instance.isAvailable();
+    if (!mounted) return;
+    setState(() {
+      _on = HeartLock.instance.enabled;
+      _available = avail;
+      _loaded = true;
+    });
+  }
+
+  Future<void> _set(bool v) async {
+    if (_busy) return;
+    if (v) {
+      // Prove the user can actually unlock BEFORE arming the gate, so they
+      // can never lock themselves out of their own secret hearts.
+      setState(() => _busy = true);
+      final ok = await BiometricService.instance
+          .authenticate('Confirm to lock secret hearts');
+      if (!mounted) return;
+      setState(() => _busy = false);
+      if (!ok) return; // leave it off
+    }
+    setState(() => _on = v);
+    await HeartLock.instance.setEnabled(v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final subtitle = !_loaded
+        ? 'Loading\u2026'
+        : (!_available
+            ? 'Set up a fingerprint, face or device PIN first'
+            : (_on
+                ? 'Fingerprint, face or PIN to open a secret \u2764'
+                : 'Tap to open \u2014 no unlock'));
+    final canToggle = _loaded && _available && !_busy;
+    return DecoratedBox(
+      decoration: _raisedCardDecoration(scheme, isDark),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        child: Row(
+          children: [
+            _accentIconChip(scheme, Icons.lock_rounded),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Lock secret hearts',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 12, color: scheme.onSurfaceVariant)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              height: 24,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Switch(
+                  value: _on,
+                  onChanged: canToggle ? _set : null,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _KeystrokeSoundSection extends StatefulWidget {
   const _KeystrokeSoundSection();
 

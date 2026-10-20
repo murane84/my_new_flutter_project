@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:math' as math;
 import 'package:visibility_detector/visibility_detector.dart';
+import 'dart:async';
+import '../../services/biometric_service.dart';
+import '../../services/heart_lock.dart';
 
 /// A "secret heart" message bubble (message_type == 'heart'). Arrives covered
 /// with a soft "tap to open" shimmer and a gentle heartbeat pulse that runs
@@ -59,6 +62,7 @@ class _HeartBubbleState extends State<HeartBubble>
   bool _revealedInHeart = false;
   bool _visible = false;
   bool _reduceMotion = false;
+  Timer? _relock;
 
   @override
   void didChangeDependencies() {
@@ -86,6 +90,7 @@ class _HeartBubbleState extends State<HeartBubble>
 
   @override
   void dispose() {
+    _relock?.cancel();
     _stars.dispose();
     _beat.dispose();
     super.dispose();
@@ -95,7 +100,27 @@ class _HeartBubbleState extends State<HeartBubble>
       widget.text.trim().length > HeartBubble.longThreshold ||
       widget.text.contains('\n');
 
-  void _onTap() {
+  Future<void> _onTap() async {
+    // A tap on an already-open in-heart note re-seals it (manual lock) — no
+    // unlock needed to close.
+    if (_revealedInHeart && !_isLong) {
+      _relock?.cancel();
+      setState(() => _revealedInHeart = false);
+      _syncBeat();
+      return;
+    }
+
+    // When the viewer has turned on "require unlock to open secret hearts",
+    // gate the first reveal behind the device biometric / PIN / password.
+    if (HeartLock.instance.enabled) {
+      final ok =
+          await BiometricService.instance.authenticate('Open secret heart');
+      if (!ok) return;
+      if (!mounted) return;
+    }
+
+    _heartbeatHaptic();
+
     if (_isLong) {
       final box = _heartKey.currentContext?.findRenderObject() as RenderBox?;
       Rect origin;
@@ -108,9 +133,30 @@ class _HeartBubbleState extends State<HeartBubble>
       showHeartGenie(context,
           originRect: origin, text: widget.text, accent: widget.accent);
     } else {
-      setState(() => _revealedInHeart = !_revealedInHeart);
+      setState(() => _revealedInHeart = true);
       _syncBeat();
+      _armRelock();
     }
+  }
+
+  /// Re-seal a revealed in-heart note after a spell of no interaction, so a
+  /// note left open on-screen doesn't stay readable indefinitely.
+  void _armRelock() {
+    _relock?.cancel();
+    _relock = Timer(HeartLock.idleRelock, () {
+      if (!mounted || !_revealedInHeart) return;
+      setState(() => _revealedInHeart = false);
+      _syncBeat();
+    });
+  }
+
+  /// A soft "lub-dub" when a heart blooms open — the beat you feel, not just
+  /// see. No-op on devices without a vibrator (e.g. desktop).
+  Future<void> _heartbeatHaptic() async {
+    if (_reduceMotion) return;
+    HapticFeedback.mediumImpact();
+    await Future.delayed(const Duration(milliseconds: 150));
+    HapticFeedback.lightImpact();
   }
 
   void _loveBack() {
@@ -455,6 +501,20 @@ class _HeartGenieState extends State<_HeartGenie>
       vsync: this, duration: const Duration(milliseconds: 320))
     ..forward();
   double _dragDy = 0;
+  Timer? _idle;
+
+  @override
+  void initState() {
+    super.initState();
+    _armIdle();
+  }
+
+  /// Auto-close the opened card after the same idle window as the in-heart
+  /// relock, reset on every touch, so a long note doesn't linger open.
+  void _armIdle() {
+    _idle?.cancel();
+    _idle = Timer(HeartLock.idleRelock, _close);
+  }
 
   Future<void> _close() async {
     if (_c.isAnimating && _c.status == AnimationStatus.reverse) return;
@@ -464,6 +524,7 @@ class _HeartGenieState extends State<_HeartGenie>
 
   @override
   void dispose() {
+    _idle?.cancel();
     _c.dispose();
     super.dispose();
   }
@@ -517,7 +578,11 @@ class _HeartGenieState extends State<_HeartGenie>
                             setState(() => _dragDy = 0);
                           }
                         },
-                        child: _card(context),
+                        child: Listener(
+                          onPointerDown: (_) => _armIdle(),
+                          onPointerMove: (_) => _armIdle(),
+                          child: _card(context),
+                        ),
                       ),
                     ),
                   ),

@@ -481,48 +481,6 @@ extension _ChatPageHelpers3 on _ChatPageState {
   /// may already be purged, so we read from the LOCAL CACHE first and only fall
   /// back to the network while the bytes still live there. The bytes are then
   /// handed to [_saveBytesToDevice], which shows a real "Save As…" dialog.
-  /// Streamed GET that reports download progress (received/total) as bytes
-  /// arrive, so a file bubble can show a live percentage. Returns the status
-  /// and the full bytes (empty on non-200).
-  Future<({int status, List<int> bytes})> _httpGetProgress(
-      String url, void Function(int received, int total)? onProgress,
-      {int expectedTotal = 0}) async {
-    final client = http.Client();
-    try {
-      final req = http.Request('GET', Uri.parse(url))
-        ..headers.addAll(mediaAuthHeaders(url));
-      final resp = await client.send(req);
-      if (resp.statusCode != 200) {
-        return (status: resp.statusCode, bytes: const <int>[]);
-      }
-      // Railway's edge can strip Content-Length (chunked re-encoding), which
-      // left the progress ring indeterminate — no percentage ever. Fall back
-      // to the message's known media_size so the percentage still works.
-      final headerTotal = resp.contentLength ?? 0;
-      final total = headerTotal > 0 ? headerTotal : expectedTotal;
-      final out = <int>[];
-      var received = 0;
-      // When we know the size, stop the moment the whole file is in: some
-      // proxies keep the socket open past the last byte, which otherwise left
-      // `await for` waiting forever (the bubble stuck "Downloading…" even
-      // though the file had fully arrived and saved). When the size is unknown
-      // we can't tell a held-open socket from a slow one, so guard with an
-      // inactivity timeout instead.
-      final stream = total > 0
-          ? resp.stream
-          : resp.stream.timeout(const Duration(seconds: 30));
-      await for (final chunk in stream) {
-        out.addAll(chunk);
-        received += chunk.length;
-        if (onProgress != null) onProgress(received, total);
-        if (total > 0 && received >= total) break;
-      }
-      return (status: 200, bytes: out);
-    } finally {
-      client.close();
-    }
-  }
-
   /// Download + save a file bubble's attachment while showing a live
   /// percentage in the bubble. Stashes transient progress on the message map
   /// (throttled to ~1% steps) and rebuilds.
@@ -559,53 +517,64 @@ extension _ChatPageHelpers3 on _ChatPageState {
     final name = (msg['media_name'] as String?)?.trim();
     final mime = msg['media_mime'] as String?;
     final type = (msg['message_type'] as String?) ?? 'file';
+    final expected = (msg['media_size'] as num?)?.toInt() ?? 0;
+    final ext = type == 'song' ? '.mp3' : '';
+    final outName = (name == null || name.isEmpty)
+        ? 'aluta_${type}_${DateTime.now().millisecondsSinceEpoch}$ext'
+        : name;
     try {
       if (mounted) showToast(context, 'Preparing download…');
-      List<int>? bytes;
-      // Ephemeral song → prefer the on-device cache (survives server purge).
+
+      // 1) Ephemeral song already on disk -> save straight from the cache file.
       final id = SongCache.assetId(rel);
       if (id != null) {
         final cached =
             await SongCache.cachedPath(id, filename: name, mime: mime);
-        if (cached != null) bytes = await File(cached).readAsBytes();
-      }
-      // Prefer the locally-persisted copy (images/files survive the server's
-      // store-and-forward purge on device), then fall back to the server while
-      // it still holds the bytes.
-      if (bytes == null || bytes.isEmpty) {
-        final url = fullMediaUrl(rel);
-        if (!kIsWeb && id == null && onProgress == null) {
-          try {
-            final f =
-                await MediaStore.instance.getFile(url, mediaAuthHeaders(url));
-            if (f != null) bytes = await f.readAsBytes();
-          } catch (_) {}
-        }
-        // A dropped connection mid-download shouldn't fail the save: retry a
-        // couple of times with a short pause. 410 (gone from the server) is
-        // final, so stop there.
-        for (var attempt = 0;
-            attempt < 3 && (bytes == null || bytes.isEmpty);
-            attempt++) {
-          if (attempt > 0) {
-            if (mounted) showToast(context, 'Connection dropped — retrying…');
-            await Future.delayed(Duration(seconds: 2 * attempt));
-          }
-          try {
-            final r = await appBusy.run(() => _httpGetProgress(
-                url, onProgress,
-                expectedTotal: (msg['media_size'] as num?)?.toInt() ?? 0));
-            if (r.status == 200 && r.bytes.isNotEmpty) {
-              bytes = r.bytes;
-            } else if (r.status == 410 || r.status == 404) {
-              break;
-            }
-          } catch (_) {
-            // network error — loop and retry
-          }
+        if (cached != null) {
+          return await _saveFileToDevice(File(cached), outName, type);
         }
       }
-      if (bytes == null || bytes.isEmpty) {
+
+      final url = fullMediaUrl(rel);
+
+      // 2) Locally-persisted media-store copy (survives the server purge).
+      if (!kIsWeb && id == null && onProgress == null) {
+        try {
+          final f =
+              await MediaStore.instance.getFile(url, mediaAuthHeaders(url));
+          if (f != null && await f.length() > 0) {
+            return await _saveFileToDevice(f, outName, type);
+          }
+        } catch (_) {}
+      }
+
+      // 3) Stream the server copy to a temp file - never buffer a big file in
+      //    RAM (that was the download-button ANR) - retrying on a dropped line.
+      final dir = await getTemporaryDirectory();
+      final tmp = File(
+          '${dir.path}/dl_${DateTime.now().millisecondsSinceEpoch}_tmp');
+      var ok = false;
+      for (var attempt = 0; attempt < 3 && !ok; attempt++) {
+        if (attempt > 0) {
+          if (mounted) showToast(context, 'Connection dropped — retrying…');
+          await Future.delayed(Duration(seconds: 2 * attempt));
+        }
+        try {
+          final status = await appBusy.run(() =>
+              _streamToFile(url, tmp, onProgress, expectedTotal: expected));
+          if (status == 200) {
+            ok = true;
+          } else if (status == 410 || status == 404) {
+            break;
+          }
+        } catch (_) {
+          // network error - loop and retry
+        }
+      }
+      if (!ok || !await tmp.exists() || await tmp.length() == 0) {
+        try {
+          if (await tmp.exists()) await tmp.delete();
+        } catch (_) {}
         if (mounted) {
           showToast(context,
               type == 'song'
@@ -615,18 +584,70 @@ extension _ChatPageHelpers3 on _ChatPageState {
         }
         return false;
       }
-      final ext = type == 'song' ? '.mp3' : '';
-      final fallback =
-          'aluta_${type}_${DateTime.now().millisecondsSinceEpoch}$ext';
-      return await _saveBytesToDevice(
-          bytes, (name == null || name.isEmpty) ? fallback : name,
-          image: type == 'image');
+      // Cache the fetched copy so a later tap-to-open installs/opens straight
+      // from disk (what the user asked for) instead of hitting the server again.
+      await MediaStore.instance.store(url, tmp);
+      final saved = await _saveFileToDevice(tmp, outName, type);
+      try {
+        await tmp.delete();
+      } catch (_) {}
+      return saved;
     } catch (_) {
       if (mounted) {
         showToast(context, 'Could not save', type: ToastType.error);
       }
       return false;
     }
+  }
+
+  /// Save an on-disk [src] to the user's device without loading a big file into
+  /// the Dart heap: images to the gallery, files to Android's public Downloads
+  /// (native, by PATH), everything else via the system Save dialog.
+  Future<bool> _saveFileToDevice(File src, String fname, String type) async {
+    // Phone images -> gallery. Images are small, so reading the bytes here is
+    // fine (PhotoManager has no by-path API).
+    if (type == 'image' && _isMobile) {
+      try {
+        final perm = await PhotoManager.requestPermissionExtend();
+        if (perm.hasAccess) {
+          await PhotoManager.editor
+              .saveImage(await src.readAsBytes(), filename: fname);
+          if (mounted) {
+            showToast(context, 'Saved to gallery', type: ToastType.success);
+          }
+          return true;
+        }
+      } catch (_) {/* fall through to the generic saver */}
+    }
+    // Android -> public Downloads by file PATH (no bytes through the heap).
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      try {
+        final safe = fname.replaceAll(RegExp(r'[\\/]+'), '_').trim();
+        final sdk = await _ChatPageState._downloadsCh.invokeMethod<int>('sdkInt') ?? 0;
+        var allowed = true;
+        if (sdk > 0 && sdk < 29) {
+          allowed = (await Permission.storage.request()).isGranted;
+        }
+        if (allowed) {
+          final where =
+              await _ChatPageState._downloadsCh.invokeMethod<String>('saveToDownloads', {
+            'srcPath': src.path,
+            'fileName': safe.isEmpty ? 'aluta_file' : safe,
+            'mimeType': null,
+          });
+          if (where != null) {
+            if (mounted) {
+              showToast(context, 'Saved to $where', type: ToastType.success);
+            }
+            return true;
+          }
+        }
+      } catch (_) {/* fall through to the Save dialog */}
+    }
+    // Desktop / last resort -> Save As dialog. Reading bytes here is acceptable:
+    // desktop has the RAM, and it is only the fallback on mobile.
+    return await _saveBytesToDevice(await src.readAsBytes(), fname,
+        image: type == 'image');
   }
 
   /// Present a real "Save As…" flow and write [bytes] there. `FilePicker.saveFile`

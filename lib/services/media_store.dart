@@ -100,6 +100,20 @@ class MediaStore {
     return null;
   }
 
+  /// Deposit an already-downloaded [src] into the cache under [url]'s key
+  /// (native file copy - no bytes through the Dart heap), so a later
+  /// cached(url)/getFile(url) serves it from disk with no re-download. Used
+  /// when a file is fetched for one purpose (save to Downloads) and may be
+  /// opened/installed later.
+  Future<void> store(String url, File src) async {
+    try {
+      final f = await _fileFor(url);
+      if (f == null || f.path == src.path) return;
+      if (!await src.exists() || await src.length() == 0) return;
+      await src.copy(f.path);
+    } catch (_) {}
+  }
+
   /// Drop a cached file (e.g. when a background is changed/removed).
   Future<void> remove(String url) async {
     try {

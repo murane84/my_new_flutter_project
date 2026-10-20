@@ -76,25 +76,34 @@ object ConnectedContacts {
         } catch (_: Exception) {
         }
 
-        // Insert the ones we don't have yet; repair the ones we already do.
+        // Insert for UNSAVED numbers only; never touch a number the user has
+        // already saved under a name in their phone book.
         for (m in matches) {
             val userId = m["userId"]?.toString() ?: continue
             val number = m["number"]?.toString()?.trim() ?: continue
             if (number.isEmpty()) continue
-            // The user already has their OWN saved name for this number → we must
-            // NEVER put a name on it (that's what was overwriting / locking the
-            // phone-book name). We only name a number that isn't saved yet.
             val hasLocalName = (m["hasLocalName"] as? Boolean) ?: false
             val name = m["name"]?.toString()?.takeIf { it.isNotBlank() } ?: "Aluta user"
             val existingRawId = existing[userId]
-            if (existingRawId != null) {
-                // Already have our raw contact for this friend. If the user now
-                // has their own name/edit for this number, strip any name an
-                // older build wrote so THEIR name wins (inherit the user edit).
-                if (hasLocalName) stripName(cr, existingRawId)
+            if (hasLocalName) {
+                // The user already named this number. Our raw contact was NOT
+                // aggregating cleanly — it surfaced as a standalone, view-only,
+                // raw-number contact that SHADOWED their saved name. So leave
+                // saved numbers completely alone: delete any Aluta raw contact a
+                // previous sync made for this one, and never create another.
+                if (existingRawId != null) {
+                    try {
+                        cr.delete(syncUri(RawContacts.CONTENT_URI),
+                            "${RawContacts._ID}=?", arrayOf(existingRawId.toString()))
+                    } catch (_: Exception) {
+                    }
+                }
                 continue
             }
-            insertRaw(cr, userId, number, name, writeName = !hasLocalName)
+            // Unsaved number → enrich it with a named, view-only Aluta contact
+            // (keeps the Call/Message-on-Aluta rows for people not in the book).
+            if (existingRawId != null) continue
+            insertRaw(cr, userId, number, name, writeName = true)
         }
 
         // Remove the ones that are no longer registered friends.

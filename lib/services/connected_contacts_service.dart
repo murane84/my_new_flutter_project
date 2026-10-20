@@ -21,7 +21,7 @@ class ConnectedContactsService {
 
   static const MethodChannel _ch = MethodChannel('aluta/connected_contacts');
 
-  static const String _lastSyncKey = 'contacts_last_sync_ms';
+  static const String _lastSyncKey = 'contacts_last_sync_v2_ms';
   static const Duration _minInterval = Duration(hours: 24);
 
   bool get _supported =>

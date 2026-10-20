@@ -32,7 +32,7 @@ class SongLibrary {
   static const Duration _memFresh = Duration(minutes: 2);
   // Don't bother background-rescanning if the saved snapshot is newer than this
   // (covers quick restarts — no redundant scan).
-  static const Duration _rescanAfter = Duration(minutes: 10);
+  static const Duration _rescanAfter = Duration(hours: 6);
 
   static Future<File> _cacheFile() async {
     if (_file != null) return _file!;

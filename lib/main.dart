@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+import 'widgets/busy_overlay.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:provider/provider.dart';
 // Prefixed: package:provider also exports Consumer/ChangeNotifierProvider.
@@ -422,8 +423,9 @@ class MyApp extends StatelessWidget {
           themeMode: themeProvider.themeMode,
           // Record every tap's position app-wide so any popup opened right after
           // genies out of / back into that exact button/tile (see showAppPopup).
-          builder: (context, child) =>
-              GlobalTapOrigin(child: child ?? const SizedBox.shrink()),
+          builder: (context, child) => GlobalTapOrigin(
+            child: BusyOverlay(child: child ?? const SizedBox.shrink()),
+          ),
           // Use `home:` (not initialRoute) so the root stack is a single route.
           // With initialRoute: '/splash', Flutter also generates a route for '/'
           // (the unknown-route "Page not found") and puts it underneath — which

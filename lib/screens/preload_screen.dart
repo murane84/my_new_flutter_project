@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/song_library.dart';
+import '../services/app_busy.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'home_page.dart';
@@ -122,10 +123,12 @@ class _PreloadScreenState extends State<PreloadScreen>
       // A few seconds' grace keeps reopen smooth; the services self-throttle
       // repeat scans, so this still pre-warms them.
       Future.delayed(const Duration(seconds: 5), () {
-        unawaited(ConnectedContactsService.instance
-            .refresh()
+        unawaited(appBusy
+            .run(() => ConnectedContactsService.instance.refresh())
             .then((_) {}).catchError((_) {}));
-        unawaited(SongLibrary.songs().then((_) {}).catchError((_) {}));
+        unawaited(appBusy
+            .run(() => SongLibrary.songs())
+            .then((_) {}).catchError((_) {}));
       });
     }
 

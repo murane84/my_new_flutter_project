@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../screens/api_service.dart';
 
@@ -19,6 +20,9 @@ class ConnectedContactsService {
   static final ConnectedContactsService instance = ConnectedContactsService._();
 
   static const MethodChannel _ch = MethodChannel('aluta/connected_contacts');
+
+  static const String _lastSyncKey = 'contacts_last_sync_ms';
+  static const Duration _minInterval = Duration(hours: 24);
 
   bool get _supported =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
@@ -61,10 +65,20 @@ class ConnectedContactsService {
   /// (read + write) — if declined, quietly does nothing. Runs at most ONCE per
   /// app session (the scan + contact writes are heavy; no need to repeat them on
   /// every home remount).
-  Future<void> refresh() async {
+  Future<void> refresh({bool force = false}) async {
     if (!_supported || _refreshed) return;
     _refreshed = true;
     try {
+      // Persistent throttle: the full address-book scan + contact writes are
+      // seconds of main-thread work on a big phone book, so run them at most
+      // once a day ACROSS launches - not on every relaunch, which janked the
+      // app into an ANR a few seconds after each reopen.
+      final prefs = await SharedPreferences.getInstance();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final lastMs = prefs.getInt(_lastSyncKey) ?? 0;
+      if (!force && lastMs > 0 && now - lastMs < _minInterval.inMilliseconds) {
+        return;
+      }
       // Needs read (to list numbers) AND write (to add the rows).
       final granted = await FlutterContacts.requestPermission(readonly: false);
       if (!granted) return;
@@ -115,6 +129,7 @@ class ConnectedContactsService {
       }
       await _ch.invokeMethod('ensureAccount');
       await _ch.invokeMethod('sync', {'matches': list});
+      await prefs.setInt(_lastSyncKey, now);
     } catch (_) {/* best-effort */}
   }
 

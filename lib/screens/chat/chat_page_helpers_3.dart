@@ -240,17 +240,53 @@ extension _ChatPageHelpers3 on _ChatPageState {
     return Icons.insert_drive_file_rounded;
   }
 
-  Future<void> _openUrl(String url, Map<String, dynamic> msg) async {
-    // Attachments are auth-protected, so we download the bytes WITH our token,
-    // save them under the file's REAL name (with extension), and OPEN them with
-    // the system viewer — a PDF opens in a PDF app, an APK goes to the package
-    // installer. Only if nothing can open it do we fall back to a share sheet.
+  /// Stream a GET straight to [dest] on disk, reporting progress, WITHOUT ever
+  /// holding the whole file in memory. A 140MB APK buffered as a `List<int>` is
+  /// ~1GB of boxed ints on the UI isolate - that GC storm is what froze the app
+  /// into "Aluta isn't responding". Writing chunk-by-chunk keeps memory flat.
+  /// Returns the HTTP status (200 on a complete read).
+  Future<int> _streamToFile(String url, File dest,
+      void Function(int received, int total)? onProgress,
+      {int expectedTotal = 0}) async {
+    final client = http.Client();
+    IOSink? sink;
     try {
-      if (mounted) showToast(context, 'Opening…');
+      final req = http.Request('GET', Uri.parse(url))
+        ..headers.addAll(mediaAuthHeaders(url));
+      final resp = await client.send(req);
+      if (resp.statusCode != 200) return resp.statusCode;
+      final headerTotal = resp.contentLength ?? 0;
+      final total = headerTotal > 0 ? headerTotal : expectedTotal;
+      sink = dest.openWrite();
+      var received = 0;
+      final stream = total > 0
+          ? resp.stream
+          : resp.stream.timeout(const Duration(seconds: 30));
+      await for (final chunk in stream) {
+        sink.add(chunk);
+        received += chunk.length;
+        if (onProgress != null) onProgress(received, total);
+        if (total > 0 && received >= total) break;
+      }
+      await sink.flush();
+      return 200;
+    } finally {
+      try {
+        await sink?.close();
+      } catch (_) {}
+      client.close();
+    }
+  }
+
+  Future<void> _openUrl(String url, Map<String, dynamic> msg) async {
+    // Attachments are auth-protected: fetch the bytes WITH our token, save them
+    // under the file's REAL name (with extension), and hand them to the system
+    // viewer - a PDF opens in a PDF app, an APK goes to the package installer.
+    // Reuse an already-downloaded copy when we can, and STREAM the fetch to disk
+    // with a live % on the bubble (never buffer a big APK in RAM -> ANR).
+    if (msg['__dlBusy'] == true) return;
+    try {
       final mime = ((msg['media_mime'] as String?) ?? '').trim();
-      // The URL's last segment is a server key with no extension, so prefer the
-      // stored file name; derive the extension from the MIME if it's missing.
-      // Without the right extension Android can't match a viewer (the "BIN").
       var name = ((msg['media_name'] as String?) ?? '').trim();
       if (name.isEmpty) {
         final seg = Uri.parse(url).pathSegments;
@@ -265,34 +301,97 @@ extension _ChatPageHelpers3 on _ChatPageState {
         if (ext.isNotEmpty) name = '$name$ext';
       }
 
-      // Reuse the on-device copy if present; otherwise fetch it now.
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/$name');
-      File? cached;
-      try {
-        cached = await MediaStore.instance.cached(url);
-      } catch (_) {}
-      if (cached != null) {
-        await file.writeAsBytes(await cached.readAsBytes(), flush: true);
-      } else {
-        final res =
-            await http.get(Uri.parse(url), headers: mediaAuthHeaders(url));
-        if (res.statusCode != 200) {
-          if (mounted) {
-            showToast(context, 'Could not open file', type: ToastType.error);
-          }
-          return;
+      final expected = (msg['media_size'] as num?)?.toInt() ?? 0;
+
+      Future<bool> isComplete(File f) async {
+        try {
+          if (!await f.exists()) return false;
+          final len = await f.length();
+          return expected > 0 ? len == expected : len > 0;
+        } catch (_) {
+          return false;
         }
-        await file.writeAsBytes(res.bodyBytes, flush: true);
       }
 
-      // A generic/empty MIME can misroute an APK away from the installer, so
-      // let open_filex infer the type from the (now correct) extension instead.
+      var ready = await isComplete(file);
+      if (!ready) {
+        File? cached;
+        try {
+          cached = await MediaStore.instance.cached(url);
+        } catch (_) {}
+        if (cached != null && await cached.length() > 0) {
+          // Native file copy - no bytes through the Dart heap.
+          if (cached.path != file.path) await cached.copy(file.path);
+          ready = true;
+        }
+      }
+
+      if (!ready) {
+        rebuildWith(() {
+          msg['__dlBusy'] = true;
+          msg['__dlProgress'] = null;
+        });
+        final part = File('${file.path}.part');
+        try {
+          var ok = false;
+          for (var attempt = 0; attempt < 3 && !ok; attempt++) {
+            if (attempt > 0) {
+              if (mounted) {
+                showToast(context, 'Connection dropped - retrying...');
+              }
+              await Future.delayed(Duration(seconds: 2 * attempt));
+            }
+            try {
+              final status = await appBusy.run(() => _streamToFile(url, part,
+                  (received, total) {
+                if (!mounted) return;
+                final q = total > 0
+                    ? (received / total).clamp(0.0, 1.0).toDouble()
+                    : null;
+                final prev = msg['__dlProgress'] as double?;
+                if (q != null && prev != null && (q - prev).abs() < 0.01) {
+                  return;
+                }
+                rebuildWith(() => msg['__dlProgress'] = q);
+              }, expectedTotal: expected));
+              if (status == 200) {
+                ok = true;
+              } else if (status == 410 || status == 404) {
+                break;
+              }
+            } catch (_) {
+              // network error - loop and retry
+            }
+          }
+          if (!ok) {
+            try {
+              if (await part.exists()) await part.delete();
+            } catch (_) {}
+            if (mounted) {
+              showToast(context, 'Could not open file', type: ToastType.error);
+            }
+            return;
+          }
+          try {
+            if (await file.exists()) await file.delete();
+          } catch (_) {}
+          await part.rename(file.path);
+        } finally {
+          if (mounted) {
+            rebuildWith(() {
+              msg['__dlBusy'] = false;
+              msg['__dlProgress'] = null;
+            });
+          }
+        }
+      }
+
       final effMime =
           (mime.isEmpty || mime == 'application/octet-stream') ? null : mime;
       final result = await OpenFilex.open(file.path, type: effMime);
       if (result.type != ResultType.done) {
-        // No installed app can open this type — let the user route it onward.
         await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
       }
     } catch (_) {

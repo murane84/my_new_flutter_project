@@ -116,10 +116,17 @@ class _PreloadScreenState extends State<PreloadScreen>
     // paint Home, so they never hold the user behind a long music/contacts
     // scan. They populate their singletons; the app fills them in as they land.
     if (!kIsWeb) {
-      unawaited(ConnectedContactsService.instance
-          .refresh()
-          .then((_) {}).catchError((_) {}));
-      unawaited(SongLibrary.songs().then((_) {}).catchError((_) {}));
+      // Warm the heavy device scans AFTER Home is interactive, not during the
+      // relaunch. Contacts/music queries do real work on the UI isolate, so
+      // firing them the instant Home appears janked the first taps (ANRs).
+      // A few seconds' grace keeps reopen smooth; the services self-throttle
+      // repeat scans, so this still pre-warms them.
+      Future.delayed(const Duration(seconds: 5), () {
+        unawaited(ConnectedContactsService.instance
+            .refresh()
+            .then((_) {}).catchError((_) {}));
+        unawaited(SongLibrary.songs().then((_) {}).catchError((_) {}));
+      });
     }
 
     if (firstRun) {

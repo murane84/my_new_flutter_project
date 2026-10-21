@@ -197,6 +197,39 @@ extension _HomePageHelpers2 on HomePageState {
         );
     Widget divider() => Container(
         width: 1, height: 20, color: scheme.outlineVariant.withValues(alpha: 0.5));
+    void openWallpaper() => showChatWallpaperSheet(
+          context,
+          convKey: chatConvKey(
+              friendId: int.tryParse(_activeFriendId ?? '') ?? 0),
+          title: name,
+        );
+    void search() => chatSearchRequest.value++;
+    // Phones: the name + last-seen need the room, so only the two most-used
+    // actions stay in the pill (Playlist — the Aluta one — and Call); Search
+    // and Wallpaper fold into a ⋯ genie menu. Wider screens show them all.
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    Widget more() => Builder(
+          builder: (bctx) => seg(Icons.more_horiz_rounded, 'More', () {
+            final box = bctx.findRenderObject() as RenderBox?;
+            if (box == null) return;
+            final o = box.localToGlobal(Offset.zero);
+            showGenieMenu(
+              bctx,
+              anchor: o & box.size,
+              width: 220,
+              entries: [
+                GenieMenuEntry(
+                    icon: Icons.search_rounded,
+                    label: 'Search in chat',
+                    onTap: search),
+                GenieMenuEntry(
+                    icon: Icons.wallpaper_rounded,
+                    label: 'Wallpaper',
+                    onTap: openWallpaper),
+              ],
+            );
+          }),
+        );
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(13),
@@ -221,18 +254,12 @@ extension _HomePageHelpers2 on HomePageState {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            seg(Icons.search_rounded, 'Search in chat',
-                () => chatSearchRequest.value++),
-            divider(),
-            seg(Icons.wallpaper_rounded, 'Wallpaper', () {
-              showChatWallpaperSheet(
-                context,
-                convKey: chatConvKey(
-                    friendId: int.tryParse(_activeFriendId ?? '') ?? 0),
-                title: name,
-              );
-            }),
-            divider(),
+            if (!compact) ...[
+              seg(Icons.search_rounded, 'Search in chat', search),
+              divider(),
+              seg(Icons.wallpaper_rounded, 'Wallpaper', openWallpaper),
+              divider(),
+            ],
             ValueListenableBuilder<bool>(
               valueListenable: playlistDrawerBus.isOpen,
               builder: (_, open, _) => seg(
@@ -252,6 +279,7 @@ extension _HomePageHelpers2 on HomePageState {
                 phone: _activeFriendPhone,
               );
             }),
+            if (compact) ...[divider(), more()],
           ],
         ),
       ),

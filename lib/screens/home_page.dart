@@ -2422,6 +2422,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
                         : _activeFriendLastSeen?.isNotEmpty == true
                             ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
                             : 'Offline',
+                    // One line, always — the header never grows a second row.
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 11,
                       color: _activeFriendOnline == true

@@ -694,7 +694,7 @@ class _HeartBubbleState extends State<HeartBubble>
       line = _hint ? 'hold to open' : _mood.cover;
     }
     return Column(
-      key: ValueKey('cover-$sealed-$_hint-${_awaitingNote}'),
+      key: ValueKey('cover-$sealed-$_hint-$_awaitingNote'),
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, color: Colors.white, size: 20),
@@ -956,7 +956,7 @@ void showHeartGenie(
     barrierDismissible: false,
     transitionDuration: Duration.zero,
     reverseTransitionDuration: Duration.zero,
-    pageBuilder: (ctx, _, __) => _HeartGenie(
+    pageBuilder: (ctx, _, _) => _HeartGenie(
       originRect: originRect,
       text: text,
       accent: accent,

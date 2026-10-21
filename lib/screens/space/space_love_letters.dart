@@ -86,7 +86,7 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
               ? () => showToast(
                   context,
                   sealed
-                      ? 'Sealed · ${heartOpensLabel(unlock!).toLowerCase()}'
+                      ? 'Sealed · ${heartOpensLabel(unlock).toLowerCase()}'
                       : 'This one is opening — check back in a moment',
                   type: ToastType.info)
               : () => _rereadLetter(text, tint, mood),
@@ -135,7 +135,7 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
                       const SizedBox(height: 3),
                       Text(
                         sealed
-                            ? heartOpensLabel(unlock!)
+                            ? heartOpensLabel(unlock)
                             : (mine
                                 ? '$when · ${opened ? 'opened 💗' : 'not opened yet'}'
                                 : when),

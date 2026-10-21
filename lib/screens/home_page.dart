@@ -2495,23 +2495,50 @@ class HomePageState extends rp.ConsumerState<HomePage>
                   ),
                   // One line, always: when it doesn't fit (tight screens) it
                   // glides as a marquee so it can still be read in full.
-                  SizedBox(
-                    height: 15,
-                    child: _ScrollingText(
-                      key: ValueKey(
-                          '${_activeFriendOnline}_$_activeFriendLastSeen'),
-                      text: _activeFriendOnline == true
-                          ? 'Online'
-                          : _activeFriendLastSeen?.isNotEmpty == true
-                              ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
-                              : 'Offline',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: _activeFriendOnline == true
-                            ? Colors.green
-                            : textColor.withAlpha(130),
-                      ),
-                    ),
+                  // When they're playing music right now, that's the status:
+                  // "🎧 Listening to …" in the theme colour — tap to tune in.
+                  ListenableBuilder(
+                    listenable: NowPlayingPresence.instance,
+                    builder: (context, _) {
+                      final fid = int.tryParse(_activeFriendId ?? '') ?? -1;
+                      final np = NowPlayingPresence.instance.trackFor(fid);
+                      final t = (np?['title'] ?? '').toString().trim();
+                      final a = (np?['artist'] ?? '').toString().trim();
+                      final listening = np != null && t.isNotEmpty;
+                      final text = listening
+                          ? '🎧 Listening to $t${a.isEmpty ? '' : ' — $a'}'
+                          : _activeFriendOnline == true
+                              ? 'Online'
+                              : _activeFriendLastSeen?.isNotEmpty == true
+                                  ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
+                                  : 'Offline';
+                      final line = SizedBox(
+                        height: 15,
+                        child: _ScrollingText(
+                          key: ValueKey(text),
+                          text: text,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight:
+                                listening ? FontWeight.w600 : FontWeight.normal,
+                            color: listening
+                                ? scheme.primary
+                                : _activeFriendOnline == true
+                                    ? Colors.green
+                                    : textColor.withAlpha(130),
+                          ),
+                        ),
+                      );
+                      if (!listening) return line;
+                      return GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _tuneInto(
+                            fid,
+                            _contactDisplayName(_activeFriendPhone,
+                                _activeFriendName ?? '')),
+                        child: line,
+                      );
+                    },
                   ),
                 ],
               ),

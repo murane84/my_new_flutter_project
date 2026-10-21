@@ -194,6 +194,19 @@ class AlutaMood {
         'Still here, still loading…',
       ]);
 
+  // ── Heartbeat tap ───────────────────────────────────────────────────────
+  static String heartbeatSent(String to) => _pick('hb_s', [
+        '💓 Sent to $to',
+        '💓 $to will feel that',
+        '💓 Mapigo yamemfikia $to',
+      ]);
+
+  static String heartbeatReceived(String from) => _pick('hb_r', [
+        '💓 $from is thinking of you',
+        '💓 $from anakuwaza',
+        '💓 A little heartbeat from $from',
+      ]);
+
   // ── Welcome-back after a long time away ─────────────────────────────────
   /// [fromPartner] unread from the bonded partner; [others] unread from
   /// everyone else across [chats] conversations.

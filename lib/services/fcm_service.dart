@@ -89,6 +89,14 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         title: '$host · Listen together',
         body: 'wants to listen to music with you',
       );
+    } else if (type == 'heartbeat_tap') {
+      // Partner's wordless "thinking of you" (server spaces.py). In the
+      // foreground the live socket already pulses the app — no banner.
+      if (foreground) return;
+      await showMessageNotification(
+        title: (data['title'] ?? '💓').toString(),
+        body: (data['body'] ?? 'is thinking of you').toString(),
+      );
     } else if (type == 'heart_opened' || type == 'heart_ready') {
       // Secret hearts (server hearts.py): the tender receipt to the sender, or
       // a timed heart that just became openable. Never carries the note.

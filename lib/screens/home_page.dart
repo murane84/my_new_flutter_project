@@ -165,6 +165,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // last greeted (so it stays special, not nagging).
   DateTime? _bgSince;
   DateTime? _lastMomentAt;
+  // Heartbeat tap: whose avatar is glowing right now (sent or received).
+  int? _glowFriendId;
+  Timer? _glowTimer;
+  // "In tune" streak per Space id (Our Space), for the DM header flame.
+  final Map<int, int> _streakDays = {};
+  final Set<int> _streakFetching = {};
   List<Map<String, dynamic>> _filteredFriends = [];
   // Group conversations the user belongs to. They sit at the TOP of the same
   // list as DMs, so a created/joined group appears right alongside friends.
@@ -503,6 +509,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   @override
   void dispose() {
+    _glowTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     ConnectionStatus.instance.online.removeListener(_onGlobalConnChanged);
     SessionEvents.instance.expired.removeListener(_onSessionExpired);
@@ -721,6 +728,86 @@ class HomePageState extends rp.ConsumerState<HomePage>
           : Icons.waving_hand_rounded,
       actions: actions,
     );
+  }
+
+  // ── Heartbeat tap ─────────────────────────────────────────────────────────
+  void _glow(int friendId) {
+    _glowTimer?.cancel();
+    setState(() => _glowFriendId = friendId);
+    _glowTimer = Timer(const Duration(milliseconds: 2600), () {
+      if (mounted) setState(() => _glowFriendId = null);
+    });
+  }
+
+  Future<void> _lubDub() async {
+    HapticFeedback.heavyImpact();
+    await Future.delayed(const Duration(milliseconds: 170));
+    HapticFeedback.mediumImpact();
+  }
+
+  /// Double-tap a bonded partner's avatar → a wordless "thinking of you".
+  Future<void> _sendHeartbeatTap(int friendId, String name) async {
+    final space = _spaceWithFriend(friendId);
+    if (space == null) {
+      showToast(context, 'Pin a bond with $name to send heartbeats 💓',
+          type: ToastType.info);
+      return;
+    }
+    final sid = (space['id'] as num?)?.toInt();
+    if (sid == null) return;
+    _lubDub();
+    _glow(friendId);
+    final ok = await ApiService().sendHeartbeat(sid);
+    if (!mounted) return;
+    final first = name.trim().split(RegExp(r'\s+')).first;
+    showToast(
+        context,
+        ok
+            ? AlutaMood.heartbeatSent(first)
+            : 'Your last heartbeat is still on its way 💓',
+        type: ok ? ToastType.success : ToastType.info);
+  }
+
+  void _onHeartbeatReceived(Map<String, dynamic> d) {
+    final fromId = (d['from_id'] as num?)?.toInt();
+    if (fromId == null || !mounted) return;
+    final f = _allFriends.firstWhere(
+        (x) => (x['id'] as num?)?.toInt() == fromId,
+        orElse: () => <String, dynamic>{});
+    final name = _contactDisplayName(f['phone']?.toString(),
+        (f['username'] ?? d['from_name'] ?? 'Someone').toString());
+    final first = name.trim().split(RegExp(r'\s+')).first;
+    _lubDub();
+    _glow(fromId);
+    if (!_appForeground) return;
+    showMomentCard(
+      context,
+      title: AlutaMood.heartbeatReceived(first),
+      leading: Icons.favorite_rounded,
+      hold: const Duration(seconds: 7),
+      actions: [
+        MomentAction(Icons.favorite_rounded, 'Send one back',
+            () => _sendHeartbeatTap(fromId, name),
+            primary: true),
+        if (f.isNotEmpty)
+          MomentAction(Icons.chat_bubble_rounded, 'Message', () => openChat(f)),
+      ],
+    );
+  }
+
+  /// The flame next to a bonded partner's name (fetched lazily, cached).
+  int? _streakFor(int friendId) {
+    final space = _spaceWithFriend(friendId);
+    final sid = (space?['id'] as num?)?.toInt();
+    if (sid == null) return null;
+    if (!_streakDays.containsKey(sid) && _streakFetching.add(sid)) {
+      ApiService().getStreak(sid).then((s) {
+        _streakFetching.remove(sid);
+        final n = (s?['current_days'] as num?)?.toInt();
+        if (mounted && n != null) setState(() => _streakDays[sid] = n);
+      });
+    }
+    return _streakDays[sid];
   }
 
   /// Returns true when it showed a card.
@@ -1409,6 +1496,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // They opened a secret heart I sent (server hearts.py). Phones get the
     // FCM ping; desktop/web have no FCM, so show a tender in-app bar here
     // unless that chat is already open (its bubble updates in place).
+    // Partner's heartbeat tap (server spaces.py) → lub-dub + glow + card.
+    if (type == 'heartbeat_tap') {
+      final d = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      _onHeartbeatReceived(d);
+      return;
+    }
     if (type == 'heart_opened') {
       if (fcmSupported || !_appForeground || !mounted) return;
       final d = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
@@ -2465,16 +2558,37 @@ class HomePageState extends rp.ConsumerState<HomePage>
                 setState(() => _avatarExpanded = !_avatarExpanded);
               }
             },
+            // Double-tap a bonded partner → heartbeat ("thinking of you").
+            onDoubleTap: () => _sendHeartbeatTap(
+                int.tryParse(_activeFriendId ?? '') ?? -1,
+                _contactDisplayName(_activeFriendPhone, _activeFriendName ?? '')),
             // Same status ring as the friend list (colourful=unseen, grey=seen).
-            child: _statusRing(
-              InitialsAvatar(
-                name: _contactDisplayName(
-                    _activeFriendPhone, _activeFriendName ?? ''),
-                radius: 17,
-                isOnline: _activeFriendOnline == true,
-                imageUrl: _avatarFull(_activeFriendAvatar),
+            // Glows in the theme colour while a heartbeat passes between you.
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 380),
+              curve: Curves.easeOutCubic,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  if (_glowFriendId != null &&
+                      _glowFriendId.toString() == _activeFriendId)
+                    BoxShadow(
+                      color: scheme.primary.withValues(alpha: 0.65),
+                      blurRadius: 16,
+                      spreadRadius: 3,
+                    ),
+                ],
               ),
-              _friendStory(_activeFriendId),
+              child: _statusRing(
+                InitialsAvatar(
+                  name: _contactDisplayName(
+                      _activeFriendPhone, _activeFriendName ?? ''),
+                  radius: 17,
+                  isOnline: _activeFriendOnline == true,
+                  imageUrl: _avatarFull(_activeFriendAvatar),
+                ),
+                _friendStory(_activeFriendId),
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -2486,13 +2600,34 @@ class HomePageState extends rp.ConsumerState<HomePage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    _contactDisplayName(
-                        _activeFriendPhone, _activeFriendName ?? ''),
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 14),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  Row(children: [
+                    Flexible(
+                      child: Text(
+                        _contactDisplayName(
+                            _activeFriendPhone, _activeFriendName ?? ''),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    // "In tune" streak with a bonded partner: 🔥 N.
+                    Builder(builder: (_) {
+                      final n =
+                          _streakFor(int.tryParse(_activeFriendId ?? '') ?? -1);
+                      if (n == null || n < 2) return const SizedBox.shrink();
+                      return Tooltip(
+                        message: '$n days in tune',
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 6),
+                          child: Text('🔥$n',
+                              style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: scheme.primary)),
+                        ),
+                      );
+                    }),
+                  ]),
                   // One line, always: when it doesn't fit (tight screens) it
                   // glides as a marquee so it can still be read in full.
                   // When they're playing music right now, that's the status:

@@ -2037,6 +2037,25 @@ class ApiService {
     }
   }
 
+  /// Heartbeat tap — a wordless "thinking of you" to the partner of this
+  /// Space. Returns true when sent (false = too soon / offline).
+  Future<bool> sendHeartbeat(int spaceId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/heartbeat'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return false;
+      final d = jsonDecode(resp.body);
+      return d is Map && d['sent'] == true;
+    } catch (e) {
+      _logger.w('sendHeartbeat failed: $e');
+      return false;
+    }
+  }
+
   /// Today's "Us" question for this bond (prompt + my/partner answers).
   /// The bond's "In tune" streak: current/longest days, stage, next milestone,
   /// earned unlocks, and any freshly-granted ones (new_unlocks).

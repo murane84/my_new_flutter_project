@@ -827,6 +827,14 @@ def _owned_space_or_404(db: Session, space_id: int, user_id: int) -> Relationshi
     return space
 
 
+# ── Heartbeat tap ────────────────────────────────────────────────────────────
+# A wordless "thinking of you": the partner's phone gives a soft double pulse
+# and their avatar glows. Live over the socket; a push when they're away.
+# Gently rate-limited so it stays a gesture, not a buzzer.
+_HEARTBEAT_LAST: dict = {}
+_HEARTBEAT_GAP = timedelta(seconds=8)
+
+
 # ── endpoints ────────────────────────────────────────────────────────────────
 @router.get("")
 def list_spaces(
@@ -1851,9 +1859,38 @@ def _streak_active_days(db: Session, pair_key: str, bond_ids: list) -> set:
                           .filter(PinnedMoment.space_id.in_(bond_ids))):
                 if dt:
                     days.add(dt.date())
+        days |= _chat_days(db, pair_key)
     except Exception:
         pass
     return days
+
+
+def _chat_days(db: Session, pair_key: str, window_days: int = 400) -> set:
+    """Days (UTC) when BOTH partners wrote to each other in their DM — a
+    real conversation counts as being in tune. Bounded window for cost."""
+    from models import Message
+    try:
+        lo, hi = (int(x) for x in pair_key.split(":"))
+    except Exception:
+        return set()
+    since = datetime.now(timezone.utc) - timedelta(days=window_days)
+    rows = (
+        db.query(Message.sender_id, Message.timestamp)
+        .filter(
+            or_(and_(Message.sender_id == lo, Message.receiver_id == hi),
+                and_(Message.sender_id == hi, Message.receiver_id == lo)),
+            Message.timestamp >= since,
+        )
+        .all()
+    )
+    by: dict = {lo: set(), hi: set()}
+    for sid, ts in rows:
+        if ts is None or sid not in by:
+            continue
+        if ts.tzinfo is not None:
+            ts = ts.astimezone(timezone.utc)
+        by[sid].add(ts.date())
+    return by[lo] & by[hi]
 
 
 def _compute_streak(active: set):
@@ -3042,3 +3079,29 @@ def clear_space_background(
             db.commit()
     db.refresh(space)
     return _space_full(db, space, current_user)
+
+
+@router.post("/{space_id}/heartbeat")
+def send_heartbeat(
+    space_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    partner = _partner_id(space, current_user.id)
+    if partner is None:
+        raise HTTPException(status_code=400, detail="Not a 1:1 bond")
+    now = datetime.now(timezone.utc)
+    key = (current_user.id, partner)
+    last = _HEARTBEAT_LAST.get(key)
+    if last is not None and now - last < _HEARTBEAT_GAP:
+        return {"sent": False, "retry_in": int((_HEARTBEAT_GAP - (now - last)).total_seconds()) + 1}
+    _HEARTBEAT_LAST[key] = now
+    name = current_user.username or "Someone"
+    safe_notify_user(partner, {
+        "type": "heartbeat_tap",
+        "data": {"from_id": current_user.id, "from_name": name,
+                 "at": now.isoformat()},
+    })
+    _push(partner, "\U0001F493 " + name, f"{name} is thinking of you", "heartbeat_tap")
+    return {"sent": True}

@@ -3505,6 +3505,7 @@ class _ChatPageState extends State<ChatPage>
                   justSent: _freshHearts.remove(msgId),
                   onMenu: (pos) =>
                       _showMessageMenu(context, msg, anchor: pos),
+                  showStatus: false, // merged into the pill below
                   onFirstOpen: () => _reportHeartOpened(msg),
                   onUnsealDue: () => _unsealHeart(msg),
                   // Bonded-space gesture: double-tap to love back (❤ reaction).
@@ -3514,42 +3515,86 @@ class _ChatPageState extends State<ChatPage>
               ),
             ],
           ),
-          if (showAvatar || isFirst)
-            Padding(
-              padding: const EdgeInsets.only(top: 3),
+          // ONE frosted pill under the heart: its status (receipt / opens-at)
+          // and the time + ticks, side by side. Frosted + dark so it reads
+          // the same on any wallpaper, light or dark.
+          Builder(builder: (_) {
+            final st = heartStatus(
+              isMe: isMe,
+              unlockAt: (msg['unlock_at'] ?? '').toString().isEmpty
+                  ? null
+                  : parseServerTime(msg['unlock_at'].toString()),
+              openedAt: (msg['opened_at'] ?? '').toString().isEmpty
+                  ? null
+                  : parseServerTime(msg['opened_at'].toString()),
+            );
+            final showTime = showAvatar || isFirst;
+            if (st == null && !showTime) return const SizedBox.shrink();
+            final warm = st?.warm == true;
+            final rose = Color.lerp(accent, Colors.white, 0.55)!;
+            return Padding(
+              padding: const EdgeInsets.only(top: 4),
               child: Align(
                 alignment:
                     isMe ? Alignment.centerRight : Alignment.centerLeft,
-                // The secret heart floats directly on the wallpaper, so its
-                // timestamp gets a translucent pill + light text to stay
-                // readable on any background (light or dark wallpaper).
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.38),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(_timeOnly(msg['timestamp'] ?? ''),
-                          style: const TextStyle(
-                              fontSize: 10.5, color: Colors.white)),
-                      if (isMe) ...[
-                        const SizedBox(width: 3),
-                        _buildStatusIcon(msg,
-                            // Read ticks stay the universal blue (like every
-                            // other bubble), just a light blue so they read
-                            // clearly on the dark timestamp pill.
-                            muted: Colors.white70,
-                            read: const Color(0xFF9FD0FF)),
-                      ],
-                    ],
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 9, vertical: 3.5),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.46),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.10)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (st != null) ...[
+                            Icon(st.icon,
+                                size: 11.5,
+                                color: warm ? rose : Colors.white70),
+                            const SizedBox(width: 4),
+                            Text(st.text,
+                                style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.2,
+                                    color: warm ? rose : Colors.white)),
+                            if (showTime)
+                              Container(
+                                width: 3,
+                                height: 3,
+                                margin:
+                                    const EdgeInsets.symmetric(horizontal: 6),
+                                decoration: const BoxDecoration(
+                                  color: Colors.white54,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                          ],
+                          if (showTime) ...[
+                            Text(_timeOnly(msg['timestamp'] ?? ''),
+                                style: const TextStyle(
+                                    fontSize: 10.5, color: Colors.white)),
+                            if (isMe) ...[
+                              const SizedBox(width: 3),
+                              _buildStatusIcon(msg,
+                                  muted: Colors.white70,
+                                  read: const Color(0xFF9FD0FF)),
+                            ],
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+            );
+          }),
         ],
       ),
     );

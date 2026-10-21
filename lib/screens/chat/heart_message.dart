@@ -84,6 +84,32 @@ String heartOpensLabel(DateTime when, {String prefix = 'Opens '}) {
   return '$prefix${DateFormat('d MMM').format(when)}, $t';
 }
 
+/// The heart's state line, for the pill under it: a timed heart's opening
+/// time (both sides), or — for the sender — the opened receipt. Null when
+/// there's nothing to say (a received, already-openable heart).
+({IconData icon, String text, bool warm})? heartStatus({
+  required bool isMe,
+  DateTime? unlockAt,
+  DateTime? openedAt,
+}) {
+  if (unlockAt != null && DateTime.now().isBefore(unlockAt)) {
+    return (
+      icon: Icons.hourglass_top_rounded,
+      text: heartOpensLabel(unlockAt),
+      warm: false,
+    );
+  }
+  if (!isMe) return null;
+  if (openedAt != null) {
+    return (
+      icon: Icons.favorite_rounded,
+      text: 'Opened ${DateFormat('h:mm a').format(openedAt)}',
+      warm: true,
+    );
+  }
+  return (icon: Icons.favorite_border_rounded, text: 'Not opened', warm: false);
+}
+
 /// Compact countdown: "2d 4h", "3h 12m", "12m", "45s".
 String _countdown(Duration d) {
   if (d.isNegative) return '0s';
@@ -111,6 +137,7 @@ class HeartBubble extends StatefulWidget {
     this.onFirstOpen,
     this.onUnsealDue,
     this.onMenu,
+    this.showStatus = true,
   });
 
   final String text;
@@ -148,6 +175,10 @@ class HeartBubble extends StatefulWidget {
   /// Open the message menu (long-press). Not offered on a covered heart —
   /// there, holding is the opening ritual; open it first, then long-press.
   final void Function(Offset globalPosition)? onMenu;
+
+  /// Draw the receipt / opens-at line under the heart. The chat turns this
+  /// off and merges it into the timestamp pill instead.
+  final bool showStatus;
 
   /// A note longer than this (or spanning more than one line) opens the genie
   /// card instead of revealing inside the heart.
@@ -500,7 +531,7 @@ class _HeartBubbleState extends State<HeartBubble>
         ),
       ),
     );
-    final status = _statusLine();
+    final status = widget.showStatus ? _statusLine() : null;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment:

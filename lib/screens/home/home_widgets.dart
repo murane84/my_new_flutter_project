@@ -59,7 +59,7 @@ class _PanelToggleBtn extends StatelessWidget {
 /// now-playing bar so long song filenames stay fully readable without stealing
 /// vertical space.
 class _ScrollingText extends StatelessWidget {
-  const _ScrollingText({required this.text, required this.style});
+  const _ScrollingText({super.key, required this.text, required this.style});
 
   final String text;
   final TextStyle style;

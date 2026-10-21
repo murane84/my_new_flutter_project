@@ -2416,21 +2416,24 @@ class HomePageState extends rp.ConsumerState<HomePage>
                         fontWeight: FontWeight.bold, fontSize: 14),
                     overflow: TextOverflow.ellipsis,
                   ),
-                  Text(
-                    _activeFriendOnline == true
-                        ? 'Online'
-                        : _activeFriendLastSeen?.isNotEmpty == true
-                            ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
-                            : 'Offline',
-                    // One line, always — the header never grows a second row.
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: _activeFriendOnline == true
-                          ? Colors.green
-                          : textColor.withAlpha(130),
+                  // One line, always: when it doesn't fit (tight screens) it
+                  // glides as a marquee so it can still be read in full.
+                  SizedBox(
+                    height: 15,
+                    child: _ScrollingText(
+                      key: ValueKey(
+                          '${_activeFriendOnline}_$_activeFriendLastSeen'),
+                      text: _activeFriendOnline == true
+                          ? 'Online'
+                          : _activeFriendLastSeen?.isNotEmpty == true
+                              ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
+                              : 'Offline',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: _activeFriendOnline == true
+                            ? Colors.green
+                            : textColor.withAlpha(130),
+                      ),
                     ),
                   ),
                 ],

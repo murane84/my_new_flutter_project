@@ -343,8 +343,10 @@ class _BubbleBorder extends ShapeBorder {
 
 // ─── Voice note player ───────────────────────────────────────────────────────
 /// Plays a voice note from a remote URL on demand (lazy-loads on first tap so
-/// the chat list stays light). Shows a play/pause button, a progress bar and
-/// the elapsed / total time.
+/// the chat list stays light). Aluta waveform you can tap / drag to scrub, a
+/// 1× · 1.5× · 2× speed pill (remembered across notes), and only one note
+/// plays at a time. The bars are a stable per-note shape derived from the
+/// URL — no amplitude data needs to travel with the message.
 class _VoiceNotePlayer extends StatefulWidget {
   const _VoiceNotePlayer({
     required this.url,
@@ -363,20 +365,45 @@ class _VoiceNotePlayer extends StatefulWidget {
 }
 
 class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
+  static const _speeds = [1.0, 1.5, 2.0];
+  static double _speed = 1.0; // shared: the next note keeps your speed
+  static _VoiceNotePlayerState? _active; // one note at a time
+
   final ja.AudioPlayer _player = ja.AudioPlayer();
   bool _prepared = false;
   bool _loading = false;
   Duration _pos = Duration.zero;
   Duration _dur = Duration.zero;
+  double? _dragFrac;
+  late final List<double> _bars = _shape(widget.url, 34);
   StreamSubscription? _posSub;
   StreamSubscription? _stateSub;
+
+  /// Deterministic, speech-like bar heights (0.18..1) seeded by the URL.
+  static List<double> _shape(String seed, int n) {
+    var h = 0x811C9DC5;
+    for (final c in seed.codeUnits) {
+      h = ((h ^ c) * 0x01000193) & 0x7FFFFFFF;
+    }
+    final out = <double>[];
+    var prev = 0.5;
+    for (var i = 0; i < n; i++) {
+      h = (h * 1103515245 + 12345) & 0x7FFFFFFF;
+      final r = (h % 1000) / 1000.0;
+      // Smooth towards the new sample + a gentle phrase envelope.
+      final env = 0.55 + 0.45 * math.sin(math.pi * (i + 0.5) / n);
+      prev = prev * 0.45 + r * 0.55;
+      out.add((0.18 + 0.82 * prev * env).clamp(0.18, 1.0));
+    }
+    return out;
+  }
 
   @override
   void initState() {
     super.initState();
     _dur = Duration(milliseconds: widget.durationMs);
     _posSub = _player.positionStream.listen((p) {
-      if (mounted) setState(() => _pos = p);
+      if (mounted && _dragFrac == null) setState(() => _pos = p);
     });
     _stateSub = _player.playerStateStream.listen((s) {
       if (!mounted) return;
@@ -390,34 +417,66 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
 
   @override
   void dispose() {
+    if (identical(_active, this)) _active = null;
     _posSub?.cancel();
     _stateSub?.cancel();
     _player.dispose();
     super.dispose();
   }
 
-  Future<void> _toggle() async {
-    if (!_prepared) {
-      setState(() => _loading = true);
-      try {
-        final d = await _player.setUrl(widget.url,
-            headers: mediaAuthHeaders(widget.url));
-        if (d != null && mounted) _dur = d;
-        _prepared = true;
-      } catch (_) {
-        if (mounted) setState(() => _loading = false);
-        return;
-      }
+  Future<bool> _prepare() async {
+    if (_prepared) return true;
+    setState(() => _loading = true);
+    try {
+      final d = await _player.setUrl(widget.url,
+          headers: mediaAuthHeaders(widget.url));
+      if (d != null && mounted) _dur = d;
+      await _player.setSpeed(_speed);
+      _prepared = true;
+    } catch (_) {
       if (mounted) setState(() => _loading = false);
+      return false;
     }
+    if (mounted) setState(() => _loading = false);
+    return true;
+  }
+
+  Future<void> _toggle() async {
+    if (!await _prepare()) return;
     if (_player.playing) {
       await _player.pause();
     } else {
       if (_player.processingState == ja.ProcessingState.completed) {
         await _player.seek(Duration.zero);
       }
+      final other = _active;
+      if (other != null && !identical(other, this) && other.mounted) {
+        other._player.pause();
+      }
+      _active = this;
+      if (_player.speed != _speed) await _player.setSpeed(_speed);
       await _player.play();
     }
+  }
+
+  Future<void> _cycleSpeed() async {
+    HapticFeedback.selectionClick();
+    final i = _speeds.indexOf(_speed);
+    final next = _speeds[(i + 1) % _speeds.length];
+    setState(() => _speed = next);
+    if (_prepared) await _player.setSpeed(next);
+  }
+
+  int get _totalMs =>
+      _dur.inMilliseconds > 0 ? _dur.inMilliseconds : widget.durationMs;
+
+  Future<void> _seekFrac(double f) async {
+    final total = _totalMs;
+    if (total <= 0) return;
+    if (!await _prepare()) return;
+    final to = Duration(milliseconds: (total * f.clamp(0.0, 1.0)).round());
+    setState(() => _pos = to);
+    await _player.seek(to);
   }
 
   String _fmt(Duration d) {
@@ -426,28 +485,36 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
     return '$m:$s';
   }
 
+  String _speedLabel(double v) =>
+      v == v.roundToDouble() ? '${v.toInt()}×' : '$v×';
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final playing = _player.playing;
-    final total =
-        _dur.inMilliseconds > 0 ? _dur.inMilliseconds : widget.durationMs;
-    final frac =
-        total > 0 ? (_pos.inMilliseconds / total).clamp(0.0, 1.0) : 0.0;
-    final label = (playing || _pos > Duration.zero) ? _pos : _dur;
+    final total = _totalMs;
+    final frac = _dragFrac ??
+        (total > 0 ? (_pos.inMilliseconds / total).clamp(0.0, 1.0) : 0.0);
+    final started = playing || _pos > Duration.zero || _dragFrac != null;
+    final label = _dragFrac != null
+        ? Duration(milliseconds: (total * _dragFrac!).round())
+        : started
+            ? _pos
+            : _dur;
     return SizedBox(
-      width: 216,
+      width: 232,
       child: Row(
         children: [
           GestureDetector(
             onTap: _toggle,
-            child: Container(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
               width: 38,
               height: 38,
-              // Soft brand tint (like the composer mic) so it complements the
-              // solid-red Send/FAB instead of competing with it.
               decoration: BoxDecoration(
-                color: widget.accent.withAlpha(isDark ? 48 : 30),
+                color: playing
+                    ? widget.accent
+                    : widget.accent.withAlpha(isDark ? 48 : 30),
                 shape: BoxShape.circle,
                 border: Border.all(
                     color: widget.accent.withAlpha(isDark ? 90 : 70),
@@ -459,40 +526,53 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: widget.accent),
                     )
-                  : Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                      color: isDark ? const Color(0xFFFF8A93) : widget.accent,
+                  : Icon(
+                      playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                      color: playing
+                          ? Colors.white
+                          : (isDark ? const Color(0xFFFF8A93) : widget.accent),
                       size: 20),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Stack(
-                  alignment: Alignment.centerLeft,
-                  children: [
-                    Container(
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: widget.onColor.withAlpha(45),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    FractionallySizedBox(
-                      widthFactor: frac == 0 ? 0.001 : frac,
-                      child: Container(
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: widget.accent,
-                          borderRadius: BorderRadius.circular(2),
+                LayoutBuilder(builder: (ctx, c) {
+                  double fx(Offset local) =>
+                      (local.dx / c.maxWidth).clamp(0.0, 1.0);
+                  return GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapUp: (d) => _seekFrac(fx(d.localPosition)),
+                    onHorizontalDragStart: (d) =>
+                        setState(() => _dragFrac = fx(d.localPosition)),
+                    onHorizontalDragUpdate: (d) =>
+                        setState(() => _dragFrac = fx(d.localPosition)),
+                    onHorizontalDragEnd: (_) {
+                      final f = _dragFrac;
+                      setState(() => _dragFrac = null);
+                      if (f != null) _seekFrac(f);
+                    },
+                    onHorizontalDragCancel: () =>
+                        setState(() => _dragFrac = null),
+                    child: SizedBox(
+                      height: 26,
+                      width: c.maxWidth,
+                      child: CustomPaint(
+                        painter: _WavePainter(
+                          bars: _bars,
+                          frac: frac,
+                          played: widget.accent,
+                          idle: widget.onColor.withAlpha(isDark ? 70 : 60),
+                          knob: _dragFrac != null || started,
                         ),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 5),
+                  );
+                }),
+                const SizedBox(height: 3),
                 Row(
                   children: [
                     Icon(Icons.mic_rounded,
@@ -501,7 +581,35 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
                     Text(_fmt(label),
                         style: TextStyle(
                             fontSize: 10.5,
+                            fontFeatures: const [
+                              ui.FontFeature.tabularFigures()
+                            ],
                             color: widget.onColor.withAlpha(165))),
+                    const Spacer(),
+                    // Speed pill — tap to cycle 1× · 1.5× · 2×.
+                    GestureDetector(
+                      onTap: _cycleSpeed,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: _speed == 1.0
+                              ? widget.onColor.withAlpha(22)
+                              : widget.accent.withAlpha(isDark ? 70 : 40),
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Text(_speedLabel(_speed),
+                            style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                color: _speed == 1.0
+                                    ? widget.onColor.withAlpha(170)
+                                    : (isDark
+                                        ? const Color(0xFFFF8A93)
+                                        : widget.accent))),
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -511,6 +619,49 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
       ),
     );
   }
+}
+
+class _WavePainter extends CustomPainter {
+  _WavePainter({
+    required this.bars,
+    required this.frac,
+    required this.played,
+    required this.idle,
+    required this.knob,
+  });
+
+  final List<double> bars;
+  final double frac;
+  final Color played;
+  final Color idle;
+  final bool knob;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final n = bars.length;
+    final slot = size.width / n;
+    final w = (slot * 0.56).clamp(1.5, 3.2);
+    final mid = size.height / 2;
+    final p = Paint()..strokeCap = StrokeCap.round;
+    for (var i = 0; i < n; i++) {
+      final x = slot * (i + 0.5);
+      final h = (size.height - 4) * bars[i];
+      p
+        ..color = (x / size.width) <= frac ? played : idle
+        ..strokeWidth = w;
+      canvas.drawLine(Offset(x, mid - h / 2), Offset(x, mid + h / 2), p);
+    }
+    if (knob) {
+      final kx = (size.width * frac).clamp(3.0, size.width - 3.0);
+      canvas.drawCircle(
+          Offset(kx, mid), 5, Paint()..color = played.withAlpha(60));
+      canvas.drawCircle(Offset(kx, mid), 3.4, Paint()..color = played);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WavePainter o) =>
+      o.frac != frac || o.played != played || o.idle != idle || o.knob != knob;
 }
 
 // ─── Shared-song bubble ──────────────────────────────────────────────────────

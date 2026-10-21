@@ -621,8 +621,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
       if (since != null) {
         final away = DateTime.now().difference(since);
         // Let the screen settle (reconnect, repaint) before greeting.
-        Future.delayed(const Duration(milliseconds: 1400),
-            () => _maybeMusicWelcome(away));
+        Future.delayed(const Duration(milliseconds: 1400), () {
+          if (_maybeMusicWelcome(away)) return;
+          // Long time away → wait for the reconnect refresh, then summarise.
+          if (away >= const Duration(hours: 3)) {
+            Future.delayed(const Duration(milliseconds: 2600),
+                () => _maybeAwaySummary());
+          }
+        });
       }
       // Coming back from idle/background — re-check the server and go online.
       _discoverServer();
@@ -637,40 +643,102 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// card: share it with your partner, tune in if they're listening too, or
   /// message them. Needs ≥1 min away, at most once every 25 min, and never
   /// during a live session (you're already together).
-  void _maybeMusicWelcome(Duration away) {
-    if (!mounted || !_appForeground) return;
-    if (away < const Duration(minutes: 1)) return;
-    final last = _lastMomentAt;
-    if (last != null &&
-        DateTime.now().difference(last) < const Duration(minutes: 25)) {
-      return;
+  /// The bonded partner (primary Space): their id + first name as I know
+  /// them (phone-book name first), or null with no Space.
+  ({Map<String, dynamic> space, int id, String name})? _partnerInfo() {
+    final space = _primarySpace;
+    if (space == null) return null;
+    for (final m
+        in ((space['members'] as List?) ?? const []).whereType<Map>()) {
+      final id = (m['id'] as num?)?.toInt();
+      if (id == null || id == _myUserId) continue;
+      final f = _allFriends.firstWhere(
+          (x) => (x['id'] as num?)?.toInt() == id,
+          orElse: () => <String, dynamic>{});
+      final full = _contactDisplayName(
+          (f['phone'] ?? m['phone'])?.toString(),
+          (m['username'] ?? f['username'] ?? '').toString());
+      return (
+        space: space,
+        id: id,
+        name: full.trim().split(RegExp(r'\s+')).first
+      );
     }
+    return null;
+  }
+
+  bool get _momentCooling {
+    final last = _lastMomentAt;
+    return last != null &&
+        DateTime.now().difference(last) < const Duration(minutes: 25);
+  }
+
+  /// Back after hours away → "Belyner sent you 4 messages 💌" (or a gentle
+  /// nudge to say hi when it's quiet). Opens the partner's chat in one tap.
+  void _maybeAwaySummary() {
+    if (!mounted || !_appForeground || _momentCooling) return;
     if (ref.read(liveSessionProvider).active) return;
+    final p = _partnerInfo();
+    final unread = ref.read(unreadProvider);
+    final fromPartner = p == null ? 0 : unread.countFor(p.id);
+    var others = 0, chats = 0;
+    unread.counts.forEach((id, c) {
+      if (c > 0 && id != p?.id) {
+        others += c;
+        chats++;
+      }
+    });
+    for (final g in _groups) {
+      final c = (g['unread_count'] as num?)?.toInt() ?? 0;
+      if (c > 0) {
+        others += c;
+        chats++;
+      }
+    }
+    final me = _username.trim().split(RegExp(r'\s+')).first;
+    final title = AlutaMood.awaySummary(
+      me: me,
+      partner: p?.name ?? '',
+      fromPartner: fromPartner,
+      others: others,
+      chats: chats,
+    );
+    if (title.isEmpty) return;
+    _lastMomentAt = DateTime.now();
+    final actions = <MomentAction>[];
+    if (p != null) {
+      actions.add(MomentAction(
+          fromPartner > 0 ? Icons.mark_email_unread_rounded : Icons.waving_hand_rounded,
+          fromPartner > 0 ? 'Open chat' : 'Say hi',
+          () => _messageSpacemate(p.space),
+          primary: true));
+    }
+    showMomentCard(
+      context,
+      title: title,
+      leading: fromPartner > 0
+          ? Icons.favorite_rounded
+          : Icons.waving_hand_rounded,
+      actions: actions,
+    );
+  }
+
+  /// Returns true when it showed a card.
+  bool _maybeMusicWelcome(Duration away) {
+    if (!mounted || !_appForeground) return false;
+    if (away < const Duration(minutes: 1)) return false;
+    if (_momentCooling) return false;
+    if (ref.read(liveSessionProvider).active) return false;
     final np = ref.read(nowPlayingProvider);
     final playing = np.playing || (playbackBus.isPlaying?.call() ?? false);
-    if (!playing) return;
+    if (!playing) return false;
     _lastMomentAt = DateTime.now();
 
     final me = _username.trim().split(RegExp(r'\s+')).first;
-    final space = _primarySpace;
-    int? pid;
-    var pname = '';
-    if (space != null) {
-      for (final m
-          in ((space['members'] as List?) ?? const []).whereType<Map>()) {
-        final id = (m['id'] as num?)?.toInt();
-        if (id == null || id == _myUserId) continue;
-        pid = id;
-        final f = _allFriends.firstWhere(
-            (x) => (x['id'] as num?)?.toInt() == id,
-            orElse: () => <String, dynamic>{});
-        final full = _contactDisplayName(
-            (f['phone'] ?? m['phone'])?.toString(),
-            (m['username'] ?? f['username'] ?? '').toString());
-        pname = full.trim().split(RegExp(r'\s+')).first;
-        break;
-      }
-    }
+    final partner = _partnerInfo();
+    final space = partner?.space;
+    final int? pid = partner?.id;
+    final pname = partner?.name ?? '';
     final partnerListening =
         pid != null && NowPlayingPresence.instance.trackFor(pid) != null;
     final track = np.track;
@@ -711,6 +779,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           : Icons.music_note_rounded,
       actions: actions,
     );
+    return true;
   }
 
   // Sends a presence heartbeat to the server and makes it the single source of

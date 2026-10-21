@@ -182,6 +182,44 @@ class AlutaMood {
         'Still here, still loading…',
       ]);
 
+  // ── Welcome-back after a long time away ─────────────────────────────────
+  /// [fromPartner] unread from the bonded partner; [others] unread from
+  /// everyone else across [chats] conversations.
+  static String awaySummary({
+    required String me,
+    String partner = '',
+    int fromPartner = 0,
+    int others = 0,
+    int chats = 0,
+  }) {
+    final you = me.isEmpty ? '' : ', $me';
+    String n(int c, String one, String many) => '$c ${c == 1 ? one : many}';
+    if (partner.isNotEmpty && fromPartner > 0) {
+      final m = n(fromPartner, 'message', 'messages');
+      return _pick('away_p', [
+        '$partner sent you $m while you were away 💌',
+        '$partner amekutumia ujumbe $fromPartner ukiwa mbali 💌',
+        'Welcome back$you — $partner left you $m 💞',
+      ]);
+    }
+    if (others > 0) {
+      return _pick('away_o', [
+        'Welcome back$you — ${n(others, 'new message', 'new messages')}'
+            '${chats > 1 ? ' in $chats chats' : ''}',
+        'Karibu tena$you — ujumbe mpya $others unakusubiri',
+        'Your circle missed you$you · ${n(others, 'new message', 'new messages')}',
+      ]);
+    }
+    if (partner.isNotEmpty) {
+      return _pick('away_q', [
+        'Karibu tena$you — say hi to $partner? 👋',
+        'All quiet$you. $partner might love a hello 💞',
+        'Welcome back$you — send $partner a little heart?',
+      ]);
+    }
+    return '';
+  }
+
   // ── Welcome-back while music plays ───────────────────────────────────────
   /// Headline when the user comes back to Aluta with a song still playing.
   /// [partner] = first name of the bonded partner (may be empty);

@@ -525,6 +525,8 @@ class _ChatPageState extends State<ChatPage>
     // Attachment downloads live app-wide; repaint bubbles as they progress.
     DownloadManager.instance.init();
     DownloadManager.instance.rev.addListener(_onDownloadsChanged);
+    // Phone book (re)loaded → re-render @mentions with my saved names.
+    ContactNames.instance.revision.addListener(_onContactNamesChanged);
     // Tell the notifier which conversation is on screen, so a foreground push
     // for THIS chat doesn't pop a redundant banner while the user reads it.
     if (_isGroup) {
@@ -663,6 +665,7 @@ class _ChatPageState extends State<ChatPage>
     _ws.close();
     UploadManager.instance.rev.removeListener(_onUploadsChanged);
     DownloadManager.instance.rev.removeListener(_onDownloadsChanged);
+    ContactNames.instance.revision.removeListener(_onContactNamesChanged);
     super.dispose();
   }
 
@@ -1481,6 +1484,12 @@ class _ChatPageState extends State<ChatPage>
 
   void _onDownloadsChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _onContactNamesChanged() {
+    if (!mounted || !_isGroup) return;
+    _publishMentionNames();
+    setState(() {});
   }
 
   void _insertOptimistic(Map<String, dynamic> msg) {

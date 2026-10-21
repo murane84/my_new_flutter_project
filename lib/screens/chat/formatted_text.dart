@@ -87,6 +87,13 @@ class _Found {
 class MentionSelf {
   MentionSelf._();
   static String? username;
+
+  /// How *I* see each tagged member: lowercase Aluta username → the name I
+  /// saved for them in my phone book (falls back to their profile name, i.e.
+  /// the username itself, when they aren't saved). Filled by the chat page
+  /// from the group's members. The message TEXT keeps the canonical
+  /// "@username" (same for everyone); only the rendering is personal.
+  static final Map<String, String> names = {};
 }
 
 // An @-mention token. The picker inserts the member's Aluta USERNAME (the same
@@ -118,8 +125,10 @@ List<InlineSpan> _mentionize(
     }
     final tok = m.group(0)!;
     final c = mentionStyle.color ?? base.color ?? Colors.blue;
+    final key = tok.substring(1).replaceAll('\u00A0', ' ').toLowerCase();
+    final shown = key == 'all' ? null : MentionSelf.names[key];
     out.add(TextSpan(
-      text: tok,
+      text: shown == null ? tok : '@$shown',
       // Chip only when the run has no background of its own (==highlight==).
       style: _isSelfMention(tok) &&
               mentionStyle.backgroundColor == null &&

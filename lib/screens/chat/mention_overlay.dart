@@ -27,8 +27,19 @@ extension _ChatMentions on _ChatPageState {
           .whereType<Map>()
           .map((m) => Map<String, dynamic>.from(m))
           .toList();
-      if (_mentionQuery != null) rebuildWith(() {});
+      _publishMentionNames();
+      rebuildWith(() {});
     } catch (_) {}
+  }
+
+  /// Tell the bubble renderer how I name each member, so "@juma" in a
+  /// message shows as my phone-book name for Juma (else his profile name).
+  void _publishMentionNames() {
+    for (final m in _groupMembers) {
+      final u = _memberUsername(m);
+      if (u.isEmpty) continue;
+      MentionSelf.names[u.toLowerCase()] = _memberName(m);
+    }
   }
 
   /// Phone-book name if I saved this member, else their Aluta username.

@@ -169,6 +169,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   DateTime? _lastMomentAt;
   // Heartbeat tap: whose avatar is glowing right now (sent or received).
   int? _glowFriendId;
+  DateTime? _lastComposeAt; // SongBridge.messagePartner tap de-bounce
   Timer? _glowTimer;
   // "In tune" streak per Space id (Our Space), for the DM header flame.
   final Map<int, int> _streakDays = {};
@@ -755,6 +756,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
     b.messagePartner = ({String? text, bool heart = false, String? mood}) {
       final p = _partnerInfo();
       if (p == null) return;
+      // A double/triple tap is one intent, not three messages.
+      final now = DateTime.now();
+      final last = _lastComposeAt;
+      _lastComposeAt = now;
+      if (last != null && now.difference(last) < const Duration(seconds: 2)) {
+        return;
+      }
       chatComposeRequest.value = {
         'friendId': p.id,
         'text': text ?? '',
@@ -2402,6 +2410,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
       _activeFriendPhone = friend['phone'] as String?;
       _activeFriendAvatar = friend['avatar_url'] as String?;
       _avatarExpanded = false;
+      // The chat must be the front surface: fold the phone's music panel and
+      // leave a full-screen music layout on desktop (e.g. "Send to Belyner"
+      // tapped from the player).
+      _playerExpanded = false;
+      if (_isMusicFullScreen) {
+        _isMusicFullScreen = false;
+        _musicPanelWidth = _prevMusicWidth;
+      }
     });
     // Optimistically clear the badge (was: friend['unread_count'] = 0).
     ref.read(unreadProvider.notifier).clear(friend['id'] as int);

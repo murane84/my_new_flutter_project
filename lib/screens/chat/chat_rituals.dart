@@ -85,7 +85,10 @@ extension _ChatRituals on _ChatPageState {
       if (text.isNotEmpty) {
         // Never wipe what they'd already written — add to it.
         final cur = _ctrl.text.trim();
-        final t = cur.isEmpty ? text : '$cur $text';
+        // Already there (a repeated tap) → don't paste it twice.
+        final t = cur.isEmpty
+            ? text
+            : (cur.contains(text) ? cur : '$cur $text');
         _ctrl.value = TextEditingValue(
             text: t, selection: TextSelection.collapsed(offset: t.length));
       }

@@ -384,9 +384,10 @@ class _HeartBubbleState extends State<HeartBubble>
   bool get _attract =>
       !widget.isMe && widget.openedAt == null && !_reported;
 
-  /// Stars only dress a heart that hasn't been opened yet (on either side:
-  /// my unopened received heart, or one I sent they haven't opened).
-  bool get _sparkle => widget.openedAt == null && !_reported;
+  /// Stars are the "something new for you" signal: only on a RECEIVED heart
+  /// I haven't opened yet. My own sent hearts never sparkle (their pill says
+  /// whether it's been opened), and an opened heart rests.
+  bool get _sparkle => _attract;
 
   Timer? _burstTimer;
   static const Duration _burstEvery = Duration(seconds: 9);

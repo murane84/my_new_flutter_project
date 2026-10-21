@@ -45,6 +45,8 @@ extension _ChatUnread on _ChatPageState {
   /// Snapshot the divider position for this visit and open the chat there.
   void _placeUnreadDivider() {
     final seen = _lastSeenAtOpen;
+    // Mentions after this point queue on the "@" stepper.
+    _mentionBase ??= seen ?? _newestId();
     if (seen == null || _messages.isEmpty) {
       // First visit on this device: nothing to compare with — start fresh.
       if (_isAtBottom) _markSeenUpToNewest();

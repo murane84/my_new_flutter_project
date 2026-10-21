@@ -105,6 +105,16 @@ final RegExp _mentionRe = RegExp(
     r'(?<![^\s(\[{"\u0027])@[^\s@.,!?;:)\]}"\u0027]+(?:\u00A0[^\s@.,!?;:)\]}"\u0027]+)*',
     unicode: true);
 
+/// True when [text] tags me (my username) or @all — drives the chat's "@"
+/// stepper and badges.
+bool mentionsMe(String text) {
+  if (!text.contains('@')) return false;
+  for (final m in _mentionRe.allMatches(text)) {
+    if (_isSelfMention(m.group(0)!)) return true;
+  }
+  return false;
+}
+
 bool _isSelfMention(String token) {
   final t = token.substring(1).replaceAll('\u00A0', ' ').toLowerCase();
   if (t == 'all') return true;

@@ -96,6 +96,7 @@ part 'chat/mention_overlay.dart';     // @-mentions picker (group chats)
 part 'chat/heart_composer.dart';      // secret-heart tray + receipts
 part 'chat/chat_unread.dart';         // "N new messages" divider + last-seen
 part 'chat/chat_search.dart';         // in-chat search pill + hit stepping
+part 'chat/chat_mentions_seen.dart';  // "@" stepper + DM seen avatar
 
 // ─── Timestamp helpers ───────────────────────────────────────────────────────
 
@@ -445,6 +446,13 @@ class _ChatPageState extends State<ChatPage>
   int _searchIdx = 0;
   Timer? _searchDebounce;
   bool _searchDeepLoaded = false;
+  // ── "@" stepper + seen avatar (see chat/chat_mentions_seen.dart) ───────
+  int? _mentionBase;
+  final Set<String> _mentionCleared = {};
+  List<Map<String, dynamic>>? _mentionCacheOf;
+  List<String> _mentionCache = const [];
+  List<Map<String, dynamic>>? _seenCacheOf;
+  String? _seenCache;
   // The message field has focus → the composer pill shows its brand ring.
   bool _composerFocused = false;
   // ── Unread divider (chat/chat_unread.dart) ─────────────────────────────────
@@ -780,6 +788,12 @@ class _ChatPageState extends State<ChatPage>
     await _loadMessages();        // fetch fresh from network (best-effort)
     if (_isGroup) unawaited(_loadGroupMembers()); // for the @-mention picker
     _placeUnreadDivider();        // "N new messages" + open where I left off
+    if (_isGroup) {
+      // Mentions already on screen at open don't need the "@" stepper.
+      Future.delayed(const Duration(milliseconds: 700), () {
+        if (mounted) _clearVisibleMentions();
+      });
+    }
     _maybeInitialJump();          // opened from a notification → jump to it
     _checkOnlineStatus();
     _startPolling();
@@ -1404,6 +1418,7 @@ class _ChatPageState extends State<ChatPage>
     }
     if (atBottom && _hasNewMsg) setState(() => _hasNewMsg = false);
     if (atBottom) _markSeenUpToNewest();
+    if (_isGroup && _pendingMentions.isNotEmpty) _clearVisibleMentions();
   }
 
   /// Back to the newest message. From far up, jump most of the way first
@@ -5319,6 +5334,10 @@ class _ChatPageState extends State<ChatPage>
                                   msg,
                                   _buildBubble(msg, isMe, isDark, showAvatar,
                                       isFirst, showTail)),
+                              if (isMe &&
+                                  !_isGroup &&
+                                  msg['id'].toString() == _seenByFriendId)
+                                _buildSeenAvatar(scheme),
                             ],
                           );
                         },
@@ -5372,6 +5391,15 @@ class _ChatPageState extends State<ChatPage>
                             ),
                           ),
                         ),
+                      ),
+                    // "@" stepper: unread mentions of me, stacked above ⇊.
+                    if (_isGroup)
+                      AnimatedPositioned(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
+                        right: 10,
+                        bottom: _farFromBottom ? 60 : 10,
+                        child: _buildMentionChip(scheme),
                       ),
                     // Round "back to latest" button, bottom-right, whenever
                     // you're a good way up the thread (a dot = new messages).

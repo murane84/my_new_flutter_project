@@ -12,6 +12,7 @@ import 'home_page.dart';
 import 'api_service.dart';
 import '../services/connected_contacts_service.dart';
 import '../services/aluta_mood.dart';
+import '../services/song_insights.dart';
 
 /// The post-unlock warm-up gate.
 ///
@@ -116,7 +117,14 @@ class _PreloadScreenState extends State<PreloadScreen>
     // read smoothly even when everything loads instantly (web / warm relaunch).
     final minShow = DateTime.now().add(const Duration(milliseconds: 1300));
 
-    _bump(_wInit, AlutaMood.wakeLine(firstRun: firstRun));
+    await SongInsights.instance.load();
+    _bump(
+        _wInit,
+        AlutaMood.wakeLine(
+          firstRun: firstRun,
+          topSong: SongInsights.instance.topForMoment(AlutaMood.moment),
+          hasCalm: SongInsights.instance.calmSongs.isNotEmpty,
+        ));
     final online = await _isOnline();
     final api = ApiService();
 

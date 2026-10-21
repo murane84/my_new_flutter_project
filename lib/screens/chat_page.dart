@@ -571,6 +571,8 @@ class _ChatPageState extends State<ChatPage>
     _scrollCtrl.addListener(_onScroll);
     chatSearchRequest.addListener(_onSearchRequest);
     chatMediaRequest.addListener(_onMediaRequest);
+    chatComposeRequest.addListener(_consumeCompose);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _consumeCompose());
     // Mirror the app-wide connection status so this banner never disagrees
     // with the home footer dot / header badge.
     _isUserOffline = !ConnectionStatus.instance.isOnline;
@@ -690,6 +692,7 @@ class _ChatPageState extends State<ChatPage>
     if (_isAtBottom) _markSeenUpToNewest();
     chatSearchRequest.removeListener(_onSearchRequest);
     chatMediaRequest.removeListener(_onMediaRequest);
+    chatComposeRequest.removeListener(_consumeCompose);
     _searchDebounce?.cancel();
     _searchCtrl.dispose();
     _searchFocus.dispose();
@@ -772,6 +775,7 @@ class _ChatPageState extends State<ChatPage>
       });
       _initChat(); // _initChat runs _maybeInitialJump after the load
       _loadRitualFlags();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _consumeCompose());
     } else if (widget.initialJumpMessageId != null &&
         widget.initialJumpMessageId != old.initialJumpMessageId) {
       // Same thread already open + a notification for a NEW message tapped →

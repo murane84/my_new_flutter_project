@@ -28,6 +28,7 @@ import '../utils/popup_shell.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:palette_generator/palette_generator.dart';
 import '../services/song_library.dart';
+import '../services/song_insights.dart';
 import '../utils/bounce_tap.dart';
 import 'music/player_disc_style.dart';
 import 'listening_audience_sheet.dart';
@@ -38,6 +39,7 @@ import 'api_service.dart';
 import 'chat/song_cache.dart';
 import 'music/song_identifier.dart' show showSongIdentifier;
 import '../widgets/genie_menu.dart';
+import '../widgets/song_feel_strip.dart';
 
 part 'music/music_control_widgets.dart'; // _CtrlBtn, _CtrlChip, _SpeedPanel
 part 'music/music_playlist_overlay.dart'; // _PlaylistOverlay + state
@@ -877,6 +879,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
     final initTitle = metadataStore.title(path, _nameFromPath(path));
     final initArtist = metadataStore.artist(path, '');
+    // Aluta learns what you play (on-device only) → gentle music nudges.
+    SongInsights.instance.recordPlay(initTitle, artist: initArtist);
     setState(() {
       _currentIndex = index;
       _trackName = initTitle;

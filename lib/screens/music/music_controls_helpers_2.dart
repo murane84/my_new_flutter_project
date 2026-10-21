@@ -582,6 +582,14 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
               ),
             ),
 
+            // How this song feels → who it's for (music ⇄ chat harmony).
+            if (!live && hasTrack)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: SongFeelStrip(
+                    title: _trackName, artist: _artistName, accent: accent),
+              ),
+
             const SizedBox(height: 20),
 
             // ── Position bar — accent colour, taller thumb ────────────

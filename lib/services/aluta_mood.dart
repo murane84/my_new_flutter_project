@@ -126,8 +126,30 @@ class AlutaMood {
   }
 
   /// The first stage line under the greeting while the app warms up.
-  static String wakeLine({bool firstRun = false}) {
+  static String wakeLine(
+      {bool firstRun = false, String? topSong, bool hasCalm = false}) {
     if (firstRun) return 'Setting up your Aluta…';
+    // Sometimes, your own songs for this moment (SongInsights).
+    if (_rng.nextInt(3) == 0) {
+      if (moment == AlutaMoment.night && hasCalm) {
+        return _pick('wake_s', [
+          'Your calm songs are ready 🌙',
+          'Nyimbo zako za utulivu ziko tayari 🌙',
+        ]);
+      }
+      if (topSong != null && topSong.isNotEmpty) {
+        final t = topSong.length > 32 ? '${topSong.substring(0, 31)}…' : topSong;
+        return _pick('wake_s', [
+          switch (moment) {
+            AlutaMoment.dawn || AlutaMoment.morning => 'Your morning favourite: “$t” ☀️',
+            AlutaMoment.afternoon => 'Your afternoon go-to: “$t” 🎶',
+            AlutaMoment.evening => 'Your evening song: “$t” 🌇',
+            AlutaMoment.night => 'Your late-night song: “$t” 🌙',
+          },
+          'Wimbo wako wa sasa hivi: “$t” 🎶',
+        ]);
+      }
+    }
     switch (moment) {
       case AlutaMoment.dawn:
       case AlutaMoment.morning:
@@ -195,6 +217,61 @@ class AlutaMood {
         'Mtandao uko polepole — bado tunajaribu',
         'Still here, still loading…',
       ]);
+
+  // ── Song feelings ───────────────────────────────────────────────────────
+  static String _q(String t) => '“${t.length > 40 ? '${t.substring(0, 39)}…' : t}”';
+
+  static String songOnRepeat(String title) => _pick('rep', [
+        '${_q(title)} on repeat 🔁 — how does it make you feel?',
+        'Huwezi kuacha ${_q(title)} 🔁 — inakufanya ujisikie vipi?',
+        'You keep coming back to ${_q(title)} 🎶 — what does it hold for you?',
+      ]);
+
+  static String songLove(String title, String partner) => _pick('sl', [
+        partner.isEmpty
+            ? '${_q(title)} sounds like love 😍'
+            : '${_q(title)} sounds like $partner 😍',
+        'Wimbo wa mapenzi 😍 — ${partner.isEmpty ? 'share it?' : 'mshirikishe $partner?'}',
+      ]);
+
+  static String songMissing(String partner) => partner.isEmpty
+      ? 'Missing someone 🥹 — a little message can close the distance'
+      : _pick('sm', [
+          'Missing $partner 🥹 — send a heart?',
+          'Unamkumbuka $partner 🥹 — mtumie moyo?',
+        ]);
+
+  static String songHyped() => _pick('sh', [
+        'That energy 💪 — share it with your people?',
+        'Nguvu! 💪 Washirikishe wenzako?',
+      ]);
+
+  static String songCalm() => _pick('sc', [
+        'Saved to your calm songs 😌 — they\'ll be here on slow nights',
+        'Imehifadhiwa kwenye nyimbo za utulivu 😌',
+      ]);
+
+  static String songHurting(String partner) => _pick('shu', [
+        'Some songs hold heavy feelings 💔 You don\'t have to carry it alone.',
+        'Moyo mzito? 💔 Hauko peke yako${partner.isEmpty ? '' : ' — $partner yupo'}.',
+      ]);
+
+  static String songMissingAgain(String title, String partner) => _pick('sma', [
+        '${_q(title)} again… send ${partner.isEmpty ? 'them' : partner} a heart? 💌',
+        '${_q(title)} tena 🥹 — mtumie ${partner.isEmpty ? 'yeye' : partner} moyo? 💌',
+      ]);
+
+  static String songOurs(String title, String partner) => _pick('so', [
+        '${_q(title)} has been your song for weeks 💞 — add it to Our Playlist${partner.isEmpty ? '' : ' with $partner'}?',
+        '${_q(title)} ni wimbo wenu 💞 — uweke kwenye Our Playlist?',
+      ]);
+
+  static String weeklyRecapTitle(String? feelLabel) => feelLabel == null
+      ? _pick('wr', ['Your week in music 🎶', 'Wiki yako ya muziki 🎶'])
+      : _pick('wr', [
+          'Your week in music 🎶 — mostly $feelLabel',
+          'Wiki yako ya muziki 🎶 · $feelLabel',
+        ]);
 
   // ── Heartbeat tap ───────────────────────────────────────────────────────
   static String heartbeatSent(String to) => _pick('hb_s', [

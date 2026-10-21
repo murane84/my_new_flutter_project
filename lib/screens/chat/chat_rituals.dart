@@ -69,6 +69,27 @@ extension _ChatRituals on _ChatPageState {
     });
   }
 
+  /// A music nudge asked to pre-fill this chat (text, maybe as a heart).
+  void _consumeCompose() {
+    final r = chatComposeRequest.value;
+    if (r == null || !mounted || _isGroup) return;
+    if ((r['friendId'] as int?) != widget.friendId) return;
+    chatComposeRequest.value = null;
+    final text = (r['text'] ?? '').toString();
+    rebuildWith(() {
+      if (r['heart'] == true) {
+        _heartMode = true;
+        _heartMood = 'love';
+        _heartUnlockAt = null;
+      }
+      if (text.isNotEmpty) {
+        _ctrl.value = TextEditingValue(
+            text: text, selection: TextSelection.collapsed(offset: text.length));
+      }
+    });
+    _composerFocus.requestFocus();
+  }
+
   /// A different chat opened in this same page → forget the last one's.
   void _resetRituals() {
     _gnDoneToday = _memoryDoneToday = _annivToday = false;

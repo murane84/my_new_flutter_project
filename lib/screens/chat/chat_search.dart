@@ -7,6 +7,11 @@ final ValueNotifier<int> chatSearchRequest = ValueNotifier<int>(0);
 /// Bumped by hosts to open the open chat's Songs · Media · Links · Docs.
 final ValueNotifier<int> chatMediaRequest = ValueNotifier<int>(0);
 
+/// Pre-fill a DM's composer from elsewhere (music nudges): {friendId: int,
+/// text: String, heart: bool}. The matching chat consumes and clears it.
+final ValueNotifier<Map<String, dynamic>?> chatComposeRequest =
+    ValueNotifier<Map<String, dynamic>?>(null);
+
 // ── In-chat search ──────────────────────────────────────────────────────────
 // A frosted Aluta pill floats over the top of the thread: type, and every
 // match lights up in its bubble; ⌃/⌄ step through them newest → oldest with

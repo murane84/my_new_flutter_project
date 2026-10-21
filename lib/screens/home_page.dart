@@ -97,6 +97,7 @@ import '../state/presence_state.dart';
 import '../widgets/genie_menu.dart';
 import '../widgets/moment_card.dart';
 import '../services/aluta_mood.dart';
+import '../services/song_insights.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
@@ -371,6 +372,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadPinnedChats();
+    _wireSongMoments();
     // Drives the playlist drawer's smooth slide/fade in & out. MusicControls
     // flips playlistDrawerBus.isOpen; we animate the host from that.
     _playlistDrawerCtrl = AnimationController(
@@ -510,6 +512,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   @override
   void dispose() {
     _glowTimer?.cancel();
+    SongInsights.instance.pending.removeListener(_onSongNudge);
     WidgetsBinding.instance.removeObserver(this);
     ConnectionStatus.instance.online.removeListener(_onGlobalConnChanged);
     SessionEvents.instance.expired.removeListener(_onSessionExpired);
@@ -630,6 +633,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
         // Let the screen settle (reconnect, repaint) before greeting.
         Future.delayed(const Duration(milliseconds: 1400), () {
           if (_maybeMusicWelcome(away)) return;
+          // A music nudge that waited for you to come back.
+          if (SongInsights.instance.pending.value != null) {
+            _onSongNudge();
+            return;
+          }
+          _maybeWeeklyRecap();
           // Long time away → wait for the reconnect refresh, then summarise.
           if (away >= const Duration(hours: 3)) {
             Future.delayed(const Duration(milliseconds: 2600),
@@ -727,6 +736,304 @@ class HomePageState extends rp.ConsumerState<HomePage>
           ? Icons.favorite_rounded
           : Icons.waving_hand_rounded,
       actions: actions,
+    );
+  }
+
+  // ── Song moments (SongInsights) ──────────────────────────────────────────
+  // The player tells SongInsights what plays; when a song is on repeat (or a
+  // "missing someone" song returns, or one has been "ours" for weeks) it
+  // queues ONE nudge a day, shown here as a moment card. Its follow-ups reach
+  // the partner / chats / Our Space through SongBridge (also used by the
+  // player's feel strip). On-device only; ignored twice → never again.
+  void _wireSongMoments() {
+    final b = SongBridge.instance;
+    b.partnerName = () => _partnerInfo()?.name;
+    b.messagePartner = ({String? text, bool heart = false}) {
+      final p = _partnerInfo();
+      if (p == null) return;
+      chatComposeRequest.value = {
+        'friendId': p.id,
+        'text': text ?? '',
+        'heart': heart,
+      };
+      _messageSpacemate(p.space);
+    };
+    b.listenTogether = () {
+      final p = _partnerInfo();
+      if (p != null) _openSpace(p.space);
+    };
+    b.shareCurrent = () => playbackBus.onShareToChat?.call();
+    b.addToOurs = (title, artist) async {
+      final p = _partnerInfo();
+      final sid = (p?.space['id'] as num?)?.toInt();
+      if (sid == null) return false;
+      final r = await ApiService().addTrack(sid,
+          title: title,
+          artist: artist.isEmpty ? null : artist,
+          memo: 'our song 💞',
+          source: 'insight');
+      if (r != null) spaceEventBus.value++;
+      return r != null;
+    };
+    SongInsights.instance.load().then((_) {
+      SongInsights.instance.pending.addListener(_onSongNudge);
+      Future.delayed(const Duration(seconds: 6), _maybeWeeklyRecap);
+    });
+    // Listen Together sessions count toward the weekly recap.
+    ref.listenManual(liveSessionProvider, (prev, next) {
+      if (next.active && !(prev?.active ?? false)) {
+        SongInsights.instance.recordTogether();
+      }
+    });
+  }
+
+  void _onSongNudge() {
+    final n = SongInsights.instance.pending.value;
+    if (n == null || !mounted || !_appForeground) return;
+    if (ref.read(liveSessionProvider).active) return; // already together
+    // Let it breathe: never on top of another moment card.
+    if (_momentCooling) return;
+    Future.delayed(const Duration(milliseconds: 900), () {
+      if (!mounted || SongInsights.instance.pending.value != n) return;
+      _showSongNudge(n);
+    });
+  }
+
+  void _showSongNudge(SongNudge n) {
+    final si = SongInsights.instance;
+    si.markShown(n);
+    _lastMomentAt = DateTime.now();
+    final partner = _partnerInfo();
+    final pname = partner?.name ?? '';
+    void acted() => si.markActed(n.title);
+    switch (n.kind) {
+      case 'repeat':
+        showMomentCard(
+          context,
+          title: AlutaMood.songOnRepeat(n.title),
+          subtitle: n.artist.isEmpty ? null : n.artist,
+          leading: Icons.repeat_rounded,
+          hold: const Duration(seconds: 12),
+          onIgnored: () => si.markIgnored(n.title),
+          actions: [
+            for (final f in SongFeel.values)
+              MomentAction(Icons.circle, f.label, () {
+                si.setFeel(n.title, f);
+                Future.delayed(const Duration(milliseconds: 650),
+                    () => _songFollowUp(n.title, n.artist, f));
+              }, emoji: f.emoji),
+          ],
+        );
+        break;
+      case 'missing':
+        showMomentCard(
+          context,
+          title: AlutaMood.songMissingAgain(n.title, pname),
+          leading: Icons.favorite_rounded,
+          onIgnored: () => si.markIgnored(n.title),
+          actions: [
+            if (partner != null)
+              MomentAction(Icons.favorite_rounded, 'Send a heart', () {
+                acted();
+                SongBridge.instance.messagePartner?.call(
+                    text: '“${n.title}” made me miss you 🥹', heart: true);
+              }, primary: true),
+          ],
+        );
+        break;
+      case 'ours':
+        showMomentCard(
+          context,
+          title: AlutaMood.songOurs(n.title, pname),
+          leading: Icons.queue_music_rounded,
+          onIgnored: () => si.markIgnored(n.title),
+          actions: [
+            if (partner != null)
+              MomentAction(Icons.playlist_add_rounded, 'Add to Our Playlist',
+                  () async {
+                acted();
+                si.markOurs(n.title);
+                final ok = await SongBridge.instance.addToOurs
+                        ?.call(n.title, n.artist) ??
+                    false;
+                if (mounted) {
+                  showToast(
+                      context,
+                      ok
+                          ? 'Added to your soundtrack 💞'
+                          : 'Could not add it right now',
+                      type: ok ? ToastType.success : ToastType.error);
+                }
+              }, primary: true),
+          ],
+        );
+        break;
+    }
+  }
+
+  /// After the feeling is picked: who this song is for.
+  Future<void> _songFollowUp(String title, String artist, SongFeel f) async {
+    if (!mounted) return;
+    final partner = _partnerInfo();
+    final pname = partner?.name ?? '';
+    final bridge = SongBridge.instance;
+    final playingNow = ref.read(nowPlayingProvider).track.trim() == title;
+    final sharer = await _whoSharedSong(title, exclude: partner?.id);
+    if (!mounted) return;
+    final actions = <MomentAction>[];
+    String headline;
+    String? sub;
+    IconData lead = Icons.music_note_rounded;
+    switch (f) {
+      case SongFeel.love:
+        headline = AlutaMood.songLove(title, pname);
+        lead = Icons.favorite_rounded;
+        if (partner != null) {
+          actions.add(MomentAction(Icons.favorite_rounded, 'Send to $pname',
+              () => bridge.messagePartner
+                  ?.call(text: '“$title” reminds me of you 💞'),
+              primary: true));
+          actions.add(MomentAction(Icons.headphones_rounded,
+              'Listen together', () => bridge.listenTogether?.call()));
+        } else if (playingNow) {
+          actions.add(MomentAction(Icons.send_rounded, 'Share it',
+              () => bridge.shareCurrent?.call(),
+              primary: true));
+        }
+        break;
+      case SongFeel.missing:
+        headline = AlutaMood.songMissing(pname);
+        lead = Icons.favorite_rounded;
+        if (partner != null) {
+          actions.add(MomentAction(Icons.favorite_rounded, 'Send a heart',
+              () => bridge.messagePartner?.call(
+                  text: '“$title” made me miss you 🥹', heart: true),
+              primary: true));
+          actions.add(MomentAction(Icons.headphones_rounded,
+              'Listen together', () => bridge.listenTogether?.call()));
+        }
+        break;
+      case SongFeel.hyped:
+        headline = AlutaMood.songHyped();
+        lead = Icons.bolt_rounded;
+        if (playingNow) {
+          actions.add(MomentAction(Icons.send_rounded, 'Share to a chat',
+              () => bridge.shareCurrent?.call(),
+              primary: true));
+        }
+        break;
+      case SongFeel.calm:
+        headline = AlutaMood.songCalm();
+        lead = Icons.spa_rounded;
+        break;
+      case SongFeel.hurting:
+        // Gentle, never pushy: no "share it" here — just a hand to hold.
+        headline = AlutaMood.songHurting(pname);
+        sub = 'If it ever feels like too much, reach out to someone you trust.';
+        lead = Icons.favorite_border_rounded;
+        if (partner != null) {
+          actions.add(MomentAction(Icons.chat_bubble_rounded,
+              'Talk to $pname', () => bridge.messagePartner?.call(),
+              primary: true));
+        }
+        actions.add(MomentAction(Icons.check_rounded, "I'm okay", () {}));
+        break;
+    }
+    // 3) Someone who shared this song with you would love it too.
+    if (sharer != null &&
+        f != SongFeel.hurting &&
+        f != SongFeel.calm &&
+        actions.length < 3) {
+      final who = sharer.$2;
+      actions.add(MomentAction(Icons.person_rounded, 'Share with $who',
+          () => openChat(sharer.$1)));
+      sub ??= '$who shared this one with you before';
+    }
+    showMomentCard(
+      context,
+      title: headline,
+      subtitle: sub,
+      leading: lead,
+      hold: Duration(seconds: f == SongFeel.hurting ? 14 : 9),
+      actions: actions,
+    );
+  }
+
+  /// A friend who sent me this song in a DM (from on-device chat caches).
+  Future<(Map<String, dynamic>, String)?> _whoSharedSong(String title,
+      {int? exclude}) async {
+    final me = _myUserId;
+    if (me == null) return null;
+    final key = title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
+    if (key.length < 3) return null;
+    try {
+      final p = await SharedPreferences.getInstance();
+      for (final f in _allFriends) {
+        final id = (f['id'] as num?)?.toInt();
+        if (id == null || id == exclude) continue;
+        final raw = p.getString('chat_cache_${me}_$id');
+        if (raw == null || !raw.contains('"song"')) continue;
+        final list = jsonDecode(raw);
+        if (list is! List) continue;
+        for (final m in list) {
+          if (m is! Map || m['message_type'] != 'song') continue;
+          if (m['sender_id']?.toString() != '$id') continue;
+          final t = '${m['content'] ?? ''} ${m['media_name'] ?? ''}'
+              .toLowerCase()
+              .replaceAll(RegExp(r'[^a-z0-9]+'), '');
+          if (t.contains(key)) {
+            final name = _contactDisplayName(
+                    f['phone']?.toString(), (f['username'] ?? '').toString())
+                .trim()
+                .split(RegExp(r'\s+'))
+                .first;
+            return (f, name);
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// 6) Sunday evening: your week in music, shareable with your partner.
+  void _maybeWeeklyRecap() {
+    if (!mounted || !_appForeground || _momentCooling) return;
+    final r = SongInsights.instance.weeklyRecapDue();
+    if (r == null) return;
+    SongInsights.instance.markRecapShown();
+    _lastMomentAt = DateTime.now();
+    final partner = _partnerInfo();
+    final lines = <String>[
+      for (var i = 0; i < r.top.length; i++) '${i + 1}. ${r.top[i]}',
+    ];
+    final feelLabel =
+        r.feel == null ? null : '${r.feel!.emoji} ${r.feel!.label.toLowerCase()}';
+    final together = r.together > 0
+        ? ' · together ${r.together}×'
+        : '';
+    showMomentCard(
+      context,
+      title: AlutaMood.weeklyRecapTitle(feelLabel),
+      subtitle: '${lines.join('  ')}$together',
+      leading: Icons.insights_rounded,
+      hold: const Duration(seconds: 14),
+      actions: [
+        if (partner != null)
+          MomentAction(Icons.send_rounded, 'Send to ${partner.name}', () async {
+            final text = '🎶 My week in music\n${lines.join('\n')}'
+                '${feelLabel == null ? '' : '\nMostly $feelLabel'}'
+                '${r.together > 0 ? '\nWe listened together ${r.together}× 💞' : ''}';
+            final sent = await ApiService().sendMessage(partner.id, text);
+            if (mounted) {
+              showToast(
+                  context,
+                  sent != null
+                      ? 'Sent to ${partner.name} 💞'
+                      : 'Could not send it right now',
+                  type: sent != null ? ToastType.success : ToastType.error);
+            }
+          }, primary: true),
+      ],
     );
   }
 

@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/live_session_service.dart' show BytesAudioSource;
 import '../services/now_playing_presence.dart';
+import '../services/song_insights.dart';
 import 'home_page.dart' show playbackBus;
 import 'web_fs/music_folder.dart';
 import 'web_fs/blob_url.dart';
@@ -255,6 +256,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       final bytes = await t.load();
       _currentBytes = bytes;
       _currentTitle = _cleanTitle(t.name);
+      SongInsights.instance.recordPlay(_currentTitle ?? '');
       // Play from a fresh object URL. Switching a StreamAudioSource on
       // just_audio_web doesn't reliably swap the audio element (you keep
       // hearing the previous track), so each track gets its own blob URL and

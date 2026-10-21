@@ -15,6 +15,7 @@ import '../widgets/wallpaper_gallery.dart';
 import 'api_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/song_insights.dart';
 
 /// The personalization surface (build step 5): whole-app **theme** (System /
 /// Light / Dark) + a curated **accent** preset set. Dark stays the brand's
@@ -216,6 +217,8 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                     _HeartReceiptsSection(),
                   ],
                 ),
+          const SizedBox(height: 10),
+          const _MusicNudgesSection(),
           if (_showGuide) ...[
             const SizedBox(height: 8),
             Text(
@@ -1318,6 +1321,64 @@ class _HeartReceiptsSectionState extends State<_HeartReceiptsSection> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "Music nudges": Aluta noticing songs on repeat and how they feel (all
+/// on-device). Off hides the cards and the player's feel strip.
+class _MusicNudgesSection extends StatelessWidget {
+  const _MusicNudgesSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final si = SongInsights.instance;
+    return DecoratedBox(
+      decoration: _raisedCardDecoration(scheme, isDark),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        child: ValueListenableBuilder<bool>(
+          valueListenable: si.enabled,
+          builder: (context, on, _) => Row(
+            children: [
+              _accentIconChip(scheme, Icons.graphic_eq_rounded),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Music nudges',
+                        style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface)),
+                    const SizedBox(height: 2),
+                    Text(
+                        on
+                            ? 'Songs on repeat, how they feel, who they\'re for · stays on this phone'
+                            : 'Aluta won\'t nudge you about your music',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 24,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Switch(value: on, onChanged: si.setEnabled),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

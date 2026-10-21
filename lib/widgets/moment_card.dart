@@ -6,11 +6,14 @@ import 'package:flutter/services.dart' show HapticFeedback;
 
 /// One action on a [showMomentCard].
 class MomentAction {
-  const MomentAction(this.icon, this.label, this.onTap, {this.primary = false});
+  const MomentAction(this.icon, this.label, this.onTap,
+      {this.primary = false, this.emoji});
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final bool primary;
+  /// Shown instead of [icon] (mood chips: 😍 🥹 💪 😌 💔).
+  final String? emoji;
 }
 
 OverlayEntry? _current;
@@ -26,6 +29,8 @@ void showMomentCard(
   IconData leading = Icons.music_note_rounded,
   List<MomentAction> actions = const [],
   Duration hold = const Duration(seconds: 9),
+  // Closed (timeout / ✕ / swipe) without tapping any action.
+  VoidCallback? onIgnored,
 }) {
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return;
@@ -38,6 +43,7 @@ void showMomentCard(
       leading: leading,
       actions: actions,
       hold: hold,
+      onIgnored: onIgnored,
       onGone: () {
         if (identical(_current, entry)) _current = null;
         if (entry.mounted) entry.remove();
@@ -56,6 +62,7 @@ class _MomentCard extends StatefulWidget {
     required this.actions,
     required this.hold,
     required this.onGone,
+    this.onIgnored,
   });
 
   final String title;
@@ -64,6 +71,7 @@ class _MomentCard extends StatefulWidget {
   final List<MomentAction> actions;
   final Duration hold;
   final VoidCallback onGone;
+  final VoidCallback? onIgnored;
 
   @override
   State<_MomentCard> createState() => _MomentCardState();
@@ -76,6 +84,7 @@ class _MomentCardState extends State<_MomentCard>
   Timer? _timer;
   double _drag = 0;
   bool _leaving = false;
+  bool _acted = false;
 
   @override
   void initState() {
@@ -89,6 +98,7 @@ class _MomentCardState extends State<_MomentCard>
     if (_leaving) return;
     _leaving = true;
     _timer?.cancel();
+    if (!_acted) widget.onIgnored?.call();
     if (mounted) await _in.reverse();
     widget.onGone();
   }
@@ -211,10 +221,15 @@ class _MomentCardState extends State<_MomentCard>
                                   a.primary
                                       ? FilledButton.icon(
                                           onPressed: () {
+                                            _acted = true;
                                             _leave();
                                             a.onTap();
                                           },
-                                          icon: Icon(a.icon, size: 16),
+                                          icon: a.emoji != null
+                                              ? Text(a.emoji!,
+                                                  style: const TextStyle(
+                                                      fontSize: 15))
+                                              : Icon(a.icon, size: 16),
                                           label: Text(a.label),
                                           style: FilledButton.styleFrom(
                                               visualDensity:
@@ -223,10 +238,15 @@ class _MomentCardState extends State<_MomentCard>
                                         )
                                       : OutlinedButton.icon(
                                           onPressed: () {
+                                            _acted = true;
                                             _leave();
                                             a.onTap();
                                           },
-                                          icon: Icon(a.icon, size: 16),
+                                          icon: a.emoji != null
+                                              ? Text(a.emoji!,
+                                                  style: const TextStyle(
+                                                      fontSize: 15))
+                                              : Icon(a.icon, size: 16),
                                           label: Text(a.label),
                                           style: OutlinedButton.styleFrom(
                                               visualDensity:

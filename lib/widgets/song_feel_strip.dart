@@ -105,11 +105,14 @@ class _SongFeelStripState extends State<SongFeelStrip> {
   }
 
   Widget _pill(String text,
-      {VoidCallback? onTap, bool strong = false, IconData? icon}) {
+      {VoidCallback? onTap,
+      bool strong = false,
+      IconData? icon,
+      String? tip}) {
     final a = widget.accent;
     final on = Theme.of(context).colorScheme.onSurface;
     final fg = strong ? Colors.white : on.withValues(alpha: 0.8);
-    return Material(
+    final pill = Material(
       color: Colors.transparent,
       child: Ink(
         decoration: BoxDecoration(
@@ -142,9 +145,12 @@ class _SongFeelStripState extends State<SongFeelStrip> {
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               if (icon != null) ...[
                 Icon(icon, size: 15, color: fg),
-                const SizedBox(width: 5),
+                if (text.isNotEmpty) const SizedBox(width: 5),
               ],
+              if (text.isNotEmpty)
               Text(text,
+                  maxLines: 1,
+                  softWrap: false,
                   style: TextStyle(
                       fontSize: widget.centered ? 13 : 12,
                       fontWeight: FontWeight.w700,
@@ -154,9 +160,14 @@ class _SongFeelStripState extends State<SongFeelStrip> {
         ),
       ),
     );
+    return (tip == null || tip.isEmpty) ? pill : Tooltip(message: tip, child: pill);
   }
 
-  List<Widget> _actions(SongFeel feel) {
+  /// [tier]: 0 = full labels, 1 = short labels (tight panel), 2 = the
+  /// secondary action becomes icon-only (very tight). Nothing is ever cut.
+  List<Widget> _actions(SongFeel feel, {int tier = 0}) {
+    String l(String full, String short, [String? tiny]) =>
+        tier == 0 ? full : (tier == 1 ? short : (tiny ?? short));
     final b = SongBridge.instance;
     final partner = b.partnerName?.call();
     final hasP = partner != null && partner.isNotEmpty;
@@ -166,12 +177,14 @@ class _SongFeelStripState extends State<SongFeelStrip> {
     switch (feel) {
       case SongFeel.love:
         if (hasP) {
-          out.add(_pill('Send to $partner',
+          out.add(_pill(l('Send to $partner', 'Send 💞'),
+              tip: 'Send to $partner',
               icon: Icons.favorite_rounded,
               strong: true,
               onTap: () => _go(() => b.messagePartner
                   ?.call(text: '“$t” reminds me of you 💞'))));
-          out.add(_pill('Together',
+          out.add(_pill(l('Together', 'Together', ''),
+              tip: 'Listen together',
               icon: Icons.headphones_rounded,
               onTap: () => _go(b.listenTogether)));
         } else if (canShare) {
@@ -183,26 +196,29 @@ class _SongFeelStripState extends State<SongFeelStrip> {
         break;
       case SongFeel.missing:
         if (hasP) {
-          out.add(_pill('Send $partner a heart',
+          out.add(_pill(l('Send $partner a heart', 'Heart 💌', 'Heart'),
+              tip: 'Send $partner a heart',
               icon: Icons.mark_email_unread_rounded,
               strong: true,
               onTap: () => _go(() => b.messagePartner?.call(
                   text: '“$t” made me miss you 🥹',
                   heart: true,
                   mood: 'miss'))));
-          out.add(_pill('Together',
+          out.add(_pill(l('Together', 'Together', ''),
+              tip: 'Listen together',
               icon: Icons.headphones_rounded,
               onTap: () => _go(b.listenTogether)));
         }
         break;
       case SongFeel.hyped:
         if (canShare) {
-          out.add(_pill('Share the energy',
+          out.add(_pill(l('Share the energy', 'Share'),
               icon: Icons.bolt_rounded,
               strong: true,
               onTap: () => _go(b.shareCurrent)));
         } else if (hasP) {
-          out.add(_pill('Tell $partner',
+          out.add(_pill(l('Tell $partner', 'Tell 🎶'),
+              tip: 'Tell $partner',
               icon: Icons.bolt_rounded,
               strong: true,
               onTap: () => _go(() => b.messagePartner
@@ -210,16 +226,18 @@ class _SongFeelStripState extends State<SongFeelStrip> {
         }
         break;
       case SongFeel.calm:
-        out.add(_pill('Kept with your calm songs', icon: Icons.spa_rounded));
+        out.add(_pill(l('Kept with your calm songs', 'In calm songs', 'Calm'),
+            icon: Icons.spa_rounded));
         break;
       case SongFeel.hurting:
         if (hasP) {
-          out.add(_pill('Talk to $partner',
+          out.add(_pill(l('Talk to $partner', 'Talk', 'Talk'),
+              tip: 'Talk to $partner',
               icon: Icons.chat_bubble_rounded,
               strong: true,
               onTap: () => _go(() => b.messagePartner?.call())));
         } else {
-          out.add(_pill('Be gentle with yourself 💗'));
+          out.add(_pill(l('Be gentle with yourself 💗', 'Be gentle 💗')));
         }
         break;
     }
@@ -332,24 +350,35 @@ class _SongFeelStripState extends State<SongFeelStrip> {
                     ],
                   ],
                 )
-              : Row(
+              : LayoutBuilder(
                   key: ValueKey('feel_${feel.key}'),
-                  children: [
-                    chosen,
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        reverse: true,
-                        child: Row(children: [
-                          for (final a in acts) ...[
-                            a,
-                            const SizedBox(width: 6),
-                          ],
-                        ]),
-                      ),
-                    ),
-                  ],
+                  builder: (context, box) {
+                    final w = box.maxWidth;
+                    final tier = w >= 400 ? 0 : (w >= 290 ? 1 : 2);
+                    final acts = _actions(feel, tier: tier);
+                    return Row(
+                      children: [
+                        // Tight: the feeling shows as its emoji only (the
+                        // name lives in the tooltip / tap to change).
+                        tier == 0
+                            ? chosen
+                            : Tooltip(
+                                message: '${feel.label} · tap to change',
+                                child: GestureDetector(
+                                  onTap: () =>
+                                      setState(() => _choosing = true),
+                                  child: Text(feel.emoji,
+                                      style: const TextStyle(fontSize: 20)),
+                                ),
+                              ),
+                        const Spacer(),
+                        for (var i = 0; i < acts.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 6),
+                          acts[i],
+                        ],
+                      ],
+                    );
+                  },
                 );
         }
         return _frame(AnimatedSize(

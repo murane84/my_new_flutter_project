@@ -698,6 +698,8 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
     switch (bg.mode) {
       case 'motif':
         return 'Motif pattern';
+      case 'watermark':
+        return 'Aluta watermark';
       case 'photo':
         return 'Photo wallpaper';
       default:
@@ -798,6 +800,11 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
                               child: _quick(scheme, Icons.auto_awesome_rounded,
                                   'Motif', current.mode == 'motif',
                                   () => applyClose('motif'))),
+                          const SizedBox(width: 10),
+                          Expanded(
+                              child: _quick(scheme, Icons.water_drop_rounded,
+                                  'Watermark', current.mode == 'watermark',
+                                  () => applyClose('watermark'))),
                         ]),
                         const SizedBox(height: 16),
                         Align(

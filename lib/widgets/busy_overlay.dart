@@ -78,13 +78,17 @@ class _BusyOverlayState extends State<BusyOverlay> {
   Widget _card(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Branded "big moment" loader (back online, opening the app): the Aluta
+    // mark sits still in the middle while a brand ring sweeps around it.
     return Container(
-      width: 54,
-      height: 54,
+      width: 68,
+      height: 68,
       decoration: BoxDecoration(
         color: (isDark ? const Color(0xFF1C1B1F) : Colors.white)
-            .withValues(alpha: 0.88),
-        borderRadius: BorderRadius.circular(16),
+            .withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+            color: scheme.primary.withValues(alpha: isDark ? 0.25 : 0.12)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.18),
@@ -93,12 +97,32 @@ class _BusyOverlayState extends State<BusyOverlay> {
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(15),
-        child: CircularProgressIndicator(
-          strokeWidth: 2.6,
-          valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
-        ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          SizedBox(
+            width: 50,
+            height: 50,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.6,
+              strokeCap: StrokeCap.round,
+              backgroundColor: scheme.primary.withValues(alpha: 0.12),
+              valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
+            ),
+          ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(9),
+            child: Image.asset(
+              'assets/images/logo.png',
+              width: 30,
+              height: 30,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.medium,
+              errorBuilder: (_, _, _) => Icon(Icons.favorite_rounded,
+                  size: 18, color: scheme.primary),
+            ),
+          ),
+        ],
       ),
     );
   }

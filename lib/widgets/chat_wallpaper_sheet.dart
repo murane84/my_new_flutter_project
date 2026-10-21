@@ -266,6 +266,11 @@ Future<void> showChatWallpaperSheet(
                               child: quick(Icons.auto_awesome_rounded, 'Motif',
                                   current.mode == 'motif',
                                   () => applyAndClose('motif'))),
+                          const SizedBox(width: 10),
+                          Expanded(
+                              child: quick(Icons.water_drop_rounded,
+                                  'Watermark', current.mode == 'watermark',
+                                  () => applyAndClose('watermark'))),
                         ]),
                         const SizedBox(height: 18),
                         label('Gallery'),

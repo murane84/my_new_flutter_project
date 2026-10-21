@@ -60,6 +60,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'chat/formatted_text.dart';
 import 'chat/heart_message.dart';
+import '../widgets/aluta_watermark.dart';
 import 'chat/conversation_media.dart';
 import '../services/keystroke_sounds.dart';
 import '../services/upload_manager.dart';
@@ -4992,6 +4993,15 @@ class _ChatPageState extends State<ChatPage>
                       }
                       if (bg.isMotif) {
                         return _chatMotifWallpaper(scheme, isDark);
+                      }
+                      if (bg.isWatermark) {
+                        return ValueListenableBuilder<double>(
+                          valueListenable: motifStrength,
+                          builder: (_, v, _) => AlutaWatermarkWallpaper(
+                              tint: scheme.primary,
+                              isDark: isDark,
+                              strength: v),
+                        );
                       }
                       return _ChatWallpaper(
                           isDark: isDark, brand: scheme.primary);

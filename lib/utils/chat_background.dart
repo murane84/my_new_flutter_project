@@ -5,18 +5,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// A chosen chat wallpaper.
 /// - mode 'default' → the built-in pattern wallpaper
 /// - mode 'motif'   → the romantic hearts/notes/blossoms scatter (faint)
+/// - mode 'watermark' → the Aluta mark, theme-tinted, as a whisper lattice
 /// - mode 'photo'   → [url] (a fully-resolved image URL: a server preset, a
 ///   reused Our Space photo, or the user's own uploaded picture). [wideUrl] is
 ///   an optional landscape variant used to fill wide screens instead of tiling
 ///   the portrait.
 class ChatBg {
-  final String mode; // 'default' | 'motif' | 'photo'
+  final String mode; // 'default' | 'motif' | 'watermark' | 'photo'
   final String? url;
   final String? wideUrl;
   const ChatBg(this.mode, this.url, {this.wideUrl});
 
   bool get isPhoto => mode == 'photo' && (url ?? '').isNotEmpty;
   bool get isMotif => mode == 'motif';
+  bool get isWatermark => mode == 'watermark';
 
   Map<String, dynamic> toJson() => {
         'mode': mode,

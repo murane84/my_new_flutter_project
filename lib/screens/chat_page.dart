@@ -3773,7 +3773,7 @@ class _ChatPageState extends State<ChatPage>
                                 height: 3,
                                 margin:
                                     const EdgeInsets.symmetric(horizontal: 6),
-                                decoration: const BoxDecoration(
+                                decoration: BoxDecoration(
                                   color: inkSoft,
                                   shape: BoxShape.circle,
                                 ),
@@ -3781,7 +3781,7 @@ class _ChatPageState extends State<ChatPage>
                           ],
                           if (showTime) ...[
                             Text(_timeOnly(msg['timestamp'] ?? ''),
-                                style: const TextStyle(
+                                style: TextStyle(
                                     fontSize: 10.5, color: ink)),
                             if (isMe) ...[
                               const SizedBox(width: 3),

@@ -745,10 +745,11 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
             const SizedBox(height: 14),
 
             // ── Tools: one compact row (no scrolling) ─────────────────
-            // Playlist · Sleep · Equalizer · Lyrics · Volume · Identify ·
-            // Speed — icon tiles with tooltips; badges carry the counts.
+            // Playlist · Sleep · Equalizer · Lyrics · Identify — icon tiles
+            // with tooltips; badges carry the counts. Volume and Speed live
+            // on the bottom row, either side of the Now Playing pill.
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 _utility(
                   scheme,
@@ -796,6 +797,38 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                   color: accent,
                   onTap: _openLyrics,
                 ),
+                Tooltip(
+                  message: 'Identify song',
+                  child: GestureDetector(
+                    onTap: () => showSongIdentifier(context),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: accent.withAlpha(28),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: accent.withAlpha(120)),
+                      ),
+                      child: Icon(Icons.hearing_rounded, size: 20, color: accent),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+                ],
+              ),
+            ),
+          ),
+          // Base motif — the soft dancing equalizer — is now a raised 3D
+          // button: tapping it opens the full Now Playing page, a second way in
+          // alongside tapping the spinning disc.
+          // Volume (left) · Now Playing pill (centre) · Speed (right):
+          // each popup genies in toward the centre.
+          Padding(
+            padding: EdgeInsets.fromLTRB(16, 2, 16, isNarrow ? 8 : 14),
+            child: Row(
+              children: [
                 CompositedTransformTarget(
                   link: _volumeLink,
                   child: GestureDetector(
@@ -863,22 +896,78 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                     ),
                   ),
                 ),
-                Tooltip(
-                  message: 'Identify song',
-                  child: GestureDetector(
-                    onTap: () => showSongIdentifier(context),
-                    child: Container(
-                      width: 40,
-                      height: 40,
+                const Spacer(),
+              Tooltip(
+                message: 'Open Now Playing',
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: (hasTrack || live) ? _openFullPlayer : null,
+                    borderRadius: BorderRadius.circular(16),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: EdgeInsets.symmetric(
+                          horizontal: isNarrow ? 14 : 20, vertical: 5),
                       decoration: BoxDecoration(
-                        color: accent.withAlpha(28),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: accent.withAlpha(120)),
+                        borderRadius: BorderRadius.circular(16),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: isDark
+                              ? [
+                                  Color.alphaBlend(
+                                      accent.withValues(alpha: 0.12),
+                                      scheme.surfaceContainerHighest),
+                                  Color.alphaBlend(
+                                      accent.withValues(alpha: 0.05),
+                                      scheme.surfaceContainerHigh),
+                                ]
+                              : [
+                                  Color.alphaBlend(
+                                      accent.withValues(alpha: 0.05),
+                                      Colors.white),
+                                  Color.alphaBlend(
+                                      accent.withValues(alpha: 0.10),
+                                      scheme.surface),
+                                ],
+                        ),
+                        border: Border.all(
+                            color: accent.withValues(
+                                alpha: isDark ? 0.22 : 0.16)),
+                        boxShadow: [
+                          // Accent lift — glows a touch brighter while playing.
+                          BoxShadow(
+                            color: accent.withValues(
+                                alpha: isPlaying
+                                    ? (isDark ? 0.20 : 0.22)
+                                    : (isDark ? 0.10 : 0.14)),
+                            blurRadius: isPlaying ? 16 : 10,
+                            offset: const Offset(0, 5),
+                          ),
+                          // Tight contact shadow grounds the raised pill.
+                          BoxShadow(
+                            color: Colors.black
+                                .withValues(alpha: isDark ? 0.30 : 0.06),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
                       ),
-                      child: Icon(Icons.hearing_rounded, size: 20, color: accent),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _MiniEqualizer(active: isPlaying, color: accent),
+                          const SizedBox(width: 8),
+                          Icon(Icons.keyboard_arrow_up_rounded,
+                              size: 16,
+                              color: accent.withValues(alpha: 0.65)),
+                        ],
+                      ),
                     ),
                   ),
                 ),
+              ),
+                const Spacer(),
                 // Speed button — anchored right so popup scales from here
                 GestureDetector(
                   onTap: _toggleSpeedPanel,
@@ -960,88 +1049,6 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                   ),
                 ),
               ],
-            ),
-
-                ],
-              ),
-            ),
-          ),
-          // Base motif — the soft dancing equalizer — is now a raised 3D
-          // button: tapping it opens the full Now Playing page, a second way in
-          // alongside tapping the spinning disc.
-          Padding(
-            padding: EdgeInsets.only(bottom: isNarrow ? 8 : 14, top: 2),
-            child: Center(
-              child: Tooltip(
-                message: 'Open Now Playing',
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: (hasTrack || live) ? _openFullPlayer : null,
-                    borderRadius: BorderRadius.circular(16),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      padding: EdgeInsets.symmetric(
-                          horizontal: isNarrow ? 14 : 20, vertical: 5),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: isDark
-                              ? [
-                                  Color.alphaBlend(
-                                      accent.withValues(alpha: 0.12),
-                                      scheme.surfaceContainerHighest),
-                                  Color.alphaBlend(
-                                      accent.withValues(alpha: 0.05),
-                                      scheme.surfaceContainerHigh),
-                                ]
-                              : [
-                                  Color.alphaBlend(
-                                      accent.withValues(alpha: 0.05),
-                                      Colors.white),
-                                  Color.alphaBlend(
-                                      accent.withValues(alpha: 0.10),
-                                      scheme.surface),
-                                ],
-                        ),
-                        border: Border.all(
-                            color: accent.withValues(
-                                alpha: isDark ? 0.22 : 0.16)),
-                        boxShadow: [
-                          // Accent lift — glows a touch brighter while playing.
-                          BoxShadow(
-                            color: accent.withValues(
-                                alpha: isPlaying
-                                    ? (isDark ? 0.20 : 0.22)
-                                    : (isDark ? 0.10 : 0.14)),
-                            blurRadius: isPlaying ? 16 : 10,
-                            offset: const Offset(0, 5),
-                          ),
-                          // Tight contact shadow grounds the raised pill.
-                          BoxShadow(
-                            color: Colors.black
-                                .withValues(alpha: isDark ? 0.30 : 0.06),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _MiniEqualizer(active: isPlaying, color: accent),
-                          const SizedBox(width: 8),
-                          Icon(Icons.keyboard_arrow_up_rounded,
-                              size: 16,
-                              color: accent.withValues(alpha: 0.65)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
             ),
           ),
         ],

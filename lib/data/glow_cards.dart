@@ -9,6 +9,7 @@
 ///  • HEALTHY LOVE cards protect people too: love never means staying where
 ///    you're unsafe.
 /// Glow is encouragement, not therapy.
+library;
 
 enum GlowKind { quote, insight, together, healthy }
 

@@ -32,9 +32,10 @@ def _aware(dt):
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def heart_kwargs(payload, content: str) -> dict:
-    """Column values for a new message from the send payload. Returns {} for
-    non-heart messages so every other message type is untouched."""
+def heart_kwargs(payload, content: str, allow_timed: bool = True) -> dict:
+    """Column values for a new message from the send payload. Non-heart
+    messages just get their content. Timed hearts are DM-only
+    (allow_timed=False for groups)."""
     if (getattr(payload, "message_type", None) or "text").lower() != "heart":
         return {"content": content}
     out = {"content": content}
@@ -43,7 +44,7 @@ def heart_kwargs(payload, content: str) -> dict:
         out["heart_mood"] = mood
     ua = _aware(getattr(payload, "unlock_at", None))
     now = datetime.now(timezone.utc)
-    if ua is not None and now + MIN_DELAY <= ua <= now + MAX_DELAY:
+    if allow_timed and ua is not None and now + MIN_DELAY <= ua <= now + MAX_DELAY:
         out["unlock_at"] = ua
         out["sealed_content"] = content
         out["content"] = ""

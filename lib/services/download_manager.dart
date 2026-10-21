@@ -307,7 +307,10 @@ class DownloadManager with WidgetsBindingObserver {
     IOSink? sink;
     try {
       final req = http.Request('GET', Uri.parse(job.url))
-        ..headers.addAll(headers);
+        // Fresh auth every attempt: a resumed-at-startup job may have been
+        // created before the token was cached, or the token may roll over
+        // during a long download.
+        ..headers.addAll({...headers, ...mediaAuthHeaders(job.url)});
       if (have > 0) req.headers['Range'] = 'bytes=$have-';
       final resp = await client.send(req);
 

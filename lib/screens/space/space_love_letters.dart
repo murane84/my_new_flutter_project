@@ -31,10 +31,62 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
           }
           final letters = snap.data ?? const [];
           if (letters.isEmpty) return _lettersEmpty(scheme);
+          // "On this day": hearts traded on today's date in earlier years.
+          final now = DateTime.now();
+          final onThisDay = letters.where((l) {
+            final t = parseLocal(l['timestamp']);
+            return t != null &&
+                t.year < now.year &&
+                t.month == now.month &&
+                t.day == now.day;
+          }).toList();
           return Column(children: [
+            if (onThisDay.isNotEmpty) _onThisDay(scheme, onThisDay, partner),
             for (final l in letters) _letterCard(scheme, l, partner),
           ]);
         },
+      ),
+    );
+  }
+
+  Widget _onThisDay(ColorScheme scheme, List<Map<String, dynamic>> letters,
+      String partner) {
+    final t = parseLocal(letters.first['timestamp'])!;
+    final years = DateTime.now().year - t.year;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            _accent.withValues(alpha: 0.30),
+            _accent.withValues(alpha: 0.10),
+          ],
+        ),
+        border: Border.all(color: _accent.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.auto_awesome_rounded, size: 18, color: _accent),
+              const SizedBox(width: 8),
+              Text(
+                'On this day · ${years == 1 ? '1 year ago' : '$years years ago'}',
+                style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    color: scheme.onSurface),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final l in letters) _letterCard(scheme, l, partner),
+        ],
       ),
     );
   }

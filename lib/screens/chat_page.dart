@@ -723,6 +723,9 @@ class _ChatPageState extends State<ChatPage>
       final prefs = await SharedPreferences.getInstance();
       _myId ??= prefs.getString('my_user_id');
     } catch (_) {}
+    // Reply-author memory first, so the first paint of quote headers uses it
+    // (and doesn't overwrite it with only the currently-loaded originals).
+    await _loadQuoteAuthors();
     await _loadCachedMessages(); // show cached messages instantly (clears loader)
     if (mounted && _isLoading) setState(() => _isLoading = false);
     _syncUploads(); // re-attach any media upload still running for this chat
@@ -742,7 +745,6 @@ class _ChatPageState extends State<ChatPage>
 
     await _loadMessages();        // fetch fresh from network (best-effort)
     if (_isGroup) unawaited(_loadGroupMembers()); // for the @-mention picker
-    unawaited(_loadQuoteAuthors()); // who wrote quotes I've replied to
     _maybeInitialJump();          // opened from a notification → jump to it
     _checkOnlineStatus();
     _startPolling();
@@ -1472,7 +1474,12 @@ class _ChatPageState extends State<ChatPage>
             mentionAll: outMentionAll,
             heartMood: heartMood,
             unlockAt: unlockAt));
-        if (heart && sent != null) _freshHearts.add(sent['id'].toString());
+        if (heart && sent != null) {
+          final sid = sent['id'].toString();
+          _freshHearts.add(sid);
+          Timer(const Duration(milliseconds: 1200),
+              () => _freshHearts.remove(sid));
+        }
         _replaceOptimistic(tempId, sent);
         if (sent == null && mounted) {
           _showErrorSnack('Message failed — tap the ! to retry.');
@@ -2793,6 +2800,10 @@ class _ChatPageState extends State<ChatPage>
       final deleted = msg['is_deleted'] == true;
       final isTextMsg = (msg['message_type'] ?? 'text') == 'text';
       final isHeart = (msg['message_type'] ?? 'text') == 'heart';
+      // A sent heart nobody has opened yet can still be taken back.
+      final heartUnopened = isHeart &&
+          (msg['opened_at'] ?? '').toString().isEmpty &&
+          _heartOpens(msg).isEmpty;
       final hasMedia = (msg['message_type'] ?? 'text') != 'text' &&
           (msg['media_url'] as String? ?? '').isNotEmpty;
       // Harmony / Our Space actions sit at the TOP of the menu (only when the
@@ -2821,6 +2832,18 @@ class _ChatPageState extends State<ChatPage>
         }
       }
       final rest = <_MenuAction>[
+        if (isHeart && !isMe && !deleted)
+          _MenuAction('heartback', Icons.favorite_rounded, 'Send a heart back',
+              () {
+            Navigator.pop(ctx);
+            _startHeartBack(msg);
+          }, short: 'Heart back', color: scheme.primary),
+        if (isHeart && isMe && heartUnopened && !deleted)
+          _MenuAction('takeback', Icons.undo_rounded, 'Take back (unopened)',
+              () {
+            Navigator.pop(ctx);
+            _takeBackHeart(msg);
+          }, short: 'Take back'),
         _MenuAction('reply', Icons.reply_rounded, 'Reply', () {
           Navigator.pop(ctx);
           setState(() => _replyTo = msg);
@@ -3194,12 +3217,24 @@ class _ChatPageState extends State<ChatPage>
     if (ctx == null && _scrollCtrl.hasClients) {
       final idx = _messages.indexWhere((m) => m['id'].toString() == id);
       if (idx == -1) return;
-      // reverse:true list → older messages sit at LARGER offsets.
+      // reverse:true list → older messages (larger index) sit at LARGER
+      // offsets. Pick the direction from what's built right now: the target
+      // is newer than everything on screen → scroll down, else up.
+      var minBuilt = -1;
+      for (var k = 0; k < _messages.length; k++) {
+        if (_msgKeys[_messages[k]['id'].toString()]?.currentContext != null) {
+          minBuilt = k;
+          break;
+        }
+      }
+      final towardOlder = minBuilt == -1 || idx > minBuilt;
       for (var i = 0; i < 60 && ctx == null; i++) {
         final pos = _scrollCtrl.position;
-        if (pos.pixels >= pos.maxScrollExtent) break;
-        final next = (pos.pixels + pos.viewportDimension * 0.9)
-            .clamp(0.0, pos.maxScrollExtent);
+        if (towardOlder && pos.pixels >= pos.maxScrollExtent) break;
+        if (!towardOlder && pos.pixels <= pos.minScrollExtent) break;
+        final step = pos.viewportDimension * 0.9 * (towardOlder ? 1 : -1);
+        final next = (pos.pixels + step)
+            .clamp(pos.minScrollExtent, pos.maxScrollExtent);
         _scrollCtrl.jumpTo(next);
         await WidgetsBinding.instance.endOfFrame;
         if (!mounted || seq != _flashSeq) return;
@@ -3448,7 +3483,17 @@ class _ChatPageState extends State<ChatPage>
         : _friendAvatar;
     final rxName =
         _isGroup ? (senderMap['username'] ?? '').toString() : widget.friendName;
-    return Padding(
+    // Registered like any bubble so a reply quote / pin / notification can
+    // jump here and flash it.
+    final key = _msgKeys.putIfAbsent(msgId, () => GlobalKey());
+    final flashing = _highlightedId == msgId && _flashOn;
+    return AnimatedContainer(
+      key: key,
+      duration: Duration(milliseconds: flashing ? 180 : 520),
+      curve: Curves.easeOut,
+      color: flashing
+          ? scheme.primary.withValues(alpha: isDark ? 0.30 : 0.20)
+          : Colors.transparent,
       padding: EdgeInsets.only(
           top: showAvatar ? 6 : 2, left: isMe ? 56 : 6, right: isMe ? 6 : 56),
       child: Column(
@@ -3511,7 +3556,9 @@ class _ChatPageState extends State<ChatPage>
                           ? null
                           : parseServerTime(msg['opened_at'].toString()))
                       : _myHeartOpen(msg),
-                  justSent: _freshHearts.remove(msgId),
+                  // Stays true for the stamp's 1.2s (removed by a timer, not
+                  // here, so a rebuild mid-animation doesn't cut it short).
+                  justSent: _freshHearts.contains(msgId),
                   onMenu: (pos) =>
                       _showMessageMenu(context, msg, anchor: pos),
                   showStatus: false, // merged into the pill below
@@ -3522,6 +3569,7 @@ class _ChatPageState extends State<ChatPage>
                   },
                   onReact: (e) => _addReaction(msg, e),
                   onKeep: _canHarmony ? () => _keepsakeMessage(msg) : null,
+                  onSendBack: () => _startHeartBack(msg),
                   onFirstOpen: () => _reportHeartOpened(msg),
                   onUnsealDue: () => _unsealHeart(msg),
                   // Bonded-space gesture: double-tap to love back (❤ reaction).

@@ -859,7 +859,9 @@ extension _ChatPageHelpers1 on _ChatPageState {
         ex['pinned_until'] = m['pinned_until'];
         // Secret hearts: receipt + timed-unseal state follow the server.
         ex['opened_at'] = m['opened_at'] ?? ex['opened_at'];
-        ex['heart_opens'] = m['heart_opens'] ?? ex['heart_opens'];
+        // Merge (server on top of local) so an open I kept private (receipts
+        // off → never sent) isn't wiped by the next poll.
+        ex['heart_opens'] = _mergeOpens(ex['heart_opens'], m['heart_opens']);
         ex['unlock_at'] = m['unlock_at'];
         ex['heart_mood'] = m['heart_mood'] ?? ex['heart_mood'];
         // Deletion is a ONE-WAY latch: once tombstoned locally (optimistic
@@ -900,6 +902,22 @@ extension _ChatPageHelpers1 on _ChatPageState {
             DateTime.fromMillisecondsSinceEpoch(0);
         return tb.compareTo(ta);
       });
+  }
+
+  /// Union of two heart_opens JSON maps ({uid: iso}); [server] wins per key.
+  String? _mergeOpens(Object? local, Object? server) {
+    Map<String, dynamic> dec(Object? v) {
+      if (v is! String || v.isEmpty) return {};
+      try {
+        final m = jsonDecode(v);
+        return m is Map ? Map<String, dynamic>.from(m) : {};
+      } catch (_) {
+        return {};
+      }
+    }
+
+    final merged = {...dec(local), ...dec(server)};
+    return merged.isEmpty ? null : jsonEncode(merged);
   }
 
   bool _listEq(List<Map<String, dynamic>> a, List<Map<String, dynamic>> b) {

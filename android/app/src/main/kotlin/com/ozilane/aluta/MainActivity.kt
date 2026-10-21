@@ -107,6 +107,21 @@ class MainActivity : AudioServiceFragmentActivity() {
                     // The device's API level, so Dart can request the legacy
                     // storage permission only on Android 9 and below.
                     "sdkInt" -> result.success(Build.VERSION.SDK_INT)
+                    // Secret hearts: block screenshots + the recents thumbnail
+                    // while a heart / love letter is open (HeartLock.dart).
+                    "setSecure" -> {
+                        val on = call.argument<Boolean>("on") ?: false
+                        runOnUiThread {
+                            try {
+                                if (on) {
+                                    window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+                                } else {
+                                    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+                                }
+                            } catch (_: Exception) {}
+                        }
+                        result.success(null)
+                    }
                     "holdAwake" -> {
                         val on = call.argument<Boolean>("on") ?: false
                         try {

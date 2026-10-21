@@ -167,6 +167,7 @@ class HeartBubble extends StatefulWidget {
     this.onReply,
     this.onReact,
     this.onKeep,
+    this.onSendBack,
   });
 
   final String text;
@@ -216,6 +217,10 @@ class HeartBubble extends StatefulWidget {
   final ValueChanged<String>? onReact;
   final VoidCallback? onKeep;
 
+  /// "Send a heart back" — answer a heart with a heart (offered on the letter
+  /// card of a RECEIVED heart).
+  final VoidCallback? onSendBack;
+
   /// A note longer than this (or spanning more than one line) opens the genie
   /// card instead of revealing inside the heart.
   static const int longThreshold = 42;
@@ -254,6 +259,14 @@ class _HeartBubbleState extends State<HeartBubble>
 
   final GlobalKey _heartKey = GlobalKey();
   bool _revealedInHeart = false;
+
+  /// Open/close the in-heart note — also tells HeartLock, which keeps the
+  /// window screenshot-proof while any note is open.
+  void _setRevealed(bool v) {
+    if (v == _revealedInHeart) return;
+    setState(() => _revealedInHeart = v);
+    v ? HeartLock.instance.noteOpened() : HeartLock.instance.noteClosed();
+  }
   bool _visible = false;
   // "Awake" = the heart was just scrolled into view / touched. Stars twinkle
   // only while awake; after [_awakeFor] of stillness they
@@ -468,7 +481,7 @@ class _HeartBubbleState extends State<HeartBubble>
   void _onRelockAll() {
     if (!mounted || !_revealedInHeart) return;
     _relock?.cancel();
-    setState(() => _revealedInHeart = false);
+    _setRevealed(false);
     _syncBeat();
   }
 
@@ -480,6 +493,7 @@ class _HeartBubbleState extends State<HeartBubble>
     _tick?.cancel();
     _hold.dispose();
     _seal.dispose();
+    if (_revealedInHeart) HeartLock.instance.noteClosed();
     _sleepTimer?.cancel();
     _burstTimer?.cancel();
     _scrollPos?.removeListener(_onScroll);
@@ -561,6 +575,9 @@ class _HeartBubbleState extends State<HeartBubble>
 
   void _open() {
     _swallowTap = true;
+    if (!widget.isMe && !HeartLock.instance.coachSeen) {
+      unawaited(HeartLock.instance.markCoachSeen());
+    }
     _heartbeatHaptic();
     if (!widget.isMe && !_reported) {
       _reported = true;
@@ -584,10 +601,11 @@ class _HeartBubbleState extends State<HeartBubble>
           mood: _mood,
           onReply: widget.onReply,
           onReact: widget.onReact,
-          onKeep: widget.onKeep);
+          onKeep: widget.onKeep,
+          onSendBack: widget.isMe ? null : widget.onSendBack);
     } else {
       _hold.value = 0;
-      setState(() => _revealedInHeart = true);
+      _setRevealed(true);
       _syncBeat();
       _armRelock();
     }
@@ -601,11 +619,15 @@ class _HeartBubbleState extends State<HeartBubble>
     // A tap on an already-open in-heart note re-seals it (manual lock).
     if (_revealedInHeart && !_isLong) {
       _relock?.cancel();
-      setState(() => _revealedInHeart = false);
+      _setRevealed(false);
       _syncBeat();
       return;
     }
-    if (widget.isMe &&
+    // My own heart → tap peeks. With a screen reader or reduced-motion on,
+    // a plain tap also opens a received heart (holding can be hard).
+    final a11y = MediaQuery.maybeOf(context)?.accessibleNavigation == true ||
+        _reduceMotion;
+    if ((widget.isMe || a11y) &&
         !_revealedInHeart &&
         !_sealedByTime &&
         !_awaitingNote &&
@@ -626,7 +648,8 @@ class _HeartBubbleState extends State<HeartBubble>
   /// Tap on my own heart: peek at it (behind the unlock when the lock is on).
   Future<void> _peekOwn() async {
     _opening = true;
-    final ok = await HeartLock.instance.ensureUnlocked('Open your heart');
+    final ok = await HeartLock.instance.ensureUnlocked(
+        widget.isMe ? 'Open your heart' : 'Open secret heart');
     if (!mounted) return;
     _opening = false;
     if (ok) {
@@ -640,7 +663,7 @@ class _HeartBubbleState extends State<HeartBubble>
     _relock?.cancel();
     _relock = Timer(HeartLock.idleRelock, () {
       if (!mounted || !_revealedInHeart) return;
-      setState(() => _revealedInHeart = false);
+      _setRevealed(false);
       _syncBeat();
     });
   }
@@ -702,12 +725,43 @@ class _HeartBubbleState extends State<HeartBubble>
       ),
     );
     final status = widget.showStatus ? _statusLine() : null;
+    // First heart this person ever receives: a one-time "hold to open" coach
+    // under it (gone for good after the first open).
+    final coach = !widget.isMe &&
+        !HeartLock.instance.coachSeen &&
+        !_revealedInHeart &&
+        !_sealedByTime &&
+        !_awaitingNote;
+    final sealedLabel = _sealedByTime
+        ? 'sealed, ${heartOpensLabel(widget.unlockAt!).toLowerCase()}'
+        : null;
+    final label = widget.isMe
+        ? 'Your secret heart, ${_mood.label.toLowerCase()}. '
+            '${sealedLabel ?? 'Tap to read it, hold for options.'}'
+        : 'Secret heart, ${_mood.label.toLowerCase()}. '
+            '${sealedLabel ?? (_revealedInHeart ? widget.text : 'Double-tap to open.')}';
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment:
           widget.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
-        heart,
+        Semantics(
+          label: label,
+          button: true,
+          excludeSemantics: true,
+          onTap: _onTap,
+          onLongPress: widget.onMenu == null
+              ? null
+              : () {
+                  final box = context.findRenderObject() as RenderBox?;
+                  final c = box == null
+                      ? Offset.zero
+                      : box.localToGlobal(box.size.center(Offset.zero));
+                  widget.onMenu!(c);
+                },
+          child: heart,
+        ),
+        if (coach) _CoachChip(color: _accent),
         if (status != null)
           Padding(
             padding: const EdgeInsets.only(top: 2, left: 10, right: 10),
@@ -914,13 +968,86 @@ class _HeartBubbleState extends State<HeartBubble>
         ),
         if (!sealed && !_awaitingNote && !_hint) ...[
           const SizedBox(height: 2),
-          Text(widget.isMe ? 'tap to peek · hold for options' : 'hold to open',
+          // One short affordance that always fits on one line inside the
+          // heart. (Holding a sent heart for its menu is the same as every
+          // bubble, so it doesn't need spelling out.)
+          Text(widget.isMe ? 'tap to peek' : 'hold to open',
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.fade,
               style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
-                  fontSize: 9,
-                  letterSpacing: 0.4)),
+                  color: Colors.white.withValues(alpha: 0.75),
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5)),
         ],
       ],
+    );
+  }
+}
+
+/// One-time "Hold to open" nudge under a person's first received heart: a
+/// soft pill with a finger that presses down and up.
+class _CoachChip extends StatefulWidget {
+  const _CoachChip({required this.color});
+  final Color color;
+  @override
+  State<_CoachChip> createState() => _CoachChipState();
+}
+
+class _CoachChipState extends State<_CoachChip>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1500))
+    ..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, bottom: 2),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: widget.color.withValues(alpha: 0.6)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedBuilder(
+              animation: _c,
+              builder: (_, _) {
+                // press (0–0.45) · hold · release
+                final t = _c.value;
+                final down = t < 0.15
+                    ? t / 0.15
+                    : (t < 0.6 ? 1.0 : (t < 0.75 ? (0.75 - t) / 0.15 : 0.0));
+                return Transform.translate(
+                  offset: Offset(0, 2.5 * down),
+                  child: Transform.scale(
+                    scale: 1 - 0.12 * down,
+                    child: const Icon(Icons.touch_app_rounded,
+                        size: 15, color: Colors.white),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 6),
+            const Text('Hold the heart to open it',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700)),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1154,6 +1281,7 @@ void showHeartGenie(
   VoidCallback? onReply,
   ValueChanged<String>? onReact,
   VoidCallback? onKeep,
+  VoidCallback? onSendBack,
 }) {
   // A see-through route (not a bare overlay) so the system Back button
   // reaches the card's PopScope and folds it back into the heart.
@@ -1171,6 +1299,7 @@ void showHeartGenie(
       onReply: onReply,
       onReact: onReact,
       onKeep: onKeep,
+      onSendBack: onSendBack,
       onClosed: () {
         if (nav.mounted && nav.canPop()) nav.pop();
       },
@@ -1188,6 +1317,7 @@ class _HeartGenie extends StatefulWidget {
     this.onReply,
     this.onReact,
     this.onKeep,
+    this.onSendBack,
   });
   final Rect originRect;
   final String text;
@@ -1197,6 +1327,7 @@ class _HeartGenie extends StatefulWidget {
   final VoidCallback? onReply;
   final ValueChanged<String>? onReact;
   final VoidCallback? onKeep;
+  final VoidCallback? onSendBack;
 
   @override
   State<_HeartGenie> createState() => _HeartGenieState();
@@ -1215,12 +1346,23 @@ class _HeartGenieState extends State<_HeartGenie>
   void initState() {
     super.initState();
     _armIdle();
-    HeartLock.instance.relockEpoch.addListener(_close);
+    HeartLock.instance.relockEpoch.addListener(_closeNow);
+    HeartLock.instance.noteOpened(); // screenshot-proof while the letter is up
   }
 
   void _armIdle() {
     _idle?.cancel();
     _idle = Timer(HeartLock.idleRelock, _close);
+  }
+
+  /// App backgrounded: no frames are drawn while paused, so an animated
+  /// close wouldn't finish before the app-switcher snapshot — close at once.
+  void _closeNow() {
+    if (_closing) return;
+    _closing = true;
+    _idle?.cancel();
+    _c.value = 0;
+    widget.onClosed();
   }
 
   Future<void> _close() async {
@@ -1233,7 +1375,8 @@ class _HeartGenieState extends State<_HeartGenie>
 
   @override
   void dispose() {
-    HeartLock.instance.relockEpoch.removeListener(_close);
+    HeartLock.instance.noteClosed();
+    HeartLock.instance.relockEpoch.removeListener(_closeNow);
     _idle?.cancel();
     _c.dispose();
     super.dispose();
@@ -1340,9 +1483,39 @@ class _HeartGenieState extends State<_HeartGenie>
           ),
         );
 
+    final a = widget.accent;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // The warmest answer to a heart is a heart.
+        if (widget.onSendBack != null) ...[
+          Material(
+            color: Color.lerp(a, Colors.white, 0.15),
+            shape: const StadiumBorder(),
+            elevation: 0,
+            child: InkWell(
+              customBorder: const StadiumBorder(),
+              onTap: () => after(widget.onSendBack!),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.favorite_rounded, size: 17, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text('Send a heart back',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.2)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         if (widget.onReact != null)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1500,7 +1673,8 @@ class _HeartGenieState extends State<_HeartGenie>
                     const SizedBox(height: 14),
                     if (widget.onReact != null ||
                         widget.onReply != null ||
-                        widget.onKeep != null) ...[
+                        widget.onKeep != null ||
+                        widget.onSendBack != null) ...[
                       _letterActions(),
                       const SizedBox(height: 12),
                     ],

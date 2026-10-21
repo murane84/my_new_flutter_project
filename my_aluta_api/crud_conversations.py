@@ -127,7 +127,9 @@ def add_message(db: Session, conversation_id: int, sender_id: int, payload) -> M
         sender_id=int(sender_id),
         receiver_id=None,  # group message: no single receiver
         conversation_id=int(conversation_id),
-        **heart_kwargs(payload, getattr(payload, "content", "") or ""),
+        # Groups: moods yes, timed hearts no (a one-to-one ritual).
+        **heart_kwargs(payload, getattr(payload, "content", "") or "",
+                       allow_timed=False),
         message_type=(getattr(payload, "message_type", None) or "text"),
         media_url=getattr(payload, "media_url", None),
         media_name=getattr(payload, "media_name", None),

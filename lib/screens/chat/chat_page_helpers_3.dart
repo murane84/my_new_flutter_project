@@ -1449,15 +1449,14 @@ extension _ChatPageHelpers3 on _ChatPageState {
   String get _quoteMemKey => 'quote_authors_v1_$_activeConvKey';
 
   Future<void> _loadQuoteAuthors() async {
+    _quoteAuthors.clear(); // never carry another chat's memory over
     try {
       final p = await SharedPreferences.getInstance();
       final raw = p.getString(_quoteMemKey);
       if (raw == null || raw.isEmpty) return;
       final m = jsonDecode(raw);
       if (m is! Map) return;
-      _quoteAuthors
-        ..clear()
-        ..addAll(m.map((k, v) =>
+      _quoteAuthors.addAll(m.map((k, v) =>
             MapEntry(k.toString(), Map<String, String>.from(v as Map))));
       if (mounted) rebuildWith(() {});
     } catch (_) {}

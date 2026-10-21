@@ -15,7 +15,33 @@ extension _ChatHeartComposer on _ChatPageState {
     final opens = _heartOpens(msg)..[_myId!] = now;
     msg['heart_opens'] = jsonEncode(opens);
     msg['opened_at'] ??= now;
+    unawaited(_saveMessagesCache()); // survives a restart
+    // "Send opened receipts" off → the sender isn't told (it still counts as
+    // opened HERE, so the knock and stars stop).
+    if (!HeartLock.instance.sendReceipts) return;
     unawaited(ApiService().heartOpened(id));
+  }
+
+  /// Answer a heart with a heart: the composer switches to heart mode with a
+  /// fitting mood (a "sorry" is best answered with love).
+  void _startHeartBack(Map<String, dynamic> msg) {
+    final m = (msg['heart_mood'] ?? 'love').toString();
+    HapticFeedback.selectionClick();
+    rebuildWith(() {
+      _heartMode = true;
+      _heartMood = (m == 'sorry') ? 'love' : (HeartMood.of(m).key);
+      _heartUnlockAt = null;
+      _replyTo = null;
+    });
+    showToast(context, 'Write your heart back 💌');
+  }
+
+  /// Unsend a heart nobody has opened yet (it never lands).
+  Future<void> _takeBackHeart(Map<String, dynamic> msg) async {
+    final id = int.tryParse(msg['id'].toString());
+    if (id == null) return;
+    await _deleteMessage(id, true);
+    if (mounted) showToast(context, 'Heart taken back — they never saw it');
   }
 
   /// Who opened this heart: user id → ISO time (from `heart_opens`).
@@ -181,16 +207,18 @@ extension _ChatHeartComposer on _ChatPageState {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                chip(
-                  label: Text(_heartUnlockAt == null
-                      ? 'Open anytime'
-                      : heartOpensLabel(_heartUnlockAt!, prefix: '')),
-                  icon: _heartUnlockAt == null
-                      ? Icons.schedule_rounded
-                      : Icons.hourglass_top_rounded,
-                  on: _heartUnlockAt != null,
-                  onTap: _pickHeartUnlock,
-                ),
+                // Timed hearts are a one-to-one ritual (DMs only).
+                if (!_isGroup)
+                  chip(
+                    label: Text(_heartUnlockAt == null
+                        ? 'Open anytime'
+                        : heartOpensLabel(_heartUnlockAt!, prefix: '')),
+                    icon: _heartUnlockAt == null
+                        ? Icons.schedule_rounded
+                        : Icons.hourglass_top_rounded,
+                    on: _heartUnlockAt != null,
+                    onTap: _pickHeartUnlock,
+                  ),
                 if (empty)
                   for (final p in mood.prompts)
                     chip(
@@ -228,6 +256,28 @@ extension _ChatHeartComposer on _ChatPageState {
       ('${now.hour < 7 ? 'This' : 'Tomorrow'} morning, 7:00 AM',
           Icons.wb_twilight_rounded, morning),
     ];
+    // Our anniversary (day + month this device remembers for this friend).
+    final annivKey = 'heart_anniv_${widget.friendId}';
+    String? annivMd;
+    try {
+      final p = await SharedPreferences.getInstance();
+      annivMd = p.getString(annivKey);
+    } catch (_) {}
+    DateTime? nextOf(String? md) {
+      if (md == null) return null;
+      final parts = md.split('-');
+      if (parts.length != 2) return null;
+      final mo = int.tryParse(parts[0]), d = int.tryParse(parts[1]);
+      if (mo == null || d == null) return null;
+      var c = DateTime(now.year, mo, d, 8);
+      if (!c.isAfter(now.add(const Duration(minutes: 1)))) {
+        c = DateTime(now.year + 1, mo, d, 8);
+      }
+      return c;
+    }
+
+    final anniv = nextOf(annivMd);
+    if (!mounted) return;
     final scheme = Theme.of(context).colorScheme;
     final choice = await showModalBottomSheet<Object>(
       context: context,
@@ -270,6 +320,17 @@ extension _ChatHeartComposer on _ChatPageState {
                   onTap: () => Navigator.pop(ctx, p.$3),
                 ),
               ListTile(
+                leading: Icon(Icons.celebration_rounded, color: scheme.primary),
+                title: Text(anniv == null
+                    ? 'On our anniversary…'
+                    : 'On our anniversary · ${DateFormat('d MMM').format(anniv)}'),
+                subtitle: Text(anniv == null
+                    ? 'Set the date once — opens that morning every year you pick it'
+                    : 'Opens at 8:00 AM · long-press to change the date'),
+                onTap: () => Navigator.pop(ctx, anniv ?? 'anniv'),
+                onLongPress: () => Navigator.pop(ctx, 'anniv'),
+              ),
+              ListTile(
                 leading: Icon(Icons.event_rounded, color: scheme.primary),
                 title: const Text('Pick a date & time…'),
                 subtitle: const Text('An anniversary, a birthday, a reunion'),
@@ -294,6 +355,22 @@ extension _ChatHeartComposer on _ChatPageState {
       return;
     }
     DateTime? when = choice is DateTime ? choice : null;
+    if (choice == 'anniv') {
+      final d = await showDatePicker(
+        context: context,
+        initialDate: anniv ?? now,
+        firstDate: DateTime(now.year - 60),
+        lastDate: DateTime(now.year + 1, 12, 31),
+        helpText: 'Our anniversary',
+      );
+      if (d == null || !mounted) return;
+      final md = '${d.month}-${d.day}';
+      try {
+        final p = await SharedPreferences.getInstance();
+        await p.setString(annivKey, md);
+      } catch (_) {}
+      when = nextOf(md);
+    }
     if (choice == 'pick') {
       final d = await showDatePicker(
         context: context,

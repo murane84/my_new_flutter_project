@@ -1,3 +1,7 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,6 +26,54 @@ class HeartLock with WidgetsBindingObserver {
   static final HeartLock instance = HeartLock._();
 
   static const String _prefKey = 'lock_secret_hearts';
+  static const String _receiptsKey = 'send_heart_receipts';
+  static const String _coachKey = 'heart_hold_coach_seen';
+  static const MethodChannel _ch = MethodChannel('aluta/downloads');
+
+  /// Tell the sender when I open their heart ("Opened 2:14 PM"). On by
+  /// default; turning it off keeps my opening private (like hiding ticks).
+  bool sendReceipts = true;
+
+  /// Whether the one-time "Hold to open" coach has been shown on this device.
+  bool coachSeen = false;
+
+  // How many hearts / letter cards are open right now. While > 0 the app's
+  // window is FLAG_SECURE on Android: no screenshots, no screen recording,
+  // and the recent-apps thumbnail is blanked — so an open note can't leak
+  // through the app switcher.
+  int _openCount = 0;
+
+  void noteOpened() {
+    _openCount++;
+    if (_openCount == 1) _setSecure(true);
+  }
+
+  void noteClosed() {
+    if (_openCount == 0) return;
+    _openCount--;
+    if (_openCount == 0) _setSecure(false);
+  }
+
+  void _setSecure(bool on) {
+    if (kIsWeb || !Platform.isAndroid) return;
+    _ch.invokeMethod('setSecure', {'on': on}).catchError((_) => null);
+  }
+
+  Future<void> setSendReceipts(bool v) async {
+    sendReceipts = v;
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setBool(_receiptsKey, v);
+    } catch (_) {}
+  }
+
+  Future<void> markCoachSeen() async {
+    coachSeen = true;
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setBool(_coachKey, true);
+    } catch (_) {}
+  }
 
   /// How long a revealed heart stays open with no interaction before it
   /// re-seals itself (also used by the genie card).
@@ -51,6 +103,8 @@ class HeartLock with WidgetsBindingObserver {
     try {
       final p = await SharedPreferences.getInstance();
       enabled = p.getBool(_prefKey) ?? false;
+      sendReceipts = p.getBool(_receiptsKey) ?? true;
+      coachSeen = p.getBool(_coachKey) ?? false;
     } catch (_) {}
     _loaded = true;
   }

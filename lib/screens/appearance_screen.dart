@@ -197,6 +197,8 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                 ),
           const SizedBox(height: 10),
           const _SecretHeartLockSection(),
+          const SizedBox(height: 10),
+          const _HeartReceiptsSection(),
           if (_showGuide) ...[
             const SizedBox(height: 8),
             Text(
@@ -1161,6 +1163,82 @@ class _SecretHeartLockSectionState extends State<_SecretHeartLockSection> {
                 child: Switch(
                   value: _on,
                   onChanged: canToggle ? _set : null,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Settings card: whether the sender sees "Opened 💗" when I open their heart.
+class _HeartReceiptsSection extends StatefulWidget {
+  const _HeartReceiptsSection();
+
+  @override
+  State<_HeartReceiptsSection> createState() => _HeartReceiptsSectionState();
+}
+
+class _HeartReceiptsSectionState extends State<_HeartReceiptsSection> {
+  bool _on = HeartLock.instance.sendReceipts;
+
+  @override
+  void initState() {
+    super.initState();
+    HeartLock.instance.init().then((_) {
+      if (mounted) setState(() => _on = HeartLock.instance.sendReceipts);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return DecoratedBox(
+      decoration: _raisedCardDecoration(scheme, isDark),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        child: Row(
+          children: [
+            _accentIconChip(scheme, Icons.mark_email_read_rounded),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Heart opened receipts',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface)),
+                  const SizedBox(height: 2),
+                  Text(
+                      _on
+                          ? 'They see \u201cOpened\u201d when you open their heart'
+                          : 'Your opening stays private',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 12, color: scheme.onSurfaceVariant)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              height: 24,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Switch(
+                  value: _on,
+                  onChanged: (v) {
+                    setState(() => _on = v);
+                    HeartLock.instance.setSendReceipts(v);
+                  },
                 ),
               ),
             ),

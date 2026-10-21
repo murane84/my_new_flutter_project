@@ -220,7 +220,7 @@ class _HeartBubbleState extends State<HeartBubble>
   bool _revealedInHeart = false;
   bool _visible = false;
   // "Awake" = the heart was just scrolled into view / touched. Stars twinkle
-  // and the heart beats only while awake; after [_awakeFor] of stillness they
+  // only while awake; after [_awakeFor] of stillness they
   // fade out together and everything rests (no frozen half-drawn stars, no
   // battery spent on an idle screen). Scrolling or a touch wakes it again.
   static const Duration _awakeFor = Duration(seconds: 6);
@@ -279,6 +279,7 @@ class _HeartBubbleState extends State<HeartBubble>
   @override
   void didUpdateWidget(HeartBubble old) {
     super.didUpdateWidget(old);
+    if (old.openedAt != widget.openedAt) _syncBeat();
     if (old.unlockAt != widget.unlockAt || old.text != widget.text) {
       _unsealAsked = false;
       _syncTick();
@@ -325,23 +326,49 @@ class _HeartBubbleState extends State<HeartBubble>
     });
   }
 
+  /// Should the heart call for attention? Only a RECEIVED heart nobody has
+  /// opened yet. Once it's been opened (here or on another of my devices),
+  /// and on the sender's own hearts, it rests — no beat.
+  bool get _attract =>
+      !widget.isMe && widget.openedAt == null && !_reported;
+
+  Timer? _burstTimer;
+  static const Duration _burstEvery = Duration(seconds: 9);
+
+  /// Two lub-dubs, then rest — a "knock" rather than a constant throb.
+  Future<void> _burst() async {
+    if (!mounted || _beat.isAnimating) return;
+    for (var i = 0; i < 2; i++) {
+      if (!mounted || !_shouldBeat) return;
+      await _beat.forward(from: 0);
+    }
+    if (mounted) _beat.value = 0;
+  }
+
+  bool get _shouldBeat =>
+      _visible && _attract && !_reduceMotion && !_revealedInHeart &&
+      !_sealedByTime && !_awaitingNote;
+
   void _syncBeat() {
-    final covered = !_revealedInHeart;
-    if (_visible && _awake && !_reduceMotion && covered && !_sealedByTime) {
-      if (!_beat.isAnimating) _beat.repeat();
-    } else if (_beat.isAnimating) {
-      // Finish the current lub-dub gently instead of snapping to rest.
-      _beat.animateTo(1.0,
-              duration: Duration(
-                  milliseconds: ((1 - _beat.value) * 1400).round().clamp(0, 1400)))
-          .whenComplete(() {
-        if (!mounted) return;
-        if (_visible && _awake && !_revealedInHeart && !_sealedByTime) {
-          _beat.repeat(); // woke up again while it was settling
-        } else {
-          _beat.value = 0;
-        }
-      });
+    if (_shouldBeat) {
+      if (_burstTimer == null) {
+        unawaited(_burst()); // knock as soon as it's seen
+        _burstTimer = Timer.periodic(_burstEvery, (_) => _burst());
+      }
+    } else {
+      _burstTimer?.cancel();
+      _burstTimer = null;
+      if (_beat.isAnimating) {
+        // Finish the current beat gently instead of snapping to rest.
+        _beat
+            .animateTo(1.0,
+                duration: Duration(
+                    milliseconds:
+                        ((1 - _beat.value) * 1400).round().clamp(0, 1400)))
+            .whenComplete(() {
+          if (mounted) _beat.value = 0;
+        });
+      }
     }
     // The star clock keeps running while the field is (fading) visible.
     final starsOn =
@@ -411,6 +438,7 @@ class _HeartBubbleState extends State<HeartBubble>
     _hold.dispose();
     _seal.dispose();
     _sleepTimer?.cancel();
+    _burstTimer?.cancel();
     _scrollPos?.removeListener(_onScroll);
     _starFade.dispose();
     _stars.dispose();
@@ -488,6 +516,7 @@ class _HeartBubbleState extends State<HeartBubble>
       _reported = true;
       widget.onFirstOpen?.call();
     }
+    _syncBeat(); // opened → stop calling for attention
     if (_isLong) {
       final box = _heartKey.currentContext?.findRenderObject() as RenderBox?;
       Rect origin;

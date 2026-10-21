@@ -818,6 +818,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
     required bool isMe,
     required WidgetBuilder reactionBarBuilder,
     required WidgetBuilder actionCardBuilder,
+    bool separateBar = true,
   }) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = scheme.brightness == Brightness.dark;
@@ -881,8 +882,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            reactionBarBuilder(ctx),
-                            const SizedBox(height: 10),
+                            if (separateBar) ...[
+                              reactionBarBuilder(ctx),
+                              const SizedBox(height: 10),
+                            ],
                             Flexible(child: actionCardBuilder(ctx)),
                           ],
                         ),
@@ -892,15 +895,18 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 ),
               ));
             } else {
-              const barH = 60.0;
-              const gap = 10.0;
+              final barH = separateBar ? 60.0 : 0.0;
+              final gap = separateBar ? 10.0 : 8.0;
               final aboveRoom = rect.top - topSafe;
               final belowRoom = sh - botSafe - rect.bottom;
-              final barAbove = aboveRoom > barH + gap + 8;
+              final barAbove = separateBar && aboveRoom > barH + gap + 8;
               final barTop =
                   barAbove ? rect.top - gap - barH : rect.bottom + gap;
 
-              final menuW = (sw - 32).clamp(0.0, 270.0);
+              // The unified card (reactions + actions) is a touch wider so six
+              // emojis and five actions breathe in one line each.
+              final menuW =
+                  (sw - 24).clamp(0.0, separateBar ? 270.0 : 312.0);
               double menuLeft = isMe ? rect.right - menuW : rect.left;
               menuLeft = menuLeft.clamp(8.0, (sw - 8 - menuW).clamp(8.0, sw));
 
@@ -911,16 +917,21 @@ extension _ChatPageHelpers3 on _ChatPageState {
               final barW = menuW;
               final barLeft = menuLeft;
 
-              final menuBelow = belowRoom >= aboveRoom;
+              // Prefer opening BELOW the bubble when the card fits there (like
+              // the bubble "unfolds" its replies); otherwise above.
+              final menuBelow = separateBar
+                  ? belowRoom >= aboveRoom
+                  : (belowRoom >= 150 || belowRoom >= aboveRoom);
               final Widget menu = Transform.scale(
                 scale: 0.96 + 0.04 * tb,
-                alignment:
-                    isMe ? Alignment.topRight : Alignment.topLeft,
+                alignment: menuBelow
+                    ? (isMe ? Alignment.topRight : Alignment.topLeft)
+                    : (isMe ? Alignment.bottomRight : Alignment.bottomLeft),
                 child: actionCardBuilder(ctx),
               );
               Widget menuPositioned;
               if (menuBelow) {
-                final mTop = barAbove
+                final mTop = (barAbove || !separateBar)
                     ? rect.bottom + gap
                     : rect.bottom + gap + barH + gap;
                 final maxH = (sh - botSafe - mTop).clamp(90.0, sh);
@@ -936,7 +947,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                   ),
                 );
               } else {
-                final mBottomY = barAbove
+                final mBottomY = (barAbove && separateBar)
                     ? rect.top - gap - barH - gap
                     : rect.top - gap;
                 final maxH = (mBottomY - topSafe).clamp(90.0, sh);
@@ -953,7 +964,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 );
               }
 
-              children.add(Positioned(
+              if (separateBar) {
+                children.add(Positioned(
                 top: barTop,
                 left: barLeft,
                 width: barW,
@@ -965,6 +977,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                   ),
                 ),
               ));
+              }
               children.add(menuPositioned);
             }
 

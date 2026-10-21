@@ -2874,6 +2874,17 @@ class _ChatPageState extends State<ChatPage>
         scheme: scheme,
         isDark: isDark,
         shadow: softShadow,
+        // Reactions live INSIDE the same card (top strip), so the menu reads
+        // as one "respond to this message" surface instead of two loose pills.
+        header: _ReactionStrip(
+          reactions: reactions,
+          mine: _myReactionOn(msg),
+          isDark: isDark,
+          onPick: (e) {
+            Navigator.pop(ctx);
+            _addReaction(msg, e);
+          },
+        ),
       );
     }
 
@@ -2900,7 +2911,21 @@ class _ChatPageState extends State<ChatPage>
         isMe: isMe,
         reactionBarBuilder: reactionBar,
         actionCardBuilder: actionCard,
+        // Reactions are part of the action card now (one unified card).
+        separateBar: false,
       );
+    }
+  }
+
+  /// The emoji I've already reacted with on [msg] (highlighted in the menu).
+  String? _myReactionOn(Map<String, dynamic> msg) {
+    final raw = msg['reactions'];
+    if (raw is! String || raw.isEmpty || _myId == null) return null;
+    try {
+      final v = (jsonDecode(raw) as Map)[_myId];
+      return v?.toString();
+    } catch (_) {
+      return null;
     }
   }
 
@@ -4997,12 +5022,14 @@ class _MsgActionMenu extends StatefulWidget {
     required this.scheme,
     required this.isDark,
     required this.shadow,
+    this.header,
   });
   final List<_MenuAction> quick;
   final List<_MenuAction> full;
   final ColorScheme scheme;
   final bool isDark;
   final List<BoxShadow> shadow;
+  final Widget? header; // the reaction strip, shown on top of the same card
 
   @override
   State<_MsgActionMenu> createState() => _MsgActionMenuState();
@@ -5054,24 +5081,156 @@ class _MsgActionMenuState extends State<_MsgActionMenu> {
   @override
   Widget build(BuildContext context) {
     final scheme = widget.scheme;
-    if (_expanded) {
-      return _FullMenuCard(
-        actions: widget.full,
-        scheme: widget.scheme,
-        isDark: widget.isDark,
-        shadow: widget.shadow,
+    final header = widget.header;
+    if (header == null) {
+      // Legacy two-piece layout (no reactions inside).
+      if (_expanded) {
+        return _FullMenuCard(
+          actions: widget.full,
+          scheme: widget.scheme,
+          isDark: widget.isDark,
+          shadow: widget.shadow,
+        );
+      }
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        decoration: _deco(26),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            for (final a in widget.quick)
+              _quickItem(scheme, a.icon, a.short ?? a.label, a.onTap, a.color),
+            _quickItem(scheme, Icons.more_vert_rounded, 'More',
+                () => setState(() => _expanded = true), null),
+          ],
+        ),
       );
     }
+
+    // One card: reactions on top, a hairline, then the actions. "More" grows
+    // the same card into the full list (reactions stay put above it).
+    final hair = Divider(
+      height: 1,
+      thickness: 1,
+      color: scheme.outlineVariant.withValues(alpha: widget.isDark ? 0.28 : 0.45),
+    );
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-      decoration: _deco(26),
+      decoration: _deco(22),
+      clipBehavior: Clip.antiAlias,
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        alignment: Alignment.topCenter,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            header,
+            hair,
+            if (!_expanded)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+                child: Row(
+                  children: [
+                    for (final a in widget.quick)
+                      _compactItem(scheme, a.icon, a.short ?? a.label, a.onTap,
+                          a.color),
+                    _compactItem(scheme, Icons.more_horiz_rounded, 'More',
+                        () => setState(() => _expanded = true), null),
+                  ],
+                ),
+              )
+            else
+              Flexible(
+                child: _FullMenuCard(
+                  actions: widget.full,
+                  scheme: widget.scheme,
+                  isDark: widget.isDark,
+                  shadow: const [],
+                  bare: true,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Slim icon-over-label action for the unified card (no big circles).
+  Widget _compactItem(ColorScheme scheme, IconData icon, String label,
+      VoidCallback onTap, Color? color) {
+    final c = color ?? scheme.onSurface;
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 20, color: color ?? scheme.primary),
+              const SizedBox(height: 3),
+              Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: c.withValues(alpha: 0.8))),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The quick-reaction strip at the top of the message card: emojis pop in
+/// one after another, and the one I already picked sits in a soft tinted pill.
+class _ReactionStrip extends StatelessWidget {
+  const _ReactionStrip({
+    required this.reactions,
+    required this.onPick,
+    required this.isDark,
+    this.mine,
+  });
+  final List<String> reactions;
+  final ValueChanged<String> onPick;
+  final bool isDark;
+  final String? mine;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          for (final a in widget.quick)
-            _quickItem(scheme, a.icon, a.short ?? a.label, a.onTap, a.color),
-          _quickItem(scheme, Icons.more_vert_rounded, 'More',
-              () => setState(() => _expanded = true), null),
+          for (var i = 0; i < reactions.length; i++)
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: Duration(milliseconds: 260 + i * 45),
+              curve: Curves.easeOutBack,
+              builder: (_, v, child) => Transform.scale(
+                scale: (0.4 + 0.6 * ((v - i * 0.08) / (1 - i * 0.08)))
+                    .clamp(0.0, 1.2),
+                child: child,
+              ),
+              child: Container(
+                decoration: reactions[i] == mine
+                    ? BoxDecoration(
+                        color: scheme.primary
+                            .withValues(alpha: isDark ? 0.24 : 0.14),
+                        shape: BoxShape.circle,
+                      )
+                    : null,
+                child: _ReactionButton(
+                  emoji: reactions[i],
+                  onTap: () => onPick(reactions[i]),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -5110,12 +5269,14 @@ class _FullMenuCard extends StatefulWidget {
     required this.isDark,
     required this.shadow,
     this.maxHeight,
+    this.bare = false,
   });
   final List<_MenuAction> actions;
   final ColorScheme scheme;
   final bool isDark;
   final List<BoxShadow> shadow;
   final double? maxHeight;
+  final bool bare; // no own card (it sits inside the unified message card)
 
   @override
   State<_FullMenuCard> createState() => _FullMenuCardState();
@@ -5133,8 +5294,10 @@ class _FullMenuCardState extends State<_FullMenuCard> {
   @override
   Widget build(BuildContext context) {
     final card = Container(
-      decoration: _menuDeco(widget.scheme, widget.isDark, widget.shadow, 18),
-      clipBehavior: Clip.antiAlias,
+      decoration: widget.bare
+          ? null
+          : _menuDeco(widget.scheme, widget.isDark, widget.shadow, 18),
+      clipBehavior: widget.bare ? Clip.none : Clip.antiAlias,
       child: Scrollbar(
         controller: _sc,
         thumbVisibility: true,

@@ -12,7 +12,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../screens/token_helper.dart' show mediaAuthHeaders;
-import 'notif_service.dart' show showDownloadProgress, finishDownloadNotif;
+import 'notif_service.dart'
+    show showDownloadProgress, finishDownloadNotif, cancelDownloadNotif;
 
 /// One file being fetched to disk.
 class DownloadJob {
@@ -22,12 +23,18 @@ class DownloadJob {
   final String name; // shown in the progress notification
   int _lastNotifPct = -1;
   bool notify = true;
+
+  // Cancellation: the flag is checked between chunks, the client is closed to
+  // abort a read in flight, and [_cancelled] wakes any retry wait at once.
+  bool cancelled = false;
+  http.Client? _client;
+  final Completer<void> _cancelled = Completer<void>();
   double? progress; // 0..1, null while the size is unknown
   late final Future<DownloadResult> future;
 }
 
 /// How a download ended.
-enum DownloadOutcome { ok, gone, failed }
+enum DownloadOutcome { ok, gone, failed, cancelled }
 
 class DownloadResult {
   const DownloadResult(this.outcome, [this.file]);
@@ -124,6 +131,20 @@ class DownloadManager with WidgetsBindingObserver {
   final ValueNotifier<int> rev = ValueNotifier<int>(0);
 
   DownloadJob? job(String url) => _jobs[url];
+
+  /// Stop a download for good (tapped by mistake): aborts the transfer,
+  /// deletes the partial file, forgets it (no auto-resume) and clears the
+  /// progress notification. Whoever awaited it gets [DownloadOutcome.cancelled].
+  Future<void> cancel(String url) async {
+    final j = _jobs[url];
+    if (j == null || j.cancelled) return;
+    j.cancelled = true;
+    try {
+      j._client?.close();
+    } catch (_) {}
+    if (!j._cancelled.isCompleted) j._cancelled.complete();
+    _bump();
+  }
   bool isBusy(String url) => _jobs.containsKey(url);
 
   /// Fetch [url] into [dest]. If a download for [url] is already running, the
@@ -148,6 +169,11 @@ class DownloadManager with WidgetsBindingObserver {
     }
     job.future =
         _run(job, headers, expectedTotal, onRetry).then((r) async {
+      if (r.outcome == DownloadOutcome.cancelled) {
+        await _forget(url);
+        await cancelDownloadNotif(url);
+        return r;
+      }
       if (notify) {
         if (r.outcome != DownloadOutcome.failed) await _forget(url);
         await finishDownloadNotif(url, name, r.ok);
@@ -223,7 +249,18 @@ class DownloadManager with WidgetsBindingObserver {
     // app resume.
     var lastBytes = -1;
     var stalledSince = DateTime.now();
+    Future<DownloadResult> cancelledResult() async {
+      try {
+        if (await part.exists()) await part.delete();
+      } catch (_) {}
+      return const DownloadResult(DownloadOutcome.cancelled);
+    }
+
+    Future<void> waitOrCancel(Future<void> f) =>
+        Future.any([f, job._cancelled.future]);
+
     for (var attempt = 0;; attempt++) {
+      if (job.cancelled) return cancelledResult();
       if (attempt > 0) {
         var nowBytes = 0;
         try {
@@ -237,11 +274,15 @@ class DownloadManager with WidgetsBindingObserver {
           break;
         }
         onRetry?.call(attempt);
-        await _waitForNetwork(const Duration(minutes: 5));
-        await Future.delayed(Duration(seconds: (2 * attempt).clamp(2, 15)));
+        await waitOrCancel(_waitForNetwork(const Duration(minutes: 5)));
+        if (job.cancelled) return cancelledResult();
+        await waitOrCancel(
+            Future.delayed(Duration(seconds: (2 * attempt).clamp(2, 15))));
+        if (job.cancelled) return cancelledResult();
       }
       try {
         final status = await _streamOnce(job, part, headers, expectedTotal);
+        if (job.cancelled) return cancelledResult();
         if (status == 200) {
           try {
             if (await job.dest.exists()) await job.dest.delete();
@@ -266,6 +307,7 @@ class DownloadManager with WidgetsBindingObserver {
         // Other HTTP errors: retry.
       } catch (_) {
         // Network drop: keep the .part and resume on the next attempt.
+        if (job.cancelled) return cancelledResult();
       }
     }
     return const DownloadResult(DownloadOutcome.failed);
@@ -304,6 +346,7 @@ class DownloadManager with WidgetsBindingObserver {
     if (expectedTotal > 0 && have >= expectedTotal) return 200;
 
     final client = http.Client();
+    job._client = client;
     IOSink? sink;
     try {
       final req = http.Request('GET', Uri.parse(job.url))
@@ -338,6 +381,7 @@ class DownloadManager with WidgetsBindingObserver {
       _setProgress(job, received, total);
       final stream = resp.stream.timeout(const Duration(seconds: 45));
       await for (final chunk in stream) {
+        if (job.cancelled) throw const SocketException('cancelled');
         sink.add(chunk);
         received += chunk.length;
         _setProgress(job, received, total);

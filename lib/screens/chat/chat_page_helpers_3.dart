@@ -138,7 +138,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                   if (dlBusy)
                     Text(
                       dlP == null
-                          ? 'Downloading\u2026'
+                          ? 'Downloading\u2026 · tap \u2715 to cancel'
                           : 'Downloading ${(dlP * 100).round()}%',
                       style: TextStyle(
                           color: scheme.primary,
@@ -157,7 +157,19 @@ extension _ChatPageHelpers3 on _ChatPageState {
             // ring while the file is downloading. Tapping the rest of the
             // bubble still opens/previews the file.
             if (dlBusy)
-              Padding(
+              // The progress ring doubles as the CANCEL button (✕ inside) —
+              // for a download tapped by mistake.
+              Tooltip(
+                message: 'Cancel download',
+                child: InkResponse(
+                radius: 22,
+                onTap: job == null
+                    ? null
+                    : () {
+                        HapticFeedback.selectionClick();
+                        DownloadManager.instance.cancel(url);
+                      },
+                child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: SizedBox(
                   width: 30,
@@ -176,15 +188,13 @@ extension _ChatPageHelpers3 on _ChatPageState {
                               AlwaysStoppedAnimation<Color>(scheme.primary),
                         ),
                       ),
-                      if (dlP != null)
-                        Text('${(dlP * 100).round()}',
-                            style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                                color: textColor)),
+                      Icon(Icons.close_rounded,
+                          size: 15, color: textColor.withAlpha(200)),
                     ],
                   ),
                 ),
+              ),
+              ),
               )
             else if (owned)
               // Owned content → the Aluta mark (always on the sender's own
@@ -324,6 +334,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
             }
           },
         );
+        if (res.outcome == DownloadOutcome.cancelled) {
+          if (mounted) showToast(context, 'Download cancelled');
+          return;
+        }
         if (!res.ok) {
           if (mounted) {
             showToast(
@@ -542,6 +556,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
           }
         },
       );
+      if (res.outcome == DownloadOutcome.cancelled) {
+        if (mounted) showToast(context, 'Download cancelled');
+        return false;
+      }
       final ok = res.ok;
       if (ok && res.file != null && res.file!.path != tmp.path) {
         await res.file!.copy(tmp.path);

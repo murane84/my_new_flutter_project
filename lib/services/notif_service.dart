@@ -622,3 +622,10 @@ Future<void> finishDownloadNotif(String key, String name, bool ok) async {
     );
   } catch (_) {}
 }
+
+Future<void> cancelDownloadNotif(String key) async {
+  if (kIsWeb) return;
+  try {
+    await _fln.cancel(id: downloadNotifId(key));
+  } catch (_) {}
+}

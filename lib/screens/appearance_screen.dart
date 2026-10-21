@@ -196,9 +196,25 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                   ],
                 ),
           const SizedBox(height: 10),
-          const _SecretHeartLockSection(),
-          const SizedBox(height: 10),
-          const _HeartReceiptsSection(),
+          // Secret-heart privacy pair — side by side on wide screens.
+          isWide
+              ? const IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: _SecretHeartLockSection()),
+                      SizedBox(width: 12),
+                      Expanded(child: _HeartReceiptsSection()),
+                    ],
+                  ),
+                )
+              : const Column(
+                  children: [
+                    _SecretHeartLockSection(),
+                    SizedBox(height: 10),
+                    _HeartReceiptsSection(),
+                  ],
+                ),
           if (_showGuide) ...[
             const SizedBox(height: 8),
             Text(

@@ -26,7 +26,11 @@ class AttachSheet extends StatefulWidget {
     required this.onDocument,
     required this.onListenTogether,
     required this.onPickPhoto,
+    this.onPoll,
   });
+
+  /// Groups only: start a poll (null hides the tile).
+  final VoidCallback? onPoll;
 
   /// Only Android/iOS have a device gallery to show the quick strip for.
   final bool isMobile;
@@ -199,6 +203,9 @@ class _AttachSheetState extends State<AttachSheet> {
           widget.onDocument),
       _Opt(Icons.headphones_rounded, 'Listen together', scheme.primary,
           widget.onListenTogether),
+      if (widget.onPoll != null)
+        _Opt(Icons.poll_rounded, 'Poll', const Color(0xFFFF7043),
+            widget.onPoll!),
     ];
 
     return Padding(

@@ -97,6 +97,7 @@ part 'chat/heart_composer.dart';      // secret-heart tray + receipts
 part 'chat/chat_unread.dart';         // "N new messages" divider + last-seen
 part 'chat/chat_search.dart';         // in-chat search pill + hit stepping
 part 'chat/chat_mentions_seen.dart';  // "@" stepper + DM seen avatar
+part 'chat/chat_polls_admin.dart';    // group admins + polls
 
 // ─── Timestamp helpers ───────────────────────────────────────────────────────
 
@@ -448,6 +449,9 @@ class _ChatPageState extends State<ChatPage>
   bool _searchDeepLoaded = false;
   // ── "@" stepper + seen avatar (see chat/chat_mentions_seen.dart) ───────
   int? _mentionBase;
+  // Group settings mirrored from the server (chat/chat_polls_admin.dart).
+  bool _adminsOnly = false;
+  bool _amAdmin = false;
   final Set<String> _mentionCleared = {};
   List<Map<String, dynamic>>? _mentionCacheOf;
   List<String> _mentionCache = const [];
@@ -994,6 +998,7 @@ class _ChatPageState extends State<ChatPage>
   void _handleWsEvent(Map<String, dynamic> event) {
     final type = event['type'];
     if (!mounted) return;
+    if (_handleGroupMetaWs(type?.toString(), event)) return;
 
     if (type == 'new_message') {
       // Backend sends the payload under `data` (a MessageWithSender), like every
@@ -1815,6 +1820,7 @@ class _ChatPageState extends State<ChatPage>
             onContact: () => act(_shareContact),
             onDocument: () => act(_pickDocument),
             onListenTogether: () => act(_startListenTogether),
+            onPoll: _isGroup ? () => act(_openPollComposer) : null,
             onPickPhoto: (bytes, name) =>
                 act(() => _previewAndSendImage(bytes, name, 'image/jpeg')),
           ),
@@ -3944,6 +3950,7 @@ class _ChatPageState extends State<ChatPage>
     // `content`; the card renders it, so the raw text is suppressed below.
     final isLocation = !tomb && msgType == 'location';
     final isContact = !tomb && msgType == 'contact';
+    final isPoll = !tomb && msgType == 'poll';
     // A lone fraction — the auto-converted glyph "½" OR a still-raw "1/2" —
     // renders big and bubble-less too, like a single emoji. Apply fraction
     // glyphs first so the test (and the big Text below) use the glyph form
@@ -4266,6 +4273,11 @@ class _ChatPageState extends State<ChatPage>
                                             ),
                                           ),
                                         ),
+                                        if (_isMemberAdmin(
+                                            msg['sender_id'])) ...[
+                                          const SizedBox(width: 6),
+                                          _adminTag(scheme),
+                                        ],
                                         if (!inPhonebook &&
                                             rxPhone.isNotEmpty) ...[
                                           const SizedBox(width: 10),
@@ -4404,6 +4416,8 @@ class _ChatPageState extends State<ChatPage>
                           _locationContent(msg, isMe, textColor, scheme),
                         if (isContact)
                           _contactContent(msg, isMe, textColor, scheme),
+                        if (isPoll)
+                          _pollContent(msg, isMe, textColor, scheme),
                         if (isMedia && !imgCap)
                           _mediaContent(msgType, mediaRel ?? '', msg, isMe,
                               textColor, scheme,
@@ -4420,6 +4434,7 @@ class _ChatPageState extends State<ChatPage>
                             msgType != 'live' &&
                             msgType != 'location' &&
                             msgType != 'contact' &&
+                            msgType != 'poll' &&
                             msgType != 'video' &&
                             !imgCap &&
                             mainText.trim().isNotEmpty)
@@ -4554,6 +4569,9 @@ class _ChatPageState extends State<ChatPage>
     } else if (msgType == 'contact') {
       typeIcon = Icons.person_rounded;
       label = 'Contact';
+    } else if (msgType == 'poll') {
+      typeIcon = Icons.poll_rounded;
+      label = 'Poll: ${(msg['content'] ?? '').toString()}';
     }
 
     return Container(
@@ -5514,7 +5532,9 @@ class _ChatPageState extends State<ChatPage>
                     // band): the watermark / photo shows right through behind
                     // it. Bubbles only soften as they scroll into the edge
                     // (the list's own fade), so nothing sits there at rest.
-                    _buildInput(isDark),
+                    _postingLocked
+                        ? _buildAdminsOnlyBar(scheme, isDark)
+                        : _buildInput(isDark),
                   ],
                 ),
               ],

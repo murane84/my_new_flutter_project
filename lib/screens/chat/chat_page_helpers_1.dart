@@ -865,6 +865,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
         ex['heart_opens'] = _mergeOpens(ex['heart_opens'], m['heart_opens']);
         ex['unlock_at'] = m['unlock_at'];
         ex['heart_mood'] = m['heart_mood'] ?? ex['heart_mood'];
+        ex['poll'] = m['poll'] ?? ex['poll'];
         // Deletion is a ONE-WAY latch: once tombstoned locally (optimistic
         // delete) or on the server, it STAYS deleted. Otherwise a poll that
         // races the server's delete would briefly un-delete the bubble (snap
@@ -934,6 +935,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
           a[i]['opened_at'] != b[i]['opened_at'] ||
           a[i]['heart_opens'] != b[i]['heart_opens'] ||
           a[i]['unlock_at'] != b[i]['unlock_at'] ||
+          a[i]['poll'] != b[i]['poll'] ||
           a[i]['reactions'] != b[i]['reactions']) { return false; }
     }
     return true;

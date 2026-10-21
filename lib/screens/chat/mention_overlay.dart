@@ -23,6 +23,10 @@ extension _ChatMentions on _ChatPageState {
       final data = await ApiService().getConversation(_cid);
       final mem = (data?['members'] as List?) ?? const [];
       if (!mounted) return;
+      if (data != null) {
+        _adminsOnly = data['admins_only'] == true;
+        _amAdmin = data['my_role']?.toString() == 'admin';
+      }
       _groupMembers = mem
           .whereType<Map>()
           .map((m) => Map<String, dynamic>.from(m))

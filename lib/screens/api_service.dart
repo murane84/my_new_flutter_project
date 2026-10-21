@@ -1279,6 +1279,7 @@ class ApiService {
     bool? mentionAll, // true when "@all" was used (group only)
     String? heartMood, // secret heart: love|miss|sorry|thanks|proud
     DateTime? unlockAt, // secret heart: sealed until this moment
+    String? poll, // group poll spec JSON {q, options, multi}
   }) async {
     try {
       final token = await _getToken();
@@ -1301,6 +1302,7 @@ class ApiService {
         'mention_all': ?mentionAll,
         'heart_mood': ?heartMood,
         if (unlockAt != null) 'unlock_at': unlockAt.toUtc().toIso8601String(),
+        'poll': ?poll,
       };
       if (conversationId == null) payload['receiver_id'] = receiverId;
 
@@ -2893,12 +2895,40 @@ class ApiService {
   Future<bool> renameGroup(int cid, String title) =>
       updateGroup(cid, title: title);
 
-  /// Update group settings (name and/or avatar). Admin only (server-enforced).
-  Future<bool> updateGroup(int cid, {String? title, String? avatarUrl}) async {
+  /// Update group settings (name, avatar, admins-only posting). Admin only
+  /// (server-enforced).
+  Future<bool> updateGroup(int cid,
+      {String? title, String? avatarUrl, bool? adminsOnly}) async {
     return _convAction('PATCH', '/conversations/$cid', body: {
       'title': ?title,
       'avatar_url': ?avatarUrl,
+      'admins_only': ?adminsOnly,
     });
+  }
+
+  /// Make a group member an admin ('admin') or step them down ('member').
+  Future<bool> setGroupMemberRole(int cid, int userId, String role) =>
+      _convAction('PATCH', '/conversations/$cid/members/$userId/role',
+          body: {'role': role});
+
+  /// Vote on a group poll ([] retracts). Returns the poll JSON, or null.
+  Future<String?> votePoll(int cid, int messageId, List<int> options) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse(
+            '${await _baseUrl}/conversations/$cid/messages/$messageId/vote'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'options': options}),
+      );
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
+      final d = jsonDecode(resp.body);
+      return d is Map ? d['poll']?.toString() : null;
+    } catch (e) {
+      _logger.e('votePoll exception: $e');
+      return null;
+    }
   }
 
   Future<bool> _convAction(String method, String path,

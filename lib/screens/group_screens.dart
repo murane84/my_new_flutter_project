@@ -12,6 +12,7 @@ import '../utils/toast_helper.dart';
 import '../utils/popup_shell.dart';
 import '../utils/app_config.dart';
 import '../utils/emoji_field.dart';
+import '../widgets/genie_menu.dart';
 import 'user_profile_sheet.dart';
 
 // Groups are presented as CARD POPUPS (AppPopupShell) — not full-window routes —
@@ -547,6 +548,53 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     }
   }
 
+  Future<void> _setAdminsOnly(bool v) async {
+    if (!_isAdmin) return;
+    setState(() {
+      _busy = true;
+      _conv?['admins_only'] = v; // optimistic
+    });
+    final ok =
+        await ApiService().updateGroup(widget.conversationId, adminsOnly: v);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
+      showToast(
+          context,
+          v
+              ? 'Only admins can send messages now'
+              : 'Everyone can send messages again',
+          type: ToastType.success);
+      await _load();
+    } else {
+      setState(() => _conv?['admins_only'] = !v);
+      showToast(context, 'Could not change that — try again.',
+          type: ToastType.error);
+    }
+  }
+
+  Future<void> _setRole(int uid, String name, bool makeAdmin) async {
+    setState(() => _busy = true);
+    final ok = await ApiService().setGroupMemberRole(
+        widget.conversationId, uid, makeAdmin ? 'admin' : 'member');
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
+      showToast(
+          context,
+          makeAdmin ? '$name is now an admin' : '$name is no longer an admin',
+          type: ToastType.success);
+      await _load();
+    } else {
+      showToast(
+          context,
+          makeAdmin
+              ? 'Could not make $name an admin.'
+              : 'Could not change that — a group needs at least one admin.',
+          type: ToastType.error);
+    }
+  }
+
   Future<void> _removeMember(int uid) async {
     setState(() => _busy = true);
     final ok = await ApiService().removeGroupMember(widget.conversationId, uid);
@@ -702,6 +750,30 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
             ],
           ),
         ),
+        // Admins-only posting: a switch for admins, a quiet note otherwise.
+        if (_isAdmin)
+          SwitchListTile.adaptive(
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            secondary: Icon(Icons.shield_rounded, color: scheme.primary),
+            title: const Text('Only admins can send messages'),
+            subtitle: const Text('Everyone can still read, react and vote'),
+            value: _conv?['admins_only'] == true,
+            onChanged: _busy ? null : _setAdminsOnly,
+          )
+        else if (_conv?['admins_only'] == true)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+            child: Row(children: [
+              Icon(Icons.shield_outlined, size: 16, color: scheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Only admins can send messages in this group',
+                    style: TextStyle(
+                        fontSize: 12.5, color: scheme.onSurfaceVariant)),
+              ),
+            ]),
+          ),
         Divider(height: 1, color: scheme.outlineVariant.withAlpha(90)),
         // Member list — expands to use all remaining height, scrolls when long.
         Flexible(
@@ -772,17 +844,72 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                 style: TextStyle(color: scheme.onPrimaryContainer))
             : null,
       ),
-      title: Text(isSelf ? '$name (You)' : name),
-      subtitle: role == 'admin'
-          ? Text('Admin',
-              style: TextStyle(fontSize: 11, color: scheme.primary))
-          : null,
-      trailing: (_isAdmin && !isSelf)
-          ? IconButton(
-              icon: Icon(Icons.remove_circle_outline_rounded,
-                  color: scheme.error),
-              tooltip: 'Remove',
-              onPressed: _busy ? null : () => _removeMember(uid),
+      title: Row(children: [
+        Flexible(
+            child: Text(isSelf ? '$name (You)' : name,
+                overflow: TextOverflow.ellipsis)),
+        if (role == 'admin') ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(7),
+              border:
+                  Border.all(color: scheme.primary.withValues(alpha: 0.35)),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.shield_rounded, size: 10, color: scheme.primary),
+              const SizedBox(width: 3),
+              Text('Admin',
+                  style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: scheme.primary)),
+            ]),
+          ),
+        ],
+      ]),
+      // Admins manage everyone (and can step themselves down); the server
+      // keeps at least one admin.
+      trailing: _isAdmin
+          ? GeniePopupMenuButton<String>(
+              tooltip: 'Member options',
+              icon: const Icon(Icons.more_vert_rounded, size: 20),
+              onSelected: (v) {
+                if (_busy) return;
+                if (v == 'admin') _setRole(uid, name, true);
+                if (v == 'member') _setRole(uid, name, false);
+                if (v == 'remove') _removeMember(uid);
+              },
+              itemBuilder: (_) => [
+                if (role != 'admin')
+                  const PopupMenuItem(
+                      value: 'admin',
+                      child: Row(children: [
+                        Icon(Icons.shield_rounded, size: 20),
+                        SizedBox(width: 12),
+                        Text('Make admin'),
+                      ])),
+                if (role == 'admin')
+                  PopupMenuItem(
+                      value: 'member',
+                      child: Row(children: [
+                        const Icon(Icons.shield_outlined, size: 20),
+                        const SizedBox(width: 12),
+                        Text(isSelf ? 'Step down as admin' : 'Dismiss as admin'),
+                      ])),
+                if (!isSelf)
+                  PopupMenuItem(
+                      value: 'remove',
+                      child: Row(children: [
+                        Icon(Icons.remove_circle_outline_rounded,
+                            size: 20, color: scheme.error),
+                        const SizedBox(width: 12),
+                        Text('Remove from group',
+                            style: TextStyle(color: scheme.error)),
+                      ])),
+              ],
             )
           : null,
     );

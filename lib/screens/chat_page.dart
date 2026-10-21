@@ -3515,6 +3515,13 @@ class _ChatPageState extends State<ChatPage>
                   onMenu: (pos) =>
                       _showMessageMenu(context, msg, anchor: pos),
                   showStatus: false, // merged into the pill below
+                  // Respond from the letter card (long notes open there).
+                  onReply: () {
+                    setState(() => _replyTo = msg);
+                    FocusScope.of(context).requestFocus(FocusNode());
+                  },
+                  onReact: (e) => _addReaction(msg, e),
+                  onKeep: _canHarmony ? () => _keepsakeMessage(msg) : null,
                   onFirstOpen: () => _reportHeartOpened(msg),
                   onUnsealDue: () => _unsealHeart(msg),
                   // Bonded-space gesture: double-tap to love back (❤ reaction).

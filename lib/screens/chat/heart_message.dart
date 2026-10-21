@@ -164,6 +164,9 @@ class HeartBubble extends StatefulWidget {
     this.onUnsealDue,
     this.onMenu,
     this.showStatus = true,
+    this.onReply,
+    this.onReact,
+    this.onKeep,
   });
 
   final String text;
@@ -205,6 +208,13 @@ class HeartBubble extends StatefulWidget {
   /// Draw the receipt / opens-at line under the heart. The chat turns this
   /// off and merges it into the timestamp pill instead.
   final bool showStatus;
+
+  /// Actions offered on the opened LETTER card (a long note opens there, not
+  /// in the heart, so the bubble's long-press menu isn't reachable while
+  /// reading). Null = not shown.
+  final VoidCallback? onReply;
+  final ValueChanged<String>? onReact;
+  final VoidCallback? onKeep;
 
   /// A note longer than this (or spanning more than one line) opens the genie
   /// card instead of revealing inside the heart.
@@ -571,7 +581,10 @@ class _HeartBubbleState extends State<HeartBubble>
           originRect: origin,
           text: widget.text,
           accent: _accent,
-          mood: _mood);
+          mood: _mood,
+          onReply: widget.onReply,
+          onReact: widget.onReact,
+          onKeep: widget.onKeep);
     } else {
       _hold.value = 0;
       setState(() => _revealedInHeart = true);
@@ -1138,6 +1151,9 @@ void showHeartGenie(
   required String text,
   required Color accent,
   HeartMood mood = HeartMood.love,
+  VoidCallback? onReply,
+  ValueChanged<String>? onReact,
+  VoidCallback? onKeep,
 }) {
   // A see-through route (not a bare overlay) so the system Back button
   // reaches the card's PopScope and folds it back into the heart.
@@ -1152,6 +1168,9 @@ void showHeartGenie(
       text: text,
       accent: accent,
       mood: mood,
+      onReply: onReply,
+      onReact: onReact,
+      onKeep: onKeep,
       onClosed: () {
         if (nav.mounted && nav.canPop()) nav.pop();
       },
@@ -1166,12 +1185,18 @@ class _HeartGenie extends StatefulWidget {
     required this.accent,
     required this.mood,
     required this.onClosed,
+    this.onReply,
+    this.onReact,
+    this.onKeep,
   });
   final Rect originRect;
   final String text;
   final Color accent;
   final HeartMood mood;
   final VoidCallback onClosed;
+  final VoidCallback? onReply;
+  final ValueChanged<String>? onReact;
+  final VoidCallback? onKeep;
 
   @override
   State<_HeartGenie> createState() => _HeartGenieState();
@@ -1277,6 +1302,87 @@ class _HeartGenieState extends State<_HeartGenie>
           );
         },
       ),
+    );
+  }
+
+  /// Respond right from the letter: a row of loving reactions, then Reply
+  /// and (bonded) Keepsake. Each closes the card first, then acts.
+  Widget _letterActions() {
+    const reactions = ['❤️', '😍', '🥹', '😘', '🙏'];
+    final white = Colors.white.withValues(alpha: 0.9);
+    Future<void> after(VoidCallback fn) async {
+      await _close();
+      fn();
+    }
+
+    Widget pill(IconData icon, String label, VoidCallback onTap) => Material(
+          color: Colors.white.withValues(alpha: 0.12),
+          shape: StadiumBorder(
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.18))),
+          child: InkWell(
+            customBorder: const StadiumBorder(),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 15, color: white),
+                  const SizedBox(width: 6),
+                  Text(label,
+                      style: TextStyle(
+                          color: white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
+        );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (widget.onReact != null)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(22),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final e in reactions)
+                  InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () => after(() => widget.onReact!(e)),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 4),
+                      child: Text(e, style: const TextStyle(fontSize: 22)),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        if (widget.onReply != null || widget.onKeep != null) ...[
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
+            children: [
+              if (widget.onReply != null)
+                pill(Icons.reply_rounded, 'Reply',
+                    () => after(widget.onReply!)),
+              if (widget.onKeep != null)
+                pill(Icons.auto_awesome_rounded, 'Keepsake',
+                    () => after(widget.onKeep!)),
+            ],
+          ),
+        ],
+      ],
     );
   }
 
@@ -1391,7 +1497,13 @@ class _HeartGenieState extends State<_HeartGenie>
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 14),
+                    if (widget.onReact != null ||
+                        widget.onReply != null ||
+                        widget.onKeep != null) ...[
+                      _letterActions(),
+                      const SizedBox(height: 12),
+                    ],
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [

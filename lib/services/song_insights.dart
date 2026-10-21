@@ -259,6 +259,20 @@ class SongInsights {
     _save();
   }
 
+  /// The feeling I tagged most recently (any song) — tunes Glow's daily card.
+  SongFeel? get lastFeel {
+    var at = 0;
+    SongFeel? f;
+    for (final s in _songs.values) {
+      final t = (s['fAt'] as num?)?.toInt() ?? 0;
+      if (t > at && s['f'] != null) {
+        at = t;
+        f = SongFeel.of(s['f'] as String?);
+      }
+    }
+    return f;
+  }
+
   SongFeel? feelOf(String title) =>
       SongFeel.of(_songs[_keyOf(title)]?['f'] as String?);
 

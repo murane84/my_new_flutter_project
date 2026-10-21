@@ -165,6 +165,15 @@ extension _HomeFriendListView on HomePageState {
                       // widths — or the panel narrowed by the music pane — use
                       // the single layer + header pills.
                       final wide = constraints.maxWidth >= 600;
+                      // Glow (third layer) fills the panel on any width.
+                      if (_friendLayer == 'glow') {
+                        return Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 720),
+                            child: const GlowFeed(),
+                          ),
+                        );
+                      }
                       if (wide) {
                         // Desktop: each column carries its OWN contextual search
                         // (inside _friendListWide) — spaces left, chats right —

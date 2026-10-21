@@ -22,6 +22,7 @@ extension _HomeHub on HomePageState {
       ColorScheme scheme,
       Color textColor) {
     final harmony = _friendLayer == 'harmony';
+    if (_friendLayer == 'glow') return const GlowFeed();
 
     // HARMONY layer is unchanged: contextual search + a single scrolling list.
     if (harmony) {
@@ -201,12 +202,14 @@ extension _HomeHub on HomePageState {
   /// One layer toggle-pill for the mobile header: icon + label + badge, lit when
   /// active and calm when not. Tapping switches the whole friend body to it.
   Widget _layerTab(ColorScheme scheme, String key, String label, IconData icon,
-      int badge) {
+      int badge, {bool compact = false, VoidCallback? onTap}) {
     final active = _friendLayer == key;
+    // Tight phones: the inactive pills drop their label (icon only).
+    final showLabel = !compact || active;
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => _setFriendLayer(key),
+        onTap: onTap ?? () => _setFriendLayer(key),
         borderRadius: BorderRadius.circular(20),
         // The badge FLOATS on the corner (Stack, no clip) instead of sitting
         // inline — so it adds zero width to the pill. A growing count (even
@@ -216,7 +219,8 @@ extension _HomeHub on HomePageState {
           children: [
             AnimatedContainer(
               duration: const Duration(milliseconds: 180),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              padding: EdgeInsets.symmetric(
+                  horizontal: showLabel ? 12 : 9, vertical: 7),
               decoration: BoxDecoration(
                 color:
                     active ? scheme.primary.withAlpha(30) : Colors.transparent,
@@ -244,6 +248,7 @@ extension _HomeHub on HomePageState {
                       size: 15,
                       color:
                           active ? scheme.primary : scheme.onSurfaceVariant),
+                  if (showLabel) ...[
                   const SizedBox(width: 6),
                   Text(
                     label,
@@ -254,6 +259,7 @@ extension _HomeHub on HomePageState {
                           active ? scheme.onSurface : scheme.onSurfaceVariant,
                     ),
                   ),
+                  ],
                 ],
               ),
             ),

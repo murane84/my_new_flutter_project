@@ -98,6 +98,7 @@ import '../widgets/genie_menu.dart';
 import '../widgets/moment_card.dart';
 import '../services/aluta_mood.dart';
 import '../services/song_insights.dart';
+import '../widgets/glow_feed.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
@@ -3036,11 +3037,21 @@ class HomePageState extends rp.ConsumerState<HomePage>
           // + "Messages". Tap to switch; the active one is lit, both carry their
           // badge so anything pending shows at first glance. The lit pill IS the
           // header, so the whole screen below is that layer's content.
-          _layerTab(scheme, 'harmony', 'Harmony', Icons.favorite_rounded,
-              _harmonyBadge()),
-          const SizedBox(width: 14),
-          _layerTab(scheme, 'circle', 'Circle', Icons.forum_rounded,
-              _circleBadge()),
+          // Three layers: on tight phones only the lit pill keeps its label
+          // (the others go icon-only) so the row never overflows.
+          ...() {
+            final tight = constraints.maxWidth < 400;
+            return [
+              _layerTab(scheme, 'harmony', 'Harmony', Icons.favorite_rounded,
+                  _harmonyBadge(), compact: tight),
+              SizedBox(width: tight ? 6 : 10),
+              _layerTab(scheme, 'circle', 'Circle', Icons.forum_rounded,
+                  _circleBadge(), compact: tight),
+              SizedBox(width: tight ? 6 : 10),
+              _layerTab(scheme, 'glow', 'Glow', Icons.auto_awesome_rounded, 0,
+                  compact: tight),
+            ];
+          }(),
           const Spacer(),
         ] else ...[
           _PanelToggleBtn(
@@ -3075,6 +3086,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
               ),
             ),
           ),
+          const SizedBox(width: 12),
+          // Desktop: Glow takes over the panel; tap again to return.
+          _layerTab(scheme, 'glow', 'Glow', Icons.auto_awesome_rounded, 0,
+              onTap: () =>
+                  _setFriendLayer(_friendLayer == 'glow' ? 'circle' : 'glow')),
           const Spacer(),
         ],
         // Right side status: when online, a green "N online" chip (moved up

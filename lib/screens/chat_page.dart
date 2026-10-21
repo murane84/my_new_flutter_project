@@ -4537,18 +4537,34 @@ class _ChatPageState extends State<ChatPage>
                       // Rounded input field: emoji · text · attach · camera.
                       Expanded(
                         child: Container(
+                          // Matches the 48px mic/send disc beside it.
+                          constraints: const BoxConstraints(minHeight: 48),
+                          // Solid, lifted pill: readable on ANY wallpaper (no
+                          // see-through), with a soft drop shadow + hairline so
+                          // it floats like a card.
                           decoration: BoxDecoration(
-                            color: scheme.surface,
+                            color: isDark
+                                ? Color.alphaBlend(
+                                    Colors.white.withValues(alpha: 0.06),
+                                    scheme.surface)
+                                : scheme.surface,
                             borderRadius: BorderRadius.circular(26),
                             border: Border.all(
-                                color: scheme.outlineVariant
-                                    .withValues(alpha: 0.5)),
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.10)
+                                    : Colors.black.withValues(alpha: 0.06)),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black
-                                    .withValues(alpha: isDark ? 0.28 : 0.06),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
+                                    .withValues(alpha: isDark ? 0.45 : 0.16),
+                                blurRadius: 16,
+                                offset: const Offset(0, 5),
+                              ),
+                              BoxShadow(
+                                color: Colors.black
+                                    .withValues(alpha: isDark ? 0.25 : 0.06),
+                                blurRadius: 3,
+                                offset: const Offset(0, 1),
                               ),
                             ],
                           ),
@@ -4664,7 +4680,14 @@ class _ChatPageState extends State<ChatPage>
                                           color: scheme.onSurfaceVariant
                                               .withValues(alpha: 0.7)),
                                       isDense: true,
+                                      // No inner box: the pill IS the field
+                                      // (overrides any app-wide filled /
+                                      // outlined input theme).
+                                      filled: false,
                                       border: InputBorder.none,
+                                      enabledBorder: InputBorder.none,
+                                      focusedBorder: InputBorder.none,
+                                      disabledBorder: InputBorder.none,
                                       contentPadding: const EdgeInsets.symmetric(
                                           vertical: 10, horizontal: 2),
                                     ),
@@ -4712,7 +4735,7 @@ class _ChatPageState extends State<ChatPage>
                           ),
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 8),
                       // Mic (idle) ↔ Send (typing). Sends never block here —
                       // per-bubble spinners show upload progress instead.
                       // Sized to match the input pill so the two read as one
@@ -4731,32 +4754,47 @@ class _ChatPageState extends State<ChatPage>
                                         ? _saveEdit
                                         : _sendMessage)
                                     : _startRecording,
-                                child: Container(
-                                  width: 42,
-                                  height: 42,
+                                // Same height + lift as the pill, so the two
+                                // read as one floating row. Idle mic: a SOLID
+                                // light disc (never see-through) with a soft
+                                // brand ring; typing → solid brand send.
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 180),
+                                  width: 48,
+                                  height: 48,
                                   decoration: BoxDecoration(
                                     color: hasText
                                         ? scheme.primary
-                                        : scheme.primary
-                                            .withAlpha(isDark ? 48 : 30),
+                                        : Color.alphaBlend(
+                                            scheme.primary.withValues(
+                                                alpha: isDark ? 0.18 : 0.10),
+                                            isDark
+                                                ? Color.alphaBlend(
+                                                    Colors.white.withValues(
+                                                        alpha: 0.06),
+                                                    scheme.surface)
+                                                : scheme.surface),
                                     shape: BoxShape.circle,
-                                    border: hasText
-                                        ? null
-                                        : Border.all(
-                                            color: scheme.primary
-                                                .withAlpha(isDark ? 90 : 64),
-                                            width: 1,
-                                          ),
-                                    boxShadow: hasText
-                                        ? [
-                                            BoxShadow(
-                                              color: scheme.primary
-                                                  .withValues(alpha: 0.4),
-                                              blurRadius: 8,
-                                              offset: const Offset(0, 2),
-                                            ),
-                                          ]
-                                        : null,
+                                    border: Border.all(
+                                      color: hasText
+                                          ? Colors.transparent
+                                          : scheme.primary.withValues(
+                                              alpha: isDark ? 0.40 : 0.28),
+                                      width: 1,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: (hasText
+                                                ? scheme.primary
+                                                : Colors.black)
+                                            .withValues(
+                                                alpha: hasText
+                                                    ? 0.40
+                                                    : (isDark ? 0.45 : 0.16)),
+                                        blurRadius: 16,
+                                        offset: const Offset(0, 5),
+                                      ),
+                                    ],
                                   ),
                                   child: Icon(
                                     hasText

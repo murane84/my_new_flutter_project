@@ -3696,6 +3696,35 @@ class _ChatPageState extends State<ChatPage>
             ],
           ),
           ),
+          // Reactions on a heart (❤️ 😍 … from the letter card or the menu)
+          // — they were saved but never drawn under hearts.
+          Builder(builder: (_) {
+            final rx = _reactionsOf(msg);
+            if (rx.isEmpty) return const SizedBox.shrink();
+            return Padding(
+              padding: EdgeInsets.only(top: 2, left: isMe ? 0 : 34),
+              child: Wrap(
+                spacing: 3,
+                children: [
+                  for (final e in rx)
+                    GestureDetector(
+                      onTap: () => _addReaction(msg, e),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: scheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: scheme.outlineVariant.withAlpha(80)),
+                        ),
+                        child: AnimatedReaction(emoji: e, size: 15),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }),
           // ONE frosted pill under the heart: its status (receipt / opens-at)
           // and the time + ticks, side by side. Frosted + dark so it reads
           // the same on any wallpaper, light or dark.

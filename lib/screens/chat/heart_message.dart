@@ -1454,9 +1454,12 @@ class _HeartGenieState extends State<_HeartGenie>
   Widget _letterActions() {
     const reactions = ['❤️', '😍', '🥹', '😘', '🙏'];
     final white = Colors.white.withValues(alpha: 0.9);
+    // Act right away (don't wait on the fold-back animation — if it never
+    // completes, the action would never run), then fold the card away.
     Future<void> after(VoidCallback fn) async {
-      await _close();
+      HapticFeedback.selectionClick();
       fn();
+      await _close();
     }
 
     Widget pill(IconData icon, String label, VoidCallback onTap) => Material(

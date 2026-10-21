@@ -2161,6 +2161,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
             tooltip: 'Group options',
             onSelected: (v) {
               switch (v) {
+                case 'search':
+                  chatSearchRequest.value++;
+                  break;
                 case 'info':
                   _openGroupInfo();
                   break;
@@ -2181,6 +2184,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
               }
             },
             itemBuilder: (ctx) => [
+              PopupMenuItem(
+                value: 'search',
+                child: _groupMenuRow(
+                    Icons.search_rounded, 'Search in chat', scheme),
+              ),
               PopupMenuItem(
                 value: 'info',
                 child: _groupMenuRow(

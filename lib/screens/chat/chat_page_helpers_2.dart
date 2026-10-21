@@ -1004,6 +1004,8 @@ extension _ChatPageHelpers2 on _ChatPageState {
       spoilerCover: textColor.withValues(alpha: 0.40),
       quoteBar: linkColor,
       selectable: RendererBinding.instance.mouseTracker.mouseIsConnected,
+      searchTerm: _searchTerm,
+      searchBg: Theme.of(context).colorScheme.primary.withValues(alpha: 0.30),
     );
   }
 

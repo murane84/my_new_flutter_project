@@ -374,6 +374,8 @@ class FormattedText extends StatefulWidget {
     required this.quoteBar,
     this.selectable = false,
     this.textScaler,
+    this.searchTerm = '',
+    this.searchBg,
   });
 
   final String text;
@@ -386,6 +388,10 @@ class FormattedText extends StatefulWidget {
   final Color quoteBar;
   final bool selectable;
   final TextScaler? textScaler;
+  /// In-chat search: every case-insensitive occurrence is marked with
+  /// [searchBg] (empty = off).
+  final String searchTerm;
+  final Color? searchBg;
 
   @override
   State<FormattedText> createState() => _FormattedTextState();
@@ -426,9 +432,57 @@ class _FormattedTextState extends State<FormattedText> {
       );
 
   Widget _rich(String text, TextStyle base) => Text.rich(
-        TextSpan(children: _spans(text, base)),
+        TextSpan(children: _markSearch(_spans(text, base))),
         textScaler: widget.textScaler ?? MediaQuery.textScalerOf(context),
       );
+
+  // Split plain TextSpans around search matches (recognizers kept, so links
+  // inside a match stay tappable). Matches straddling two spans aren't
+  // marked — rare, and the bubble still flashes.
+  List<InlineSpan> _markSearch(List<InlineSpan> spans) {
+    final q = widget.searchTerm.toLowerCase();
+    final bg = widget.searchBg;
+    if (q.length < 2 || bg == null) return spans;
+    InlineSpan walk(InlineSpan sp) {
+      if (sp is! TextSpan) return sp;
+      final kids = sp.children?.map(walk).toList();
+      final t = sp.text;
+      if (t == null || t.isEmpty || !t.toLowerCase().contains(q)) {
+        return kids == null
+            ? sp
+            : TextSpan(
+                text: t,
+                style: sp.style,
+                recognizer: sp.recognizer,
+                children: kids);
+      }
+      final lower = t.toLowerCase();
+      final parts = <InlineSpan>[];
+      var at = 0;
+      while (true) {
+        final k = lower.indexOf(q, at);
+        if (k < 0) break;
+        if (k > at) {
+          parts.add(TextSpan(text: t.substring(at, k), recognizer: sp.recognizer));
+        }
+        parts.add(TextSpan(
+          text: t.substring(k, k + q.length),
+          recognizer: sp.recognizer,
+          style: TextStyle(
+              backgroundColor: bg, fontWeight: FontWeight.w700),
+        ));
+        at = k + q.length;
+      }
+      if (at < t.length) {
+        parts.add(TextSpan(text: t.substring(at), recognizer: sp.recognizer));
+      }
+      return TextSpan(
+          style: sp.style,
+          children: [...parts, ...?kids]);
+    }
+
+    return [for (final sp in spans) walk(sp)];
+  }
 
   @override
   Widget build(BuildContext context) {

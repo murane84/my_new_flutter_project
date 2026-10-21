@@ -221,6 +221,9 @@ extension _HomePageHelpers2 on HomePageState {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            seg(Icons.search_rounded, 'Search in chat',
+                () => chatSearchRequest.value++),
+            divider(),
             seg(Icons.wallpaper_rounded, 'Wallpaper', () {
               showChatWallpaperSheet(
                 context,

@@ -95,6 +95,7 @@ part 'chat/chat_page_helpers_3.dart'; // _ChatPageState helpers (42 methods)
 part 'chat/mention_overlay.dart';     // @-mentions picker (group chats)
 part 'chat/heart_composer.dart';      // secret-heart tray + receipts
 part 'chat/chat_unread.dart';         // "N new messages" divider + last-seen
+part 'chat/chat_search.dart';         // in-chat search pill + hit stepping
 
 // ─── Timestamp helpers ───────────────────────────────────────────────────────
 
@@ -436,6 +437,14 @@ class _ChatPageState extends State<ChatPage>
   // Scrolled well up (e.g. after jumping to a quoted message) → show the
   // round "back to latest" button.
   bool _farFromBottom = false;
+  // ── In-chat search (see chat/chat_search.dart) ─────────────────────────
+  bool _searchOpen = false;
+  final TextEditingController _searchCtrl = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
+  List<String> _searchHits = const [];
+  int _searchIdx = 0;
+  Timer? _searchDebounce;
+  bool _searchDeepLoaded = false;
   // The message field has focus → the composer pill shows its brand ring.
   bool _composerFocused = false;
   // ── Unread divider (chat/chat_unread.dart) ─────────────────────────────────
@@ -530,6 +539,7 @@ class _ChatPageState extends State<ChatPage>
     _ctrl.addListener(_onTextChanged);
     _loadDraft();
     _scrollCtrl.addListener(_onScroll);
+    chatSearchRequest.addListener(_onSearchRequest);
     // Mirror the app-wide connection status so this banner never disagrees
     // with the home footer dot / header badge.
     _isUserOffline = !ConnectionStatus.instance.isOnline;
@@ -646,6 +656,10 @@ class _ChatPageState extends State<ChatPage>
   @override
   void dispose() {
     if (_isAtBottom) _markSeenUpToNewest();
+    chatSearchRequest.removeListener(_onSearchRequest);
+    _searchDebounce?.cancel();
+    _searchCtrl.dispose();
+    _searchFocus.dispose();
     WidgetsBinding.instance.removeObserver(this);
     if (kIsWeb) webpaste.unregisterClipboardPaste();
     // Release any in-flight caption request so its awaiter unwinds.
@@ -5420,6 +5434,30 @@ class _ChatPageState extends State<ChatPage>
                         ),
                       ),
                     ),
+                    // In-chat search pill, floating over the top of the
+                    // thread (slides + fades in).
+                    Positioned(
+                      top: 8,
+                      left: 10,
+                      right: 10,
+                      child: IgnorePointer(
+                        ignoring: !_searchOpen,
+                        child: AnimatedSlide(
+                          offset: _searchOpen
+                              ? Offset.zero
+                              : const Offset(0, -0.6),
+                          duration: const Duration(milliseconds: 240),
+                          curve: Curves.easeOutCubic,
+                          child: AnimatedOpacity(
+                            opacity: _searchOpen ? 1 : 0,
+                            duration: const Duration(milliseconds: 180),
+                            child: _searchOpen
+                                ? _buildSearchBar(scheme, isDark)
+                                : const SizedBox(height: 48),
+                          ),
+                        ),
+                      ),
+                    ),
                     if (_viewerImages != null) _buildInlineViewer(),
                   ],
                 ),
@@ -5506,6 +5544,11 @@ class _ChatPageState extends State<ChatPage>
               icon: const Icon(Icons.headphones_rounded),
               onPressed: _startListenTogether,
             ),
+          IconButton(
+            tooltip: 'Search in chat',
+            icon: const Icon(Icons.search_rounded),
+            onPressed: _openSearch,
+          ),
           GeniePopupMenuButton<String>(
             tooltip: 'More',
             icon: const Icon(Icons.more_vert_rounded),

@@ -279,7 +279,10 @@ class _HeartBubbleState extends State<HeartBubble>
   @override
   void didUpdateWidget(HeartBubble old) {
     super.didUpdateWidget(old);
-    if (old.openedAt != widget.openedAt) _syncBeat();
+    if (old.openedAt != widget.openedAt) {
+      _syncBeat();
+      if (!_sparkle && _awake) _sleep();
+    }
     if (old.unlockAt != widget.unlockAt || old.text != widget.text) {
       _unsealAsked = false;
       _syncTick();
@@ -306,7 +309,7 @@ class _HeartBubbleState extends State<HeartBubble>
 
   /// Start (or extend) the awake window.
   void _wake() {
-    if (!mounted || _reduceMotion) return;
+    if (!mounted || _reduceMotion || !_sparkle) return;
     _sleepTimer?.cancel();
     _sleepTimer = Timer(_awakeFor, _sleep);
     if (!_awake) {
@@ -331,6 +334,10 @@ class _HeartBubbleState extends State<HeartBubble>
   /// and on the sender's own hearts, it rests — no beat.
   bool get _attract =>
       !widget.isMe && widget.openedAt == null && !_reported;
+
+  /// Stars only dress a heart that hasn't been opened yet (on either side:
+  /// my unopened received heart, or one I sent they haven't opened).
+  bool get _sparkle => widget.openedAt == null && !_reported;
 
   Timer? _burstTimer;
   static const Duration _burstEvery = Duration(seconds: 9);
@@ -517,6 +524,7 @@ class _HeartBubbleState extends State<HeartBubble>
       widget.onFirstOpen?.call();
     }
     _syncBeat(); // opened → stop calling for attention
+    if (!_sparkle && _awake) _sleep(); // …and let the stars fade away
     if (_isLong) {
       final box = _heartKey.currentContext?.findRenderObject() as RenderBox?;
       Rect origin;

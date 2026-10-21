@@ -208,8 +208,11 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 // "It's here — open it": the file-open glyph in the brand
                 // colour (was the Aluta logo, which read as branding, not
                 // state).
-                icon: Icon(Icons.file_open_rounded,
-                    size: 21, color: scheme.primary),
+                // A STATE mark, not another file glyph (the tile on the left
+                // already says "file"): a tick over a tray = it's on this
+                // device. Tap to save another copy.
+                icon: Icon(Icons.download_done_rounded,
+                    size: 22, color: scheme.primary),
                 onPressed: () => _downloadMediaWithProgress(msg),
               )
             else
@@ -243,6 +246,12 @@ extension _ChatPageHelpers3 on _ChatPageState {
       return Icons.audiotrack_rounded;
     }
     if (n.endsWith('.mp4') || n.endsWith('.mov')) return Icons.movie_rounded;
+    if (n.endsWith('.apk') || n.endsWith('.aab')) return Icons.android_rounded;
+    if (n.endsWith('.exe') || n.endsWith('.msi') || n.endsWith('.msix')) {
+      return Icons.desktop_windows_rounded;
+    }
+    if (n.endsWith('.ppt') || n.endsWith('.pptx')) return Icons.slideshow_rounded;
+    if (n.endsWith('.txt') || n.endsWith('.md')) return Icons.article_rounded;
     return Icons.insert_drive_file_rounded;
   }
 

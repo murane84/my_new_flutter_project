@@ -88,48 +88,51 @@ class _BusyOverlayState extends State<BusyOverlay> {
   Widget _card(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Branded "big moment" loader (back online, opening the app): the Aluta
-    // mark sits still in the middle while a brand ring sweeps around it.
-    return Container(
-      width: 68,
-      height: 68,
-      decoration: BoxDecoration(
-        color: (isDark ? const Color(0xFF1C1B1F) : Colors.white)
-            .withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-            color: scheme.primary.withValues(alpha: isDark ? 0.25 : 0.12)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.18),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
+    // No card: just a round whitish disc carrying the Aluta mark, with the
+    // brand ring sweeping snugly around it. Compact and modern.
+    const ring = 52.0;
+    const disc = 40.0;
+    return SizedBox(
+      width: ring,
+      height: ring,
       child: Stack(
         alignment: Alignment.center,
         children: [
-          SizedBox(
-            width: 50,
-            height: 50,
-            child: CircularProgressIndicator(
-              strokeWidth: 2.6,
-              strokeCap: StrokeCap.round,
-              backgroundColor: scheme.primary.withValues(alpha: 0.12),
-              valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
+          Container(
+            width: disc,
+            height: disc,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isDark ? const Color(0xFF26222A) : Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.16),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            alignment: Alignment.center,
+            child: ClipOval(
+              child: Image.asset(
+                'assets/images/logo.png',
+                width: 26,
+                height: 26,
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.medium,
+                errorBuilder: (_, _, _) => Icon(Icons.favorite_rounded,
+                    size: 16, color: scheme.primary),
+              ),
             ),
           ),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(9),
-            child: Image.asset(
-              'assets/images/logo.png',
-              width: 30,
-              height: 30,
-              fit: BoxFit.cover,
-              filterQuality: FilterQuality.medium,
-              errorBuilder: (_, _, _) => Icon(Icons.favorite_rounded,
-                  size: 18, color: scheme.primary),
+          SizedBox(
+            width: ring,
+            height: ring,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              strokeCap: StrokeCap.round,
+              backgroundColor: scheme.primary.withValues(alpha: 0.14),
+              valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
             ),
           ),
         ],

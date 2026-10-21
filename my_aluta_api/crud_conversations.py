@@ -375,6 +375,17 @@ def message_info(db: Session, conversation_id: int, message_id: int, sender_id: 
     read: list[dict] = []
     delivered: list[dict] = []
     sent: list[dict] = []
+    # Secret hearts: who has actually OPENED it (beyond just seeing it).
+    opened: list[dict] = []
+    opens = {}
+    msg = db.query(Message).filter(Message.id == message_id).first()
+    is_heart = bool(msg) and (msg.message_type or "") == "heart"
+    if is_heart and msg.heart_opens:
+        try:
+            import json
+            opens = json.loads(msg.heart_opens) or {}
+        except Exception:
+            opens = {}
     for m in members:
         u = db.query(User).filter(User.id == m.user_id).first()
         base = {
@@ -385,13 +396,18 @@ def message_info(db: Session, conversation_id: int, message_id: int, sender_id: 
         }
         lr = m.last_read_message_id or 0
         ld = m.last_delivered_message_id or 0
+        if is_heart and str(m.user_id) in opens:
+            opened.append({**base, "timestamp": opens[str(m.user_id)]})
         if lr >= message_id:
             read.append({**base, "timestamp": m.last_read_at})
         elif ld >= message_id:
             delivered.append({**base, "timestamp": m.last_delivered_at})
         else:
             sent.append({**base, "timestamp": None})
-    return {"read": read, "delivered": delivered, "sent": sent}
+    out = {"read": read, "delivered": delivered, "sent": sent}
+    if is_heart:
+        out["opened"] = opened
+    return out
 
 
 def seen_by(db: Session, conversation_id: int, message_id: int, exclude_user: int | None = None) -> list[dict]:

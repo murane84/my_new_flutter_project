@@ -87,10 +87,17 @@ String heartOpensLabel(DateTime when, {String prefix = 'Opens '}) {
 /// The heart's state line, for the pill under it: a timed heart's opening
 /// time (both sides), or — for the sender — the opened receipt. Null when
 /// there's nothing to say (a received, already-openable heart).
+///
+/// In a GROUP the sender sees a count instead of a time ("2 of 3 opened",
+/// "Opened by all") — who exactly is in Message info. [openCount] is how many
+/// members opened it, [openTotal] how many could (null if unknown).
 ({IconData icon, String text, bool warm})? heartStatus({
   required bool isMe,
   DateTime? unlockAt,
   DateTime? openedAt,
+  bool isGroup = false,
+  int openCount = 0,
+  int? openTotal,
 }) {
   if (unlockAt != null && DateTime.now().isBefore(unlockAt)) {
     return (
@@ -100,6 +107,25 @@ String heartOpensLabel(DateTime when, {String prefix = 'Opens '}) {
     );
   }
   if (!isMe) return null;
+  if (isGroup) {
+    if (openCount <= 0) {
+      return (
+        icon: Icons.favorite_border_rounded,
+        text: openTotal == null ? 'Not opened' : '0 of $openTotal opened',
+        warm: false,
+      );
+    }
+    if (openTotal != null && openCount >= openTotal) {
+      return (icon: Icons.favorite_rounded, text: 'Opened by all', warm: true);
+    }
+    return (
+      icon: Icons.favorite_rounded,
+      text: openTotal == null
+          ? '$openCount opened'
+          : '$openCount of $openTotal opened',
+      warm: true,
+    );
+  }
   if (openedAt != null) {
     return (
       icon: Icons.favorite_rounded,

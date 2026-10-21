@@ -196,6 +196,7 @@ def ensure_media_schema():
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS unlock_at TIMESTAMPTZ",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS sealed_content TEXT",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS opened_at TIMESTAMPTZ",
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS heart_opens TEXT",
         # Ozilane Key: opaque per-user subject, linked-at cache, two-step flag.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_subject VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_linked_at TIMESTAMPTZ",

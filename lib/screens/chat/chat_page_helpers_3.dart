@@ -1060,7 +1060,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 ),
               );
 
-          Widget seenPill(int readCount, int total) => Container(
+          Widget seenPill(int readCount, int total, {bool heart = false}) =>
+              Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                 decoration: BoxDecoration(
@@ -1070,10 +1071,17 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.visibility_rounded,
-                        size: 13, color: scheme.primary),
+                    Icon(
+                        heart
+                            ? Icons.favorite_rounded
+                            : Icons.visibility_rounded,
+                        size: 13,
+                        color: scheme.primary),
                     const SizedBox(width: 6),
-                    Text('Seen by $readCount of $total',
+                    Text(
+                        heart
+                            ? 'Opened by $readCount of $total'
+                            : 'Seen by $readCount of $total',
                         style: TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w700,
@@ -1118,6 +1126,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
               final read = (data['read'] as List?) ?? const [];
               final delivered = (data['delivered'] as List?) ?? const [];
               final sent = (data['sent'] as List?) ?? const [];
+              // Secret heart: the server adds who actually OPENED it.
+              final opened = data['opened'] as List?;
               final total = read.length + delivered.length + sent.length;
               return Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1128,7 +1138,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
                   titleBar(),
                   if (total > 0) ...[
                     const SizedBox(height: 8),
-                    Center(child: seenPill(read.length, total)),
+                    Center(
+                        child: opened != null
+                            ? seenPill(opened.length, total, heart: true)
+                            : seenPill(read.length, total)),
                   ],
                   const SizedBox(height: 12),
                   const Divider(height: 1),
@@ -1148,6 +1161,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
                         controller: scrollCtrl,
                         padding: const EdgeInsets.only(bottom: 16),
                         children: [
+                          if (opened != null)
+                            _infoSection('Opened the heart',
+                                Icons.favorite_rounded,
+                                const Color(0xFFE0447A), opened, scheme),
                           _infoSection('Read by', Icons.done_all_rounded,
                               const Color(0xFF1976D2), read, scheme),
                           _infoSection('Delivered to', Icons.done_all_rounded,

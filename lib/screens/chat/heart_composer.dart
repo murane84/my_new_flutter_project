@@ -10,9 +10,37 @@ extension _ChatHeartComposer on _ChatPageState {
   /// First open by me (the recipient) → the sender's "Opened 💗" receipt.
   void _reportHeartOpened(Map<String, dynamic> msg) {
     final id = int.tryParse(msg['id'].toString());
-    if (id == null || msg['opened_at'] != null) return;
-    msg['opened_at'] = DateTime.now().toUtc().toIso8601String();
+    if (id == null || _myId == null || _myHeartOpen(msg) != null) return;
+    final now = DateTime.now().toUtc().toIso8601String();
+    final opens = _heartOpens(msg)..[_myId!] = now;
+    msg['heart_opens'] = jsonEncode(opens);
+    msg['opened_at'] ??= now;
     unawaited(ApiService().heartOpened(id));
+  }
+
+  /// Who opened this heart: user id → ISO time (from `heart_opens`).
+  Map<String, String> _heartOpens(Map<String, dynamic> msg) {
+    final raw = msg['heart_opens'];
+    if (raw is! String || raw.isEmpty) return <String, String>{};
+    try {
+      final m = jsonDecode(raw);
+      if (m is Map) {
+        return m.map((k, v) => MapEntry(k.toString(), v.toString()));
+      }
+    } catch (_) {}
+    return <String, String>{};
+  }
+
+  /// When *I* opened it (null = not yet). DMs from before per-member opens
+  /// existed fall back to the single opened_at.
+  DateTime? _myHeartOpen(Map<String, dynamic> msg) {
+    final mine = _myId == null ? null : _heartOpens(msg)[_myId!];
+    if (mine != null && mine.isNotEmpty) return parseServerTime(mine);
+    if (!_isGroup) {
+      final o = (msg['opened_at'] ?? '').toString();
+      if (o.isNotEmpty) return parseServerTime(o);
+    }
+    return null;
   }
 
   /// A timed heart's moment passed but the note isn't here yet → fetch it.

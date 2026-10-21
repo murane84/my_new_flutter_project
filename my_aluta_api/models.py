@@ -133,7 +133,10 @@ class Message(Base):
     heart_mood = Column(String, nullable=True)            # love|miss|sorry|thanks|proud
     unlock_at = Column(DateTime(timezone=True), nullable=True)   # timed heart
     sealed_content = Column(Text, nullable=True)         # withheld note while sealed
-    opened_at = Column(DateTime(timezone=True), nullable=True)   # recipient opened
+    opened_at = Column(DateTime(timezone=True), nullable=True)   # FIRST open
+    # Every opener: JSON {"<user id>": "<iso time>"} — a DM has one entry, a
+    # group one per member who opened it (the "2 of 3 opened" count + info).
+    heart_opens = Column(Text, nullable=True)
 
     # New fields for visibility
     visible_to_sender = Column(Boolean, default=True)

@@ -92,6 +92,7 @@ class Message(BaseModel):
     heart_mood: Optional[str] = None
     unlock_at: Optional[datetime] = None
     opened_at: Optional[datetime] = None
+    heart_opens: Optional[str] = None   # JSON {uid: iso} — who opened it
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -120,6 +121,7 @@ class MessageWithSender(BaseModel):
     heart_mood: Optional[str] = None
     unlock_at: Optional[datetime] = None
     opened_at: Optional[datetime] = None
+    heart_opens: Optional[str] = None   # JSON {uid: iso} — who opened it
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -240,6 +242,8 @@ class MessageInfoOut(BaseModel):
     read: list[MessageInfoMember] = []
     delivered: list[MessageInfoMember] = []
     sent: list[MessageInfoMember] = []
+    # Secret hearts only: members who OPENED it (null for other messages).
+    opened: Optional[list[MessageInfoMember]] = None
 
 
 # ---------------------- CONTACTS SYNC ----------------------

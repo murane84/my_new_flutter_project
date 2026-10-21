@@ -1080,7 +1080,12 @@ class _ChatPageState extends State<ChatPage>
       if (mid != null) {
         final idx = _messages.indexWhere((m) => m['id'].toString() == mid);
         if (idx != -1) {
-          setState(() => _messages[idx]['opened_at'] = data!['opened_at']);
+          setState(() {
+            _messages[idx]['opened_at'] = data!['opened_at'];
+            if (data['heart_opens'] != null) {
+              _messages[idx]['heart_opens'] = data['heart_opens'];
+            }
+          });
           HapticFeedback.lightImpact();
         }
       }
@@ -3499,9 +3504,13 @@ class _ChatPageState extends State<ChatPage>
                   unlockAt: (msg['unlock_at'] ?? '').toString().isEmpty
                       ? null
                       : parseServerTime(msg['unlock_at'].toString()),
-                  openedAt: (msg['opened_at'] ?? '').toString().isEmpty
-                      ? null
-                      : parseServerTime(msg['opened_at'].toString()),
+                  // Sender: has anyone opened it. Receiver: have *I* (in a
+                  // group someone else opening it mustn't silence my heart).
+                  openedAt: isMe
+                      ? ((msg['opened_at'] ?? '').toString().isEmpty
+                          ? null
+                          : parseServerTime(msg['opened_at'].toString()))
+                      : _myHeartOpen(msg),
                   justSent: _freshHearts.remove(msgId),
                   onMenu: (pos) =>
                       _showMessageMenu(context, msg, anchor: pos),
@@ -3527,6 +3536,11 @@ class _ChatPageState extends State<ChatPage>
               openedAt: (msg['opened_at'] ?? '').toString().isEmpty
                   ? null
                   : parseServerTime(msg['opened_at'].toString()),
+              isGroup: _isGroup,
+              openCount: _heartOpens(msg).length,
+              openTotal: _groupMembers.length > 1
+                  ? _groupMembers.length - 1
+                  : null,
             );
             final showTime = showAvatar || isFirst;
             if (st == null && !showTime) return const SizedBox.shrink();

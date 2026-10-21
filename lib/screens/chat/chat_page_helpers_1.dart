@@ -859,6 +859,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
         ex['pinned_until'] = m['pinned_until'];
         // Secret hearts: receipt + timed-unseal state follow the server.
         ex['opened_at'] = m['opened_at'] ?? ex['opened_at'];
+        ex['heart_opens'] = m['heart_opens'] ?? ex['heart_opens'];
         ex['unlock_at'] = m['unlock_at'];
         ex['heart_mood'] = m['heart_mood'] ?? ex['heart_mood'];
         // Deletion is a ONE-WAY latch: once tombstoned locally (optimistic
@@ -912,6 +913,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
           a[i]['is_deleted'] != b[i]['is_deleted'] ||
           a[i]['pinned_until'] != b[i]['pinned_until'] ||
           a[i]['opened_at'] != b[i]['opened_at'] ||
+          a[i]['heart_opens'] != b[i]['heart_opens'] ||
           a[i]['unlock_at'] != b[i]['unlock_at'] ||
           a[i]['reactions'] != b[i]['reactions']) { return false; }
     }

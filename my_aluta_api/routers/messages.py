@@ -487,23 +487,44 @@ def heart_opened(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """The recipient opened a secret heart. Records the FIRST open and tells
-    the sender (live event + a tender push). Idempotent; the sender opening
-    their own heart is a no-op."""
+    """A recipient opened a secret heart. Records each member's FIRST open
+    (a DM has one opener, a group many) and tells the sender live + with a
+    tender push. Idempotent per user; the sender opening their own heart is a
+    no-op."""
+    import json
     m = _heart_or_404(db, message_id, current_user.id)
-    if int(m.sender_id) == int(current_user.id) or m.opened_at is not None \
-            or hearts.is_sealed(m):
+    if int(m.sender_id) == int(current_user.id) or hearts.is_sealed(m):
         return schemas.MessageWithSender.model_validate(m)
-    m.opened_at = datetime.now(timezone.utc)
+    try:
+        opens = json.loads(m.heart_opens) if m.heart_opens else {}
+        if not isinstance(opens, dict):
+            opens = {}
+    except Exception:
+        opens = {}
+    key = str(current_user.id)
+    if key in opens:
+        return schemas.MessageWithSender.model_validate(m)
+    now = datetime.now(timezone.utc)
+    opens[key] = now.isoformat()
+    m.heart_opens = json.dumps(opens)
+    if m.opened_at is None:
+        m.opened_at = now
     db.commit()
     db.refresh(m)
     validated = schemas.MessageWithSender.model_validate(m)
+    is_group = m.receiver_id is None
+    total = 1
+    if is_group and m.conversation_id:
+        total = max(0, len(crud_conversations.member_ids(db, m.conversation_id)) - 1)
     safe_notify_user(int(m.sender_id), {
         "type": "heart_opened",
         "data": {
             "message_id": m.id,
             "conversation_id": m.conversation_id,
             "opened_at": m.opened_at.isoformat(),
+            "heart_opens": m.heart_opens,
+            "opened_count": len(opens),
+            "total": total,
             "by_id": current_user.id,
             "by_name": current_user.username or "",
             "by_phone": getattr(current_user, "phone", None) or "",
@@ -514,8 +535,7 @@ def heart_opened(
         "sender_id": str(current_user.id),
         "sender_name": current_user.username or "Someone",
         # Groups only (DMs open by sender_id on the client).
-        "conversation_id": (str(m.conversation_id or "")
-                            if m.receiver_id is None else ""),
+        "conversation_id": (str(m.conversation_id or "") if is_group else ""),
         "message_id": str(m.id),
         "body": "",
     })

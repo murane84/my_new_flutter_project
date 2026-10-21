@@ -223,6 +223,10 @@ extension _HomePageHelpers2 on HomePageState {
                     label: 'Search in chat',
                     onTap: search),
                 GenieMenuEntry(
+                    icon: Icons.library_music_rounded,
+                    label: 'Songs, media & docs',
+                    onTap: () => chatMediaRequest.value++),
+                GenieMenuEntry(
                     icon: Icons.wallpaper_rounded,
                     label: 'Wallpaper',
                     onTap: openWallpaper),
@@ -256,6 +260,9 @@ extension _HomePageHelpers2 on HomePageState {
           children: [
             if (!compact) ...[
               seg(Icons.search_rounded, 'Search in chat', search),
+              divider(),
+              seg(Icons.library_music_rounded, 'Songs, media & docs',
+                  () => chatMediaRequest.value++),
               divider(),
               seg(Icons.wallpaper_rounded, 'Wallpaper', openWallpaper),
               divider(),

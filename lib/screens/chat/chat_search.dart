@@ -4,6 +4,9 @@ part of '../chat_page.dart';
 /// on whichever chat is showing.
 final ValueNotifier<int> chatSearchRequest = ValueNotifier<int>(0);
 
+/// Bumped by hosts to open the open chat's Songs · Media · Links · Docs.
+final ValueNotifier<int> chatMediaRequest = ValueNotifier<int>(0);
+
 // ── In-chat search ──────────────────────────────────────────────────────────
 // A frosted Aluta pill floats over the top of the thread: type, and every
 // match lights up in its bubble; ⌃/⌄ step through them newest → oldest with

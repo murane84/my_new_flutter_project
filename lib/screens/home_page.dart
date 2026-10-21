@@ -2374,6 +2374,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
                 case 'search':
                   chatSearchRequest.value++;
                   break;
+                case 'media':
+                  chatMediaRequest.value++;
+                  break;
                 case 'info':
                   _openGroupInfo();
                   break;
@@ -2398,6 +2401,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
                 value: 'search',
                 child: _groupMenuRow(
                     Icons.search_rounded, 'Search in chat', scheme),
+              ),
+              PopupMenuItem(
+                value: 'media',
+                child: _groupMenuRow(Icons.library_music_rounded,
+                    'Songs, media & docs', scheme),
               ),
               PopupMenuItem(
                 value: 'info',

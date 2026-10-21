@@ -558,6 +558,7 @@ class _ChatPageState extends State<ChatPage>
     _loadDraft();
     _scrollCtrl.addListener(_onScroll);
     chatSearchRequest.addListener(_onSearchRequest);
+    chatMediaRequest.addListener(_onMediaRequest);
     // Mirror the app-wide connection status so this banner never disagrees
     // with the home footer dot / header badge.
     _isUserOffline = !ConnectionStatus.instance.isOnline;
@@ -676,6 +677,7 @@ class _ChatPageState extends State<ChatPage>
   void dispose() {
     if (_isAtBottom) _markSeenUpToNewest();
     chatSearchRequest.removeListener(_onSearchRequest);
+    chatMediaRequest.removeListener(_onMediaRequest);
     _searchDebounce?.cancel();
     _searchCtrl.dispose();
     _searchFocus.dispose();
@@ -3447,6 +3449,10 @@ class _ChatPageState extends State<ChatPage>
   // history, sorts shared items into the three tabs, and — when the user taps
   // an item — jumps back to that message in the thread so playback / saving
   // reuses the thread's own handling. Links open directly.
+  void _onMediaRequest() {
+    if (mounted) _openMediaBrowser();
+  }
+
   Future<void> _openMediaBrowser() async {
     List<Map<String, dynamic>> msgs = const [];
     try {
@@ -3476,6 +3482,7 @@ class _ChatPageState extends State<ChatPage>
     final media = <MediaItem>[];
     final links = <LinkItem>[];
     final docs = <DocItem>[];
+    final songs = <SongItem>[];
     final linkRe = RegExp(r'https?://[^\s]+');
 
     for (final m in msgs) {
@@ -3505,7 +3512,25 @@ class _ChatPageState extends State<ChatPage>
               : '${d.day} ${months[d.month - 1].substring(0, 3)}',
           dateLabel: shortDate(ts),
         ));
-      } else if (type == 'file' || type == 'document' || type == 'song') {
+      } else if (type == 'song') {
+        final mine = m['sender_id']?.toString() == _myId;
+        final sender = mine
+            ? 'You'
+            : _isGroup
+                ? ((m['sender'] as Map?)?['username'] ?? 'Someone').toString()
+                : widget.friendName.split(' ').first;
+        final t = content.trim().isNotEmpty
+            ? content.trim()
+            : ((m['media_name'] as String?)?.trim() ?? 'Song');
+        songs.add(SongItem(
+          messageId: id,
+          title: t,
+          sender: sender,
+          mine: mine,
+          dateLabel: shortDate(ts),
+        ));
+        continue; // a song's title isn't a link
+      } else if (type == 'file' || type == 'document') {
         final name = (m['media_name'] as String?)?.trim();
         final size = (m['media_size'] as num?)?.toInt();
         docs.add(DocItem(
@@ -3539,6 +3564,7 @@ class _ChatPageState extends State<ChatPage>
           media: media,
           links: links,
           docs: docs,
+          songs: songs,
         ),
       ),
     );
@@ -5666,7 +5692,7 @@ class _ChatPageState extends State<ChatPage>
                   children: [
                     Icon(Icons.perm_media_outlined, size: 20),
                     SizedBox(width: 12),
-                    Text('Media, links & docs'),
+                    Text('Songs, media & docs'),
                   ],
                 ),
               ),

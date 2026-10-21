@@ -23,6 +23,22 @@ class MediaItem {
   });
 }
 
+/// One song shared in the conversation — the "songs we shared" shelf.
+class SongItem {
+  final String messageId;
+  final String title;
+  final String sender; // "You" or their name
+  final bool mine;
+  final String dateLabel;
+  const SongItem({
+    required this.messageId,
+    required this.title,
+    required this.sender,
+    required this.mine,
+    required this.dateLabel,
+  });
+}
+
 /// One link found in a text message.
 class LinkItem {
   final String messageId;
@@ -61,6 +77,7 @@ class ConversationMediaScreen extends StatefulWidget {
   final List<MediaItem> media;
   final List<LinkItem> links;
   final List<DocItem> docs;
+  final List<SongItem> songs;
 
   const ConversationMediaScreen({
     super.key,
@@ -68,6 +85,7 @@ class ConversationMediaScreen extends StatefulWidget {
     required this.media,
     required this.links,
     required this.docs,
+    this.songs = const [],
   });
 
   @override
@@ -77,7 +95,7 @@ class ConversationMediaScreen extends StatefulWidget {
 
 class _ConversationMediaScreenState extends State<ConversationMediaScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 3, vsync: this);
+  late final TabController _tabs = TabController(length: 4, vsync: this);
 
   @override
   void dispose() {
@@ -114,7 +132,10 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
           controller: _tabs,
           labelColor: scheme.primary,
           indicatorColor: scheme.primary,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           tabs: [
+            Tab(text: 'Songs (${widget.songs.length})'),
             Tab(text: 'Media (${widget.media.length})'),
             Tab(text: 'Links (${widget.links.length})'),
             Tab(text: 'Docs (${widget.docs.length})'),
@@ -124,6 +145,7 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
       body: TabBarView(
         controller: _tabs,
         children: [
+          _songsTab(scheme),
           _mediaTab(scheme),
           _linksTab(scheme),
           _docsTab(scheme),
@@ -296,6 +318,64 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
           onTap: () => _openLink(l.url),
         );
       },
+    );
+  }
+
+  /// Our soundtrack: every song either of us sent, newest first, with who
+  /// sent it — tap to go back to that moment in the chat.
+  Widget _songsTab(ColorScheme scheme) {
+    if (widget.songs.isEmpty) {
+      return _empty(scheme, Icons.library_music_outlined,
+          'No songs shared yet — your soundtrack starts here');
+    }
+    final mine = widget.songs.where((s) => s.mine).length;
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+          child: Row(children: [
+            Icon(Icons.favorite_rounded, size: 15, color: scheme.primary),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                '${widget.songs.length} songs shared · $mine from you, '
+                '${widget.songs.length - mine} to you',
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurfaceVariant),
+              ),
+            ),
+          ]),
+        ),
+        for (final s in widget.songs)
+          ListTile(
+            leading: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(colors: [
+                  Color.lerp(scheme.primary, Colors.white, 0.25)!,
+                  scheme.primary,
+                ]),
+              ),
+              child: const Icon(Icons.music_note_rounded,
+                  color: Colors.white, size: 20),
+            ),
+            title: Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+            subtitle: Text(
+              [s.mine ? 'You shared' : '${s.sender} shared', s.dateLabel]
+                  .where((e) => e.isNotEmpty)
+                  .join(' · '),
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+            ),
+            trailing: Icon(Icons.chevron_right_rounded,
+                color: scheme.onSurfaceVariant),
+            onTap: () => _jump(s.messageId),
+          ),
+      ],
     );
   }
 

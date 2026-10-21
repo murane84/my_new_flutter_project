@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:flutter/painting.dart' show Color;
+
 /// Aluta's mood of the moment — so the welcome, the loader and its captions
 /// feel like the app noticed the time of day, not like a machine repeating
 /// itself. Everything here is local and cheap: the clock, the weekday and a

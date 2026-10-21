@@ -84,7 +84,7 @@ extension _ChatMusicMoments on _ChatPageState {
   }
 
   /// Song bubble → "Dedicate to…" (groups): pick a member, send a tagged note.
-  Future<void> _dedicateSong(Map<String, dynamic> msg) async {
+  Future<void> _dedicateSongToMember(Map<String, dynamic> msg) async {
     if (!_isGroup) return;
     final title = ((msg['content'] as String?)?.trim().isNotEmpty == true
             ? (msg['content'] as String).trim()

@@ -3077,10 +3077,11 @@ class _ChatPageState extends State<ChatPage>
           }, short: 'Song'),
         // Groups: dedicate a shared song to a member.
         if (!deleted && _isGroup && (msg['message_type'] ?? '') == 'song')
-          _MenuAction('dedicate', Icons.card_giftcard_rounded, 'Dedicate to…',
+          _MenuAction('dedicate_member', Icons.card_giftcard_rounded,
+              'Dedicate to a member…',
               () {
             Navigator.pop(ctx);
-            _dedicateSong(msg);
+            _dedicateSongToMember(msg);
           }, short: 'Dedicate'),
         if (!deleted && hasMedia)
           _MenuAction('save', Icons.download_rounded, 'Save to device', () {

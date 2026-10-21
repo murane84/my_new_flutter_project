@@ -1503,6 +1503,13 @@ class _ChatPageState extends State<ChatPage>
             heartMood: heartMood,
             unlockAt: unlockAt));
         if (heart && sent != null) {
+          // A server that doesn't (yet) store heart fields echoes the message
+          // without them — keep what I chose so my bubble doesn't snap back to
+          // red "with love" / lose its seal.
+          sent['heart_mood'] ??= heartMood;
+          if (unlockAt != null) {
+            sent['unlock_at'] ??= unlockAt.toUtc().toIso8601String();
+          }
           final sid = sent['id'].toString();
           _freshHearts.add(sid);
           Timer(const Duration(milliseconds: 1200),

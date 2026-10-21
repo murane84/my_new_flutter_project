@@ -455,6 +455,8 @@ class _FormattedTextState extends State<FormattedText> {
     if (q.length < 2 || bg == null) return spans;
     InlineSpan walk(InlineSpan sp) {
       if (sp is! TextSpan) return sp;
+      // A still-hidden spoiler stays hidden — a highlight would reveal it.
+      if (sp.style?.background?.color == widget.spoilerCover) return sp;
       final kids = sp.children?.map(walk).toList();
       final t = sp.text;
       if (t == null || t.isEmpty || !t.toLowerCase().contains(q)) {

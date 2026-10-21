@@ -995,6 +995,15 @@ class _ChatPageState extends State<ChatPage>
 
   // ── WebSocket events ──────────────────────────────────────────────────────
 
+  // The "@" stepper / seen-avatar caches key on the _messages list identity,
+  // but many paths mutate it in place — so any rebuild drops them.
+  @override
+  void setState(VoidCallback fn) {
+    _mentionCacheOf = null;
+    _seenCacheOf = null;
+    super.setState(fn);
+  }
+
   void _handleWsEvent(Map<String, dynamic> event) {
     final type = event['type'];
     if (!mounted) return;
@@ -3527,7 +3536,8 @@ class _ChatPageState extends State<ChatPage>
       // The browser reaches further back than the thread holds — fold that
       // history in first so the jump can land on older items too.
       if (!_messages.any((m) => m['id'].toString() == jumpId)) {
-        final merged = _merge(_messages, msgs);
+        final merged = _merge(
+            _messages, msgs.where((m) => m['purged'] != true).toList());
         setState(() => _messages = merged);
         await WidgetsBinding.instance.endOfFrame;
         if (!mounted) return;

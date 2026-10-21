@@ -241,6 +241,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: TextField(
+                        key: ObjectKey(opts[i]),
                         controller: opts[i],
                         maxLength: 100,
                         textCapitalization: TextCapitalization.sentences,
@@ -258,9 +259,13 @@ extension _ChatPollsAdmin on _ChatPageState {
                                     ? IconButton(
                                         icon: const Icon(Icons.close_rounded,
                                             size: 18),
-                                        onPressed: () => setS(() {
-                                          opts.removeAt(i).dispose();
-                                        }),
+                                        onPressed: () {
+                                          final gone = opts[i];
+                                          setS(() => opts.removeAt(i));
+                                          WidgetsBinding.instance
+                                              .addPostFrameCallback(
+                                                  (_) => gone.dispose());
+                                        },
                                       )
                                     : null)
                             .copyWith(counterText: ''),
@@ -302,10 +307,14 @@ extension _ChatPollsAdmin on _ChatPageState {
         );
       }),
     );
-    q.dispose();
-    for (final c in opts) {
-      c.dispose();
-    }
+    // The sheet is still animating out (its fields still build) — dispose
+    // the controllers once it's fully gone.
+    Future.delayed(const Duration(milliseconds: 600), () {
+      q.dispose();
+      for (final c in opts) {
+        c.dispose();
+      }
+    });
     if (result == null || !mounted) return;
     _sendPoll(result);
   }

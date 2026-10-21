@@ -61,7 +61,9 @@ extension _ChatSearch on _ChatPageState {
             .fetchMessagesBetween(uid, widget.friendId, skip: 0, limit: 500);
       }
       if (!mounted || msgs.isEmpty) return;
-      final merged = _merge(_messages, msgs);
+      // Purged-after-delivery rows I never cached would be blank bubbles.
+      final merged =
+          _merge(_messages, msgs.where((m) => m['purged'] != true).toList());
       if (merged.length != _messages.length) {
         rebuildWith(() => _messages = merged);
         if (_searchTerm.length >= 2) _runSearch(jump: false);

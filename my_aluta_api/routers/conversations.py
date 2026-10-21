@@ -489,6 +489,7 @@ def vote_poll(
     msg = (
         db.query(Message)
         .filter(Message.id == mid, Message.conversation_id == cid)
+        .with_for_update()  # two voters at once must not overwrite each other
         .first()
     )
     if not msg or msg.is_deleted or (msg.message_type or "") != "poll":

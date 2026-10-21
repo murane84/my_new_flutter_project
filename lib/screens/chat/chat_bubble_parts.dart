@@ -366,7 +366,12 @@ class _VoiceNotePlayer extends StatefulWidget {
 
 class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
   static const _speeds = [1.0, 1.5, 2.0];
-  static double _speed = 1.0; // shared: the next note keeps your speed
+  // Shared: the next note keeps your speed, and every pill on screen follows.
+  static final ValueNotifier<double> _speedN = ValueNotifier<double>(1.0);
+  double get _speed => _speedN.value;
+  void _onSpeed() {
+    if (mounted) setState(() {});
+  }
   static _VoiceNotePlayerState? _active; // one note at a time
 
   final ja.AudioPlayer _player = ja.AudioPlayer();
@@ -402,6 +407,7 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
   void initState() {
     super.initState();
     _dur = Duration(milliseconds: widget.durationMs);
+    _speedN.addListener(_onSpeed);
     _posSub = _player.positionStream.listen((p) {
       if (mounted && _dragFrac == null) setState(() => _pos = p);
     });
@@ -417,6 +423,7 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
 
   @override
   void dispose() {
+    _speedN.removeListener(_onSpeed);
     if (identical(_active, this)) _active = null;
     _posSub?.cancel();
     _stateSub?.cancel();
@@ -424,25 +431,33 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
     super.dispose();
   }
 
-  Future<bool> _prepare() async {
+  // One shared load, so a tap followed by a quick drag doesn't start two
+  // setUrl calls (the first would throw "Loading interrupted").
+  Future<bool>? _prepFut;
+  Future<bool> _prepare() => _prepFut ??= _doPrepare();
+
+  Future<bool> _doPrepare() async {
     if (_prepared) return true;
     setState(() => _loading = true);
     try {
       final d = await _player.setUrl(widget.url,
           headers: mediaAuthHeaders(widget.url));
-      if (d != null && mounted) _dur = d;
+      if (!mounted) return false;
+      if (d != null) _dur = d;
       await _player.setSpeed(_speed);
       _prepared = true;
     } catch (_) {
+      _prepFut = null; // let a later tap retry
       if (mounted) setState(() => _loading = false);
       return false;
     }
-    if (mounted) setState(() => _loading = false);
+    if (!mounted) return false;
+    setState(() => _loading = false);
     return true;
   }
 
   Future<void> _toggle() async {
-    if (!await _prepare()) return;
+    if (!await _prepare() || !mounted) return;
     if (_player.playing) {
       await _player.pause();
     } else {
@@ -463,7 +478,7 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
     HapticFeedback.selectionClick();
     final i = _speeds.indexOf(_speed);
     final next = _speeds[(i + 1) % _speeds.length];
-    setState(() => _speed = next);
+    _speedN.value = next;
     if (_prepared) await _player.setSpeed(next);
   }
 
@@ -473,7 +488,7 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
   Future<void> _seekFrac(double f) async {
     final total = _totalMs;
     if (total <= 0) return;
-    if (!await _prepare()) return;
+    if (!await _prepare() || !mounted) return;
     final to = Duration(milliseconds: (total * f.clamp(0.0, 1.0)).round());
     setState(() => _pos = to);
     await _player.seek(to);

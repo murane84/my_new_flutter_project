@@ -391,6 +391,10 @@ class _ChatPageState extends State<ChatPage>
   // Per-message keys + highlight id, used to scroll to a quoted original.
   final Map<String, GlobalKey> _msgKeys = {};
   String? _highlightedId;
+  // Jump-to-message flash: pulse phase + a sequence id so a newer jump
+  // cancels an older one mid-flash.
+  bool _flashOn = false;
+  int _flashSeq = 0;
 
   // Styles *bold* _italic_ etc. live in the composer as you type.
   final _ctrl = FormattingTextController();
@@ -3040,20 +3044,12 @@ class _ChatPageState extends State<ChatPage>
 
   void _jumpToQuoted(String quoted) {
     final target = _findQuotedMessage(quoted);
-    if (target == null) return;
-    final ctx = _msgKeys[target['id'].toString()]?.currentContext;
-    if (ctx == null) return;
-    Scrollable.ensureVisible(
-      ctx,
-      duration: const Duration(milliseconds: 320),
-      alignment: 0.3,
-      curve: Curves.easeInOut,
-    );
-    HapticFeedback.selectionClick();
-    setState(() => _highlightedId = target['id'].toString());
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      if (mounted) setState(() => _highlightedId = null);
-    });
+    if (target == null) {
+      showToast(context, 'That message isn\'t on this device anymore',
+          type: ToastType.info);
+      return;
+    }
+    _jumpToMessage(target['id'].toString());
   }
 
   Future<void> _deleteMessage(int id, bool forAll) async {
@@ -3162,21 +3158,55 @@ class _ChatPageState extends State<ChatPage>
     WidgetsBinding.instance.addPostFrameCallback((_) => attempt());
   }
 
-  /// Scroll to a message by id and briefly highlight it.
-  void _jumpToMessage(String id) {
-    final ctx = _msgKeys[id]?.currentContext;
-    if (ctx == null) return;
-    Scrollable.ensureVisible(
+  /// Scroll to a message by id, then FLASH it so the eye lands on it.
+  ///
+  /// The list is lazy, so a far-away message may not be built yet (no
+  /// context): step the list toward it a screen at a time until it is, then
+  /// centre it. The flash only starts once the scroll has settled — two soft
+  /// pulses of the accent band + a little lift of the bubble, then a fade.
+  Future<void> _jumpToMessage(String id) async {
+    final seq = ++_flashSeq;
+    var ctx = _msgKeys[id]?.currentContext;
+    if (ctx == null && _scrollCtrl.hasClients) {
+      final idx = _messages.indexWhere((m) => m['id'].toString() == id);
+      if (idx == -1) return;
+      // reverse:true list → older messages sit at LARGER offsets.
+      for (var i = 0; i < 60 && ctx == null; i++) {
+        final pos = _scrollCtrl.position;
+        if (pos.pixels >= pos.maxScrollExtent) break;
+        final next = (pos.pixels + pos.viewportDimension * 0.9)
+            .clamp(0.0, pos.maxScrollExtent);
+        _scrollCtrl.jumpTo(next);
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted || seq != _flashSeq) return;
+        ctx = _msgKeys[id]?.currentContext;
+      }
+    }
+    if (ctx == null || !ctx.mounted) return;
+    await Scrollable.ensureVisible(
       ctx,
-      duration: const Duration(milliseconds: 320),
-      alignment: 0.3,
-      curve: Curves.easeInOut,
+      duration: const Duration(milliseconds: 380),
+      alignment: 0.4,
+      curve: Curves.easeOutCubic,
     );
+    if (!mounted || seq != _flashSeq) return;
     HapticFeedback.selectionClick();
-    setState(() => _highlightedId = id);
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      if (mounted) setState(() => _highlightedId = null);
-    });
+    // Pulse: on · off · on · then fade out.
+    const steps = <(bool, int)>[(true, 300), (false, 220), (true, 900)];
+    for (final st in steps) {
+      if (!mounted || seq != _flashSeq) return;
+      setState(() {
+        _highlightedId = id;
+        _flashOn = st.$1;
+      });
+      await Future.delayed(Duration(milliseconds: st.$2));
+    }
+    if (mounted && seq == _flashSeq) {
+      setState(() {
+        _highlightedId = null;
+        _flashOn = false;
+      });
+    }
   }
 
   // Open the per-conversation Media / Links / Docs browser. Pulls a window of
@@ -3673,18 +3703,28 @@ class _ChatPageState extends State<ChatPage>
 
     final msgId = msg['id'].toString();
     final key = _msgKeys.putIfAbsent(msgId, () => GlobalKey());
+    final flashing = _highlightedId == msgId && _flashOn;
     return AnimatedContainer(
       key: key,
-      duration: const Duration(milliseconds: 300),
-      color: _highlightedId == msgId
-          ? scheme.primary.withAlpha(30)
+      duration: Duration(milliseconds: flashing ? 180 : 520),
+      curve: Curves.easeOut,
+      // A full-width accent band behind the jumped-to message, like a marker
+      // swipe — strong enough to catch the eye, gone in about a second.
+      color: flashing
+          ? scheme.primary.withValues(alpha: isDark ? 0.30 : 0.20)
           : Colors.transparent,
       padding: EdgeInsets.only(
         top: topPad,
         left: isMe ? 56 : 6,
         right: isMe ? 6 : 56,
       ),
-      child: Column(
+      child: AnimatedScale(
+        // …and the bubble itself lifts a touch while it flashes.
+        scale: flashing ? 1.025 : 1.0,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutBack,
+        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: Column(
         crossAxisAlignment:
             isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
@@ -4092,6 +4132,7 @@ class _ChatPageState extends State<ChatPage>
               ),
             ),
         ],
+      ),
       ),
     );
   }

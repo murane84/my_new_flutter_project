@@ -84,11 +84,21 @@ class _EditBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // A floating card on the wallpaper (like a bubble), not a flat strip.
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin: const EdgeInsets.fromLTRB(10, 6, 10, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        border: Border(left: BorderSide(color: scheme.primary, width: 3)),
+        color: scheme.surface.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.45)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -142,10 +152,18 @@ class _OfflineBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // A floating pill on the wallpaper rather than a full-width strip.
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       height: isOffline ? 38 : 0,
-      color: scheme.errorContainer,
+      margin: isOffline
+          ? const EdgeInsets.fromLTRB(10, 6, 10, 0)
+          : EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: scheme.errorContainer,
+        borderRadius: BorderRadius.circular(19),
+      ),
       child: isOffline
           ? Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),

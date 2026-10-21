@@ -4915,28 +4915,55 @@ class _ChatPageState extends State<ChatPage>
                   : Border.all(color: scheme.outlineVariant.withAlpha(70)),
             ),
             clipBehavior: Clip.antiAlias,
+            // The wallpaper fills the WHOLE card — under the composer too —
+            // so the typing area floats on it. Messages stay above the
+            // composer and dissolve into the wallpaper just before it.
+            child: Stack(
+              children: [
+                // ── Chat wallpaper background ─────────────────────────────
+                Positioned.fill(
+                  child: ValueListenableBuilder<int>(
+                    valueListenable: chatBgRevision,
+                    builder: (ctx, _, _) {
+                      final bg = chatBackgroundFor(_convKey);
+                      if (bg.isPhoto) {
+                        return _chatPhotoWallpaper(bg, isDark);
+                      }
+                      if (bg.isMotif) {
+                        return _chatMotifWallpaper(scheme, isDark);
+                      }
+                      return _ChatWallpaper(
+                          isDark: isDark, brand: scheme.primary);
+                    },
+                  ),
+                ),
+                Column(
+                  children: [
+                    Expanded(
             child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : Stack(
                   children: [
-                    // ── Chat wallpaper background ─────────────────────────
-                    Positioned.fill(
-                      child: ValueListenableBuilder<int>(
-                        valueListenable: chatBgRevision,
-                        builder: (ctx, _, _) {
-                          final bg = chatBackgroundFor(_convKey);
-                          if (bg.isPhoto) {
-                            return _chatPhotoWallpaper(bg, isDark);
-                          }
-                          if (bg.isMotif) {
-                            return _chatMotifWallpaper(scheme, isDark);
-                          }
-                          return _ChatWallpaper(
-                              isDark: isDark, brand: scheme.primary);
-                        },
-                      ),
-                    ),
-                    GestureDetector(
+                    // Bubbles fade out over the last ~28px above the
+                    // composer instead of being cut off by a hard edge.
+                    ShaderMask(
+                      blendMode: BlendMode.dstIn,
+                      shaderCallback: (r) {
+                        final f = r.height <= 0
+                            ? 0.0
+                            : (28 / r.height).clamp(0.0, 0.4);
+                        return LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: const [
+                            Colors.white,
+                            Colors.white,
+                            Colors.transparent
+                          ],
+                          stops: [0.0, 1.0 - f, 1.0],
+                        ).createShader(r);
+                      },
+                      child: GestureDetector(
                       // Tapping the conversation drops the text-field focus so
                       // the cursor leaves and the keyboard slides away smoothly,
                       // and closes the emoji sheet.
@@ -5026,6 +5053,7 @@ class _ChatPageState extends State<ChatPage>
                       ),
                       ),
                       ),
+                    ),
                     ),
                     // New messages chip
                     if (_hasNewMsg)
@@ -5130,10 +5158,32 @@ class _ChatPageState extends State<ChatPage>
                     if (_viewerImages != null) _buildInlineViewer(),
                   ],
                 ),
+                    ),
+                    // Input — floating on the wallpaper, over a soft tint
+                    // that rises from the bottom edge for legibility.
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Color.alphaBlend(
+                                scheme.primary.withValues(
+                                    alpha: isDark ? 0.10 : 0.06),
+                                scheme.surface)
+                                .withValues(alpha: isDark ? 0.55 : 0.45),
+                          ],
+                        ),
+                      ),
+                      child: _buildInput(isDark),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
-        // Input
-        _buildInput(isDark),
       ],
     );
 

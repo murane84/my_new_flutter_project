@@ -3717,7 +3717,20 @@ class _ChatPageState extends State<ChatPage>
             final showTime = showAvatar || isFirst;
             if (st == null && !showTime) return const SizedBox.shrink();
             final warm = st?.warm == true;
-            final rose = Color.lerp(accent, Colors.white, 0.55)!;
+            // A quiet, near-colourless frosted pill (like a bubble's own
+            // timestamp, not a badge): frosted glass in the page's tone with
+            // neutral grey text — dark grey on light, soft white on dark — so
+            // it reads on any wallpaper or theme without competing.
+            final ink = isDark
+                ? Colors.white.withValues(alpha: 0.78)
+                : const Color(0xFF5E5A5C);
+            final inkSoft = isDark
+                ? Colors.white.withValues(alpha: 0.55)
+                : const Color(0xFF8A8587);
+            // Opened: the theme colour, toned to stay subtle.
+            final rose = isDark
+                ? Color.lerp(accent, Colors.white, 0.45)!
+                : Color.lerp(accent, Colors.black, 0.15)!;
             return Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Align(
@@ -3731,10 +3744,14 @@ class _ChatPageState extends State<ChatPage>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 9, vertical: 3.5),
                       decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.46),
+                        color: isDark
+                            ? Colors.black.withValues(alpha: 0.30)
+                            : Colors.white.withValues(alpha: 0.55),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.10)),
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.black.withValues(alpha: 0.05)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -3742,14 +3759,14 @@ class _ChatPageState extends State<ChatPage>
                           if (st != null) ...[
                             Icon(st.icon,
                                 size: 11.5,
-                                color: warm ? rose : Colors.white70),
+                                color: warm ? rose : inkSoft),
                             const SizedBox(width: 4),
                             Text(st.text,
                                 style: TextStyle(
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: 0.2,
-                                    color: warm ? rose : Colors.white)),
+                                    color: warm ? rose : ink)),
                             if (showTime)
                               Container(
                                 width: 3,
@@ -3757,7 +3774,7 @@ class _ChatPageState extends State<ChatPage>
                                 margin:
                                     const EdgeInsets.symmetric(horizontal: 6),
                                 decoration: const BoxDecoration(
-                                  color: Colors.white54,
+                                  color: inkSoft,
                                   shape: BoxShape.circle,
                                 ),
                               ),
@@ -3765,12 +3782,14 @@ class _ChatPageState extends State<ChatPage>
                           if (showTime) ...[
                             Text(_timeOnly(msg['timestamp'] ?? ''),
                                 style: const TextStyle(
-                                    fontSize: 10.5, color: Colors.white)),
+                                    fontSize: 10.5, color: ink)),
                             if (isMe) ...[
                               const SizedBox(width: 3),
                               _buildStatusIcon(msg,
-                                  muted: Colors.white70,
-                                  read: const Color(0xFF9FD0FF)),
+                                  muted: inkSoft,
+                                  read: isDark
+                                      ? const Color(0xFF9FD0FF)
+                                      : const Color(0xFF1E88E5)),
                             ],
                           ],
                         ],

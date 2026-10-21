@@ -481,8 +481,15 @@ class _HeartBubbleState extends State<HeartBubble>
 
   // ── Hold-to-open ritual ────────────────────────────────────────────────────
 
+  // Hold-to-open is the RECIPIENT's ritual. On my own sent hearts a hold
+  // opens the message menu (Message info, delete…) like any bubble, and a
+  // tap peeks at what I wrote.
   bool get _canHold =>
-      !_revealedInHeart && !_sealedByTime && !_awaitingNote && !_opening;
+      !widget.isMe &&
+      !_revealedInHeart &&
+      !_sealedByTime &&
+      !_awaitingNote &&
+      !_opening;
 
   void _pointerDown(PointerDownEvent e) {
     _swallowTap = false;
@@ -585,6 +592,14 @@ class _HeartBubbleState extends State<HeartBubble>
       _syncBeat();
       return;
     }
+    if (widget.isMe &&
+        !_revealedInHeart &&
+        !_sealedByTime &&
+        !_awaitingNote &&
+        !_opening) {
+      unawaited(_peekOwn());
+      return;
+    }
     if (_sealedByTime || _awaitingNote) {
       HapticFeedback.selectionClick();
       _hintTimer?.cancel();
@@ -592,6 +607,18 @@ class _HeartBubbleState extends State<HeartBubble>
       _hintTimer = Timer(const Duration(milliseconds: 2200), () {
         if (mounted) setState(() => _hint = false);
       });
+    }
+  }
+
+  /// Tap on my own heart: peek at it (behind the unlock when the lock is on).
+  Future<void> _peekOwn() async {
+    _opening = true;
+    final ok = await HeartLock.instance.ensureUnlocked('Open your heart');
+    if (!mounted) return;
+    _opening = false;
+    if (ok) {
+      _open();
+      _swallowTap = false; // no finger-lift tap follows a tap-open
     }
   }
 
@@ -855,7 +882,7 @@ class _HeartBubbleState extends State<HeartBubble>
       line = 'opening…';
     } else {
       icon = _hint ? Icons.touch_app_rounded : _mood.icon;
-      line = _hint ? 'hold to open' : _mood.cover;
+      line = _hint ? (widget.isMe ? 'tap to peek' : 'hold to open') : _mood.cover;
     }
     return Column(
       key: ValueKey('cover-$sealed-$_hint-$_awaitingNote'),
@@ -874,7 +901,7 @@ class _HeartBubbleState extends State<HeartBubble>
         ),
         if (!sealed && !_awaitingNote && !_hint) ...[
           const SizedBox(height: 2),
-          Text('hold to open',
+          Text(widget.isMe ? 'tap to peek · hold for options' : 'hold to open',
               style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.7),
                   fontSize: 9,

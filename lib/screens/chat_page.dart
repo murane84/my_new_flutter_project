@@ -49,6 +49,7 @@ import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'user_profile_sheet.dart';
 import 'home_page.dart' show playlistNotifier, playbackBus;
+import '../state/playback_state.dart' show providerContainer, nowPlayingProvider;
 import 'relationship_space_page.dart' show spaceEventBus;
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
@@ -100,6 +101,7 @@ part 'chat/chat_search.dart';         // in-chat search pill + hit stepping
 part 'chat/chat_mentions_seen.dart';  // "@" stepper + DM seen avatar
 part 'chat/chat_polls_admin.dart';    // group admins + polls
 part 'chat/chat_rituals.dart';        // good night + on this day
+part 'chat/chat_music_moments.dart';  // song reactions, dedications, voice-over-music
 
 // ─── Timestamp helpers ───────────────────────────────────────────────────────
 
@@ -457,6 +459,8 @@ class _ChatPageState extends State<ChatPage>
   bool _gnDoneToday = false;
   bool _memoryDoneToday = false;
   bool _annivToday = false;
+  // Song playing when the current voice note started (its caption).
+  String? _recordSong;
   bool _amAdmin = false;
   final Set<String> _mentionCleared = {};
   List<Map<String, dynamic>>? _mentionCacheOf;
@@ -2229,6 +2233,8 @@ class _ChatPageState extends State<ChatPage>
         path: path,
       );
       _recordMs = 0;
+      // Recording over music → remember the song for the note's caption.
+      _recordSong = _nowPlayingTitle();
       setState(() => _isRecording = true);
       // Tell peers I'm recording (refreshed so their indicator stays alive).
       _iTyping = false;
@@ -2285,7 +2291,9 @@ class _ChatPageState extends State<ChatPage>
         mime: 'audio/mp4',
         type: 'audio',
         durationMs: durationMs,
+        caption: _voiceMusicCaption(),
       );
+      _recordSong = null;
     } catch (_) {
       if (mounted) showToast(context, 'Could not send recording', type: ToastType.error);
     } finally {
@@ -3049,6 +3057,20 @@ class _ChatPageState extends State<ChatPage>
             Navigator.pop(ctx);
             _showForwardPicker(msg);
           }),
+        // React with the song playing right now (a vinyl chip).
+        if (!deleted && !isHeart && _nowPlayingTitle().isNotEmpty)
+          _MenuAction('songreact', Icons.album_rounded,
+              'React with “${_clip(_nowPlayingTitle(), 28)}”', () {
+            Navigator.pop(ctx);
+            _reactWithSong(msg);
+          }, short: 'Song'),
+        // Groups: dedicate a shared song to a member.
+        if (!deleted && _isGroup && (msg['message_type'] ?? '') == 'song')
+          _MenuAction('dedicate', Icons.card_giftcard_rounded, 'Dedicate to…',
+              () {
+            Navigator.pop(ctx);
+            _dedicateSong(msg);
+          }, short: 'Dedicate'),
         if (!deleted && hasMedia)
           _MenuAction('save', Icons.download_rounded, 'Save to device', () {
             Navigator.pop(ctx);
@@ -3824,17 +3846,20 @@ class _ChatPageState extends State<ChatPage>
                   for (final e in rx)
                     GestureDetector(
                       onTap: () => _addReaction(msg, e),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: scheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: scheme.outlineVariant.withAlpha(80)),
-                        ),
-                        child: AnimatedReaction(emoji: e, size: 15),
-                      ),
+                      child: _isSongReaction(e)
+                          ? _songReactionChip(e, scheme)
+                          : Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: scheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                    color:
+                                        scheme.outlineVariant.withAlpha(80)),
+                              ),
+                              child: AnimatedReaction(emoji: e, size: 15),
+                            ),
                     ),
                 ],
               ),
@@ -4554,6 +4579,12 @@ class _ChatPageState extends State<ChatPage>
               child: Wrap(
                 spacing: 2,
                 children: reactions.map((e) {
+                  if (_isSongReaction(e)) {
+                    return GestureDetector(
+                      onTap: () => _addReaction(msg, e),
+                      child: _songReactionChip(e, scheme),
+                    );
+                  }
                   return GestureDetector(
                     onTap: () => _addReaction(msg, e),
                     child: Container(

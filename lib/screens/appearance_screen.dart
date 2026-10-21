@@ -238,171 +238,9 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
             ),
           ],
           const SizedBox(height: 18),
-          isWide
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-          _sectionLabel(scheme, 'WALLPAPER CLARITY'),
-          const SizedBox(height: 4),
-          ValueListenableBuilder<double>(
-            valueListenable: wallpaperClarity,
-            builder: (_, v, _) => Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Text('Faint',
-                        style: TextStyle(
-                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
-                    Expanded(
-                      child: Slider(
-                        value: v,
-                        onChanged: (nv) => setWallpaperClarity(nv),
-                      ),
-                    ),
-                    Text('Clear',
-                        style: TextStyle(
-                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
-                  ],
-                ),
-                if (_showGuide)
-                  Text(
-                    'How strongly chat & Space wallpapers show through. Slide '
-                    'toward Clear for a vivid picture, or Faint for a subtle '
-                    'backdrop. Buttons and cards always stay sharp on top.',
-                    style: TextStyle(
-                        fontSize: 12, color: scheme.onSurfaceVariant),
-                  ),
-              ],
-            ),
-          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 24),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-          _sectionLabel(scheme, 'THEME COLOUR STRENGTH'),
-          const SizedBox(height: 4),
-          ValueListenableBuilder<double>(
-            valueListenable: motifStrength,
-            builder: (_, v, _) => Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Text('Soft',
-                        style: TextStyle(
-                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
-                    Expanded(
-                      child: Slider(
-                        value: v,
-                        onChanged: (nv) => setMotifStrength(nv),
-                      ),
-                    ),
-                    Text('Bold',
-                        style: TextStyle(
-                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
-                  ],
-                ),
-                if (_showGuide)
-                  Text(
-                    'How concentrated the default theme-colour backdrop (the '
-                    'hearts-and-glow motif shown when a chat or Space has no '
-                    'photo wallpaper) appears. Slide toward Bold for richer '
-                    'colour — it is entirely your call.',
-                    style: TextStyle(
-                        fontSize: 12, color: scheme.onSurfaceVariant),
-                  ),
-              ],
-            ),
-          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-          _sectionLabel(scheme, 'WALLPAPER CLARITY'),
-          const SizedBox(height: 4),
-          ValueListenableBuilder<double>(
-            valueListenable: wallpaperClarity,
-            builder: (_, v, _) => Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Text('Faint',
-                        style: TextStyle(
-                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
-                    Expanded(
-                      child: Slider(
-                        value: v,
-                        onChanged: (nv) => setWallpaperClarity(nv),
-                      ),
-                    ),
-                    Text('Clear',
-                        style: TextStyle(
-                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
-                  ],
-                ),
-                if (_showGuide)
-                  Text(
-                    'How strongly chat & Space wallpapers show through. Slide '
-                    'toward Clear for a vivid picture, or Faint for a subtle '
-                    'backdrop. Buttons and cards always stay sharp on top.',
-                    style: TextStyle(
-                        fontSize: 12, color: scheme.onSurfaceVariant),
-                  ),
-              ],
-            ),
-          ),
-                    const SizedBox(height: 18),
-          _sectionLabel(scheme, 'THEME COLOUR STRENGTH'),
-          const SizedBox(height: 4),
-          ValueListenableBuilder<double>(
-            valueListenable: motifStrength,
-            builder: (_, v, _) => Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Text('Soft',
-                        style: TextStyle(
-                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
-                    Expanded(
-                      child: Slider(
-                        value: v,
-                        onChanged: (nv) => setMotifStrength(nv),
-                      ),
-                    ),
-                    Text('Bold',
-                        style: TextStyle(
-                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
-                  ],
-                ),
-                if (_showGuide)
-                  Text(
-                    'How concentrated the default theme-colour backdrop (the '
-                    'hearts-and-glow motif shown when a chat or Space has no '
-                    'photo wallpaper) appears. Slide toward Bold for richer '
-                    'colour — it is entirely your call.',
-                    style: TextStyle(
-                        fontSize: 12, color: scheme.onSurfaceVariant),
-                  ),
-              ],
-            ),
-          ),
-                  ],
-                ),
+          _sectionLabel(scheme, 'BACKDROP'),
+          const SizedBox(height: 10),
+          _BackdropSlidersCard(isWide: isWide, showGuide: _showGuide),
           if (_showGuide) ...[
             const SizedBox(height: 18),
             Container(
@@ -538,49 +376,112 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
       (title: 'Neutral', items: _accents.sublist(21, 22)),
       (title: 'Neon', items: _accents.sublist(22)),
     ];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    Widget block(({String title, List<_Accent> items}) g) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              g.title,
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.2,
-                  color: scheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 14,
-              runSpacing: 14,
-              children: [
-                for (final a in g.items) _accentDot(context, theme, scheme, a),
-              ],
-            ),
-          ],
+    // One family = a label column + a tidy wrap of compact dots. Labels share
+    // a fixed width so every row's dots start on the same line.
+    Widget family(({String title, List<_Accent> items}) g, double labelW) =>
+        labelW == 0
+            // Phone: label on top, so a full family of six fits one row.
+            ? Padding(
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(g.title,
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: scheme.onSurfaceVariant)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        for (final a in g.items)
+                          _accentDot(context, theme, scheme, a),
+                      ],
+                    ),
+                  ],
+                ),
+              )
+            : Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: labelW,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                    g.title,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurfaceVariant),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final a in g.items)
+                      _accentDot(context, theme, scheme, a),
+                  ],
+                ),
+              ),
+            ],
+          ),
         );
 
-    if (isWide) {
-      // Each family is a fixed-width block; they wrap across the full width.
-      return [
-        Wrap(
-          spacing: 30,
-          runSpacing: 22,
-          children: [
-            for (final g in groups) SizedBox(width: 300, child: block(g)),
-          ],
+    return [
+      DecoratedBox(
+        decoration: _raisedCardDecoration(scheme, isDark),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+          child: LayoutBuilder(builder: (ctx, c) {
+            // Wide: two balanced columns of families. Narrow: one column with
+            // a slimmer label so six dots still fit a phone row.
+            final twoCols = c.maxWidth >= 720;
+            final labelW = twoCols ? 128.0 : (c.maxWidth >= 480 ? 112.0 : 0.0);
+            Widget column(List<({String title, List<_Accent> items})> gs) =>
+                Column(
+                  children: [
+                    for (var i = 0; i < gs.length; i++) ...[
+                      if (i > 0)
+                        Divider(
+                            height: 1,
+                            color: scheme.outlineVariant
+                                .withValues(alpha: 0.35)),
+                      family(gs[i], labelW),
+                    ],
+                  ],
+                );
+            if (!twoCols) return column(groups);
+            return IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: column(groups.sublist(0, 4))),
+                  VerticalDivider(
+                      width: 28,
+                      color: scheme.outlineVariant.withValues(alpha: 0.35)),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: column(groups.sublist(4)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
         ),
-      ];
-    }
-    // Narrow (mobile): stack the families; dots already fill the phone width.
-    final out = <Widget>[];
-    for (var i = 0; i < groups.length; i++) {
-      if (i > 0) out.add(const SizedBox(height: 14));
-      out.add(block(groups[i]));
-    }
-    return out;
+      ),
+    ];
   }
 
   // A single clean accent dot: colour circle, glow, ring + check when picked.
@@ -594,27 +495,177 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
         onTap: () => theme.setAccent(a.color),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
-          width: 46,
-          height: 46,
+          width: 38,
+          height: 38,
           decoration: BoxDecoration(
             color: a.color,
             shape: BoxShape.circle,
+            // Picked: a white gap + its own colour ring around it (modern
+            // "selected swatch" look) instead of a heavy dark border.
             border: Border.all(
-              color: selected ? scheme.onSurface : Colors.transparent,
-              width: selected ? 3 : 0,
+              color: selected ? scheme.surface : Colors.transparent,
+              width: selected ? 2.5 : 0,
             ),
             boxShadow: [
+              if (selected)
+                BoxShadow(color: a.color, spreadRadius: 2.5, blurRadius: 0),
               BoxShadow(
-                color: a.color.withAlpha(selected ? 150 : 55),
-                blurRadius: selected ? 14 : 6,
-                spreadRadius: selected ? 1 : 0,
+                color: a.color.withAlpha(selected ? 120 : 45),
+                blurRadius: selected ? 12 : 5,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
           child: selected
-              ? const Icon(Icons.check_rounded, color: Colors.white, size: 20)
+              ? const Icon(Icons.check_rounded, color: Colors.white, size: 18)
               : null,
         ),
+      ),
+    );
+  }
+}
+
+/// Wallpaper clarity + theme-colour strength, together in one raised card:
+/// each control gets an icon chip, a title, a live % badge and a slider with
+/// its end labels. Side by side on wide screens, stacked on phones.
+class _BackdropSlidersCard extends StatelessWidget {
+  const _BackdropSlidersCard({required this.isWide, required this.showGuide});
+  final bool isWide;
+  final bool showGuide;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    Widget control({
+      required IconData icon,
+      required String title,
+      required ValueListenable<double> value,
+      required ValueChanged<double> onChanged,
+      required String low,
+      required String high,
+      required String guide,
+    }) {
+      return ValueListenableBuilder<double>(
+        valueListenable: value,
+        builder: (_, v, _) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                _accentIconChip(scheme, icon),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(title,
+                      style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface)),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text('${(v * 100).round()}%',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: scheme.primary)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                SizedBox(
+                  width: 40,
+                  child: Text(low,
+                      style: TextStyle(
+                          fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                ),
+                Expanded(
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 5,
+                      inactiveTrackColor:
+                          scheme.primary.withValues(alpha: 0.14),
+                      overlayShape:
+                          const RoundSliderOverlayShape(overlayRadius: 16),
+                    ),
+                    child: Slider(value: v, onChanged: onChanged),
+                  ),
+                ),
+                SizedBox(
+                  width: 40,
+                  child: Text(high,
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                          fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                ),
+              ],
+            ),
+            if (showGuide)
+              Text(guide,
+                  style:
+                      TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+          ],
+        ),
+      );
+    }
+
+    final clarity = control(
+      icon: Icons.wallpaper_rounded,
+      title: 'Wallpaper clarity',
+      value: wallpaperClarity,
+      onChanged: setWallpaperClarity,
+      low: 'Faint',
+      high: 'Clear',
+      guide: 'How strongly chat & Space photo wallpapers show through. '
+          'Buttons and bubbles always stay sharp on top.',
+    );
+    final strength = control(
+      icon: Icons.format_color_fill_rounded,
+      title: 'Theme colour strength',
+      value: motifStrength,
+      onChanged: setMotifStrength,
+      low: 'Soft',
+      high: 'Bold',
+      guide: 'How rich the theme-colour backdrops look — the Motif hearts '
+          'and the Aluta Watermark.',
+    );
+
+    return DecoratedBox(
+      decoration: _raisedCardDecoration(scheme, isDark),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+        child: isWide
+            ? IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: clarity),
+                    VerticalDivider(
+                        width: 28,
+                        color:
+                            scheme.outlineVariant.withValues(alpha: 0.35)),
+                    Expanded(child: strength),
+                  ],
+                ),
+              )
+            : Column(
+                children: [
+                  clarity,
+                  Divider(
+                      height: 22,
+                      color: scheme.outlineVariant.withValues(alpha: 0.35)),
+                  strength,
+                ],
+              ),
       ),
     );
   }

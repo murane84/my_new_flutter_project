@@ -302,7 +302,16 @@ extension _ChatPageHelpers3 on _ChatPageState {
       }
 
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/$name');
+      // Each attachment gets its OWN temp subfolder, keyed by the unique
+      // attachment id in its URL, so two files that share a display name
+      // (e.g. two 'app-release.apk' builds) never collide and open the
+      // wrong one. The file keeps its real name for the installer prompt.
+      final seg = Uri.parse(url).pathSegments;
+      final keyId = (seg.isNotEmpty ? seg.last : '${url.hashCode}')
+          .replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
+      final holder = Directory('${dir.path}/aluta_open/$keyId');
+      if (!await holder.exists()) await holder.create(recursive: true);
+      final file = File('${holder.path}/$name');
       final expected = (msg['media_size'] as num?)?.toInt() ?? 0;
 
       Future<bool> isComplete(File f) async {

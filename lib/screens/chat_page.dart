@@ -5128,14 +5128,14 @@ class _ChatPageState extends State<ChatPage>
               ? const Center(child: CircularProgressIndicator())
               : Stack(
                   children: [
-                    // Bubbles fade out over the last ~22px above the
+                    // Bubbles fade out over the last ~10px above the
                     // composer instead of being cut off by a hard edge.
                     ShaderMask(
                       blendMode: BlendMode.dstIn,
                       shaderCallback: (r) {
                         final f = r.height <= 0
                             ? 0.0
-                            : (22 / r.height).clamp(0.0, 0.4);
+                            : (10 / r.height).clamp(0.0, 0.4);
                         return LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
@@ -5167,7 +5167,7 @@ class _ChatPageState extends State<ChatPage>
                         // rest the newest bubble — footer and all — sits
                         // fully ABOVE the fade; only scrolled-away bubbles
                         // dissolve into it.
-                        padding: const EdgeInsets.fromLTRB(4, 8, 4, 30),
+                        padding: const EdgeInsets.fromLTRB(4, 8, 4, 14),
                         itemCount: _messages.length + 1,
                         itemBuilder: (ctx, i) {
                           // Reversed list: index 0 is the bottom. A persistent

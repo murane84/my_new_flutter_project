@@ -218,24 +218,63 @@ def send_message(
     # Best-effort push to the other members.
     preview = crud.list_preview(msg)
     is_group = bool(conv.is_group)
+    # Resolve the @-mention set: everyone (minus sender) for "@all", otherwise
+    # the tagged ids intersected with real members.
+    member_set = {int(u) for u in members}
+    mention_all = bool(getattr(payload, "mention_all", False))
+    if mention_all:
+        mentioned = {u for u in member_set if u != current_user.id}
+    else:
+        mentioned = set()
+        for u in (getattr(payload, "mentions", None) or []):
+            try:
+                u = int(u)
+            except (TypeError, ValueError):
+                continue
+            if u in member_set and u != current_user.id:
+                mentioned.add(u)
+    if mentioned:
+        # Tell tagged members live so the client can badge/highlight the thread.
+        safe_broadcast_users(
+            list(mentioned),
+            {
+                "type": "mention",
+                "conversation_id": cid,
+                "message_id": msg.id,
+                "sender_id": current_user.id,
+                "sender_name": (current_user.username or ""),
+                "sender_phone": (getattr(current_user, "phone", None) or ""),
+                "group_title": (conv.title or "") if is_group else "",
+                "all": mention_all,
+            },
+            exclude=current_user.id,
+        )
     from websocket_manager import is_viewing
     for uid in members:
         if uid == current_user.id:
             continue
-        # Skip members who are actively viewing this group thread right now.
+        is_mention = int(uid) in mentioned
+        # Skip members already viewing this thread (the client suppresses a
+        # push for the open thread anyway — they can see the tag in place).
         if is_viewing(int(uid), f"grp:{cid}"):
             continue
+        gt = (conv.title or "") if is_group else ""
+        # The body stays the message preview; the client builds the
+        # "X mentioned you: …" line from type/mentioned (fcm_service.dart).
+        body = preview
         background.add_task(
             send_push_to_user,
             int(uid),
             {
-                "type": "new_message",
+                "type": "mention" if is_mention else "new_message",
                 "conversation_id": str(cid),
                 "sender_id": str(current_user.id),
                 "sender_name": (current_user.username or "New message"),
-                "group_title": (conv.title or "") if is_group else "",
+                "group_title": gt,
                 "message_id": str(msg.id),
-                "body": preview,
+                "body": body,
+                "mentioned": "1" if is_mention else "0",
+                "mention_all": "1" if (is_mention and mention_all) else "0",
             },
         )
     return validated

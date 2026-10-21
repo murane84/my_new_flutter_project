@@ -1697,8 +1697,22 @@ extension _HomeFriendListView on HomePageState {
                         hasUnread ? FontWeight.w600 : FontWeight.normal,
                   ),
                 ),
-                if (hasUnread) ...[
+                if (hasUnread || _groupMentions.containsKey(gid)) ...[
                   const SizedBox(height: 4),
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                  // "@" = someone tagged me here (like WhatsApp's chip).
+                  if (_groupMentions.containsKey(gid))
+                    Container(
+                      margin: EdgeInsets.only(right: hasUnread ? 4 : 0),
+                      padding: const EdgeInsets.all(2.5),
+                      decoration: BoxDecoration(
+                        color: scheme.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.alternate_email_rounded,
+                          size: 11, color: scheme.onPrimary),
+                    ),
+                  if (hasUnread)
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 6, vertical: 2),
@@ -1715,6 +1729,7 @@ extension _HomeFriendListView on HomePageState {
                       ),
                     ),
                   ),
+                  ]),
                 ],
               ],
             ),

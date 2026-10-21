@@ -1275,6 +1275,8 @@ class ApiService {
     int? mediaSize,
     int? mediaDuration, // audio length in ms
     int? conversationId, // when set → send to a GROUP conversation instead of a DM
+    List<int>? mentions, // @-mentioned member ids (group only)
+    bool? mentionAll, // true when "@all" was used (group only)
   }) async {
     try {
       final token = await _getToken();
@@ -1293,6 +1295,8 @@ class ApiService {
         'media_mime': ?mediaMime,
         'media_size': ?mediaSize,
         'media_duration': ?mediaDuration,
+        'mentions': ?mentions,
+        'mention_all': ?mentionAll,
       };
       if (conversationId == null) payload['receiver_id'] = receiverId;
 

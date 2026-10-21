@@ -155,6 +155,10 @@ class GroupMessageCreate(BaseModel):
     media_mime: Optional[str] = None
     media_size: Optional[int] = None
     media_duration: Optional[int] = None
+    # @-mentions: the tagged members' user ids (resolved client-side from the
+    # "@" picker). mention_all means the whole group was tagged ("@all").
+    mentions: Optional[List[int]] = None
+    mention_all: Optional[bool] = False
 
 
 class AddMembers(BaseModel):

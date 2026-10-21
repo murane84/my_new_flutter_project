@@ -81,6 +81,60 @@ class _Found {
   final String inner;
 }
 
+/// Who "me" is for @-mention highlighting. Set once the signed-in user's
+/// Aluta username is known (home_page `_loadUserData`). A mention of me (or
+/// "@all") renders as a filled chip so I can spot it at a glance.
+class MentionSelf {
+  MentionSelf._();
+  static String? username;
+}
+
+// An @-mention token. The picker inserts the member's Aluta USERNAME (the same
+// for every reader, unlike phone-book names), with any inner spaces joined by
+// a non-breaking space (U+00A0) so "@John\u00A0Doe" stays one run. Only counts
+// at the start of a word, so emails / "a@b" aren't highlighted, and trailing
+// punctuation ("@Juma,") is left out of the token.
+final RegExp _mentionRe = RegExp(
+    r'(?<![^\s(\[{"\u0027])@[^\s@.,!?;:)\]}"\u0027]+(?:\u00A0[^\s@.,!?;:)\]}"\u0027]+)*',
+    unicode: true);
+
+bool _isSelfMention(String token) {
+  final t = token.substring(1).replaceAll('\u00A0', ' ').toLowerCase();
+  if (t == 'all') return true;
+  final me = MentionSelf.username?.trim().toLowerCase();
+  return me != null && me.isNotEmpty && t == me;
+}
+
+List<InlineSpan> _mentionize(
+    String s, TextStyle base, TextStyle mentionStyle) {
+  if (s.isEmpty || !s.contains('@')) {
+    return [TextSpan(text: s, style: base)];
+  }
+  final out = <InlineSpan>[];
+  int cursor = 0;
+  for (final m in _mentionRe.allMatches(s)) {
+    if (m.start > cursor) {
+      out.add(TextSpan(text: s.substring(cursor, m.start), style: base));
+    }
+    final tok = m.group(0)!;
+    final c = mentionStyle.color ?? base.color ?? Colors.blue;
+    out.add(TextSpan(
+      text: tok,
+      // Chip only when the run has no background of its own (==highlight==).
+      style: _isSelfMention(tok) &&
+              mentionStyle.backgroundColor == null &&
+              mentionStyle.background == null
+          ? mentionStyle.copyWith(background: Paint()..color = c.withValues(alpha: 0.18))
+          : mentionStyle,
+    ));
+    cursor = m.end;
+  }
+  if (cursor < s.length) {
+    out.add(TextSpan(text: s.substring(cursor), style: base));
+  }
+  return out;
+}
+
 /// Linkify-aware plain run → spans (also applies fraction glyphs).
 List<InlineSpan> _plain(
   String s,
@@ -106,7 +160,9 @@ List<InlineSpan> _plain(
           style: linkStyle.copyWith(background: base.background),
           recognizer: rec));
     } else {
-      out.add(TextSpan(text: e.text, style: base));
+      final mentionStyle =
+          base.copyWith(color: linkStyle.color, fontWeight: FontWeight.w700);
+      out.addAll(_mentionize(e.text, base, mentionStyle));
     }
   }
   return out;

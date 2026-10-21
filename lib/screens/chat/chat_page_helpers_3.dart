@@ -989,28 +989,46 @@ extension _ChatPageHelpers3 on _ChatPageState {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final animCtrl = BottomSheet.createAnimationController(this);
-    animCtrl.duration = const Duration(milliseconds: 440);
-    animCtrl.reverseDuration = const Duration(milliseconds: 280);
-
-    showModalBottomSheet(
+    // No hand-made transitionAnimationController: one we own (vsynced to the
+    // chat page or a Navigator) could stall on desktop, so pop() never
+    // finished and the card stayed stuck on a black barrier. Let the route
+    // own its controller; sheetAnimationStyle keeps the custom timing.
+    showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      transitionAnimationController: animCtrl,
+      useSafeArea: true,
+      isDismissible: true,
+      enableDrag: true,
+      barrierColor: Colors.black54,
+      // The card draws its own accent border — drop the theme's outer red
+      // one so it isn't doubled up into a box-around-a-box.
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      elevation: 0,
+      constraints: const BoxConstraints(maxWidth: 560),
+      sheetAnimationStyle: const AnimationStyle(
+        duration: Duration(milliseconds: 440),
+        reverseDuration: Duration(milliseconds: 280),
+      ),
       builder: (ctx) => DraggableScrollableSheet(
         initialChildSize: 0.6,
         minChildSize: 0.4,
         maxChildSize: 0.94,
         expand: false,
         builder: (c, scrollCtrl) {
-          final handle = Container(
-            margin: const EdgeInsets.only(top: 10, bottom: 2),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: scheme.outlineVariant,
-              borderRadius: BorderRadius.circular(3),
+          // Center it: the columns below stretch their children, which
+          // otherwise turns this 40px handle into a full-width grey bar.
+          final handle = Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 2),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: scheme.outlineVariant,
+                borderRadius: BorderRadius.circular(3),
+              ),
             ),
           );
 
@@ -1213,7 +1231,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
           );
         },
       ),
-    ).whenComplete(animCtrl.dispose);
+    );
   }
 
   /// A single shimmer-free skeleton row shown while message info loads.

@@ -114,11 +114,18 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       // For a group message show the group name as the title and "Sender: text"
       // as the body; a tap opens the GROUP thread (via conversation_id) instead
       // of a DM with the sender.
+      // An @-mention reads "Juma mentioned you: <text>" so it stands out from
+      // ordinary group chatter (server sends type "mention" + the preview).
+      final mentioned = type == 'mention' || data['mentioned'] == '1';
+      final everyone = data['mention_all'] == '1';
       await showMessageNotification(
         title: isGroup && groupTitle.isNotEmpty ? groupTitle : sender,
-        body: isGroup
-            ? '$sender: ${body.isEmpty ? 'Sent a message' : body}'
-            : (body.isEmpty ? 'Sent you a message' : body),
+        body: mentioned
+            ? '$sender ${everyone ? 'mentioned everyone' : 'mentioned you'}'
+                '${body.isEmpty ? '' : ': $body'}'
+            : isGroup
+                ? '$sender: ${body.isEmpty ? 'Sent a message' : body}'
+                : (body.isEmpty ? 'Sent you a message' : body),
         senderId: senderId.isEmpty ? null : senderId,
         senderName: sender,
         conversationId: convId.isEmpty ? null : convId,

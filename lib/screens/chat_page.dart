@@ -86,6 +86,7 @@ part 'chat/chat_composer_parts.dart';  // recording bar, edit + offline banners
 part 'chat/chat_page_helpers_1.dart'; // _ChatPageState helpers (30 methods)
 part 'chat/chat_page_helpers_2.dart'; // _ChatPageState helpers (38 methods)
 part 'chat/chat_page_helpers_3.dart'; // _ChatPageState helpers (42 methods)
+part 'chat/mention_overlay.dart';     // @-mentions picker (group chats)
 
 // ─── Timestamp helpers ───────────────────────────────────────────────────────
 
@@ -395,6 +396,11 @@ class _ChatPageState extends State<ChatPage>
   // Smart-list continuation state (bullets / numbers).
   String _lastComposerText = '';
   bool _applyingListEdit = false;
+  // ── @-mentions (group tagging) — see chat/mention_overlay.dart ──────────
+  List<Map<String, dynamic>> _groupMembers = [];
+  String? _mentionQuery;
+  int _mentionStart = -1;
+  final Set<int> _mentionTicked = {};
   final _scrollCtrl = ScrollController();
   // Dedicated controller so the Listen-together picker's scrollbar can auto-hide
   // (show only while scrolling) instead of sitting over the row icons.
@@ -670,6 +676,8 @@ class _ChatPageState extends State<ChatPage>
         _isLoading = true;
         _messages.clear();
         _replyTo = null;
+        _groupMembers = []; // reloaded by _initChat for the new group
+        _closeMentionPicker();
       });
       _initChat(); // _initChat runs _maybeInitialJump after the load
     } else if (widget.initialJumpMessageId != null &&
@@ -710,6 +718,7 @@ class _ChatPageState extends State<ChatPage>
     }
 
     await _loadMessages();        // fetch fresh from network (best-effort)
+    if (_isGroup) unawaited(_loadGroupMembers()); // for the @-mention picker
     _maybeInitialJump();          // opened from a notification → jump to it
     _checkOnlineStatus();
     _startPolling();
@@ -1335,6 +1344,7 @@ class _ChatPageState extends State<ChatPage>
     }
     if (!_applyingListEdit) _maybeContinueList();
     if (!_applyingListEdit) _maybeFractionReplace();
+    if (!_applyingListEdit && _isGroup) _updateMentionQuery();
     setState(() {});
     _markActivity();
     if (!_iTyping && !_isRecording) {
@@ -1356,6 +1366,12 @@ class _ChatPageState extends State<ChatPage>
     final text = _ctrl.text.trim();
     if (text.isEmpty) return;
 
+    // @-mentions for this send (group only). Derived from the final text, so a tag deleted before sending is never
+    // sent (and a restored draft's tags still count).
+    final tagged = _resolveMentions(text);
+    final List<int>? outMentions = tagged.ids.isEmpty ? null : tagged.ids;
+    final bool? outMentionAll = tagged.all ? true : null;
+
     String content = text;
     if (_replyTo != null) {
       final quoted = _replyQuoteText(_replyTo!);
@@ -1371,6 +1387,7 @@ class _ChatPageState extends State<ChatPage>
       _heartMode = false;
     });
     _saveDraft(); // text now empty → clears the stored draft
+    if (_isGroup) setState(_closeMentionPicker);
 
     final tempId = _newTempId();
     _insertOptimistic(
@@ -1381,7 +1398,9 @@ class _ChatPageState extends State<ChatPage>
         final sent = await appBusy.run(() => ApiService().sendMessage(
             widget.friendId, content,
             messageType: heart ? 'heart' : 'text',
-            conversationId: widget.conversationId));
+            conversationId: widget.conversationId,
+            mentions: outMentions,
+            mentionAll: outMentionAll));
         _replaceOptimistic(tempId, sent);
         if (sent == null && mounted) {
           _showErrorSnack('Message failed — tap the ! to retry.');
@@ -4184,6 +4203,13 @@ class _ChatPageState extends State<ChatPage>
             isReconnecting: _isReconnecting,
             onReconnect: _reconnect,
           ),
+          // @-mention picker: inline, so it rides above the keyboard with the
+          // composer instead of floating somewhere the keyboard can cover.
+          if (_isGroup && _mentionQuery != null && !_isRecording)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _buildMentionPicker(scheme, isDark),
+            ),
           if (_editing != null)
             _EditBanner(
               text: _stripQuote((_editing!['content'] as String?) ?? ''),

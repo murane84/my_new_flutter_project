@@ -28,7 +28,7 @@ import 'theme_provider.dart';
 import 'music_controls.dart';
 import 'web_music_panel.dart';
 import 'chat_page.dart';
-import 'chat/formatted_text.dart' show previewSpans;
+import 'chat/formatted_text.dart' show previewSpans, MentionSelf;
 import 'group_screens.dart';
 import 'user_profile_sheet.dart';
 import 'device_link.dart';
@@ -190,6 +190,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // The first name of whoever is typing in each group (phonebook-resolved), so
   // the group tile can say "Belyner typing…" rather than a bare "typing…".
   final Map<int, String> _groupTypingNames = {};
+  // Groups where someone @-mentioned me since I last opened them → an "@"
+  // chip on the tile; value = the mentioning message id (opening the group
+  // jumps to it). Fed by the notify socket's `mention` event.
+  final Map<int, String> _groupMentions = {};
   // When a chat is opened from a message notification, the id of the message to
   // scroll to + highlight once the thread loads (null for normal opens). Passed
   // to ChatPage; cleared to null on every ordinary open so it fires once.
@@ -1188,6 +1192,66 @@ class HomePageState extends rp.ConsumerState<HomePage>
       NowPlayingPresence.instance.applyEvent(event);
       return;
     }
+    // Someone @-mentioned me in a group (server: routers/conversations.py).
+    if (type == 'mention') {
+      final cid = int.tryParse((event['conversation_id'] ?? '').toString());
+      if (cid == null) return;
+      final mid = (event['message_id'] ?? '').toString();
+      final viewing = _activeGroup != null &&
+          _activeGroup!['id']?.toString() == cid.toString();
+      if (viewing && _appForeground) return; // it's right there on screen
+      if (mounted) setState(() => _groupMentions[cid] = mid);
+      // Android/iOS get the FCM "mentioned you" heads-up. Desktop/web have no
+      // FCM, so prompt from here: an in-app bar while open, a local
+      // notification when the window is in the background.
+      if (!fcmSupported) {
+        // My phone-book name for the sender, else their Aluta username.
+        final sPhone = (event['sender_phone'] ?? '').toString();
+        final saved =
+            sPhone.isNotEmpty ? ContactNames.instance.nameFor(sPhone) : null;
+        final who = (saved != null && saved.isNotEmpty)
+            ? saved
+            : (event['sender_name'] ?? 'Someone').toString();
+        final gTitle = (event['group_title'] ?? '').toString();
+        final everyone = event['all'] == true;
+        final line = everyone
+            ? '$who mentioned everyone${gTitle.isEmpty ? '' : ' in $gTitle'}'
+            : '$who mentioned you${gTitle.isEmpty ? '' : ' in $gTitle'}';
+        if (_appForeground) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(SnackBar(
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 5),
+              content: Row(children: [
+                const Icon(Icons.alternate_email_rounded,
+                    size: 18, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text(line)),
+              ]),
+              action: SnackBarAction(
+                label: 'View',
+                onPressed: () => _handleMessageTap({
+                  'conversation_id': cid.toString(),
+                  'group_title': gTitle,
+                  'message_id': mid,
+                }),
+              ),
+            ));
+        } else {
+          showMessageNotification(
+            title: gTitle.isEmpty ? who : gTitle,
+            body: line,
+            senderName: who,
+            conversationId: cid.toString(),
+            groupTitle: gTitle.isEmpty ? null : gTitle,
+            messageId: mid.isEmpty ? null : mid,
+          );
+        }
+      }
+      return;
+    }
     // A friend is typing to me → show a live "typing…" line on their tile.
     if (type == 'typing') {
       // Group typing carries a conversation_id → light the GROUP tile, not the
@@ -1283,6 +1347,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       _myAvatar = data['avatar_url'] as String?;
       if (data.isNotEmpty && data['username'] != null) {
         await prefs.setString('username', data['username']);
+        MentionSelf.username = data['username'].toString();
         if (mounted) setState(() => _username = data['username']);
       } else {
         if (mounted) setState(() => _username = prefs.getString('username') ?? 'User');
@@ -1678,6 +1743,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// Open a GROUP conversation inside the chat panel (leaving the music panel
   /// visible on desktop). Called from the Groups popup / after creating a group.
   void openGroupInPanel(Map<String, dynamic> conv, {String? jumpToMessageId}) {
+    // Opening the group clears its "@" chip; with no explicit target, land on
+    // the message that mentioned me.
+    final gid = int.tryParse(conv['id']?.toString() ?? '');
+    final mentionMid = gid == null ? null : _groupMentions.remove(gid);
+    jumpToMessageId ??=
+        (mentionMid != null && mentionMid.isNotEmpty) ? mentionMid : null;
     setState(() {
       _pendingJumpMessageId = jumpToMessageId;
       _clearSearchState();

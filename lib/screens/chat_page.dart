@@ -3535,7 +3535,16 @@ class _ChatPageState extends State<ChatPage>
         crossAxisAlignment:
             isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          Row(
+          // Swipe right to reply — same gesture as every other bubble.
+          // (A swipe moves the finger, so it never counts as hold-to-open.)
+          _SwipeToReply(
+            isMe: isMe,
+            onReply: () {
+              HapticFeedback.selectionClick();
+              setState(() => _replyTo = msg);
+              FocusScope.of(context).requestFocus(FocusNode());
+            },
+            child: Row(
             mainAxisAlignment:
                 isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -3613,6 +3622,7 @@ class _ChatPageState extends State<ChatPage>
                 ),
               ),
             ],
+          ),
           ),
           // ONE frosted pill under the heart: its status (receipt / opens-at)
           // and the time + ticks, side by side. Frosted + dark so it reads

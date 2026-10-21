@@ -89,6 +89,28 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         title: '$host · Listen together',
         body: 'wants to listen to music with you',
       );
+    } else if (type == 'heart_opened' || type == 'heart_ready') {
+      // Secret hearts (server hearts.py): the tender receipt to the sender, or
+      // a timed heart that just became openable. Never carries the note.
+      final who = (data['sender_name'] ?? 'Someone').toString();
+      final convId = (data['conversation_id'] ?? '').toString();
+      final senderId = (data['sender_id'] ?? '').toString();
+      final messageId = (data['message_id'] ?? '').toString();
+      if (foreground &&
+          ActiveChat.instance.suppresses(senderId: senderId, convId: convId)) {
+        return; // that chat is open — the bubble shows it
+      }
+      await showMessageNotification(
+        title: who,
+        body: type == 'heart_opened'
+            ? 'opened your secret heart 💗'
+            : '💌 Your secret heart is ready to open',
+        senderId: senderId.isEmpty ? null : senderId,
+        senderName: who,
+        messageId: messageId.isEmpty ? null : messageId,
+        // Set only for GROUP hearts (server), so a tap opens the right thread.
+        conversationId: convId.isEmpty ? null : convId,
+      );
     } else if (type == 'call_end' ||
         type == 'call_cancel' ||
         type == 'call_decline' ||

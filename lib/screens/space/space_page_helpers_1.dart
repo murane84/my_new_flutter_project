@@ -1136,6 +1136,8 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
           footer: _footerPrimary(
               'Seal a capsule', Icons.schedule_send_rounded, _composeCapsule),
         );
+      case 'letters':
+        return _loveLettersSection(scheme, onMenu: onMenu);
       default:
         return const SizedBox.shrink();
     }

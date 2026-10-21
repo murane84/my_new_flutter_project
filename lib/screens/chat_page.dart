@@ -87,6 +87,7 @@ part 'chat/chat_page_helpers_1.dart'; // _ChatPageState helpers (30 methods)
 part 'chat/chat_page_helpers_2.dart'; // _ChatPageState helpers (38 methods)
 part 'chat/chat_page_helpers_3.dart'; // _ChatPageState helpers (42 methods)
 part 'chat/mention_overlay.dart';     // @-mentions picker (group chats)
+part 'chat/heart_composer.dart';      // secret-heart tray + receipts
 
 // ─── Timestamp helpers ───────────────────────────────────────────────────────
 
@@ -408,6 +409,12 @@ class _ChatPageState extends State<ChatPage>
   bool _showEmoji = false;
   // Compose the next message as a secret heart (message_type 'heart').
   bool _heartMode = false;
+  // Secret-heart composer choices (see _buildHeartTray): the mood it's sent
+  // with and, for a timed heart, the moment it opens. Reset after each send.
+  String _heartMood = 'love';
+  DateTime? _heartUnlockAt;
+  // Server ids of hearts I just sent → their bubble plays the seal stamp once.
+  final Set<String> _freshHearts = {};
   // Which tab is showing in the emoji panel: 0 = emoji, 1 = GIF stickers.
   int _emojiTab = 0;
   bool _isAtBottom = true;
@@ -1036,6 +1043,30 @@ class _ChatPageState extends State<ChatPage>
           }
         });
       }
+    } else if (type == 'heart_unsealed') {
+      // A timed heart's moment came: swap its note in (server hearts.py).
+      final data = event['data'] as Map<String, dynamic>?;
+      final mid = data?['id']?.toString();
+      if (mid != null) {
+        final idx = _messages.indexWhere((m) => m['id'].toString() == mid);
+        if (idx != -1) {
+          setState(() {
+            _messages[idx]['content'] = data!['content'];
+            _messages[idx]['unlock_at'] = data['unlock_at'];
+          });
+        }
+      }
+    } else if (type == 'heart_opened') {
+      // They opened the heart I sent → "Opened 2:14 PM 💗" under it.
+      final data = event['data'] as Map<String, dynamic>?;
+      final mid = data?['message_id']?.toString();
+      if (mid != null) {
+        final idx = _messages.indexWhere((m) => m['id'].toString() == mid);
+        if (idx != -1) {
+          setState(() => _messages[idx]['opened_at'] = data!['opened_at']);
+          HapticFeedback.lightImpact();
+        }
+      }
     } else if (type == 'message_unpinned') {
       final data = event['data'] as Map<String, dynamic>?;
       final mid = data?['message_id'];
@@ -1373,25 +1404,39 @@ class _ChatPageState extends State<ChatPage>
     final bool? outMentionAll = tagged.all ? true : null;
 
     String content = text;
-    if (_replyTo != null) {
+    // A heart carries only its note (the heart bubble has no quote area).
+    if (_replyTo != null && !_heartMode) {
       final quoted = _replyQuoteText(_replyTo!);
       final lines = quoted.split('\n').take(2).join('\n');
       content = '> $lines\n\n$text';
     }
 
     final heart = _heartMode;
+    final heartMood = heart ? _heartMood : null;
+    final unlockAt = heart ? _heartUnlockAt : null;
     _markActivity();
     _ctrl.clear();
     setState(() {
       _replyTo = null;
       _heartMode = false;
+      _heartMood = 'love';
+      _heartUnlockAt = null;
     });
     _saveDraft(); // text now empty → clears the stored draft
     if (_isGroup) setState(_closeMentionPicker);
 
     final tempId = _newTempId();
-    _insertOptimistic(
-        _optimisticMsg(tempId, heart ? 'heart' : 'text', content));
+    final optimistic =
+        _optimisticMsg(tempId, heart ? 'heart' : 'text', content);
+    if (heart) {
+      optimistic['heart_mood'] = heartMood;
+      if (unlockAt != null) {
+        // Sealed for me too until it opens — mirror what the server returns.
+        optimistic['unlock_at'] = unlockAt.toUtc().toIso8601String();
+        optimistic['content'] = '';
+      }
+    }
+    _insertOptimistic(optimistic);
 
     Future<void> attempt() async {
       try {
@@ -1400,7 +1445,10 @@ class _ChatPageState extends State<ChatPage>
             messageType: heart ? 'heart' : 'text',
             conversationId: widget.conversationId,
             mentions: outMentions,
-            mentionAll: outMentionAll));
+            mentionAll: outMentionAll,
+            heartMood: heartMood,
+            unlockAt: unlockAt));
+        if (heart && sent != null) _freshHearts.add(sent['id'].toString());
         _replaceOptimistic(tempId, sent);
         if (sent == null && mounted) {
           _showErrorSnack('Message failed — tap the ! to retry.');
@@ -2710,6 +2758,7 @@ class _ChatPageState extends State<ChatPage>
     List<_MenuAction> buildFull(BuildContext ctx) {
       final deleted = msg['is_deleted'] == true;
       final isTextMsg = (msg['message_type'] ?? 'text') == 'text';
+      final isHeart = (msg['message_type'] ?? 'text') == 'heart';
       final hasMedia = (msg['message_type'] ?? 'text') != 'text' &&
           (msg['media_url'] as String? ?? '').isNotEmpty;
       // Harmony / Our Space actions sit at the TOP of the menu (only when the
@@ -2755,12 +2804,14 @@ class _ChatPageState extends State<ChatPage>
               _showPinDurationSheet(msg);
             }
           }),
+        // Copy / Forward would lift a secret heart's note out in plain text.
+        if (!isHeart)
         _MenuAction('copy', Icons.copy_rounded, 'Copy', () {
           Navigator.pop(ctx);
           Clipboard.setData(ClipboardData(text: _stripQuote(content)));
           showToast(context, 'Copied');
         }),
-        if (!deleted)
+        if (!deleted && !isHeart)
           _MenuAction('forward', Icons.forward_rounded, 'Forward', () {
             Navigator.pop(ctx);
             _showForwardPicker(msg);
@@ -3350,8 +3401,8 @@ class _ChatPageState extends State<ChatPage>
                 ),
               if (!isMe) const SizedBox(width: 4),
               GestureDetector(
-                onLongPressStart: (d) =>
-                    _showMessageMenu(context, msg, anchor: d.globalPosition),
+                // Right-click menu (desktop). Long-press is handled inside the
+                // heart: on a covered heart holding is the opening ritual.
                 onSecondaryTapDown: (d) =>
                     _showMessageMenu(context, msg, anchor: d.globalPosition),
                 child: HeartBubble(
@@ -3361,6 +3412,21 @@ class _ChatPageState extends State<ChatPage>
                   accent: accent,
                   bonded: _canHarmony,
                   heartKeySeed: msgId,
+                  mood: msg['heart_mood']?.toString(),
+                  sentAt: (msg['timestamp'] ?? '').toString().isEmpty
+                      ? null
+                      : parseServerTime(msg['timestamp'].toString()),
+                  unlockAt: (msg['unlock_at'] ?? '').toString().isEmpty
+                      ? null
+                      : parseServerTime(msg['unlock_at'].toString()),
+                  openedAt: (msg['opened_at'] ?? '').toString().isEmpty
+                      ? null
+                      : parseServerTime(msg['opened_at'].toString()),
+                  justSent: _freshHearts.remove(msgId),
+                  onMenu: (pos) =>
+                      _showMessageMenu(context, msg, anchor: pos),
+                  onFirstOpen: () => _reportHeartOpened(msg),
+                  onUnsealDue: () => _unsealHeart(msg),
                   // Bonded-space gesture: double-tap to love back (❤ reaction).
                   onLoveBack:
                       _canHarmony ? () => _addReaction(msg, '❤️') : null,
@@ -4205,6 +4271,15 @@ class _ChatPageState extends State<ChatPage>
           ),
           // @-mention picker: inline, so it rides above the keyboard with the
           // composer instead of floating somewhere the keyboard can cover.
+          // Secret heart: mood · seal-until · note starters.
+          if (_heartMode && !_isRecording && _editing == null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: _buildHeartTray(scheme, isDark),
+              ),
+            ),
           if (_isGroup && _mentionQuery != null && !_isRecording)
             Align(
               alignment: Alignment.centerLeft,
@@ -4306,8 +4381,13 @@ class _ChatPageState extends State<ChatPage>
                                       ? scheme.primary
                                       : scheme.onSurfaceVariant,
                                 ),
-                                onPressed: () =>
-                                    setState(() => _heartMode = !_heartMode),
+                                onPressed: () => setState(() {
+                                  _heartMode = !_heartMode;
+                                  if (!_heartMode) {
+                                    _heartMood = 'love';
+                                    _heartUnlockAt = null;
+                                  }
+                                }),
                                 visualDensity: VisualDensity.compact,
                               ),
                               // Text field. Desktop: Enter=send, Shift+Enter=newline.

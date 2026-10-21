@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from hearts import heart_kwargs
 
 from models import Conversation, ConversationMember, Message, User
 
@@ -126,7 +127,7 @@ def add_message(db: Session, conversation_id: int, sender_id: int, payload) -> M
         sender_id=int(sender_id),
         receiver_id=None,  # group message: no single receiver
         conversation_id=int(conversation_id),
-        content=(getattr(payload, "content", "") or ""),
+        **heart_kwargs(payload, getattr(payload, "content", "") or ""),
         message_type=(getattr(payload, "message_type", None) or "text"),
         media_url=getattr(payload, "media_url", None),
         media_name=getattr(payload, "media_name", None),

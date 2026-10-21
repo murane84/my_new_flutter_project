@@ -47,7 +47,7 @@ extension _ChatMentions on _ChatPageState {
   /// The token inserted into the text for a member: "@user" with inner spaces
   /// joined by a non-breaking space so it stays one highlightable run.
   String _mentionToken(Map<String, dynamic> m) =>
-      '@${_memberUsername(m).replaceAll(' ', ' ')}';
+      '@${_memberUsername(m).replaceAll(' ', '\u00A0')}';
 
   bool _isMe(Map<String, dynamic> m) =>
       _myId != null && m['user_id']?.toString() == _myId;
@@ -71,7 +71,7 @@ extension _ChatMentions on _ChatPageState {
       }
       // Plain whitespace ends the token; the NBSP inside an inserted tag does
       // too (we're past a finished tag, not typing a query).
-      if (ch == '\n' || ch == ' ' || ch == ' ' || ch == '\t') break;
+      if (ch == '\n' || ch == ' ' || ch == '\u00A0' || ch == '\t') break;
     }
     if (at == -1) {
       _closeMentionPicker();
@@ -139,9 +139,9 @@ extension _ChatMentions on _ChatPageState {
   ({List<int> ids, bool all}) _resolveMentions(String text) {
     if (!_isGroup || !text.contains('@')) return (ids: const [], all: false);
     final tokens = <String>{};
-    for (final m in RegExp(r'(?<![^\s(\[{"])@([^\s@.,!?;:)\]}"]+(?: [^\s@.,!?;:)\]}"]+)*)')
+    for (final m in RegExp(r'(?<![^\s(\[{"\u0027])@([^\s@.,!?;:)\]}"\u0027]+(?:\u00A0[^\s@.,!?;:)\]}"\u0027]+)*)')
         .allMatches(text)) {
-      tokens.add(m.group(1)!.replaceAll(' ', ' ').toLowerCase());
+      tokens.add(m.group(1)!.replaceAll('\u00A0', ' ').toLowerCase());
     }
     final all = tokens.contains('all');
     final ids = <int>[];

@@ -60,6 +60,9 @@ class MessageCreate(BaseModel):
     media_mime: Optional[str] = None
     media_size: Optional[int] = None
     media_duration: Optional[int] = None
+    # Secret hearts: optional mood + timed unsealing (hearts.py).
+    heart_mood: Optional[str] = None
+    unlock_at: Optional[datetime] = None
 
 
 class MessageEdit(BaseModel):
@@ -86,6 +89,9 @@ class Message(BaseModel):
     is_deleted: Optional[bool] = False
     purged: Optional[bool] = False
     pinned_until: Optional[datetime] = None
+    heart_mood: Optional[str] = None
+    unlock_at: Optional[datetime] = None
+    opened_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -111,6 +117,9 @@ class MessageWithSender(BaseModel):
     is_deleted: Optional[bool] = False
     purged: Optional[bool] = False
     pinned_until: Optional[datetime] = None
+    heart_mood: Optional[str] = None
+    unlock_at: Optional[datetime] = None
+    opened_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -159,6 +168,9 @@ class GroupMessageCreate(BaseModel):
     # "@" picker). mention_all means the whole group was tagged ("@all").
     mentions: Optional[List[int]] = None
     mention_all: Optional[bool] = False
+    # Secret hearts: optional mood + timed unsealing (hearts.py).
+    heart_mood: Optional[str] = None
+    unlock_at: Optional[datetime] = None
 
 
 class AddMembers(BaseModel):

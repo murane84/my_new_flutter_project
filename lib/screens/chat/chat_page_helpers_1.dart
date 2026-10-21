@@ -857,6 +857,10 @@ extension _ChatPageHelpers1 on _ChatPageState {
         ex['edited'] = m['edited'];
         ex['reactions'] = m['reactions'];
         ex['pinned_until'] = m['pinned_until'];
+        // Secret hearts: receipt + timed-unseal state follow the server.
+        ex['opened_at'] = m['opened_at'] ?? ex['opened_at'];
+        ex['unlock_at'] = m['unlock_at'];
+        ex['heart_mood'] = m['heart_mood'] ?? ex['heart_mood'];
         // Deletion is a ONE-WAY latch: once tombstoned locally (optimistic
         // delete) or on the server, it STAYS deleted. Otherwise a poll that
         // races the server's delete would briefly un-delete the bubble (snap
@@ -907,6 +911,8 @@ extension _ChatPageHelpers1 on _ChatPageState {
           a[i]['edited'] != b[i]['edited'] ||
           a[i]['is_deleted'] != b[i]['is_deleted'] ||
           a[i]['pinned_until'] != b[i]['pinned_until'] ||
+          a[i]['opened_at'] != b[i]['opened_at'] ||
+          a[i]['unlock_at'] != b[i]['unlock_at'] ||
           a[i]['reactions'] != b[i]['reactions']) { return false; }
     }
     return true;

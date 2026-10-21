@@ -42,10 +42,23 @@ async def lifespan(app: FastAPI):
     # Fire love-capsule unlocks at their chosen time (push + socket to both).
     from capsule_notifier import capsule_unlock_loop
     _capsule_task = asyncio.create_task(capsule_unlock_loop())
+    # Unseal timed secret hearts at their moment (hearts.py).
+    async def _heart_loop():
+        import hearts
+        while True:
+            try:
+                await asyncio.to_thread(hearts.unseal_due_once)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
+            await asyncio.sleep(20)
+    _heart_task = asyncio.create_task(_heart_loop())
     try:
         yield
     finally:
         _capsule_task.cancel()
+        _heart_task.cancel()
 
 
 # ✅ Create FastAPI app ONCE
@@ -178,6 +191,11 @@ def ensure_media_schema():
         # notifier never double-fires). Added here in case love_capsules was
         # created by slice 1 before this column existed.
         "ALTER TABLE love_capsules ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ",
+        # Secret hearts: mood, timed unsealing, opened receipt (hearts.py).
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS heart_mood VARCHAR",
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS unlock_at TIMESTAMPTZ",
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS sealed_content TEXT",
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS opened_at TIMESTAMPTZ",
         # Ozilane Key: opaque per-user subject, linked-at cache, two-step flag.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_subject VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_linked_at TIMESTAMPTZ",

@@ -21,6 +21,9 @@ import 'live_session_screen.dart';
 import 'token_helper.dart' show getToken, mediaAuthHeaders;
 import '../services/now_playing_presence.dart';
 import '../utils/toast_helper.dart';
+import '../utils/time_utils.dart' show parseServerTime;
+import '../services/heart_lock.dart';
+import 'chat/heart_message.dart' show HeartMood, showHeartGenie, heartOpensLabel;
 import '../utils/avatar_widget.dart';
 import '../utils/popup_shell.dart';
 import '../utils/chat_background.dart';
@@ -42,6 +45,7 @@ part 'space/space_diary.dart'; // diary composer, paper/dog-ear painters, pressa
 part 'space/space_moment_detail.dart'; // moment comments, memory detail sheet, moment video player
 part 'space/space_capsules.dart'; // time capsules, dedications, press-play countdown, voice player
 part 'space/space_mixtape.dart'; // mixtape screen
+part 'space/space_love_letters.dart'; // love letters: secret hearts shelf
 part 'space/space_page_helpers_1.dart'; // _RelationshipSpacePageState helpers (30 methods)
 part 'space/space_page_helpers_2.dart'; // _RelationshipSpacePageState helpers (15 methods)
 part 'space/space_page_helpers_3.dart'; // _RelationshipSpacePageState helpers (23 methods)
@@ -539,6 +543,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   void _onSpaceEvent() {
     if (mounted) _load();
   }
+
+  // Love letters shelf (space/space_love_letters.dart) — loaded once per visit.
+  Future<List<Map<String, dynamic>>>? _lettersFuture;
 
   int? get _partnerId {
     final o = _others;
@@ -1118,6 +1125,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       ('moments', Icons.favorite_rounded, 'Pinned moments'),
       if (pair) ('diary', Icons.menu_book_rounded, 'Our Diary'),
       if (pair) ('capsule', Icons.card_giftcard_rounded, 'Love capsule'),
+      if (pair) ('letters', Icons.mark_email_unread_rounded, 'Love letters'),
     ];
   }
 
@@ -1287,6 +1295,21 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                 'You both get a ping the moment it unlocks. Then tap “Open the capsule”.'),
             (Icons.close_rounded, 'Change your mind',
                 'The sender can cancel a capsule any time before it unlocks.'),
+          ],
+        );
+      case 'letters':
+        return (
+          'Love letters',
+          'Every secret heart you\'ve traded, kept to reread.',
+          [
+            (Icons.favorite_rounded, 'Send one from chat',
+                'Tap the ♡ in the composer, pick a mood, write your note. They hold the heart to open it.'),
+            (Icons.hourglass_top_rounded, 'Seal it for later',
+                'Choose “Open anytime” → a moment (tonight, a birthday…). It stays sealed — even to you — until then.'),
+            (Icons.lock_rounded, 'Private by default',
+                'With “Lock secret hearts” on, opening asks for your fingerprint, face or PIN, and open letters reseal on their own.'),
+            (Icons.mark_email_read_rounded, 'Know it landed',
+                'Under a heart you sent you\'ll see “Opened 💗” the moment they open it.'),
           ],
         );
       default:

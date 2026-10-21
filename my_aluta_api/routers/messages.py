@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from websocket_manager import safe_notify_user
 from push import send_push_to_user
 import crud_conversations
+import hearts
 
 router = APIRouter(
     prefix="/messages",
@@ -180,6 +181,8 @@ def search_messages(
         db.query(Message)
         .filter(Message.is_deleted == False)  # noqa: E712
         .filter(Message.content.ilike(f"%{term}%"))
+        # Secret hearts stay secret: never surface their notes in search.
+        .filter((Message.message_type.is_(None)) | (Message.message_type != "heart"))
         .filter(cond)
         .order_by(Message.timestamp.desc())
         .limit(min(max(limit, 1), 100))
@@ -466,6 +469,106 @@ def edit_message(
     _fanout_others(db, message, current_user.id,
                    {"type": "message_edited", "data": serialized})
     return validated
+
+# ❤️ SECRET HEARTS — opened receipt, timed unseal, love-letter shelf (hearts.py)
+def _heart_or_404(db, message_id: int, me: int) -> Message:
+    m = db.query(Message).filter(Message.id == message_id).first()
+    if not m or (m.message_type or "") != "heart" or m.is_deleted:
+        raise HTTPException(status_code=404, detail="Heart not found")
+    if int(me) not in [int(u) for u in _access_ids(db, m)]:
+        raise HTTPException(status_code=403, detail="Not your heart")
+    return m
+
+
+@router.post("/{message_id}/heart/opened", response_model=schemas.MessageWithSender)
+def heart_opened(
+    message_id: int,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The recipient opened a secret heart. Records the FIRST open and tells
+    the sender (live event + a tender push). Idempotent; the sender opening
+    their own heart is a no-op."""
+    m = _heart_or_404(db, message_id, current_user.id)
+    if int(m.sender_id) == int(current_user.id) or m.opened_at is not None \
+            or hearts.is_sealed(m):
+        return schemas.MessageWithSender.model_validate(m)
+    m.opened_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(m)
+    validated = schemas.MessageWithSender.model_validate(m)
+    safe_notify_user(int(m.sender_id), {
+        "type": "heart_opened",
+        "data": {
+            "message_id": m.id,
+            "conversation_id": m.conversation_id,
+            "opened_at": m.opened_at.isoformat(),
+            "by_id": current_user.id,
+            "by_name": current_user.username or "",
+            "by_phone": getattr(current_user, "phone", None) or "",
+        },
+    })
+    background.add_task(send_push_to_user, int(m.sender_id), {
+        "type": "heart_opened",
+        "sender_id": str(current_user.id),
+        "sender_name": current_user.username or "Someone",
+        # Groups only (DMs open by sender_id on the client).
+        "conversation_id": (str(m.conversation_id or "")
+                            if m.receiver_id is None else ""),
+        "message_id": str(m.id),
+        "body": "",
+    })
+    return validated
+
+
+@router.post("/{message_id}/heart/unseal", response_model=schemas.MessageWithSender)
+def heart_unseal(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Open up a timed heart whose moment has come (covers the notifier loop
+    lagging or the server having restarted). 423 while still sealed."""
+    m = _heart_or_404(db, message_id, current_user.id)
+    if hearts.is_sealed(m):
+        if not hearts.unseal(m):
+            raise HTTPException(status_code=423, detail="Still sealed")
+        db.commit()
+        db.refresh(m)
+        try:
+            hearts._announce_unsealed(db, m)
+        except Exception:
+            pass
+    return schemas.MessageWithSender.model_validate(m)
+
+
+@router.get("/hearts/{peer_id}", response_model=List[schemas.MessageWithSender])
+def love_letters(
+    peer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The love-letter shelf: every secret heart between me and {peer_id},
+    newest first. Sealed (timed, not yet due) hearts come back with empty
+    content so the shelf can show them as 'opens …' without the note."""
+    me = current_user.id
+    rows = (
+        db.query(Message)
+        .filter(Message.message_type == "heart")
+        .filter(Message.is_deleted.is_(False))
+        .filter(
+            ((Message.sender_id == me) & (Message.receiver_id == peer_id)
+             & (Message.visible_to_sender.is_(True)))
+            | ((Message.sender_id == peer_id) & (Message.receiver_id == me)
+               & (Message.visible_to_receiver.is_(True)))
+        )
+        .order_by(Message.timestamp.desc())
+        .limit(500)
+        .all()
+    )
+    return [schemas.MessageWithSender.model_validate(m) for m in rows]
+
 
 # 5️⃣ Single message delivery endpoint
 @router.put("/{message_id}/delivered", response_model=schemas.Message)

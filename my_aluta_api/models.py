@@ -129,6 +129,12 @@ class Message(Base):
     # the time passes. NULL = not pinned.
     pinned_until = Column(DateTime(timezone=True), nullable=True)
 
+    # ── Secret hearts (message_type 'heart') — see hearts.py ─────────────────
+    heart_mood = Column(String, nullable=True)            # love|miss|sorry|thanks|proud
+    unlock_at = Column(DateTime(timezone=True), nullable=True)   # timed heart
+    sealed_content = Column(Text, nullable=True)         # withheld note while sealed
+    opened_at = Column(DateTime(timezone=True), nullable=True)   # recipient opened
+
     # New fields for visibility
     visible_to_sender = Column(Boolean, default=True)
     visible_to_receiver = Column(Boolean, default=True)

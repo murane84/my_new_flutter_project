@@ -7,6 +7,7 @@ from sqlalchemy import func
 from models import Message, User, Friend, MuteStatus, BlockStatus
 from schemas import MessageCreate, FriendWithUnread
 import crud_conversations
+from hearts import heart_kwargs
 
 
 # Presence window: a user is shown "online" only if the server heard from them
@@ -49,7 +50,7 @@ def create_message(db: Session, sender_id: int, message: MessageCreate) -> Messa
         sender_id=sender_id,
         receiver_id=message.receiver_id,
         conversation_id=conv.id,
-        content=message.content or "",
+        **heart_kwargs(message, message.content or ""),
         message_type=(message.message_type or "text"),
         media_url=message.media_url,
         media_name=message.media_name,

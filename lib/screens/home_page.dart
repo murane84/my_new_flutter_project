@@ -1192,6 +1192,33 @@ class HomePageState extends rp.ConsumerState<HomePage>
       NowPlayingPresence.instance.applyEvent(event);
       return;
     }
+    // They opened a secret heart I sent (server hearts.py). Phones get the
+    // FCM ping; desktop/web have no FCM, so show a tender in-app bar here
+    // unless that chat is already open (its bubble updates in place).
+    if (type == 'heart_opened') {
+      if (fcmSupported || !_appForeground || !mounted) return;
+      final d = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final byId = d['by_id']?.toString();
+      if (byId != null && byId == _activeFriendId?.toString()) return;
+      final phone = (d['by_phone'] ?? '').toString();
+      final saved =
+          phone.isNotEmpty ? ContactNames.instance.nameFor(phone) : null;
+      final who = (saved != null && saved.isNotEmpty)
+          ? saved
+          : (d['by_name'] ?? 'Someone').toString();
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+          content: Row(children: [
+            const Icon(Icons.favorite_rounded, size: 18, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(child: Text('$who opened your secret heart')),
+          ]),
+        ));
+      return;
+    }
     // Someone @-mentioned me in a group (server: routers/conversations.py).
     if (type == 'mention') {
       final cid = int.tryParse((event['conversation_id'] ?? '').toString());
@@ -1303,8 +1330,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
               data['username'] ??
               'New message')
           .toString();
-      final text =
-          (data['content'] ?? data['text'] ?? data['message'] ?? '').toString();
+      // A secret heart's note never goes into a notification.
+      final text = (data['message_type'] ?? '').toString() == 'heart'
+          ? '❤️ Sent you a secret heart'
+          : (data['content'] ?? data['text'] ?? data['message'] ?? '')
+              .toString();
       // Badge the sender immediately (unless their chat is open) — the fetch
       // below reconciles to the server's authoritative count a moment later.
       final senderId = (senderObj?['id'] as num?)?.toInt() ??

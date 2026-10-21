@@ -1277,6 +1277,8 @@ class ApiService {
     int? conversationId, // when set → send to a GROUP conversation instead of a DM
     List<int>? mentions, // @-mentioned member ids (group only)
     bool? mentionAll, // true when "@all" was used (group only)
+    String? heartMood, // secret heart: love|miss|sorry|thanks|proud
+    DateTime? unlockAt, // secret heart: sealed until this moment
   }) async {
     try {
       final token = await _getToken();
@@ -1297,6 +1299,8 @@ class ApiService {
         'media_duration': ?mediaDuration,
         'mentions': ?mentions,
         'mention_all': ?mentionAll,
+        'heart_mood': ?heartMood,
+        if (unlockAt != null) 'unlock_at': unlockAt.toUtc().toIso8601String(),
       };
       if (conversationId == null) payload['receiver_id'] = receiverId;
 
@@ -3078,6 +3082,56 @@ class ApiService {
     } catch (e) {
       _logger.e('markMessageAsDelivered exception: $e');
     }
+  }
+
+  // ── Secret hearts (server: my_aluta_api/hearts.py) ─────────────────────────
+
+  /// Tell the sender I opened their heart (first open only; idempotent).
+  Future<Map<String, dynamic>?> heartOpened(int messageId) =>
+      _heartPost(messageId, 'opened');
+
+  /// Ask for a timed heart whose moment has passed. Null while still sealed
+  /// (HTTP 423) or on error; otherwise the message with its note.
+  Future<Map<String, dynamic>?> heartUnseal(int messageId) =>
+      _heartPost(messageId, 'unseal');
+
+  Future<Map<String, dynamic>?> _heartPost(int id, String action) async {
+    final token = await _getToken();
+    if (token == null) return null;
+    try {
+      final r = await http.post(
+        Uri.parse('${await _baseUrl}/messages/$id/heart/$action'),
+        headers: _authHeaders(token),
+      );
+      if (r.statusCode >= 200 && r.statusCode < 300) {
+        final d = jsonDecode(r.body);
+        if (d is Map<String, dynamic>) return d;
+      }
+    } catch (e) {
+      _logger.e('heart $action exception: $e');
+    }
+    return null;
+  }
+
+  /// Every secret heart between me and [peerId], newest first (love letters).
+  Future<List<Map<String, dynamic>>> loveLetters(int peerId) async {
+    final token = await _getToken();
+    if (token == null) return [];
+    try {
+      final r = await http.get(
+        Uri.parse('${await _baseUrl}/messages/hearts/$peerId'),
+        headers: _authHeaders(token),
+      );
+      if (r.statusCode >= 200 && r.statusCode < 300) {
+        final d = jsonDecode(r.body);
+        if (d is List) {
+          return d.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
+        }
+      }
+    } catch (e) {
+      _logger.e('loveLetters exception: $e');
+    }
+    return [];
   }
 
   // MARK AS READ

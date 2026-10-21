@@ -2059,8 +2059,11 @@ extension _ChatPageHelpers3 on _ChatPageState {
   // Short label describing a message for a reply quote/preview — media messages
   // get a typed label (📷 Photo / 🎤 Voice message / 📎 name) instead of blank.
   String _replyQuoteText(Map<String, dynamic> msg) {
-    final caption = _stripQuote((msg['content'] as String?) ?? '').trim();
     final type = (msg['message_type'] as String?) ?? 'text';
+    // A secret heart never shows its note outside the heart itself — not in a
+    // reply quote, not in the pinned banner (both read this label).
+    if (type == 'heart') return '❤️ Secret heart';
+    final caption = _stripQuote((msg['content'] as String?) ?? '').trim();
     final isMedia =
         type != 'text' && (msg['media_url'] as String? ?? '').isNotEmpty;
     if (isMedia && caption.isEmpty) {

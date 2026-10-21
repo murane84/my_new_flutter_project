@@ -197,27 +197,19 @@ extension _ChatPageHelpers3 on _ChatPageState {
               ),
               )
             else if (owned)
-              // Owned content → the Aluta mark (always on the sender's own
-              // bubble; on the receiver's once downloaded). Still tappable to
-              // save again to a chosen location.
+              // Owned content → the file-open mark (always on the sender's
+              // own bubble; on the receiver's once downloaded). Still tappable
+              // to save again to a chosen location.
               IconButton(
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
                 tooltip: isMine ? 'Your file' : 'Saved — tap to save again',
-                icon: ClipRRect(
-                  borderRadius: BorderRadius.circular(5),
-                  child: Image.asset(
-                    'assets/images/logo.png',
-                    width: 20,
-                    height: 20,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => Icon(
-                        Icons.verified_rounded,
-                        size: 20,
-                        color: scheme.primary),
-                  ),
-                ),
+                // "It's here — open it": the file-open glyph in the brand
+                // colour (was the Aluta logo, which read as branding, not
+                // state).
+                icon: Icon(Icons.file_open_rounded,
+                    size: 21, color: scheme.primary),
                 onPressed: () => _downloadMediaWithProgress(msg),
               )
             else

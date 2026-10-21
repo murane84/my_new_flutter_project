@@ -518,6 +518,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     sb.messagePartner = null;
     sb.listenTogether = null;
     sb.shareCurrent = null;
+    sb.canShare = null;
     sb.addToOurs = null;
     WidgetsBinding.instance.removeObserver(this);
     ConnectionStatus.instance.online.removeListener(_onGlobalConnChanged);
@@ -766,6 +767,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       if (p != null) _openSpace(p.space);
     };
     b.shareCurrent = () => playbackBus.onShareToChat?.call();
+    b.canShare = () => playbackBus.onShareToChat != null;
     b.addToOurs = (title, artist) async {
       final p = _partnerInfo();
       final sid = (p?.space['id'] as num?)?.toInt();

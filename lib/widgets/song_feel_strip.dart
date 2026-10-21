@@ -87,6 +87,7 @@ class _SongFeelStripState extends State<SongFeelStrip> {
         final b = SongBridge.instance;
         final partner = b.partnerName?.call();
         final hasP = partner != null && partner.isNotEmpty;
+        final canShare = b.canShare?.call() ?? false;
         final on2 = Theme.of(context).colorScheme.onSurface;
         Widget child;
         if (feel == null || _choosing) {
@@ -123,13 +124,15 @@ class _SongFeelStripState extends State<SongFeelStrip> {
           final t = widget.title;
           switch (feel) {
             case SongFeel.love:
-              actions.add(hasP
-                  ? _pill('Send to $partner 💞',
-                      strong: true,
-                      onTap: () => b.messagePartner
-                          ?.call(text: '“$t” reminds me of you 💞'))
-                  : _pill('Share 🎶',
-                      strong: true, onTap: () => b.shareCurrent?.call()));
+              if (hasP) {
+                actions.add(_pill('Send to $partner 💞',
+                    strong: true,
+                    onTap: () => b.messagePartner
+                        ?.call(text: '“$t” reminds me of you 💞')));
+              } else if (canShare) {
+                actions.add(_pill('Share 🎶',
+                    strong: true, onTap: () => b.shareCurrent?.call()));
+              }
               if (hasP) {
                 actions.add(_pill('Together',
                     icon: Icons.headphones_rounded,
@@ -148,8 +151,15 @@ class _SongFeelStripState extends State<SongFeelStrip> {
               }
               break;
             case SongFeel.hyped:
-              actions.add(_pill('Share the energy 🎶',
-                  strong: true, onTap: () => b.shareCurrent?.call()));
+              if (canShare) {
+                actions.add(_pill('Share the energy 🎶',
+                    strong: true, onTap: () => b.shareCurrent?.call()));
+              } else if (hasP) {
+                actions.add(_pill('Tell $partner 🎶',
+                    strong: true,
+                    onTap: () => b.messagePartner
+                        ?.call(text: '“$t” has me hyped 💪🎶')));
+              }
               break;
             case SongFeel.calm:
               actions.add(_pill('In your calm songs 🌙'));

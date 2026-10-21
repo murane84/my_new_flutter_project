@@ -352,6 +352,9 @@ class SongBridge {
   /// Share the song playing now to a chat (picker).
   VoidCallback? shareCurrent;
 
+  /// Whether this player can share its track (the web player can't yet).
+  bool Function()? canShare;
+
   /// Add a song to Our Playlist with the partner.
   Future<bool> Function(String title, String artist)? addToOurs;
 }

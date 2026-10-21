@@ -5353,25 +5353,11 @@ class _ChatPageState extends State<ChatPage>
                   ],
                 ),
                     ),
-                    // Input — floating on the wallpaper, over a soft tint
-                    // that rises from the bottom edge for legibility.
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Color.alphaBlend(
-                                scheme.primary.withValues(
-                                    alpha: isDark ? 0.10 : 0.06),
-                                scheme.surface)
-                                .withValues(alpha: isDark ? 0.55 : 0.45),
-                          ],
-                        ),
-                      ),
-                      child: _buildInput(isDark),
-                    ),
+                    // Input — floating straight on the wallpaper (no tint
+                    // band): the watermark / photo shows right through behind
+                    // it. Bubbles only soften as they scroll into the edge
+                    // (the list's own fade), so nothing sits there at rest.
+                    _buildInput(isDark),
                   ],
                 ),
               ],

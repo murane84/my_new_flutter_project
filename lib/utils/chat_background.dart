@@ -103,6 +103,10 @@ const String _kOverrides = 'chat_bg_overrides_v1'; // JSON {convKey: ChatBg}
 const String _kLegacyMode = 'chat_bg_mode_v1'; // migrate old single choice
 const String _kLegacyUrl = 'chat_bg_url_v1';
 const String _kApplyAll = 'chat_bg_apply_all_v1';
+// Set once the user actually picks an all-chats wallpaper. Until then each
+// chat gets a smart default by kind (see [chatBackgroundSmart]).
+const String _kAllChosen = 'chat_bg_all_chosen_v1';
+bool _allChosen = false;
 
 // Remembered "Apply to all chats" choice so picking a wallpaper (e.g. from the
 // gallery) keeps applying to every DM once the user has chosen that, instead
@@ -130,6 +134,20 @@ String chatConvKey({int? friendId, int? conversationId}) {
 /// The wallpaper a given chat should show: its own override, else the all-chats
 /// default.
 ChatBg chatBackgroundFor(String convKey) => _overrides[convKey] ?? _all;
+
+/// Like [chatBackgroundFor], but before the user has ever chosen a wallpaper
+/// each kind of chat starts with its own character: a bonded (couple) chat
+/// gets the romantic Motif, a group the Aluta Watermark, any other DM the
+/// Default. Any pick the user makes (per chat or for all) always wins.
+ChatBg chatBackgroundSmart(String convKey,
+    {required bool isGroup, bool bonded = false}) {
+  final o = _overrides[convKey];
+  if (o != null) return o;
+  if (_allChosen) return _all;
+  if (bonded) return const ChatBg('motif', null);
+  if (isGroup) return const ChatBg('watermark', null);
+  return _all;
+}
 
 /// The all-chats default (what a chat with no override shows).
 ChatBg get chatBackgroundAll => _all;
@@ -162,6 +180,8 @@ Future<void> loadChatBackground() async {
       });
     }
     _applyAllPref = p.getBool(_kApplyAll) ?? true;
+    // Existing users who already picked something non-default keep it.
+    _allChosen = p.getBool(_kAllChosen) ?? (_all.mode != 'default');
     chatBackground.value = _all;
     wallpaperClarity.value =
         (p.getDouble(_kClarity) ?? 0.5).clamp(0.0, 1.0).toDouble();
@@ -202,6 +222,11 @@ Future<void> setChatBackgroundAll(String mode,
     {String? url, String? wideUrl}) async {
   _all = _norm(mode, url, wideUrl);
   _overrides.clear();
+  _allChosen = true;
+  try {
+    final p = await SharedPreferences.getInstance();
+    await p.setBool(_kAllChosen, true);
+  } catch (_) {}
   await _persist();
   chatBackground.value = _all;
   chatBgRevision.value++;

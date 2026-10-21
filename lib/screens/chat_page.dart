@@ -1530,6 +1530,72 @@ class _ChatPageState extends State<ChatPage>
     unawaited(attempt());
   }
 
+  /// "Say hi" card for a brand-new conversation: the Aluta mark, a friendly
+  /// line, and a one-tap starter that drops "Hi 👋" into the composer.
+  Widget _emptyChatHello(ColorScheme scheme, bool isDark) {
+    final who = _isGroup ? widget.groupTitle : _livePeerLabel;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 32),
+      padding: const EdgeInsets.fromLTRB(22, 20, 22, 16),
+      constraints: const BoxConstraints(maxWidth: 320),
+      decoration: BoxDecoration(
+        color: scheme.surface.withValues(alpha: isDark ? 0.86 : 0.92),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+            color: scheme.primary.withValues(alpha: isDark ? 0.28 : 0.14)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.10),
+            blurRadius: 22,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Image.asset('assets/images/logo.png',
+                width: 48,
+                height: 48,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Icon(Icons.chat_bubble_rounded,
+                    size: 40, color: scheme.primary)),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _isGroup ? 'Welcome to $who' : 'Start your story with $who',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontSize: 15.5,
+                fontWeight: FontWeight.w800,
+                color: scheme.onSurface),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Messages, songs and secret hearts you share will live here.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 14),
+          FilledButton.tonalIcon(
+            onPressed: () {
+              const hi = 'Hi 👋';
+              _ctrl.value = const TextEditingValue(
+                text: hi,
+                selection: TextSelection.collapsed(offset: hi.length),
+              );
+              setState(() {});
+            },
+            icon: const Text('👋', style: TextStyle(fontSize: 16)),
+            label: const Text('Say hi'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _onDownloadsChanged() {
     if (mounted) setState(() {});
   }
@@ -3787,6 +3853,9 @@ class _ChatPageState extends State<ChatPage>
     // their picks apply to every chat, with text/links derived for contrast so
     // the same colour reads well in both light and dark mode.
     final bool customBubbles = bubbleCustomEnabled;
+    final bool onPhoto = chatBackgroundSmart(_convKey,
+            isGroup: _isGroup, bonded: _canHarmony)
+        .isPhoto;
     final Color sentBubble = customBubbles
         ? bubbleSentColor
         : (isDark ? const Color(0xFF4C2328) : const Color(0xFFFBDCDB));
@@ -3981,13 +4050,29 @@ class _ChatPageState extends State<ChatPage>
                     decoration: ShapeDecoration(
                       color: bubbleColor,
                       shape: bubbleShape,
-                      shadows: [
-                        BoxShadow(
-                          color: Colors.black.withAlpha(isDark ? 46 : 20),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
+                      // On a PHOTO wallpaper (any brightness, any busyness)
+                      // lift bubbles harder so text never sinks into the
+                      // picture; patterns keep the light shadow.
+                      shadows: onPhoto
+                          ? [
+                              BoxShadow(
+                                color: Colors.black.withAlpha(isDark ? 110 : 56),
+                                blurRadius: 14,
+                                offset: const Offset(0, 4),
+                              ),
+                              BoxShadow(
+                                color: Colors.black.withAlpha(isDark ? 60 : 24),
+                                blurRadius: 2,
+                                offset: const Offset(0, 1),
+                              ),
+                            ]
+                          : [
+                              BoxShadow(
+                                color: Colors.black.withAlpha(isDark ? 46 : 20),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
                     ),
                     // Reserve the tail-side gutter on EVERY bubble (not just
                     // the one with the beak) so a grouped run aligns straight.
@@ -4987,7 +5072,8 @@ class _ChatPageState extends State<ChatPage>
                   child: ValueListenableBuilder<int>(
                     valueListenable: chatBgRevision,
                     builder: (ctx, _, _) {
-                      final bg = chatBackgroundFor(_convKey);
+                      final bg = chatBackgroundSmart(_convKey,
+                          isGroup: _isGroup, bonded: _canHarmony);
                       if (bg.isPhoto) {
                         return _chatPhotoWallpaper(bg, isDark);
                       }
@@ -5000,7 +5086,10 @@ class _ChatPageState extends State<ChatPage>
                           builder: (_, v, _) => AlutaWatermarkWallpaper(
                               tint: scheme.primary,
                               isDark: isDark,
-                              strength: v),
+                              strength: v,
+                              // The big centre mark drifts a touch with the
+                              // chat — a hint of depth behind the bubbles.
+                              scroll: _scrollCtrl),
                         );
                       }
                       return _ChatWallpaper(
@@ -5126,6 +5215,13 @@ class _ChatPageState extends State<ChatPage>
                       ),
                     ),
                     ),
+                    // Empty chat: a warm, branded first-message nudge.
+                    if (_messages.isEmpty)
+                      Positioned.fill(
+                        child: Center(
+                          child: _emptyChatHello(scheme, isDark),
+                        ),
+                      ),
                     // New messages chip
                     if (_hasNewMsg)
                       Positioned(

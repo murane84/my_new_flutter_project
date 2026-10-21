@@ -60,6 +60,7 @@ Future<void> showChatWallpaperSheet(
   required String convKey,
   required String title,
   String? apiBase,
+  bool bonded = false,
 }) async {
   final base = apiBase ?? await AppConfig.baseUrl;
   final presets = await WallpapersService.instance.load();
@@ -67,7 +68,10 @@ Future<void> showChatWallpaperSheet(
   if (!context.mounted) return;
   final scheme = Theme.of(context).colorScheme;
   final isDark = Theme.of(context).brightness == Brightness.dark;
-  final current = chatBackgroundFor(convKey);
+  // What the chat actually SHOWS (incl. the smart per-kind default), so the
+  // right tile is highlighted.
+  final current = chatBackgroundSmart(convKey,
+      isGroup: convKey.startsWith('g'), bonded: bonded);
   bool applyAll = wallpaperApplyAllDefault;
 
   String full(String rel) => resolveWallpaperUrl(rel, base);

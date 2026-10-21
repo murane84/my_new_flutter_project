@@ -13,7 +13,12 @@ class AlutaWatermarkWallpaper extends StatelessWidget {
     required this.tint,
     required this.isDark,
     this.strength = 0.6,
+    this.scroll,
   });
+
+  /// Optional: the chat list's scroll position. The big centre mark drifts
+  /// gently against it (parallax) while the small lattice stays put.
+  final ScrollController? scroll;
 
   /// The theme colour the marks take on.
   final Color tint;
@@ -84,8 +89,28 @@ class AlutaWatermarkWallpaper extends StatelessWidget {
           return ClipRect(
             child: Stack(
               children: [
-                ...marks,
-                Center(child: logo(hero.clamp(120.0, 320.0), big)),
+                // The lattice never moves → its own layer, painted once.
+                Positioned.fill(
+                  child: RepaintBoundary(child: Stack(children: marks)),
+                ),
+                Center(
+                  child: scroll == null
+                      ? logo(hero.clamp(120.0, 320.0), big)
+                      : AnimatedBuilder(
+                          animation: scroll!,
+                          builder: (_, child) {
+                            final px = scroll!.hasClients
+                                ? scroll!.position.pixels
+                                : 0.0;
+                            // reverse list: scrolling up = larger pixels →
+                            // mark sinks a little; capped at ±40px.
+                            final dy = (px * 0.06).clamp(0.0, 40.0);
+                            return Transform.translate(
+                                offset: Offset(0, dy), child: child);
+                          },
+                          child: logo(hero.clamp(120.0, 320.0), big),
+                        ),
+                ),
               ],
             ),
           );

@@ -4188,7 +4188,7 @@ class _ChatPageState extends State<ChatPage>
                         child: Text(
                           isFromMe
                               ? 'Replying to yourself'
-                              : 'Replying to ${widget.friendName}',
+                              : 'Replying to ${_isGroup && _replyTo != null ? _groupMemberLabel(_replyTo!) : widget.friendName}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(

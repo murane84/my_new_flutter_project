@@ -1454,9 +1454,33 @@ extension _ChatPageHelpers3 on _ChatPageState {
   String _quotedAuthor(String quotedText, bool replyIsMe) {
     final orig = _findQuotedMessage(quotedText);
     if (orig != null) {
-      return orig['sender_id'].toString() == _myId ? 'You' : widget.friendName;
+      if (orig['sender_id'].toString() == _myId) return 'You';
+      // In a GROUP, widget.friendName is the GROUP's title ("Family") — name
+      // the member who actually wrote the quoted message instead: my saved
+      // phone-book name for them, else their Aluta username.
+      if (_isGroup) return _groupMemberLabel(orig);
+      return widget.friendName;
     }
+    if (_isGroup) return replyIsMe ? 'Member' : 'You';
     return replyIsMe ? widget.friendName : 'You';
+  }
+
+  /// A group message author's display name (phone-book name, else username).
+  String _groupMemberLabel(Map<String, dynamic> m) {
+    final Map sender = (m['sender'] as Map?) ?? const {};
+    final phone = (sender['phone'] ?? '').toString();
+    final saved = phone.isNotEmpty ? ContactNames.instance.nameFor(phone) : null;
+    if (saved != null && saved.isNotEmpty) return saved;
+    final uname = (sender['username'] ?? '').toString();
+    if (uname.isNotEmpty) return uname;
+    // Sender object missing (e.g. an optimistic copy): look them up in the
+    // loaded member list.
+    for (final mem in _groupMembers) {
+      if (mem['user_id']?.toString() == m['sender_id']?.toString()) {
+        return _memberName(mem);
+      }
+    }
+    return 'Member';
   }
 
   // ── Pin a message (for a duration) ────────────────────────────────────────

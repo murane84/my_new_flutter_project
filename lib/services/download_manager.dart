@@ -6,7 +6,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../screens/token_helper.dart' show mediaAuthHeaders;
@@ -68,7 +70,28 @@ class DownloadManager with WidgetsBindingObserver {
     try {
       WidgetsBinding.instance.addObserver(this);
     } catch (_) {}
+    // The network came back (Wi-Fi rejoined, data on, out of a dead zone) →
+    // continue anything that had paused, from its last byte.
+    try {
+      Connectivity().onConnectivityChanged.listen((r) {
+        if (r.any((c) => c != ConnectivityResult.none)) {
+          unawaited(resumePending());
+        }
+      });
+    } catch (_) {}
     unawaited(resumePending());
+  }
+
+  /// Wait until some network is up again (or [max] passes).
+  Future<void> _waitForNetwork(Duration max) async {
+    try {
+      final now = await Connectivity().checkConnectivity();
+      if (now.any((c) => c != ConnectivityResult.none)) return;
+      await Connectivity()
+          .onConnectivityChanged
+          .firstWhere((r) => r.any((c) => c != ConnectivityResult.none))
+          .timeout(max);
+    } catch (_) {/* timeout / plugin missing → just carry on */}
   }
 
   @override
@@ -181,14 +204,41 @@ class DownloadManager with WidgetsBindingObserver {
 
   Future<DownloadResult> _run(DownloadJob job, Map<String, String> headers,
       int expectedTotal, void Function(int attempt)? onRetry) async {
-    final part = File('${job.dest.path}.part');
+    final part = await _partFor(job.url, job.dest);
     try {
       await part.parent.create(recursive: true);
+      await job.dest.parent.create(recursive: true);
     } catch (_) {}
-    for (var attempt = 0; attempt < 6; attempt++) {
+    // Show where we already are straight away (a resumed job doesn't flash
+    // back to 0%).
+    try {
+      if (expectedTotal > 0 && await part.exists()) {
+        _setProgress(job, await part.length(), expectedTotal);
+      }
+    } catch (_) {}
+    // Patient retries: a flaky line / dead zone / Doze nap shouldn't end the
+    // download. Keep resuming (from the last byte) while it still makes
+    // progress; only give up after 30 min with NO new bytes — and even then
+    // the job stays remembered and continues on the next network change or
+    // app resume.
+    var lastBytes = -1;
+    var stalledSince = DateTime.now();
+    for (var attempt = 0;; attempt++) {
       if (attempt > 0) {
+        var nowBytes = 0;
+        try {
+          if (await part.exists()) nowBytes = await part.length();
+        } catch (_) {}
+        if (nowBytes > lastBytes) {
+          lastBytes = nowBytes;
+          stalledSince = DateTime.now();
+        } else if (DateTime.now().difference(stalledSince) >
+            const Duration(minutes: 30)) {
+          break;
+        }
         onRetry?.call(attempt);
-        await Future.delayed(Duration(seconds: (2 * attempt).clamp(2, 10)));
+        await _waitForNetwork(const Duration(minutes: 5));
+        await Future.delayed(Duration(seconds: (2 * attempt).clamp(2, 15)));
       }
       try {
         final status = await _streamOnce(job, part, headers, expectedTotal);
@@ -196,7 +246,15 @@ class DownloadManager with WidgetsBindingObserver {
           try {
             if (await job.dest.exists()) await job.dest.delete();
           } catch (_) {}
-          await part.rename(job.dest.path);
+          try {
+            await part.rename(job.dest.path);
+          } catch (_) {
+            // Different volume → copy, then drop the partial.
+            await part.copy(job.dest.path);
+            try {
+              await part.delete();
+            } catch (_) {}
+          }
           return DownloadResult(DownloadOutcome.ok, job.dest);
         }
         if (status == 404 || status == 410) {
@@ -211,6 +269,28 @@ class DownloadManager with WidgetsBindingObserver {
       }
     }
     return const DownloadResult(DownloadOutcome.failed);
+  }
+
+  /// Where a job's partial bytes live. NOT next to [dest] (that's usually the
+  /// OS cache dir, which Android may wipe while the phone sleeps under storage
+  /// pressure): app-support storage, keyed by the url, so a download that
+  /// Doze / a low-memory kill interrupted always continues from its last byte.
+  Future<File> _partFor(String url, File dest) async {
+    try {
+      if (!kIsWeb) {
+        final base = await getApplicationSupportDirectory();
+        return File('${base.path}/aluta_parts/${_fnv(url)}.part');
+      }
+    } catch (_) {}
+    return File('${dest.path}.part');
+  }
+
+  static String _fnv(String s) {
+    var h = 0x811c9dc5;
+    for (final c in s.codeUnits) {
+      h = ((h ^ c) * 0x01000193) & 0xFFFFFFFF;
+    }
+    return h.toRadixString(16).padLeft(8, '0');
   }
 
   /// One pass: resume from what's already in [part]. Returns 200 when the file

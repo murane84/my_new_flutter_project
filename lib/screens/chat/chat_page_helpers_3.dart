@@ -317,8 +317,11 @@ extension _ChatPageHelpers3 on _ChatPageState {
           headers: mediaAuthHeaders(url),
           expectedTotal: expected,
           name: name,
-          onRetry: (_) {
-            if (mounted) showToast(context, 'Connection dropped - resuming...');
+          onRetry: (n) {
+            if (n == 1 && mounted) {
+              showToast(context,
+                  'Connection dropped — it will continue where it stopped');
+            }
           },
         );
         if (!res.ok) {
@@ -327,7 +330,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 context,
                 res.outcome == DownloadOutcome.gone
                     ? 'File is no longer available'
-                    : 'Download paused — tap again to resume',
+                    : 'Download paused — it continues from where it stopped',
                 type: ToastType.error);
           }
           return;
@@ -532,8 +535,11 @@ extension _ChatPageHelpers3 on _ChatPageState {
         headers: mediaAuthHeaders(url),
         expectedTotal: expected,
         name: outName,
-        onRetry: (_) {
-          if (mounted) showToast(context, 'Connection dropped — resuming…');
+        onRetry: (n) {
+          if (n == 1 && mounted) {
+            showToast(context,
+                'Connection dropped — it will continue where it stopped');
+          }
         },
       );
       final ok = res.ok;

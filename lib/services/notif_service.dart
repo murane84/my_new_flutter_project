@@ -606,7 +606,7 @@ Future<void> finishDownloadNotif(String key, String name, bool ok) async {
     await _fln.show(
       id: downloadNotifId(key),
       title: name,
-      body: ok ? 'Downloaded · open it from the chat' : 'Download paused — tap the file to resume',
+      body: ok ? 'Downloaded · open it from the chat' : 'Paused (no network) — continues from where it stopped',
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           _dlChannelId,

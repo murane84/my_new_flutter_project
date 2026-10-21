@@ -219,6 +219,18 @@ class _HeartBubbleState extends State<HeartBubble>
   final GlobalKey _heartKey = GlobalKey();
   bool _revealedInHeart = false;
   bool _visible = false;
+  // "Awake" = the heart was just scrolled into view / touched. Stars twinkle
+  // and the heart beats only while awake; after [_awakeFor] of stillness they
+  // fade out together and everything rests (no frozen half-drawn stars, no
+  // battery spent on an idle screen). Scrolling or a touch wakes it again.
+  static const Duration _awakeFor = Duration(seconds: 6);
+  bool _awake = false;
+  Timer? _sleepTimer;
+  ScrollPosition? _scrollPos;
+  late final AnimationController _starFade = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 450),
+      reverseDuration: const Duration(milliseconds: 1100));
   bool _reduceMotion = false;
   bool _opening = false; // between hold-complete and the bloom (auth etc.)
   bool _hint = false; // "hold to open" nudge after a quick tap
@@ -277,20 +289,63 @@ class _HeartBubbleState extends State<HeartBubble>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    // Wake on every scroll of the chat list while this heart is on screen.
+    final pos = Scrollable.maybeOf(context)?.position;
+    if (pos != _scrollPos) {
+      _scrollPos?.removeListener(_onScroll);
+      _scrollPos = pos;
+      _scrollPos?.addListener(_onScroll);
+    }
     _syncBeat();
+  }
+
+  void _onScroll() {
+    if (_visible) _wake();
+  }
+
+  /// Start (or extend) the awake window.
+  void _wake() {
+    if (!mounted || _reduceMotion) return;
+    _sleepTimer?.cancel();
+    _sleepTimer = Timer(_awakeFor, _sleep);
+    if (!_awake) {
+      _awake = true;
+      _starFade.forward();
+      _syncBeat();
+    }
+  }
+
+  /// Let the stars fade out and the beat settle; stop the clocks after.
+  void _sleep() {
+    if (!mounted) return;
+    _awake = false;
+    _syncBeat(); // stops the beat
+    _starFade.reverse().whenComplete(() {
+      if (mounted && !_awake) _syncBeat(); // then stops the star clock
+    });
   }
 
   void _syncBeat() {
     final covered = !_revealedInHeart;
-    if (_visible && !_reduceMotion && covered && !_sealedByTime) {
+    if (_visible && _awake && !_reduceMotion && covered && !_sealedByTime) {
       if (!_beat.isAnimating) _beat.repeat();
-    } else {
-      if (_beat.isAnimating) {
-        _beat.stop();
-        _beat.value = 0;
-      }
+    } else if (_beat.isAnimating) {
+      // Finish the current lub-dub gently instead of snapping to rest.
+      _beat.animateTo(1.0,
+              duration: Duration(
+                  milliseconds: ((1 - _beat.value) * 1400).round().clamp(0, 1400)))
+          .whenComplete(() {
+        if (!mounted) return;
+        if (_visible && _awake && !_revealedInHeart && !_sealedByTime) {
+          _beat.repeat(); // woke up again while it was settling
+        } else {
+          _beat.value = 0;
+        }
+      });
     }
-    final starsOn = _visible && !_reduceMotion;
+    // The star clock keeps running while the field is (fading) visible.
+    final starsOn =
+        _visible && !_reduceMotion && (_awake || _starFade.value > 0);
     if (starsOn) {
       if (!_stars.isAnimating) _stars.repeat();
     } else if (_stars.isAnimating) {
@@ -355,6 +410,9 @@ class _HeartBubbleState extends State<HeartBubble>
     _tick?.cancel();
     _hold.dispose();
     _seal.dispose();
+    _sleepTimer?.cancel();
+    _scrollPos?.removeListener(_onScroll);
+    _starFade.dispose();
     _stars.dispose();
     _beat.dispose();
     super.dispose();
@@ -367,6 +425,7 @@ class _HeartBubbleState extends State<HeartBubble>
 
   void _pointerDown(PointerDownEvent e) {
     _swallowTap = false;
+    _wake();
     if (!_canHold) return;
     _downAt = e.position;
     _hapticStep = 0;
@@ -512,7 +571,15 @@ class _HeartBubbleState extends State<HeartBubble>
         final v = info.visibleFraction > 0.15;
         if (v != _visible) {
           _visible = v;
-          if (mounted) _syncBeat();
+          if (!mounted) return;
+          if (v) {
+            _wake(); // scrolled into view → stars + beat
+          } else {
+            _sleepTimer?.cancel();
+            _awake = false;
+            _starFade.value = 0;
+            _syncBeat();
+          }
         }
       },
       child: Listener(
@@ -611,10 +678,13 @@ class _HeartBubbleState extends State<HeartBubble>
           Positioned.fill(
             child: IgnorePointer(
               child: RepaintBoundary(
-                child: AnimatedBuilder(
-                  animation: _stars,
-                  builder: (context, _) => CustomPaint(
-                    painter: _StarsPainter(_stars.value, _accent),
+                child: FadeTransition(
+                  opacity: _starFade,
+                  child: AnimatedBuilder(
+                    animation: _stars,
+                    builder: (context, _) => CustomPaint(
+                      painter: _StarsPainter(_stars.value, _accent),
+                    ),
                   ),
                 ),
               ),

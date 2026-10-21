@@ -34,8 +34,9 @@ class AlutaWatermarkWallpaper extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final s = strength.clamp(0.0, 1.0);
     // Very low alphas on purpose — this is a texture.
-    final small = (isDark ? 0.045 : 0.055) * (0.55 + s * 0.9);
-    final big = (isDark ? 0.030 : 0.035) * (0.55 + s * 0.9);
+    final small = (isDark ? 0.040 : 0.050) * (0.55 + s * 0.9);
+    // The hero is huge, so it can carry a little more ink and still whisper.
+    final big = (isDark ? 0.050 : 0.065) * (0.55 + s * 0.9);
     final mark = isDark ? Color.lerp(tint, Colors.white, 0.35)! : tint;
 
     Widget logo(double size, double alpha) => ColorFiltered(
@@ -65,8 +66,9 @@ class AlutaWatermarkWallpaper extends StatelessWidget {
           ),
         ),
         child: LayoutBuilder(builder: (ctx, c) {
-          const cell = 92.0; // lattice spacing
-          const size = 26.0; // small mark
+          // Denser, smaller lattice: more marks, each more discreet.
+          const cell = 68.0; // lattice spacing
+          const size = 20.0; // small mark
           final cols = (c.maxWidth / cell).ceil() + 1;
           final rows = (c.maxHeight / cell).ceil() + 1;
           final marks = <Widget>[];
@@ -85,7 +87,11 @@ class AlutaWatermarkWallpaper extends StatelessWidget {
               ));
             }
           }
-          final hero = math.min(c.maxWidth, c.maxHeight) * 0.42;
+          // Screen-aware hero (like a brand watermark on a sign-in page):
+          // ~85% of the shorter side, so it reads as one big emblem behind
+          // the conversation on a phone and a wide desktop alike.
+          final hero =
+              (math.min(c.maxWidth, c.maxHeight) * 0.85).clamp(200.0, 900.0);
           return ClipRect(
             child: Stack(
               children: [
@@ -95,7 +101,7 @@ class AlutaWatermarkWallpaper extends StatelessWidget {
                 ),
                 Center(
                   child: scroll == null
-                      ? logo(hero.clamp(120.0, 320.0), big)
+                      ? logo(hero, big)
                       : AnimatedBuilder(
                           animation: scroll!,
                           builder: (_, child) {
@@ -108,7 +114,7 @@ class AlutaWatermarkWallpaper extends StatelessWidget {
                             return Transform.translate(
                                 offset: Offset(0, dy), child: child);
                           },
-                          child: logo(hero.clamp(120.0, 320.0), big),
+                          child: logo(hero, big),
                         ),
                 ),
               ],

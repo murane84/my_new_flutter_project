@@ -7,6 +7,7 @@ import 'message_search_screen.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter/foundation.dart'
     show kIsWeb, kReleaseMode, defaultTargetPlatform, TargetPlatform, ValueListenable;
 import 'package:flutter_contacts/flutter_contacts.dart';
@@ -196,6 +197,47 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // chip on the tile; value = the mentioning message id (opening the group
   // jumps to it). Fed by the notify socket's `mention` event.
   final Map<int, String> _groupMentions = {};
+  // Chats pinned to the top of "Your circle" (this device): 'dm:<id>' /
+  // 'grp:<id>', oldest pin first. A bonded partner's pin shows a heart.
+  List<String> _pinnedChats = [];
+  static const _pinsPref = 'pinned_chats_v1';
+  static const _maxPins = 5;
+
+  String _pinKeyOf(Map<String, dynamic> m) =>
+      m['is_group'] == true ? 'grp:${m['id']}' : 'dm:${m['id']}';
+
+  Future<void> _loadPinnedChats() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final l = p.getStringList(_pinsPref) ?? const <String>[];
+      if (mounted) setState(() => _pinnedChats = List.of(l));
+    } catch (_) {}
+  }
+
+  void _togglePinChat(Map<String, dynamic> m) {
+    final k = _pinKeyOf(m);
+    final was = _pinnedChats.contains(k);
+    if (!was && _pinnedChats.length >= _maxPins) {
+      showToast(context, 'You can pin up to $_maxPins chats',
+          type: ToastType.info);
+      return;
+    }
+    HapticFeedback.selectionClick();
+    setState(() {
+      _pinnedChats = was
+          ? (_pinnedChats.where((e) => e != k).toList())
+          : [..._pinnedChats, k];
+    });
+    showToast(context, was ? 'Chat unpinned' : 'Chat pinned to the top',
+        type: ToastType.success);
+    final snap = List.of(_pinnedChats);
+    () async {
+      try {
+        final p = await SharedPreferences.getInstance();
+        await p.setStringList(_pinsPref, snap);
+      } catch (_) {}
+    }();
+  }
   // When a chat is opened from a message notification, the id of the message to
   // scroll to + highlight once the thread loads (null for normal opens). Passed
   // to ChatPage; cleared to null on every ordinary open so it fires once.
@@ -316,6 +358,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _loadPinnedChats();
     // Drives the playlist drawer's smooth slide/fade in & out. MusicControls
     // flips playlistDrawerBus.isOpen; we animate the host from that.
     _playlistDrawerCtrl = AnimationController(

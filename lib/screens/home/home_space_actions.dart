@@ -397,6 +397,21 @@ extension _HomeSpaceActions on HomePageState {
                 ],
               ),
             ),
+            Builder(builder: (_) {
+              final pinned = _pinnedChats.contains(_pinKeyOf(f));
+              return ListTile(
+                leading: Icon(
+                    pinned
+                        ? Icons.push_pin_outlined
+                        : Icons.push_pin_rounded,
+                    color: scheme.primary),
+                title: Text(pinned ? 'Unpin chat' : 'Pin chat to the top'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _togglePinChat(f);
+                },
+              );
+            }),
             ListTile(
               leading: Icon(Icons.favorite_rounded, color: scheme.primary),
               title: const Text('Pin as Our Space'),

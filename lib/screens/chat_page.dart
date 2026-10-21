@@ -3435,6 +3435,8 @@ class _ChatPageState extends State<ChatPage>
       }
     } catch (_) {}
     if (!mounted) return;
+    // Newest first (the gallery reads top-down from now), de-duplicated.
+    msgs = _merge(const [], msgs);
 
     String shortDate(String iso) {
       final d = DateTime.tryParse(iso)?.toLocal();
@@ -3462,11 +3464,21 @@ class _ChatPageState extends State<ChatPage>
       if ((type == 'image' || type == 'video') && rel.isNotEmpty) {
         final full = fullMediaUrl(rel);
         final thumb = type == 'video' ? '$full/thumb' : full;
+        final d = DateTime.tryParse(ts)?.toLocal();
+        const months = [
+          'January', 'February', 'March', 'April', 'May', 'June', 'July',
+          'August', 'September', 'October', 'November', 'December'
+        ];
         media.add(MediaItem(
           messageId: id,
           thumbUrl: thumb,
           headers: mediaAuthHeaders(thumb),
           isVideo: type == 'video',
+          monthLabel: d == null ? '' : '${months[d.month - 1]} ${d.year}',
+          dayLabel: d == null
+              ? ''
+              : '${d.day} ${months[d.month - 1].substring(0, 3)}',
+          dateLabel: shortDate(ts),
         ));
       } else if (type == 'file' || type == 'document' || type == 'song') {
         final name = (m['media_name'] as String?)?.trim();
@@ -3506,6 +3518,14 @@ class _ChatPageState extends State<ChatPage>
       ),
     );
     if (jumpId != null && jumpId.isNotEmpty && mounted) {
+      // The browser reaches further back than the thread holds — fold that
+      // history in first so the jump can land on older items too.
+      if (!_messages.any((m) => m['id'].toString() == jumpId)) {
+        final merged = _merge(_messages, msgs);
+        setState(() => _messages = merged);
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted) return;
+      }
       _jumpToMessage(jumpId);
     }
   }

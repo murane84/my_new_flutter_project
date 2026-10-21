@@ -47,6 +47,15 @@ extension _HomeFriendListView on HomePageState {
         .toString()
         .toLowerCase();
     combined.sort((a, b) {
+      // Pinned chats ride on top (in the order they were pinned), then
+      // everything else by recency.
+      final pa = _pinnedChats.indexOf(_pinKeyOf(a));
+      final pb = _pinnedChats.indexOf(_pinKeyOf(b));
+      if (pa != -1 || pb != -1) {
+        if (pa == -1) return 1;
+        if (pb == -1) return -1;
+        return pa.compareTo(pb);
+      }
       final byTime = lastMillis(b).compareTo(lastMillis(a));
       return byTime != 0 ? byTime : nameKey(a).compareTo(nameKey(b));
     });
@@ -1510,18 +1519,21 @@ extension _HomeFriendListView on HomePageState {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  _formatFriendTimestamp(lastTime),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: hasUnread
-                        ? scheme.primary
-                        : textColor.withAlpha(110),
-                    fontWeight: hasUnread
-                        ? FontWeight.w600
-                        : FontWeight.normal,
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  _pinMark(f, scheme),
+                  Text(
+                    _formatFriendTimestamp(lastTime),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: hasUnread
+                          ? scheme.primary
+                          : textColor.withAlpha(110),
+                      fontWeight: hasUnread
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
                   ),
-                ),
+                ]),
                 if (hasUnread) ...[
                   const SizedBox(height: 4),
                   Container(
@@ -1578,6 +1590,35 @@ extension _HomeFriendListView on HomePageState {
 
   /// A group conversation row in the unified chat list. Tapping opens the group
   /// inside the chat panel (never a full-window route).
+  /// True when [friendId] shares a Space (bond) with me.
+  bool _isBondedFriend(int friendId) {
+    for (final s in _spaces) {
+      for (final m in ((s['members'] as List?) ?? const []).whereType<Map>()) {
+        if ((m['id'] as num?)?.toInt() == friendId) return true;
+      }
+    }
+    return false;
+  }
+
+  /// Small mark before the tile's time for a pinned chat: a heart for a
+  /// bonded partner (Aluta's signature), a pin for everyone else.
+  Widget _pinMark(Map<String, dynamic> m, ColorScheme scheme) {
+    if (!_pinnedChats.contains(_pinKeyOf(m))) return const SizedBox.shrink();
+    final bonded = m['is_group'] != true &&
+        _isBondedFriend((m['id'] as num?)?.toInt() ?? -1);
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: Tooltip(
+        message: bonded ? 'Pinned · your bond' : 'Pinned',
+        child: Icon(
+          bonded ? Icons.favorite_rounded : Icons.push_pin_rounded,
+          size: 12,
+          color: scheme.primary.withValues(alpha: bonded ? 1 : 0.75),
+        ),
+      ),
+    );
+  }
+
   Widget _buildGroupTile(
       Map<String, dynamic> g, Color textColor, ColorScheme scheme) {
     final title = (g['title'] as String?)?.trim();
@@ -1600,6 +1641,7 @@ extension _HomeFriendListView on HomePageState {
       color: Colors.transparent,
       child: InkWell(
       onTap: () => _isSharing ? _sendShareTo(group: g) : openGroupInPanel(g),
+      onLongPress: _isSharing ? null : () => _togglePinChat(g),
       borderRadius: BorderRadius.circular(16),
       child: Container(
         decoration: _circleTileDecoration(scheme, isDark),
@@ -1687,16 +1729,20 @@ extension _HomeFriendListView on HomePageState {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  _formatFriendTimestamp(lastTime),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color:
-                        hasUnread ? scheme.primary : textColor.withAlpha(110),
-                    fontWeight:
-                        hasUnread ? FontWeight.w600 : FontWeight.normal,
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  _pinMark(g, scheme),
+                  Text(
+                    _formatFriendTimestamp(lastTime),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: hasUnread
+                          ? scheme.primary
+                          : textColor.withAlpha(110),
+                      fontWeight:
+                          hasUnread ? FontWeight.w600 : FontWeight.normal,
+                    ),
                   ),
-                ),
+                ]),
                 if (hasUnread || _groupMentions.containsKey(gid)) ...[
                   const SizedBox(height: 4),
                   Row(mainAxisSize: MainAxisSize.min, children: [

@@ -9,11 +9,17 @@ class MediaItem {
   final String thumbUrl; // full image, or video poster (…/thumb)
   final Map<String, String> headers;
   final bool isVideo;
+  final String monthLabel; // "October 2026" — gallery section
+  final String dayLabel; // "21 Oct" — stamp on the tile
+  final String dateLabel; // "21 Oct 2026"
   const MediaItem({
     required this.messageId,
     required this.thumbUrl,
     required this.headers,
     required this.isVideo,
+    this.monthLabel = '',
+    this.dayLabel = '',
+    this.dateLabel = '',
   });
 }
 
@@ -143,42 +149,117 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
       return _empty(scheme, Icons.photo_library_outlined,
           'No photos or videos shared yet');
     }
-    return GridView.builder(
-      padding: const EdgeInsets.all(8),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        mainAxisSpacing: 6,
-        crossAxisSpacing: 6,
-      ),
-      itemCount: widget.media.length,
-      itemBuilder: (_, i) {
-        final m = widget.media[i];
-        return GestureDetector(
-          onTap: () => _jump(m.messageId),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image(
-                  image: authNetworkImageProvider(m.thumbUrl, m.headers),
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => Container(
-                    color: scheme.surfaceContainerHighest,
-                    child: Icon(Icons.broken_image_outlined,
-                        color: scheme.onSurfaceVariant),
-                  ),
+    // Month sections (newest first, as the items arrive), each a 3-up grid
+    // under a small accent header — the gallery reads like a timeline.
+    final sections = <(String, List<MediaItem>)>[];
+    for (final m in widget.media) {
+      if (sections.isEmpty || sections.last.$1 != m.monthLabel) {
+        sections.add((m.monthLabel, <MediaItem>[]));
+      }
+      sections.last.$2.add(m);
+    }
+    return CustomScrollView(
+      slivers: [
+        for (final sec in sections) ...[
+          if (sec.$1.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 14, 12, 6),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 3,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: scheme.primary,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(sec.$1,
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface)),
+                    const SizedBox(width: 6),
+                    Text('${sec.$2.length}',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: scheme.onSurfaceVariant)),
+                  ],
                 ),
-                if (m.isVideo)
-                  const Center(
-                    child: Icon(Icons.play_circle_fill_rounded,
-                        color: Colors.white, size: 34),
-                  ),
-              ],
+              ),
+            ),
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 150,
+                mainAxisSpacing: 6,
+                crossAxisSpacing: 6,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (_, i) => _mediaCell(scheme, sec.$2[i]),
+                childCount: sec.$2.length,
+              ),
             ),
           ),
-        );
-      },
+        ],
+        const SliverToBoxAdapter(child: SizedBox(height: 16)),
+      ],
+    );
+  }
+
+  Widget _mediaCell(ColorScheme scheme, MediaItem m) {
+    return Tooltip(
+      message: m.dateLabel.isEmpty ? 'Show in chat' : '${m.dateLabel} · show in chat',
+      child: GestureDetector(
+        onTap: () => _jump(m.messageId),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image(
+                image: authNetworkImageProvider(m.thumbUrl, m.headers),
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Container(
+                  color: scheme.surfaceContainerHighest,
+                  child: Icon(Icons.broken_image_outlined,
+                      color: scheme.onSurfaceVariant),
+                ),
+              ),
+              if (m.isVideo)
+                const Center(
+                  child: Icon(Icons.play_circle_fill_rounded,
+                      color: Colors.white, size: 34),
+                ),
+              // Day stamp, bottom-left, on a soft scrim.
+              if (m.dayLabel.isNotEmpty)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(6, 10, 6, 4),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.transparent, Colors.black54],
+                      ),
+                    ),
+                    child: Text(m.dayLabel,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

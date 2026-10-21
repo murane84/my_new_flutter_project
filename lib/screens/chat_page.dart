@@ -464,6 +464,8 @@ class _ChatPageState extends State<ChatPage>
   int _streakDays = 0;
   bool _streakAlive = false;
   bool _streakNudged = false;
+  bool _ritualsFlagsLoaded = false;
+  bool _bondRitualsRan = false;
   // Song playing when the current voice note started (its caption).
   String? _recordSong;
   bool _amAdmin = false;
@@ -530,6 +532,7 @@ class _ChatPageState extends State<ChatPage>
           .where((s) => (s['status'] ?? 'active').toString() == 'active')
           .toList();
       if (mounted) setState(() => _mySpaces = bonds);
+      _bondRituals();
     } catch (_) {
       // Leave _mySpaces empty — the Harmony actions just won't show.
     }
@@ -765,8 +768,10 @@ class _ChatPageState extends State<ChatPage>
         _replyTo = null;
         _groupMembers = []; // reloaded by _initChat for the new group
         _closeMentionPicker();
+        _resetRituals();
       });
       _initChat(); // _initChat runs _maybeInitialJump after the load
+      _loadRitualFlags();
     } else if (widget.initialJumpMessageId != null &&
         widget.initialJumpMessageId != old.initialJumpMessageId) {
       // Same thread already open + a notification for a NEW message tapped →
@@ -3524,7 +3529,7 @@ class _ChatPageState extends State<ChatPage>
       if ((type == 'image' || type == 'video') && rel.isNotEmpty) {
         final full = fullMediaUrl(rel);
         final thumb = type == 'video' ? '$full/thumb' : full;
-        final d = DateTime.tryParse(ts)?.toLocal();
+        final d = ts.isEmpty ? null : parseServerTime(ts);
         const months = [
           'January', 'February', 'March', 'April', 'May', 'June', 'July',
           'August', 'September', 'October', 'November', 'December'

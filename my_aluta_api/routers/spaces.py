@@ -1874,15 +1874,19 @@ def _chat_days(db: Session, pair_key: str, window_days: int = 400) -> set:
     except Exception:
         return set()
     since = datetime.now(timezone.utc) - timedelta(days=window_days)
-    rows = (
-        db.query(Message.sender_id, Message.timestamp)
-        .filter(
-            or_(and_(Message.sender_id == lo, Message.receiver_id == hi),
-                and_(Message.sender_id == hi, Message.receiver_id == lo)),
-            Message.timestamp >= since,
+    try:
+        rows = (
+            db.query(Message.sender_id, Message.timestamp)
+            .filter(
+                or_(and_(Message.sender_id == lo, Message.receiver_id == hi),
+                    and_(Message.sender_id == hi, Message.receiver_id == lo)),
+                Message.timestamp >= since,
+            )
+            .all()
         )
-        .all()
-    )
+    except Exception:
+        db.rollback()  # never leave the session in an aborted transaction
+        return set()
     by: dict = {lo: set(), hi: set()}
     for sid, ts in rows:
         if ts is None or sid not in by:
@@ -3103,5 +3107,15 @@ def send_heartbeat(
         "data": {"from_id": current_user.id, "from_name": name,
                  "at": now.isoformat()},
     })
-    _push(partner, "\U0001F493 " + name, f"{name} is thinking of you", "heartbeat_tap")
+    if send_push_to_user is not None:
+        try:
+            send_push_to_user(partner, {
+                "type": "heartbeat_tap",
+                "title": "\U0001F493 " + name,
+                "body": f"{name} is thinking of you",
+                "from_id": str(current_user.id),
+                "from_name": name,
+            })
+        except Exception:
+            pass
     return {"sent": True}

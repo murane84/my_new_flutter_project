@@ -93,9 +93,14 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       // Partner's wordless "thinking of you" (server spaces.py). In the
       // foreground the live socket already pulses the app — no banner.
       if (foreground) return;
+      final from = (data['from_id'] ?? '').toString();
       await showMessageNotification(
         title: (data['title'] ?? '💓').toString(),
         body: (data['body'] ?? 'is thinking of you').toString(),
+        // Its own slot (never replaces another alert); tap opens their chat.
+        id: 7300 + (int.tryParse(from) ?? 0) % 1000,
+        senderId: from.isEmpty ? null : from,
+        senderName: (data['from_name'] ?? '').toString(),
       );
     } else if (type == 'heart_opened' || type == 'heart_ready') {
       // Secret hearts (server hearts.py): the tender receipt to the sender, or

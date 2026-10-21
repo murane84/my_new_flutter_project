@@ -801,11 +801,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final sid = (space?['id'] as num?)?.toInt();
     if (sid == null) return null;
     if (!_streakDays.containsKey(sid) && _streakFetching.add(sid)) {
+      // Always cache something (0 hides the flame), so an offline / empty
+      // answer doesn't refetch on every rebuild.
       ApiService().getStreak(sid).then((s) {
-        _streakFetching.remove(sid);
-        final n = (s?['current_days'] as num?)?.toInt();
-        if (mounted && n != null) setState(() => _streakDays[sid] = n);
-      });
+        if (!mounted) return;
+        setState(() =>
+            _streakDays[sid] = (s?['current_days'] as num?)?.toInt() ?? 0);
+      }).catchError((_) {}).whenComplete(() => _streakFetching.remove(sid));
     }
     return _streakDays[sid];
   }
@@ -2559,9 +2561,16 @@ class HomePageState extends rp.ConsumerState<HomePage>
               }
             },
             // Double-tap a bonded partner → heartbeat ("thinking of you").
-            onDoubleTap: () => _sendHeartbeatTap(
-                int.tryParse(_activeFriendId ?? '') ?? -1,
-                _contactDisplayName(_activeFriendPhone, _activeFriendName ?? '')),
+            // Only for a bonded partner — a double-tap handler delays every
+            // single tap (~300ms), so others keep instant taps.
+            onDoubleTap:
+                _spaceWithFriend(int.tryParse(_activeFriendId ?? '') ?? -1) ==
+                        null
+                    ? null
+                    : () => _sendHeartbeatTap(
+                        int.tryParse(_activeFriendId ?? '') ?? -1,
+                        _contactDisplayName(
+                            _activeFriendPhone, _activeFriendName ?? '')),
             // Same status ring as the friend list (colourful=unseen, grey=seen).
             // Glows in the theme colour while a heartbeat passes between you.
             child: AnimatedContainer(

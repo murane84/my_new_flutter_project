@@ -15,11 +15,23 @@ extension _ChatRituals on _ChatPageState {
     return '${d.year}-${d.month}-${d.day}';
   }
 
+  /// "Night of": until 2 AM it's still last night (good-night chip).
+  String get _nightKey {
+    final d = DateTime.now().subtract(const Duration(hours: 2));
+    return '${d.year}-${d.month}-${d.day}';
+  }
+
+  /// Server times are UTC (often without a zone marker) → local.
+  DateTime? _ts(Object? raw) {
+    final s = (raw ?? '').toString();
+    return s.isEmpty ? null : parseServerTime(s);
+  }
+
   Future<void> _loadRitualFlags() async {
     try {
       final p = await SharedPreferences.getInstance();
       final k = _todayKey;
-      _gnDoneToday = p.getString('gn_done_${widget.friendId}') == k;
+      _gnDoneToday = p.getString('gn_done_${widget.friendId}') == _nightKey;
       _memoryDoneToday = p.getString('otd_done_$_activeConvKey') == k;
       // Our anniversary (month-day saved from the heart composer's picker).
       final md = p.getString('heart_anniv_${widget.friendId}');
@@ -27,32 +39,50 @@ extension _ChatRituals on _ChatPageState {
       _annivToday = md == '${now.month}-${now.day}' &&
           p.getString('anniv_done_${widget.friendId}') != k;
       if (mounted) rebuildWith(() {});
-      // The "In tune" streak with this partner (for the keep-it-alive chip).
-      if (!_isGroup) {
-        Future.delayed(const Duration(seconds: 2), () async {
-          final sid = _defaultKeepSpaceId;
-          if (!mounted || sid == null) return;
-          final st = await ApiService().getStreak(sid);
-          if (!mounted || st == null) return;
-          rebuildWith(() {
-            _streakDays = (st['current_days'] as num?)?.toInt() ?? 0;
-            _streakAlive = st['alive'] == true;
-          });
-        });
-      }
-      // Reach further back once a day so "on this day" can find last year.
-      if (!_isGroup && !_memoryDoneToday) {
-        Future.delayed(const Duration(seconds: 4), () {
-          if (mounted && _bondedDm) _searchDeepLoad();
-        });
-      }
+      _ritualsFlagsLoaded = true;
+      _bondRituals();
     } catch (_) {}
+  }
+
+  /// Bond-only extras — run once both the flags and my Spaces are known
+  /// (called from _loadRitualFlags AND _loadMySpaces, whichever lands last).
+  Future<void> _bondRituals() async {
+    if (!mounted || !_ritualsFlagsLoaded || !_bondedDm || _bondRitualsRan) {
+      return;
+    }
+    _bondRitualsRan = true;
+    final convAtStart = _activeConvKey;
+    // Reach further back once a day so "on this day" can find last year.
+    if (!_memoryDoneToday) {
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted && _activeConvKey == convAtStart) _searchDeepLoad();
+      });
+    }
+    // The "In tune" streak with this partner (keep-it-alive chip).
+    final sid = _defaultKeepSpaceId;
+    if (sid == null) return;
+    final st = await ApiService().getStreak(sid);
+    if (!mounted || st == null || _activeConvKey != convAtStart) return;
+    rebuildWith(() {
+      _streakDays = (st['current_days'] as num?)?.toInt() ?? 0;
+      _streakAlive = st['alive'] == true;
+    });
+  }
+
+  /// A different chat opened in this same page → forget the last one's.
+  void _resetRituals() {
+    _gnDoneToday = _memoryDoneToday = _annivToday = false;
+    _streakAlive = _streakNudged = false;
+    _streakDays = 0;
+    _recordSong = null;
+    _ritualsFlagsLoaded = false;
+    _bondRitualsRan = false;
   }
 
   Future<void> _markRitual(String key) async {
     try {
       final p = await SharedPreferences.getInstance();
-      await p.setString(key, _todayKey);
+      await p.setString(key, key.startsWith('gn_') ? _nightKey : _todayKey);
     } catch (_) {}
   }
 
@@ -102,7 +132,7 @@ extension _ChatRituals on _ChatPageState {
     if (now.hour < 18) return false;
     var mine = false, theirs = false;
     for (final m in _messages) {
-      final d = DateTime.tryParse((m['timestamp'] ?? '').toString())?.toLocal();
+      final d = _ts(m['timestamp']);
       if (d == null) continue;
       if (d.year != now.year || d.month != now.month || d.day != now.day) {
         break; // newest-first: past today
@@ -126,7 +156,7 @@ extension _ChatRituals on _ChatPageState {
       if (m['is_deleted'] == true || (m['message_type'] ?? '') == 'heart') {
         continue;
       }
-      final d = DateTime.tryParse((m['timestamp'] ?? '').toString())?.toLocal();
+      final d = _ts(m['timestamp']);
       if (d == null || d.year >= now.year) continue;
       if (d.month == now.month && d.day == now.day) best = m; // keeps oldest
     }
@@ -241,7 +271,7 @@ extension _ChatRituals on _ChatPageState {
     }
     final memory = _onThisDay;
     if (memory != null && !_heartMode) {
-      final d = DateTime.tryParse(memory['timestamp'].toString())!.toLocal();
+      final d = _ts(memory['timestamp'])!;
       final years = DateTime.now().year - d.year;
       chips.add(_ritualChip(
         scheme: scheme,

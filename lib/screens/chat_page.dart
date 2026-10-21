@@ -94,6 +94,7 @@ part 'chat/chat_page_helpers_2.dart'; // _ChatPageState helpers (38 methods)
 part 'chat/chat_page_helpers_3.dart'; // _ChatPageState helpers (42 methods)
 part 'chat/mention_overlay.dart';     // @-mentions picker (group chats)
 part 'chat/heart_composer.dart';      // secret-heart tray + receipts
+part 'chat/chat_unread.dart';         // "N new messages" divider + last-seen
 
 // ─── Timestamp helpers ───────────────────────────────────────────────────────
 
@@ -437,6 +438,14 @@ class _ChatPageState extends State<ChatPage>
   bool _farFromBottom = false;
   // The message field has focus → the composer pill shows its brand ring.
   bool _composerFocused = false;
+  // ── Unread divider (chat/chat_unread.dart) ─────────────────────────────────
+  // The newest message id I'd SEEN (reached the bottom with) last time, the
+  // first incoming message after it (the divider goes above it), and how many
+  // arrived since. Snapshotted when the chat opens.
+  int? _lastSeenAtOpen;
+  String? _unreadAnchorId;
+  int _unreadCount = 0;
+  int _seenSavedId = 0; // last id written (avoids a prefs write per frame)
 
   Timer? _statusTimer;
   Timer? _pollTimer;
@@ -636,6 +645,7 @@ class _ChatPageState extends State<ChatPage>
 
   @override
   void dispose() {
+    if (_isAtBottom) _markSeenUpToNewest();
     WidgetsBinding.instance.removeObserver(this);
     if (kIsWeb) webpaste.unregisterClipboardPaste();
     // Release any in-flight caption request so its awaiter unwinds.
@@ -735,6 +745,7 @@ class _ChatPageState extends State<ChatPage>
     // Reply-author memory first, so the first paint of quote headers uses it
     // (and doesn't overwrite it with only the currently-loaded originals).
     await _loadQuoteAuthors();
+    await _loadLastSeen(); // where I left off → the "N new messages" divider
     await _loadCachedMessages(); // show cached messages instantly (clears loader)
     if (mounted && _isLoading) setState(() => _isLoading = false);
     _syncUploads(); // re-attach any media upload still running for this chat
@@ -754,6 +765,7 @@ class _ChatPageState extends State<ChatPage>
 
     await _loadMessages();        // fetch fresh from network (best-effort)
     if (_isGroup) unawaited(_loadGroupMembers()); // for the @-mention picker
+    _placeUnreadDivider();        // "N new messages" + open where I left off
     _maybeInitialJump();          // opened from a notification → jump to it
     _checkOnlineStatus();
     _startPolling();
@@ -1377,6 +1389,7 @@ class _ChatPageState extends State<ChatPage>
       });
     }
     if (atBottom && _hasNewMsg) setState(() => _hasNewMsg = false);
+    if (atBottom) _markSeenUpToNewest();
   }
 
   /// Back to the newest message. From far up, jump most of the way first
@@ -3318,7 +3331,7 @@ class _ChatPageState extends State<ChatPage>
   /// context): step the list toward it a screen at a time until it is, then
   /// centre it. The flash only starts once the scroll has settled — two soft
   /// pulses of the accent band + a little lift of the bubble, then a fade.
-  Future<void> _jumpToMessage(String id) async {
+  Future<void> _jumpToMessage(String id, {bool flash = true}) async {
     final seq = ++_flashSeq;
     var ctx = _msgKeys[id]?.currentContext;
     if (ctx == null && _scrollCtrl.hasClients) {
@@ -3356,6 +3369,7 @@ class _ChatPageState extends State<ChatPage>
       curve: Curves.easeOutCubic,
     );
     if (!mounted || seq != _flashSeq) return;
+    if (!flash) return;
     HapticFeedback.selectionClick();
     // Pulse: on · off · on · then fade out.
     const steps = <(bool, int)>[(true, 300), (false, 220), (true, 900)];
@@ -5284,6 +5298,9 @@ class _ChatPageState extends State<ChatPage>
                             children: [
                               if (showDate)
                                 _buildDateSeparator(dateLabel),
+                              if (_unreadAnchorId != null &&
+                                  msg['id'].toString() == _unreadAnchorId)
+                                _buildUnreadDivider(scheme, isDark),
                               _animateInWrap(
                                   msg,
                                   _buildBubble(msg, isMe, isDark, showAvatar,

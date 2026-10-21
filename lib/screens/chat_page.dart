@@ -62,6 +62,7 @@ import 'chat/formatted_text.dart';
 import 'chat/heart_message.dart';
 import 'chat/conversation_media.dart';
 import '../services/keystroke_sounds.dart';
+import '../services/upload_manager.dart';
 import '../services/heart_lock.dart';
 import 'package:float_column/float_column.dart';
 import 'package:linkify/linkify.dart' show linkify;
@@ -498,6 +499,7 @@ class _ChatPageState extends State<ChatPage>
     _loadSavedMediaKeys();
     KeystrokeSounds.instance.init();
     HeartLock.instance.init();
+    UploadManager.instance.rev.addListener(_onUploadsChanged);
     // Tell the notifier which conversation is on screen, so a foreground push
     // for THIS chat doesn't pop a redundant banner while the user reads it.
     if (_isGroup) {
@@ -634,6 +636,7 @@ class _ChatPageState extends State<ChatPage>
     }
     _sendActivePresence(false);
     _ws.close();
+    UploadManager.instance.rev.removeListener(_onUploadsChanged);
     super.dispose();
   }
 
@@ -691,6 +694,7 @@ class _ChatPageState extends State<ChatPage>
     } catch (_) {}
     await _loadCachedMessages(); // show cached messages instantly (clears loader)
     if (mounted && _isLoading) setState(() => _isLoading = false);
+    _syncUploads(); // re-attach any media upload still running for this chat
 
     // Best-effort refresh from the network. On success this also re-caches the
     // user id (see ApiService.getUserData); offline it simply no-ops.
@@ -1458,10 +1462,55 @@ class _ChatPageState extends State<ChatPage>
     }
   }
 
+  // Keep this chat in sync with the persistent upload manager: show in-flight
+  // uploads (incl. ones started before navigating away), live progress, and
+  // swap a finished upload's optimistic bubble for the real sent message.
+  void _onUploadsChanged() {
+    if (mounted) _syncUploads();
+  }
+
+  void _syncUploads() {
+    if (!mounted) return;
+    final key = _activeConvKey;
+    var changed = false;
+    for (final up in UploadManager.instance.active(key)) {
+      if (!_messages.any((m) => m['id'] == up.optimistic['id'])) {
+        _messages.insert(0, up.optimistic);
+        changed = true;
+      }
+    }
+    for (final d in UploadManager.instance.drainDone(key)) {
+      final tempId = d['tempId'];
+      final sent = d['sent'] as Map<String, dynamic>?;
+      final i = _messages.indexWhere((m) => m['id'].toString() == tempId);
+      if (i != -1) {
+        _messages.removeAt(i);
+        changed = true;
+      }
+      if (sent != null && !_messages.any((m) => m['id'] == sent['id'])) {
+        _messages.insert(0, sent);
+        changed = true;
+      }
+    }
+    // Progress mutates the shared optimistic map in place, so rebuild whenever
+    // this chat has a live upload, even with no structural change.
+    if (changed || UploadManager.instance.active(key).isNotEmpty) {
+      setState(() {});
+    }
+    if (changed) _saveMessagesCache();
+  }
+
   // Re-run a failed send (tapped from the retry marker in the tick slot).
   void _retrySend(Map<String, dynamic> msg) {
     final tempId = msg['id']?.toString();
     if (tempId == null) return;
+    // A media upload's retry lives in the manager (it survives navigation).
+    final key = _activeConvKey;
+    if (UploadManager.instance.has(key, tempId)) {
+      setState(() => msg['status'] = 'sending');
+      UploadManager.instance.retry(key, tempId);
+      return;
+    }
     final job = _outbox[tempId];
     if (job == null) return;
     setState(() => msg['status'] = 'sending');

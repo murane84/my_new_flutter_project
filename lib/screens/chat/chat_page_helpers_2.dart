@@ -596,6 +596,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
     // (uncompressed) bytes/mime/name are captured for the attempt so a retry
     // starts clean.
     final tempId = _newTempId();
+    final convKey = _activeConvKey;
     final optimistic = _optimisticMsg(tempId, type, caption);
     optimistic['media_name'] = filename;
     optimistic['media_mime'] = mime;
@@ -647,7 +648,8 @@ extension _ChatPageHelpers2 on _ChatPageState {
             filename: sendName,
             mime: sendMime,
             ephemeral: ephemeral,
-            onProgress: (sent, total) => _setUploadProgress(
+            onProgress: (sent, total) => UploadManager.instance.progress(
+                convKey,
                 tempId,
                 // Bytes handed to the socket aren't "done" — the server still
                 // has to receive + accept them, then we create the message.
@@ -655,7 +657,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
                 // it smoothly to 100%, so it never slams to ~99% then stalls.
                 total > 0 ? (sent / total * 0.90).clamp(0.0, 0.90) : null)));
         if (up == null || up['url'] == null) {
-          _replaceOptimistic(tempId, null);
+          UploadManager.instance.finish(convKey, tempId, null);
           if (mounted) {
             showToast(context, 'Upload failed — tap the ! to retry',
                 type: ToastType.error);
@@ -664,7 +666,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
         }
         // File is on the server; keep the ring moving while the message row is
         // created (the animated bar eases, so this reads as one smooth fill).
-        _setUploadProgress(tempId, 0.96);
+        UploadManager.instance.progress(convKey, tempId, 0.96);
         final sent = await appBusy.run(() => ApiService().sendMessage(
               widget.friendId,
               // Caption travels as the message content, so an image + text
@@ -682,16 +684,16 @@ extension _ChatPageHelpers2 on _ChatPageState {
           // Truly done now (uploaded AND the message was created). Fill the
           // ring to 100% and confirm with a "Sent" toast, then let the
           // optimistic bubble swap to the real sent message.
-          _setUploadProgress(tempId, 1.0);
+          UploadManager.instance.progress(convKey, tempId, 1.0);
           if (mounted) showToast(context, 'Sent', type: ToastType.success);
           await Future.delayed(const Duration(milliseconds: 600));
         } else if (mounted) {
           showToast(context, 'Could not send — tap the ! to retry',
               type: ToastType.error);
         }
-        _replaceOptimistic(tempId, sent);
+        UploadManager.instance.finish(convKey, tempId, sent);
       } catch (_) {
-        _replaceOptimistic(tempId, null);
+        UploadManager.instance.finish(convKey, tempId, null);
         if (mounted) {
           showToast(context, 'Upload failed — tap the ! to retry',
               type: ToastType.error);
@@ -699,26 +701,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
       }
     }
 
-    _outbox[tempId] = attempt;
-    unawaited(attempt());
-  }
-
-  /// Live upload progress for an optimistic media bubble. Throttled to ~1%
-  /// steps so a large file doesn't trigger a rebuild per network chunk.
-  void _setUploadProgress(String tempId, double? p) {
-    if (!mounted) return;
-    final idx = _messages.indexWhere((m) => m['id'] == tempId);
-    if (idx == -1) return;
-    final prev = _messages[idx]['__upProgress'] as double?;
-    // Throttle only the dense byte-phase updates (< 0.90); always apply the
-    // milestone values (0.90, 0.96, 1.0) so the fill completes cleanly.
-    if (p != null &&
-        p < 0.90 &&
-        prev != null &&
-        (p - prev).abs() < 0.01) {
-      return;
-    }
-    rebuildWith(() => _messages[idx]['__upProgress'] = p);
+    UploadManager.instance.begin(convKey, optimistic, attempt);
   }
 
   String _fmtBytes(int? n) {

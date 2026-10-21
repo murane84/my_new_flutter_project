@@ -428,6 +428,9 @@ class _ChatPageState extends State<ChatPage>
   int _emojiTab = 0;
   bool _isAtBottom = true;
   bool _hasNewMsg = false;
+  // Scrolled well up (e.g. after jumping to a quoted message) → show the
+  // round "back to latest" button.
+  bool _farFromBottom = false;
 
   Timer? _statusTimer;
   Timer? _pollTimer;
@@ -1359,8 +1362,33 @@ class _ChatPageState extends State<ChatPage>
     _starTimer?.cancel();
     final atBottom = _scrollCtrl.offset <=
         _scrollCtrl.position.minScrollExtent + 40;
-    setState(() => _isAtBottom = atBottom);
+    final far = _scrollCtrl.offset - _scrollCtrl.position.minScrollExtent >
+        _scrollCtrl.position.viewportDimension * 0.6;
+    if (atBottom != _isAtBottom || far != _farFromBottom) {
+      setState(() {
+        _isAtBottom = atBottom;
+        _farFromBottom = far;
+      });
+    }
     if (atBottom && _hasNewMsg) setState(() => _hasNewMsg = false);
+  }
+
+  /// Back to the newest message. From far up, jump most of the way first
+  /// (so it doesn't scroll for seconds), then glide the last screen.
+  void _jumpToLatest() {
+    if (!_scrollCtrl.hasClients) return;
+    HapticFeedback.selectionClick();
+    final pos = _scrollCtrl.position;
+    final screen = pos.viewportDimension;
+    if (pos.pixels - pos.minScrollExtent > screen * 3) {
+      _scrollCtrl.jumpTo(pos.minScrollExtent + screen * 1.5);
+    }
+    _scrollCtrl.animateTo(
+      pos.minScrollExtent,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+    );
+    setState(() => _hasNewMsg = false);
   }
 
   void _onChatPointerDown(PointerDownEvent e) => _starDownPos = e.position;
@@ -5038,6 +5066,67 @@ class _ChatPageState extends State<ChatPage>
                           ),
                         ),
                       ),
+                    // Round "back to latest" button, bottom-right, whenever
+                    // you're a good way up the thread (a dot = new messages).
+                    Positioned(
+                      right: 12,
+                      bottom: 12,
+                      child: IgnorePointer(
+                        ignoring: !_farFromBottom,
+                        child: AnimatedScale(
+                          scale: _farFromBottom ? 1 : 0.6,
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeOutBack,
+                          child: AnimatedOpacity(
+                            opacity: _farFromBottom ? 1 : 0,
+                            duration: const Duration(milliseconds: 180),
+                            child: Material(
+                              color: scheme.surface,
+                              shape: CircleBorder(
+                                  side: BorderSide(
+                                      color: scheme.outlineVariant
+                                          .withValues(alpha: 0.6))),
+                              elevation: 4,
+                              shadowColor: Colors.black38,
+                              child: InkWell(
+                                customBorder: const CircleBorder(),
+                                onTap: _jumpToLatest,
+                                child: SizedBox(
+                                  width: 42,
+                                  height: 42,
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      Icon(
+                                          Icons
+                                              .keyboard_double_arrow_down_rounded,
+                                          color: scheme.primary,
+                                          size: 24),
+                                      if (_hasNewMsg)
+                                        Positioned(
+                                          top: 7,
+                                          right: 8,
+                                          child: Container(
+                                            width: 9,
+                                            height: 9,
+                                            decoration: BoxDecoration(
+                                              color: scheme.primary,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                  color: scheme.surface,
+                                                  width: 1.5),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                     if (_viewerImages != null) _buildInlineViewer(),
                   ],
                 ),

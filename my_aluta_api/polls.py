@@ -33,12 +33,16 @@ def clean_poll(raw) -> dict:
         raise ValueError("Poll needs at least two different options")
     if len(opts) > MAX_OPTIONS:
         raise ValueError(f"A poll can have at most {MAX_OPTIONS} options")
-    return {
+    out = {
         "q": q[:MAX_QUESTION_LEN],
         "options": opts,
         "multi": bool(data.get("multi")),
         "votes": {},
     }
+    # A "jam": the options are songs — the group votes what plays next.
+    if data.get("kind") == "jam":
+        out["kind"] = "jam"
+    return out
 
 
 def load(msg) -> dict:

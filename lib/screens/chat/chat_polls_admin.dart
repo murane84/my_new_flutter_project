@@ -169,6 +169,9 @@ extension _ChatPollsAdmin on _ChatPageState {
     final q = TextEditingController();
     final opts = [TextEditingController(), TextEditingController()];
     var multi = false;
+    var jam = false;
+    // Song titles I can offer for a jam (my loaded playlist / web queue).
+    final songTitles = _jamSongTitles();
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
@@ -219,13 +222,46 @@ extension _ChatPollsAdmin on _ChatPageState {
                   ),
                   const SizedBox(height: 12),
                   Row(children: [
-                    Icon(Icons.poll_rounded, color: scheme.primary),
+                    Icon(jam ? Icons.queue_music_rounded : Icons.poll_rounded,
+                        color: scheme.primary),
                     const SizedBox(width: 8),
-                    Text('New poll',
-                        style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                            color: scheme.onSurface)),
+                    Expanded(
+                      child: Text(jam ? 'Group jam' : 'New poll',
+                          style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: scheme.onSurface)),
+                    ),
+                    // A jam: fill the options from my songs.
+                    if (songTitles.isNotEmpty)
+                      TextButton.icon(
+                        onPressed: () async {
+                          final picked =
+                              await _pickJamSongs(ctx, songTitles);
+                          if (picked == null || picked.length < 2) return;
+                          setS(() {
+                            jam = true;
+                            if (q.text.trim().isEmpty) {
+                              q.text = 'What do we play next? 🎶';
+                            }
+                            final old = List.of(opts);
+                            opts
+                              ..clear()
+                              ..addAll(picked
+                                  .map((t) => TextEditingController(text: t)));
+                            if (opts.length < 12) {
+                              opts.add(TextEditingController());
+                            }
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              for (final c in old) {
+                                c.dispose();
+                              }
+                            });
+                          });
+                        },
+                        icon: const Icon(Icons.library_music_rounded, size: 18),
+                        label: const Text('Songs'),
+                      ),
                   ]),
                   const SizedBox(height: 14),
                   TextField(
@@ -291,10 +327,11 @@ extension _ChatPollsAdmin on _ChatPageState {
                               'q': q.text.trim(),
                               'options': clean,
                               'multi': multi,
+                              if (jam) 'kind': 'jam',
                             })
                         : null,
                     icon: const Icon(Icons.send_rounded, size: 18),
-                    label: const Text('Send poll'),
+                    label: Text(jam ? 'Start the jam' : 'Send poll'),
                     style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(46),
                         shape: RoundedRectangleBorder(
@@ -317,6 +354,84 @@ extension _ChatPollsAdmin on _ChatPageState {
     });
     if (result == null || !mounted) return;
     _sendPoll(result);
+  }
+
+  /// Titles from my loaded playlist (or the web queue), de-duplicated.
+  List<String> _jamSongTitles() {
+    final out = <String>[];
+    final seen = <String>{};
+    void add(String t) {
+      final s = t.trim();
+      if (s.isNotEmpty && seen.add(s.toLowerCase())) out.add(s);
+    }
+
+    try {
+      for (final p in playlistNotifier.value) {
+        var name = p.split(RegExp(r'[\\/]')).last;
+        name = name.replaceAll(RegExp(r'\.[A-Za-z0-9]{2,4}$'), '');
+        add(name);
+      }
+      if (out.isEmpty) {
+        for (final e in playbackBus.webQueue?.call() ?? const []) {
+          add(e.title);
+        }
+      }
+    } catch (_) {}
+    return out;
+  }
+
+  Future<List<String>?> _pickJamSongs(
+      BuildContext ctx, List<String> titles) async {
+    final chosen = <String>{};
+    return showModalBottomSheet<List<String>>(
+      context: ctx,
+      isScrollControlled: true,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setC) => SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(c).height * 0.7),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 14, 8, 4),
+                child: Row(children: [
+                  Expanded(
+                    child: Text('Pick 2–12 songs (${chosen.length})',
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w800)),
+                  ),
+                  TextButton(
+                    onPressed: chosen.length >= 2
+                        ? () => Navigator.pop(
+                            c, titles.where(chosen.contains).toList())
+                        : null,
+                    child: const Text('Use'),
+                  ),
+                ]),
+              ),
+              Flexible(
+                child: ListView(shrinkWrap: true, children: [
+                  for (final t in titles)
+                    CheckboxListTile(
+                      dense: true,
+                      value: chosen.contains(t),
+                      title: Text(t, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      secondary: const Icon(Icons.music_note_rounded),
+                      onChanged: (v) => setC(() {
+                        if (v == true && chosen.length < 12) {
+                          chosen.add(t);
+                        } else {
+                          chosen.remove(t);
+                        }
+                      }),
+                    ),
+                ]),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
   }
 
   void _sendPoll(Map<String, dynamic> spec) {
@@ -373,6 +488,7 @@ extension _ChatPollsAdmin on _ChatPageState {
     final top = counts.isEmpty ? 0 : counts.reduce(math.max);
     final pending = msg['__pending'] == true;
     final accent = isMe ? textColor : scheme.primary;
+    final isJam = poll['kind'] == 'jam';
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 220, maxWidth: 300),
       child: Column(
@@ -380,9 +496,13 @@ extension _ChatPollsAdmin on _ChatPageState {
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(children: [
-            Icon(Icons.poll_rounded, size: 15, color: accent),
+            Icon(isJam ? Icons.queue_music_rounded : Icons.poll_rounded,
+                size: 15, color: accent),
             const SizedBox(width: 5),
-            Text(multi ? 'POLL · pick any' : 'POLL',
+            Text(
+                isJam
+                    ? 'GROUP JAM · vote the next song'
+                    : (multi ? 'POLL · pick any' : 'POLL'),
                 style: TextStyle(
                     fontSize: 10.5,
                     letterSpacing: 1.1,
@@ -407,6 +527,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                 picked: mine.contains(i),
                 leading: top > 0 && counts[i] == top,
                 multi: multi,
+                jam: isJam,
                 textColor: textColor,
                 accent: accent,
                 onTap: pending ? null : () => _votePoll(msg, i),
@@ -432,6 +553,7 @@ extension _ChatPollsAdmin on _ChatPageState {
     required bool picked,
     required bool leading,
     required bool multi,
+    bool jam = false,
     required Color textColor,
     required Color accent,
     VoidCallback? onTap,
@@ -507,8 +629,14 @@ extension _ChatPollsAdmin on _ChatPageState {
                       if (leading)
                         Padding(
                           padding: const EdgeInsets.only(right: 4),
-                          child: Icon(Icons.favorite_rounded,
-                              size: 12, color: accent),
+                          child: jam
+                              ? Text('Next up 🎶',
+                                  style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: accent))
+                              : Icon(Icons.favorite_rounded,
+                                  size: 12, color: accent),
                         ),
                       if (count > 0)
                         Text('$count',

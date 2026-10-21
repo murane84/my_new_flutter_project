@@ -4664,11 +4664,13 @@ class _ChatPageState extends State<ChatPage>
                             borderRadius: BorderRadius.circular(26),
                             // Focused → a clear brand ring + soft brand glow
                             // (you're typing here); idle → a quiet hairline.
+                            // Subtle, like the original focus line: a thin
+                            // brand hairline, no thicker than idle.
                             border: Border.all(
-                                width: _composerFocused ? 1.6 : 1.0,
+                                width: 1.0,
                                 color: _composerFocused
                                     ? scheme.primary
-                                        .withValues(alpha: isDark ? 0.85 : 0.75)
+                                        .withValues(alpha: isDark ? 0.55 : 0.45)
                                     : (isDark
                                         ? Colors.white.withValues(alpha: 0.10)
                                         : Colors.black.withValues(alpha: 0.06))),
@@ -4676,9 +4678,8 @@ class _ChatPageState extends State<ChatPage>
                               if (_composerFocused)
                                 BoxShadow(
                                   color: scheme.primary
-                                      .withValues(alpha: isDark ? 0.35 : 0.22),
-                                  blurRadius: 14,
-                                  spreadRadius: 0.5,
+                                      .withValues(alpha: isDark ? 0.14 : 0.08),
+                                  blurRadius: 8,
                                 ),
                               BoxShadow(
                                 color: Colors.black

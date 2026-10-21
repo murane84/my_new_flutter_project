@@ -5113,7 +5113,10 @@ class _ChatPageState extends State<ChatPage>
                               strength: v,
                               // The big centre mark drifts a touch with the
                               // chat — a hint of depth behind the bubbles.
-                              scroll: _scrollCtrl),
+                              scroll: _scrollCtrl,
+                              // Centre on the message area above the
+                              // floating composer (~64px incl. margins).
+                              bottomInset: 64),
                         );
                       }
                       return _ChatWallpaper(

@@ -14,7 +14,13 @@ class AlutaWatermarkWallpaper extends StatelessWidget {
     required this.isDark,
     this.strength = 0.6,
     this.scroll,
+    this.bottomInset = 0,
   });
+
+  /// Space at the bottom covered by floating UI (the composer). The hero is
+  /// centred on the VISIBLE chat area above it, not the whole card — otherwise
+  /// it reads as sitting low, most of all on a phone.
+  final double bottomInset;
 
   /// Optional: the chat list's scroll position. The big centre mark drifts
   /// gently against it (parallax) while the small lattice stays put.
@@ -90,8 +96,8 @@ class AlutaWatermarkWallpaper extends StatelessWidget {
           // Screen-aware hero (like a brand watermark on a sign-in page):
           // ~85% of the shorter side, so it reads as one big emblem behind
           // the conversation on a phone and a wide desktop alike.
-          final hero =
-              (math.min(c.maxWidth, c.maxHeight) * 0.85).clamp(200.0, 900.0);
+          final hero = (math.min(c.maxWidth, c.maxHeight - bottomInset) * 0.85)
+              .clamp(200.0, 900.0);
           return ClipRect(
             child: Stack(
               children: [
@@ -99,23 +105,26 @@ class AlutaWatermarkWallpaper extends StatelessWidget {
                 Positioned.fill(
                   child: RepaintBoundary(child: Stack(children: marks)),
                 ),
-                Center(
-                  child: scroll == null
-                      ? logo(hero, big)
-                      : AnimatedBuilder(
-                          animation: scroll!,
-                          builder: (_, child) {
-                            final px = scroll!.hasClients
-                                ? scroll!.position.pixels
-                                : 0.0;
-                            // reverse list: scrolling up = larger pixels →
-                            // mark sinks a little; capped at ±40px.
-                            final dy = (px * 0.06).clamp(0.0, 40.0);
-                            return Transform.translate(
-                                offset: Offset(0, dy), child: child);
-                          },
-                          child: logo(hero, big),
-                        ),
+                Positioned.fill(
+                  bottom: bottomInset,
+                  child: Center(
+                    child: scroll == null
+                        ? logo(hero, big)
+                        : AnimatedBuilder(
+                            animation: scroll!,
+                            builder: (_, child) {
+                              final px = scroll!.hasClients
+                                  ? scroll!.position.pixels
+                                  : 0.0;
+                              // At rest it's dead centre; reading back up
+                              // drifts it gently UP (≤24px) for depth.
+                              final dy = -(px * 0.04).clamp(0.0, 24.0);
+                              return Transform.translate(
+                                  offset: Offset(0, dy), child: child);
+                            },
+                            child: logo(hero, big),
+                          ),
+                  ),
                 ),
               ],
             ),

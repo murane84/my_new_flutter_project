@@ -5270,6 +5270,16 @@ class _ChatPageState extends State<ChatPage>
                     },
                   ),
                 ),
+                // The room follows the day: a faint warm / golden / night
+                // wash over whichever wallpaper is set.
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: AnimatedContainer(
+                      duration: const Duration(seconds: 2),
+                      color: AlutaMood.wallpaperWash(isDark: isDark),
+                    ),
+                  ),
+                ),
                 Column(
                   children: [
                     Expanded(

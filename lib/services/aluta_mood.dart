@@ -28,6 +28,18 @@ class AlutaMood {
 
   static AlutaMoment get moment => momentAt();
 
+  /// A barely-there wash over chat wallpapers so the room follows the day:
+  /// warm at dawn/morning, clear by afternoon, golden at evening, deep
+  /// blue at night. Transparent = no wash.
+  static Color wallpaperWash({required bool isDark}) => switch (moment) {
+        AlutaMoment.dawn => const Color(0xFFFFB74D).withValues(alpha: 0.05),
+        AlutaMoment.morning => const Color(0xFFFFE0B2).withValues(alpha: 0.05),
+        AlutaMoment.afternoon => const Color(0x00000000),
+        AlutaMoment.evening => const Color(0xFFFF8A65).withValues(alpha: 0.045),
+        AlutaMoment.night => const Color(0xFF1A237E)
+            .withValues(alpha: isDark ? 0.06 : 0.07),
+      };
+
   /// Pick from [options] without repeating the last pick for [slot].
   static String _pick(String slot, List<String> options) {
     if (options.isEmpty) return '';

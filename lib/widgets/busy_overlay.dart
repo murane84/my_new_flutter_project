@@ -23,18 +23,18 @@ class _BusyOverlayState extends State<BusyOverlay> {
   @override
   void initState() {
     super.initState();
-    appBusy.count.addListener(_onBusy);
+    appBusy.major.addListener(_onBusy);
     _onBusy();
   }
 
   void _onBusy() {
-    final busy = appBusy.count.value > 0;
+    final busy = appBusy.major.value > 0;
     if (busy) {
       // Only reveal once the work has lasted past a brief window, so a fast op
       // doesn't flicker a spinner on screen.
       _delay ??= Timer(const Duration(milliseconds: 300), () {
         _delay = null;
-        if (mounted && appBusy.count.value > 0 && !_show) {
+        if (mounted && appBusy.major.value > 0 && !_show) {
           setState(() => _show = true);
         }
       });
@@ -48,7 +48,7 @@ class _BusyOverlayState extends State<BusyOverlay> {
   @override
   void dispose() {
     _delay?.cancel();
-    appBusy.count.removeListener(_onBusy);
+    appBusy.major.removeListener(_onBusy);
     super.dispose();
   }
 

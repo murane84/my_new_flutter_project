@@ -124,10 +124,10 @@ class _PreloadScreenState extends State<PreloadScreen>
       // repeat scans, so this still pre-warms them.
       Future.delayed(const Duration(seconds: 5), () {
         unawaited(appBusy
-            .run(() => ConnectedContactsService.instance.refresh())
+            .runMajor(() => ConnectedContactsService.instance.refresh())
             .then((_) {}).catchError((_) {}));
         unawaited(appBusy
-            .run(() => SongLibrary.songs())
+            .runMajor(() => SongLibrary.songs())
             .then((_) {}).catchError((_) {}));
       });
     }
@@ -162,13 +162,13 @@ class _PreloadScreenState extends State<PreloadScreen>
       // WARM START — paint Home fast; refresh everything silently in the
       // background from cache so the lists are already full on open.
       if (online) {
-        unawaited(_guard(api.getUserData()));
-        unawaited(Future.wait([
+        unawaited(appBusy.runMajor(() => Future.wait([
+          _guard(api.getUserData()),
           _guard(api.fetchUsers()),
           _guard(api.listConversations()),
           _guard(api.listSpaces()),
           _guard(api.fetchStoriesFeed()),
-        ]));
+        ])));
       }
       _bump(_wProfile + _wCircle + _wStories, 'Getting things ready…');
     }

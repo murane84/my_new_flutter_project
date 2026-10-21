@@ -32,6 +32,26 @@ class AppBusy {
       end();
     }
   }
+
+  /// MAJOR background work only (startup sync, reconnect re-sync). Drives the
+  /// centred busy overlay, scoped to the big moments so the spinner is not
+  /// noisy on every small op.
+  final ValueNotifier<int> major = ValueNotifier<int>(0);
+
+  void beginMajor() => major.value = major.value + 1;
+  void endMajor() {
+    final n = major.value - 1;
+    major.value = n < 0 ? 0 : n;
+  }
+
+  Future<T> runMajor<T>(Future<T> Function() task) async {
+    beginMajor();
+    try {
+      return await task();
+    } finally {
+      endMajor();
+    }
+  }
 }
 
 /// App-wide singleton.

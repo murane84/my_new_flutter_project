@@ -1451,6 +1451,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   Future<void> _autoReconnect() async {
     if (_reconnecting || !mounted) return;
     _reconnecting = true;
+    appBusy.beginMajor();
     try {
       final ok = await ApiService().setOnlineStatus(true);
       if (!mounted) return;
@@ -1469,6 +1470,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         }
       }
     } catch (_) {}
+    appBusy.endMajor();
     _reconnecting = false;
   }
 

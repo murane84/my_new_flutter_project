@@ -457,6 +457,41 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                       // Synced-lyric ticker — shows only when the song has LRC
                       // timing; tap it to open the full lyrics sheet.
                       _syncedLyricLine(scheme, accent, false),
+                      // How this song feels → who it's for. Folds away with
+                      // the utilities when the queue opens.
+                      if (!live && title.trim().isNotEmpty)
+                        ClipRect(
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            heightFactor:
+                                (1.0 - openT.clamp(0.0, 1.0) * 1.8)
+                                    .clamp(0.0, 1.0),
+                            child: Opacity(
+                              opacity: (1.0 - openT.clamp(0.0, 1.0) * 1.8)
+                                  .clamp(0.0, 1.0),
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: Center(
+                                  child: ConstrainedBox(
+                                    constraints:
+                                        const BoxConstraints(maxWidth: 420),
+                                    child: SongFeelStrip(
+                                      title: title,
+                                      artist: artist,
+                                      accent: accent,
+                                      centered: true,
+                                      // Leaving for a chat / Space: close
+                                      // the full player first.
+                                      onLeave: () => Navigator.of(context,
+                                              rootNavigator: true)
+                                          .maybePop(),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       SizedBox(height: 18 - 10 * openT.clamp(0.0, 1.0)),
                       // Waveform + times (live via the position stream).
                       StreamBuilder<Duration>(

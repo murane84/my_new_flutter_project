@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
+import 'dart:math' as math;
+import 'package:flutter/physics.dart' show SpringSimulation, SpringDescription;
 
 import '../services/fcm_service.dart' show ActiveChat;
 import '../services/notif_service.dart' show cancelConversationNotifications;

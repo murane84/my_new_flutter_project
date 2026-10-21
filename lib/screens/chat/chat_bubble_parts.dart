@@ -901,24 +901,20 @@ class _SwipeToReply extends StatefulWidget {
 
 class _SwipeToReplyState extends State<_SwipeToReply>
     with SingleTickerProviderStateMixin {
-  static const double _maxDrag = 72;
-  static const double _trigger = 50;
+  // Travel limit + where the reply arms. The finger's raw pull is mapped
+  // through a rubber-band curve, so it starts 1:1 and gets heavier near the
+  // limit instead of hitting a hard stop.
+  static const double _maxDrag = 84;
+  static const double _trigger = 56;
 
-  late final AnimationController _spring;
-  Animation<double>? _springAnim;
-  double _dx = 0;
+  // Unbounded so a spring can overshoot zero a hair on release (that tiny
+  // settle is what makes it feel physical, not scripted).
+  late final AnimationController _spring =
+      AnimationController.unbounded(vsync: this)
+        ..addListener(() => setState(() => _dx = _spring.value));
+  double _raw = 0; // finger travel
+  double _dx = 0; // rendered travel (rubber-banded)
   bool _armed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _spring = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 240),
-    )..addListener(() {
-        if (_springAnim != null) setState(() => _dx = _springAnim!.value);
-      });
-  }
 
   @override
   void dispose() {
@@ -926,19 +922,33 @@ class _SwipeToReplyState extends State<_SwipeToReply>
     super.dispose();
   }
 
-  void _settle() {
-    _springAnim = Tween<double>(begin: _dx, end: 0).animate(
-      CurvedAnimation(parent: _spring, curve: Curves.easeOutCubic),
-    );
-    _spring
-      ..reset()
-      ..forward();
+  double _band(double raw) =>
+      _maxDrag * (1 - math.exp(-raw / (_maxDrag * 0.9)));
+
+  void _settle(double velocity) {
+    _raw = 0;
+    _spring.value = _dx;
+    _spring.animateWith(SpringSimulation(
+      const SpringDescription(mass: 1, stiffness: 420, damping: 24),
+      _dx,
+      0,
+      velocity / 4,
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final progress = (_dx / _trigger).clamp(0.0, 1.0);
+    final t = Curves.easeOut.transform(progress);
+
+    // 3D: the bubble slides, tips back a little on its vertical axis (as if
+    // hinged on the far edge) and leans down a touch — a card being pulled.
+    final m = Matrix4.identity()
+      ..setEntry(3, 2, 0.0013) // perspective
+      ..translateByDouble(_dx, 0, 0, 1)
+      ..rotateY(-0.16 * t * (widget.isMe ? -1 : 1))
+      ..scaleByDouble(1 - 0.03 * t, 1 - 0.03 * t, 1, 1);
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
@@ -951,49 +961,77 @@ class _SwipeToReplyState extends State<_SwipeToReply>
         PointerDeviceKind.invertedStylus,
         PointerDeviceKind.unknown,
       },
+      onHorizontalDragStart: (_) {
+        _spring.stop();
+        _raw = _dx <= 0 ? 0 : _dx; // grab it mid-settle smoothly
+      },
       onHorizontalDragUpdate: (d) {
-        // Reply is a rightward pull only; resist and cap the travel.
-        final next = (_dx + d.delta.dx).clamp(0.0, _maxDrag);
+        // Reply is a rightward pull only.
+        _raw = (_raw + d.delta.dx).clamp(0.0, 400.0);
+        final next = _band(_raw);
         if (!_armed && next >= _trigger) {
           _armed = true;
+          HapticFeedback.mediumImpact();
+        } else if (_armed && next < _trigger - 6) {
+          _armed = false; // a little hysteresis so it doesn't flicker
           HapticFeedback.selectionClick();
-        } else if (_armed && next < _trigger) {
-          _armed = false;
         }
         setState(() => _dx = next);
       },
-      onHorizontalDragEnd: (_) {
-        if (_dx >= _trigger) widget.onReply();
+      onHorizontalDragEnd: (d) {
+        if (_armed) widget.onReply();
         _armed = false;
-        _settle();
+        _settle(d.primaryVelocity ?? 0);
       },
       onHorizontalDragCancel: () {
         _armed = false;
-        _settle();
+        _settle(0);
       },
       child: Stack(
         alignment: Alignment.centerLeft,
+        clipBehavior: Clip.none,
         children: [
+          // The reply badge rises with the pull, spins into place and pops
+          // (solid fill) the moment the reply is armed.
           Positioned(
-            left: 14,
+            left: 12,
             child: Opacity(
-              opacity: progress,
-              child: Transform.scale(
-                scale: 0.5 + 0.5 * progress,
-                child: Container(
-                  padding: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(
-                    color: scheme.primary.withAlpha(30),
-                    shape: BoxShape.circle,
+              opacity: t,
+              child: Transform.rotate(
+                angle: (1 - t) * -0.9,
+                child: AnimatedScale(
+                  scale: _armed ? 1.18 : (0.55 + 0.45 * t),
+                  duration: const Duration(milliseconds: 160),
+                  curve: Curves.easeOutBack,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: _armed
+                          ? scheme.primary
+                          : scheme.primary.withValues(alpha: 0.14),
+                      shape: BoxShape.circle,
+                      boxShadow: _armed
+                          ? [
+                              BoxShadow(
+                                color: scheme.primary.withValues(alpha: 0.4),
+                                blurRadius: 10,
+                                offset: const Offset(0, 3),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Icon(Icons.reply_rounded,
+                        size: 18,
+                        color: _armed ? Colors.white : scheme.primary),
                   ),
-                  child: Icon(Icons.reply_rounded,
-                      size: 18, color: scheme.primary),
                 ),
               ),
             ),
           ),
-          Transform.translate(
-            offset: Offset(_dx, 0),
+          Transform(
+            transform: m,
+            alignment: widget.isMe ? Alignment.centerLeft : Alignment.centerRight,
             child: widget.child,
           ),
         ],

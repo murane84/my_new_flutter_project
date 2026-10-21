@@ -989,8 +989,6 @@ extension _ChatPageHelpers3 on _ChatPageState {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // A slightly slower, eased slide-up than the stock sheet for a more
-    // deliberate, premium entrance.
     final animCtrl = BottomSheet.createAnimationController(this);
     animCtrl.duration = const Duration(milliseconds: 440);
     animCtrl.reverseDuration = const Duration(milliseconds: 280);
@@ -1005,123 +1003,147 @@ extension _ChatPageHelpers3 on _ChatPageState {
         minChildSize: 0.4,
         maxChildSize: 0.94,
         expand: false,
-        builder: (c, scrollCtrl) => Container(
-          margin: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: scheme.surface,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(isDark ? 110 : 40),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: FutureBuilder<Map<String, dynamic>?>(
-            future: ApiService().messageInfo(_cid, mid),
-            builder: (c, snap) {
-              final handle = Container(
-                margin: const EdgeInsets.only(top: 10, bottom: 2),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: scheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(3),
+        builder: (c, scrollCtrl) {
+          final handle = Container(
+            margin: const EdgeInsets.only(top: 10, bottom: 2),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: scheme.outlineVariant,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          );
+
+          Widget closeBtn() => Material(
+                color: scheme.onSurface.withValues(alpha: isDark ? 0.14 : 0.06),
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => Navigator.of(c).pop(),
+                  child: Padding(
+                    padding: const EdgeInsets.all(7),
+                    child: Icon(Icons.close_rounded,
+                        size: 18, color: scheme.onSurfaceVariant),
+                  ),
                 ),
               );
 
+          Widget titleBar() => SizedBox(
+                height: 42,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: scheme.primary.withValues(alpha: 0.14),
+                          ),
+                          child: Icon(Icons.done_all_rounded,
+                              size: 15, color: scheme.primary),
+                        ),
+                        const SizedBox(width: 8),
+                        Text('Message info',
+                            style: TextStyle(
+                                fontSize: 16.5,
+                                fontWeight: FontWeight.w800,
+                                color: scheme.onSurface)),
+                      ],
+                    ),
+                    Positioned(
+                      right: 6,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(child: closeBtn()),
+                    ),
+                  ],
+                ),
+              );
+
+          Widget seenPill(int readCount, int total) => Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.visibility_rounded,
+                        size: 13, color: scheme.primary),
+                    const SizedBox(width: 6),
+                    Text('Seen by $readCount of $total',
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.primary)),
+                  ],
+                ),
+              );
+
+          final content = FutureBuilder<Map<String, dynamic>?>(
+            future: ApiService().messageInfo(_cid, mid),
+            builder: (c2, snap) {
               if (snap.connectionState == ConnectionState.waiting) {
-                // Show the card's own shape immediately (handle + title +
-                // skeleton rows) so loading reads as "filling in", not a
-                // blank sheet with a lone spinner.
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     handle,
-                    const SizedBox(height: 8),
-                    Center(
-                      child: Text('Message info',
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: scheme.onSurface)),
-                    ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 6),
+                    titleBar(),
+                    const SizedBox(height: 12),
                     const Divider(height: 1),
                     for (int k = 0; k < 4; k++) _infoSkeletonRow(scheme),
                   ],
                 );
               }
-
               final data = snap.data;
               if (data == null) {
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     handle,
+                    const SizedBox(height: 6),
+                    titleBar(),
                     Padding(
                       padding: const EdgeInsets.all(30),
-                      child: Text('Couldn\'t load message info.',
+                      child: Text("Couldn't load message info.",
                           style: TextStyle(color: scheme.onSurfaceVariant)),
                     ),
                   ],
                 );
               }
-
               final read = (data['read'] as List?) ?? const [];
               final delivered = (data['delivered'] as List?) ?? const [];
               final sent = (data['sent'] as List?) ?? const [];
               final total = read.length + delivered.length + sent.length;
-
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   handle,
-                  const SizedBox(height: 8),
-                  Center(
-                    child: Text('Message info',
-                        style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: scheme.onSurface)),
-                  ),
-                  const SizedBox(height: 3),
-                  // One-line summary so the headline fact — how many have
-                  // seen it — reads at a glance.
-                  if (total > 0)
-                    Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.done_all_rounded,
-                              size: 14, color: Color(0xFF1976D2)),
-                          const SizedBox(width: 5),
-                          Text(
-                            'Seen by ${read.length} of $total',
-                            style: TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w500,
-                                color: scheme.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
-                    ),
+                  const SizedBox(height: 6),
+                  titleBar(),
+                  if (total > 0) ...[
+                    const SizedBox(height: 8),
+                    Center(child: seenPill(read.length, total)),
+                  ],
                   const SizedBox(height: 12),
                   const Divider(height: 1),
-                  // Content fades + rises in as a unit once the data lands.
                   Flexible(
                     child: TweenAnimationBuilder<double>(
                       tween: Tween(begin: 0, end: 1),
                       duration: const Duration(milliseconds: 360),
                       curve: Curves.easeOutCubic,
-                      builder: (_, t, child) => Opacity(
-                        opacity: t.clamp(0.0, 1.0),
+                      builder: (_, tv, child) => Opacity(
+                        opacity: tv.clamp(0.0, 1.0),
                         child: Transform.translate(
-                          offset: Offset(0, (1 - t) * 14),
+                          offset: Offset(0, (1 - tv) * 14),
                           child: child,
                         ),
                       ),
@@ -1131,14 +1153,11 @@ extension _ChatPageHelpers3 on _ChatPageState {
                         children: [
                           _infoSection('Read by', Icons.done_all_rounded,
                               const Color(0xFF1976D2), read, scheme),
-                          _infoSection(
-                              'Delivered to',
-                              Icons.done_all_rounded,
-                              scheme.onSurfaceVariant,
-                              delivered,
-                              scheme),
-                          _infoSection('Not yet received', Icons.schedule_rounded,
-                              scheme.onSurfaceVariant, sent, scheme),
+                          _infoSection('Delivered to', Icons.done_all_rounded,
+                              scheme.onSurfaceVariant, delivered, scheme),
+                          _infoSection('Not yet received',
+                              Icons.schedule_rounded, scheme.onSurfaceVariant,
+                              sent, scheme),
                           if (read.isEmpty &&
                               delivered.isEmpty &&
                               sent.isEmpty)
@@ -1158,8 +1177,41 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 ],
               );
             },
-          ),
-        ),
+          );
+
+          return Container(
+            margin: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(
+                  color:
+                      scheme.primary.withValues(alpha: isDark ? 0.26 : 0.12)),
+              boxShadow: [
+                BoxShadow(
+                  color:
+                      scheme.primary.withValues(alpha: isDark ? 0.20 : 0.10),
+                  blurRadius: 30,
+                  spreadRadius: -6,
+                  offset: const Offset(0, 12),
+                ),
+                BoxShadow(
+                  color: Colors.black.withAlpha(isDark ? 110 : 30),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: CallbackShortcuts(
+              bindings: {
+                const SingleActivator(LogicalKeyboardKey.escape): () =>
+                    Navigator.of(c).pop(),
+              },
+              child: Focus(autofocus: true, child: content),
+            ),
+          );
+        },
       ),
     ).whenComplete(animCtrl.dispose);
   }

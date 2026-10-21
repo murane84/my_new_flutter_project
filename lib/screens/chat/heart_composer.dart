@@ -371,6 +371,7 @@ extension _ChatHeartComposer on _ChatPageState {
       } catch (_) {}
       when = nextOf(md);
     }
+    if (!mounted) return;
     if (choice == 'pick') {
       final d = await showDatePicker(
         context: context,
@@ -388,7 +389,7 @@ extension _ChatHeartComposer on _ChatPageState {
       if (t == null || !mounted) return;
       when = DateTime(d.year, d.month, d.day, t.hour, t.minute);
     }
-    if (when == null) return;
+    if (when == null || !mounted) return;
     if (when.isBefore(DateTime.now().add(const Duration(minutes: 1)))) {
       showToast(context, 'Pick a moment a little later', type: ToastType.info);
       return;

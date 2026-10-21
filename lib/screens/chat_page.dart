@@ -415,6 +415,9 @@ class _ChatPageState extends State<ChatPage>
   DateTime? _heartUnlockAt;
   // Server ids of hearts I just sent → their bubble plays the seal stamp once.
   final Set<String> _freshHearts = {};
+  // Reply-author memory: quote first-line → {id, u(sername), p(hone)} of the
+  // quoted message's author, per conversation (see chat_page_helpers_3).
+  final Map<String, Map<String, String>> _quoteAuthors = {};
   // Which tab is showing in the emoji panel: 0 = emoji, 1 = GIF stickers.
   int _emojiTab = 0;
   bool _isAtBottom = true;
@@ -726,6 +729,7 @@ class _ChatPageState extends State<ChatPage>
 
     await _loadMessages();        // fetch fresh from network (best-effort)
     if (_isGroup) unawaited(_loadGroupMembers()); // for the @-mention picker
+    unawaited(_loadQuoteAuthors()); // who wrote quotes I've replied to
     _maybeInitialJump();          // opened from a notification → jump to it
     _checkOnlineStatus();
     _startPolling();
@@ -1409,6 +1413,8 @@ class _ChatPageState extends State<ChatPage>
       final quoted = _replyQuoteText(_replyTo!);
       final lines = quoted.split('\n').take(2).join('\n');
       content = '> $lines\n\n$text';
+      // I can see whose message this is right now — remember it on-device.
+      _rememberQuoteAuthor(lines, _replyTo!);
     }
 
     final heart = _heartMode;

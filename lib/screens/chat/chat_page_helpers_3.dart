@@ -1438,12 +1438,83 @@ extension _ChatPageHelpers3 on _ChatPageState {
   Map<String, dynamic>? _findQuotedMessage(String quoted) {
     final q = quoted.trim();
     if (q.isEmpty) return null;
+    final qFirst = _quoteKey(q);
+    Map<String, dynamic>? loose;
     for (final m in _messages) {
       if (m['is_deleted'] == true) continue;
-      final c = _stripQuote((m['content'] as String?) ?? '').trim();
-      if (c.isNotEmpty && c == q) return m;
+      // Match on the label a reply would have quoted (media → "📷 Photo",
+      // heart → "❤️ Secret heart", text → its text), not raw content only.
+      final label = _replyQuoteText(m).trim();
+      if (label.isEmpty) continue;
+      if (label == q) return m;
+      // Replies keep just the first line(s) of a long message.
+      if (loose == null && _quoteKey(label) == qFirst) loose = m;
     }
-    return null;
+    return loose;
+  }
+
+  /// Normalised key for a quote: its first line, trimmed.
+  String _quoteKey(String quoted) => quoted.trim().split('\n').first.trim();
+
+  // ── Reply-author memory (this device) ─────────────────────────────────────
+  // When I reply, I can SEE whose message I'm quoting, so remember it here,
+  // per conversation, keyed by the quote's first line. Later — even after the
+  // original has scrolled out of the loaded window or the app restarted — the
+  // quote header still names that person. Members who never had the original
+  // fall back to "Member".
+
+  String get _quoteMemKey => 'quote_authors_v1_$_activeConvKey';
+
+  Future<void> _loadQuoteAuthors() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final raw = p.getString(_quoteMemKey);
+      if (raw == null || raw.isEmpty) return;
+      final m = jsonDecode(raw);
+      if (m is! Map) return;
+      _quoteAuthors
+        ..clear()
+        ..addAll(m.map((k, v) =>
+            MapEntry(k.toString(), Map<String, String>.from(v as Map))));
+      if (mounted) rebuildWith(() {});
+    } catch (_) {}
+  }
+
+  /// Remember who wrote [orig] under the quote [quoted]. Cheap + idempotent.
+  void _rememberQuoteAuthor(String quoted, Map<String, dynamic> orig) {
+    final key = _quoteKey(quoted);
+    if (key.isEmpty) return;
+    final Map sender = (orig['sender'] as Map?) ?? const {};
+    final entry = <String, String>{
+      'id': (orig['sender_id'] ?? '').toString(),
+      'u': (sender['username'] ?? '').toString(),
+      'p': (sender['phone'] ?? '').toString(),
+    };
+    final prev = _quoteAuthors[key];
+    if (prev != null && prev['id'] == entry['id']) return;
+    _quoteAuthors[key] = entry;
+    // Keep the store small: drop the oldest beyond 400 quotes per chat.
+    while (_quoteAuthors.length > 400) {
+      _quoteAuthors.remove(_quoteAuthors.keys.first);
+    }
+    () async {
+      try {
+        final p = await SharedPreferences.getInstance();
+        await p.setString(_quoteMemKey, jsonEncode(_quoteAuthors));
+      } catch (_) {}
+    }();
+  }
+
+  /// A remembered author → display label ("You", phone-book name, username).
+  String? _rememberedAuthor(String quoted) {
+    final e = _quoteAuthors[_quoteKey(quoted)];
+    if (e == null) return null;
+    if (e['id'] == _myId) return 'You';
+    if (!_isGroup) return widget.friendName;
+    return _groupMemberLabel({
+      'sender_id': e['id'],
+      'sender': {'username': e['u'] ?? '', 'phone': e['p'] ?? ''},
+    });
   }
 
   /// The name to show on a reply-quote header — the author of the ORIGINAL
@@ -1454,6 +1525,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
   String _quotedAuthor(String quotedText, bool replyIsMe) {
     final orig = _findQuotedMessage(quotedText);
     if (orig != null) {
+      _rememberQuoteAuthor(quotedText, orig);
       if (orig['sender_id'].toString() == _myId) return 'You';
       // In a GROUP, widget.friendName is the GROUP's title ("Family") — name
       // the member who actually wrote the quoted message instead: my saved
@@ -1461,7 +1533,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
       if (_isGroup) return _groupMemberLabel(orig);
       return widget.friendName;
     }
-    if (_isGroup) return replyIsMe ? 'Member' : 'You';
+    // Not loaded right now → what this device remembers from when it saw it.
+    final remembered = _rememberedAuthor(quotedText);
+    if (remembered != null) return remembered;
+    if (_isGroup) return 'Member';
     return replyIsMe ? widget.friendName : 'You';
   }
 

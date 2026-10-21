@@ -27,6 +27,19 @@ extension _ChatRituals on _ChatPageState {
       _annivToday = md == '${now.month}-${now.day}' &&
           p.getString('anniv_done_${widget.friendId}') != k;
       if (mounted) rebuildWith(() {});
+      // The "In tune" streak with this partner (for the keep-it-alive chip).
+      if (!_isGroup) {
+        Future.delayed(const Duration(seconds: 2), () async {
+          final sid = _defaultKeepSpaceId;
+          if (!mounted || sid == null) return;
+          final st = await ApiService().getStreak(sid);
+          if (!mounted || st == null) return;
+          rebuildWith(() {
+            _streakDays = (st['current_days'] as num?)?.toInt() ?? 0;
+            _streakAlive = st['alive'] == true;
+          });
+        });
+      }
       // Reach further back once a day so "on this day" can find last year.
       if (!_isGroup && !_memoryDoneToday) {
         Future.delayed(const Duration(seconds: 4), () {
@@ -78,6 +91,30 @@ extension _ChatRituals on _ChatPageState {
   void _dismissGoodNight() {
     rebuildWith(() => _gnDoneToday = true);
     _markRitual('gn_done_${widget.friendId}');
+  }
+
+  /// Evening, a live streak, and today's "both wrote" not done yet.
+  bool get _streakAtRisk {
+    if (!_bondedDm || _streakNudged || !_streakAlive || _streakDays < 2) {
+      return false;
+    }
+    final now = DateTime.now();
+    if (now.hour < 18) return false;
+    var mine = false, theirs = false;
+    for (final m in _messages) {
+      final d = DateTime.tryParse((m['timestamp'] ?? '').toString())?.toLocal();
+      if (d == null) continue;
+      if (d.year != now.year || d.month != now.month || d.day != now.day) {
+        break; // newest-first: past today
+      }
+      if (m['sender_id']?.toString() == _myId) {
+        mine = true;
+      } else {
+        theirs = true;
+      }
+      if (mine && theirs) return false;
+    }
+    return true;
   }
 
   /// Oldest-first: the most meaningful (furthest back) same-day message.
@@ -187,6 +224,19 @@ extension _ChatRituals on _ChatPageState {
           rebuildWith(() => _annivToday = false);
           _markRitual('anniv_done_${widget.friendId}');
         },
+      ));
+    }
+    if (_streakAtRisk) {
+      chips.add(_ritualChip(
+        scheme: scheme,
+        isDark: isDark,
+        icon: Icons.local_fire_department_rounded,
+        label: '🔥 $_streakDays days in tune — keep it going tonight',
+        onTap: () {
+          rebuildWith(() => _streakNudged = true);
+          _composerFocus.requestFocus();
+        },
+        onClose: () => rebuildWith(() => _streakNudged = true),
       ));
     }
     final memory = _onThisDay;

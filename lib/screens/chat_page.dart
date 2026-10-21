@@ -447,6 +447,8 @@ class _ChatPageState extends State<ChatPage>
   bool _searchOpen = false;
   final TextEditingController _searchCtrl = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
+  // The message field (rituals focus it: "keep the streak going").
+  final FocusNode _composerFocus = FocusNode();
   List<String> _searchHits = const [];
   int _searchIdx = 0;
   Timer? _searchDebounce;
@@ -459,6 +461,9 @@ class _ChatPageState extends State<ChatPage>
   bool _gnDoneToday = false;
   bool _memoryDoneToday = false;
   bool _annivToday = false;
+  int _streakDays = 0;
+  bool _streakAlive = false;
+  bool _streakNudged = false;
   // Song playing when the current voice note started (its caption).
   String? _recordSong;
   bool _amAdmin = false;
@@ -685,6 +690,7 @@ class _ChatPageState extends State<ChatPage>
     _searchDebounce?.cancel();
     _searchCtrl.dispose();
     _searchFocus.dispose();
+    _composerFocus.dispose();
     WidgetsBinding.instance.removeObserver(this);
     if (kIsWeb) webpaste.unregisterClipboardPaste();
     // Release any in-flight caption request so its awaiter unwinds.
@@ -5007,6 +5013,7 @@ class _ChatPageState extends State<ChatPage>
                                   },
                                   child: TextField(
                                     controller: _ctrl,
+                                    focusNode: _composerFocus,
                                     minLines: 1,
                                     maxLines: 5,
                                     textInputAction: TextInputAction.newline,

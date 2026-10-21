@@ -38,6 +38,7 @@ import '../utils/file_bytes.dart';
 import '../services/notif_service.dart'
     show syncDiaryReminders, cancelDiaryReminder, PlanReminder;
 import 'package:video_player/video_player.dart';
+import '../widgets/genie_menu.dart';
 
 part 'space/space_moment_composer.dart'; // moment composer + add-to-playlist sheet
 part 'space/space_edit_sheet.dart'; // edit-space sheet + wallpaper picker

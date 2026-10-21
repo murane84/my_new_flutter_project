@@ -93,6 +93,7 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import '../state/playback_state.dart';
 import '../state/unread_state.dart';
 import '../state/presence_state.dart';
+import '../widgets/genie_menu.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
@@ -2155,7 +2156,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           // kebab. The app-wide menu (top-right) owns the vertical ⋮, so pairing
           // ☰ (this chat) with ⋮ (app) makes the two instantly distinct, and a
           // hamburger avoids the dots that would echo the typing indicator.
-          PopupMenuButton<String>(
+          GeniePopupMenuButton<String>(
             icon: const Icon(Icons.menu_rounded),
             tooltip: 'Group options',
             onSelected: (v) {
@@ -3326,7 +3327,7 @@ class _WebQueueSheetState extends State<_WebQueueSheet> {
                               )
                             : null,
                         onTap: () => playbackBus.webPlayAt?.call(i),
-                        trailing: PopupMenuButton<String>(
+                        trailing: GeniePopupMenuButton<String>(
                           tooltip: 'More',
                           icon: Icon(Icons.more_vert_rounded,
                               color: scheme.onSurfaceVariant),

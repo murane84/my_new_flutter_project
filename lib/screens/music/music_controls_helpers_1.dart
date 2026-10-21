@@ -979,7 +979,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                   child: Icon(Icons.volume_up_rounded, size: 16, color: accent),
                 )
               else
-                PopupMenuButton<String>(
+                GeniePopupMenuButton<String>(
                   tooltip: 'Track options',
                   padding: EdgeInsets.zero,
                   icon: Icon(Icons.more_vert_rounded,

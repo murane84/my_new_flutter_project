@@ -18,6 +18,7 @@ import '../utils/bounce_tap.dart' show Tactile;
 import '../services/track_title.dart'
     show cleanDisplayName, splitTitleArtist;
 import 'listening_audience_sheet.dart' show PresenceShareButton;
+import '../widgets/genie_menu.dart';
 
 /// Web-only replacement for the native [MusicControls] panel.
 ///
@@ -543,34 +544,37 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   // and the info popover.
 
   Widget _infoAnchor(ThemeData theme, {bool inline = false}) {
-    return MenuAnchor(
-      style: MenuStyle(
-        backgroundColor:
-            WidgetStatePropertyAll(theme.colorScheme.surfaceContainerHigh),
-        shape: WidgetStatePropertyAll(RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16))),
-        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-      ),
-      builder: (context, controller, _) {
-        void toggle() =>
-            controller.isOpen ? controller.close() : controller.open();
-        if (inline) {
-          return TextButton.icon(
-            onPressed: toggle,
-            icon: const Icon(Icons.info_outline_rounded, size: 16),
-            label: const Text('About this player · Get the app'),
-          );
-        }
-        return IconButton(
-          tooltip: 'About · Get the app',
-          iconSize: 20,
-          color: theme.hintColor,
-          onPressed: toggle,
-          icon: const Icon(Icons.info_outline_rounded),
+    // Same genie motion as every other menu (widgets/genie_menu.dart).
+    return Builder(builder: (ctx) {
+      void open() {
+        final box = ctx.findRenderObject() as RenderBox?;
+        if (box == null || !box.hasSize) return;
+        showGenieMenu(
+          ctx,
+          anchor: box.localToGlobal(Offset.zero) & box.size,
+          width: 308,
+          color: theme.colorScheme.surfaceContainerHigh,
+          entries: [
+            GenieMenuEntry(label: '', enabled: false, custom: _infoCard(theme)),
+          ],
         );
-      },
-      menuChildren: [_infoCard(theme)],
-    );
+      }
+
+      if (inline) {
+        return TextButton.icon(
+          onPressed: open,
+          icon: const Icon(Icons.info_outline_rounded, size: 16),
+          label: const Text('About this player · Get the app'),
+        );
+      }
+      return IconButton(
+        tooltip: 'About · Get the app',
+        iconSize: 20,
+        color: theme.hintColor,
+        onPressed: open,
+        icon: const Icon(Icons.info_outline_rounded),
+      );
+    });
   }
 
   Widget _infoCard(ThemeData theme) {

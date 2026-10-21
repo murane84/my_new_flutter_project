@@ -554,7 +554,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
                     fontSize: 14, fontWeight: FontWeight.w600, color: color)),
           ],
         );
-    return PopupMenuButton<String>(
+    return GeniePopupMenuButton<String>(
       tooltip: 'Options',
       // Drop UNDER the trigger, styled like the app's other menus: rounded with
       // a soft accent hairline, iconized rows, and a clearly destructive Delete.

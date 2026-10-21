@@ -494,7 +494,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
                   SizedBox(
                     width: 32,
                     height: 32,
-                    child: PopupMenuButton<String>(
+                    child: GeniePopupMenuButton<String>(
                       tooltip: 'Moment options',
                       padding: EdgeInsets.zero,
                       icon: Icon(Icons.more_horiz_rounded,
@@ -1274,7 +1274,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
   }
 
   Widget _diaryMenu(ColorScheme scheme, Map<String, dynamic> e) {
-    return PopupMenuButton<String>(
+    return GeniePopupMenuButton<String>(
       tooltip: 'More',
       icon: Icon(Icons.more_horiz_rounded,
           size: 20, color: scheme.onSurfaceVariant),

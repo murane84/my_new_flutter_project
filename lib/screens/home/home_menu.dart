@@ -8,7 +8,7 @@ part of '../home_page.dart';
 
 extension _HomeMenu on HomePageState {
   // One row of the header overflow menu (icon + label).
-  // ── Overflow menu (grouped, MenuAnchor with submenus) ─────────────────────
+  // ── Overflow menu (grouped genie menu with inline submenus) ──────────────
 
   /// The header overflow menu, grouped by intent so it scales as features grow:
   /// Aluta Together (monetization, top level for visibility), Groups, then the
@@ -22,144 +22,129 @@ extension _HomeMenu on HomePageState {
     final bool mobile = !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS);
-    final menuStyle = MenuStyle(
-      backgroundColor: WidgetStatePropertyAll(scheme.surface),
-      elevation: const WidgetStatePropertyAll(10),
-      // Faint red hairline so the menu (and each submenu) lifts off the UI.
-      shape: WidgetStatePropertyAll(
-        RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-              color: scheme.primary.withAlpha(70), width: 1),
+    // Genie menu (widgets/genie_menu.dart): grows out of the ⋮ button and
+    // folds back into it; submenus open inline with the same motion.
+    return GenieMenuButton(
+      icon: Icon(Icons.more_vert_rounded, color: scheme.onSurface),
+      tooltip: 'Menu',
+      width: 252,
+      entries: () => [
+        // Monetization lives at the TOP LEVEL so the upgrade is one tap away.
+        GenieMenuEntry(
+          icon: _isTogether
+              ? Icons.workspace_premium_rounded
+              : Icons.favorite_border_rounded,
+          label: _isTogether ? 'Together ✓' : 'Aluta Together',
+          onTap: _openTogether,
         ),
-      ),
-      padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(vertical: 6, horizontal: 4)),
-    );
-
-    return MenuAnchor(
-      style: menuStyle,
-      builder: (ctx, controller, child) => IconButton(
-        icon: Icon(Icons.more_vert_rounded, color: scheme.onSurface),
-        tooltip: 'Menu',
-        onPressed: () =>
-            controller.isOpen ? controller.close() : controller.open(),
-      ),
-      menuChildren: [
-        // Monetization lives at the TOP LEVEL so the upgrade is one tap from the
-        // menu — it used to be buried two levels deep under Tools & settings.
-        _menuBtn(
-            scheme,
-            _isTogether
-                ? Icons.workspace_premium_rounded
-                : Icons.favorite_border_rounded,
-            _isTogether ? 'Together ✓' : 'Aluta Together',
-            _openTogether),
-        _menuBtn(scheme, Icons.groups_rounded, 'Groups', () async {
-          final conv = await showAppPopup<Map<String, dynamic>>(
-              context, const GroupsScreen());
-          if (conv != null && mounted) openGroupInPanel(conv);
-        }),
-        // Friends — the two "grow your circle" actions grouped together (they
-        // were the same intent split across two flat Tools entries).
-        SubmenuButton(
-          menuStyle: menuStyle,
-          leadingIcon: Icon(Icons.group_add_rounded,
-              size: 20, color: scheme.primary),
-          menuChildren: [
-            _menuBtn(scheme, Icons.contacts_rounded, 'Find friends',
-                () => _findFriendsFromContacts()),
-            _menuBtn(scheme, Icons.person_add_alt_1_rounded, 'Add friend',
-                () => _showAddFriend()),
+        GenieMenuEntry(
+          icon: Icons.groups_rounded,
+          label: 'Groups',
+          onTap: () async {
+            final conv = await showAppPopup<Map<String, dynamic>>(
+                context, const GroupsScreen());
+            if (conv != null && mounted) openGroupInPanel(conv);
+          },
+        ),
+        // Friends — the two "grow your circle" actions together.
+        GenieMenuEntry(
+          icon: Icons.group_add_rounded,
+          label: 'Friends',
+          children: [
+            GenieMenuEntry(
+                icon: Icons.contacts_rounded,
+                label: 'Find friends',
+                onTap: () => _findFriendsFromContacts()),
+            GenieMenuEntry(
+                icon: Icons.person_add_alt_1_rounded,
+                label: 'Add friend',
+                onTap: () => _showAddFriend()),
           ],
-          child: const Text('Friends'),
         ),
         // Devices — QR linking + the linked-devices manager.
-        SubmenuButton(
-          menuStyle: menuStyle,
-          leadingIcon: Icon(Icons.devices_rounded,
-              size: 20, color: scheme.primary),
-          menuChildren: [
+        GenieMenuEntry(
+          icon: Icons.devices_rounded,
+          label: 'Devices',
+          children: [
             if (mobile)
-              _menuBtn(scheme, Icons.laptop_chromebook_rounded,
-                  'Link a computer', () {
-                Navigator.push(
+              GenieMenuEntry(
+                icon: Icons.laptop_chromebook_rounded,
+                label: 'Link a computer',
+                onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
                       builder: (_) => const DeviceLinkScanScreen()),
-                );
-              }),
-            _menuBtn(scheme, Icons.devices_other_rounded, 'Linked devices',
-                () {
-              showAppPopup(context, const LinkedDevicesScreen());
-            }),
+                ),
+              ),
+            GenieMenuEntry(
+              icon: Icons.devices_other_rounded,
+              label: 'Linked devices',
+              onTap: () => showAppPopup(context, const LinkedDevicesScreen()),
+            ),
           ],
-          child: const Text('Devices'),
         ),
-        // Tools — on mobile a small submenu (Identify song + Call reliability,
-        // which is mobile-only). On desktop Call reliability doesn't apply, so
-        // Identify song sits directly at the top level rather than alone in a
-        // one-item submenu.
+        // Tools — a small submenu on mobile; on desktop Identify song sits at
+        // the top level (Call reliability is mobile-only).
         if (mobile)
-          SubmenuButton(
-            menuStyle: menuStyle,
-            leadingIcon:
-                Icon(Icons.tune_rounded, size: 20, color: scheme.primary),
-            menuChildren: [
-              _menuBtn(scheme, Icons.hearing_rounded, 'Identify song',
-                  () => showSongIdentifier(context)),
-              _menuBtn(scheme, Icons.phonelink_ring_rounded,
-                  'Call reliability', () {
-                Navigator.push(
+          GenieMenuEntry(
+            icon: Icons.tune_rounded,
+            label: 'Tools',
+            children: [
+              GenieMenuEntry(
+                  icon: Icons.hearing_rounded,
+                  label: 'Identify song',
+                  onTap: () => showSongIdentifier(context)),
+              GenieMenuEntry(
+                icon: Icons.phonelink_ring_rounded,
+                label: 'Call reliability',
+                onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
                       builder: (_) => const CallReliabilityScreen()),
-                );
-              }),
+                ),
+              ),
             ],
-            child: const Text('Tools'),
           )
         else
-          _menuBtn(scheme, Icons.hearing_rounded, 'Identify song',
-              () => showSongIdentifier(context)),
-        // Account — you + your app: your profile, personalization, and the
-        // legal/about info, all under one parent as requested.
-        SubmenuButton(
-          menuStyle: menuStyle,
-          leadingIcon: Icon(Icons.account_circle_outlined,
-              size: 20, color: scheme.primary),
-          menuChildren: [
-            _menuBtn(scheme, Icons.person_rounded, 'Profile', () async {
-              await showAppPopup(context, const ProfileScreen());
-              if (mounted) _loadUserData();
-            }),
-            _menuBtn(scheme, Icons.palette_outlined, 'Appearance',
-                () => showAppPopup(context, const AppearanceScreen())),
-            _menuBtn(scheme, Icons.lock_outline_rounded, 'Backup & restore',
-                () => showAppPopup(context, const BackupScreen())),
-            _menuBtn(scheme, Icons.shield_outlined, 'Legal & About',
-                () => showLegalMenu(context)),
+          GenieMenuEntry(
+              icon: Icons.hearing_rounded,
+              label: 'Identify song',
+              onTap: () => showSongIdentifier(context)),
+        // Account — profile, personalization, backup and legal together.
+        GenieMenuEntry(
+          icon: Icons.account_circle_outlined,
+          label: 'Account',
+          children: [
+            GenieMenuEntry(
+              icon: Icons.person_rounded,
+              label: 'Profile',
+              onTap: () async {
+                await showAppPopup(context, const ProfileScreen());
+                if (mounted) _loadUserData();
+              },
+            ),
+            GenieMenuEntry(
+                icon: Icons.palette_outlined,
+                label: 'Appearance',
+                onTap: () =>
+                    showAppPopup(context, const AppearanceScreen())),
+            GenieMenuEntry(
+                icon: Icons.lock_outline_rounded,
+                label: 'Backup & restore',
+                onTap: () => showAppPopup(context, const BackupScreen())),
+            GenieMenuEntry(
+                icon: Icons.shield_outlined,
+                label: 'Legal & About',
+                onTap: () => showLegalMenu(context)),
           ],
-          child: const Text('Account'),
         ),
-        const Divider(height: 10),
-        _menuBtn(scheme, Icons.logout_rounded, 'Sign out', _logout,
+        const GenieMenuEntry.divider(),
+        GenieMenuEntry(
+            icon: Icons.logout_rounded,
+            label: 'Sign out',
+            onTap: _logout,
             destructive: true),
       ],
-    );
-  }
-
-  MenuItemButton _menuBtn(
-      ColorScheme scheme, IconData icon, String label, VoidCallback onPressed,
-      {bool destructive = false}) {
-    final accent = destructive ? scheme.error : scheme.primary;
-    return MenuItemButton(
-      leadingIcon: Icon(icon, size: 20, color: accent),
-      onPressed: onPressed,
-      child: Text(
-        label,
-        style: destructive ? TextStyle(color: scheme.error) : null,
-      ),
     );
   }
 }

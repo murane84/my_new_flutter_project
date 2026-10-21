@@ -81,6 +81,7 @@ import '../services/app_busy.dart';
 import 'chat/attach_sheet.dart';
 import 'chat/contact_picker_sheet.dart';
 import 'stories/camera_capture.dart';
+import '../widgets/genie_menu.dart';
 
 // Split out for maintainability (Dart parts — same library, shared
 // imports & privacy, zero behaviour change):
@@ -5440,7 +5441,7 @@ class _ChatPageState extends State<ChatPage>
               icon: const Icon(Icons.headphones_rounded),
               onPressed: _startListenTogether,
             ),
-          PopupMenuButton<String>(
+          GeniePopupMenuButton<String>(
             tooltip: 'More',
             icon: const Icon(Icons.more_vert_rounded),
             onSelected: (v) {

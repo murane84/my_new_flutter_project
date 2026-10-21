@@ -37,6 +37,7 @@ import '../utils/marquee_text.dart';
 import 'api_service.dart';
 import 'chat/song_cache.dart';
 import 'music/song_identifier.dart' show showSongIdentifier;
+import '../widgets/genie_menu.dart';
 
 part 'music/music_control_widgets.dart'; // _CtrlBtn, _CtrlChip, _SpeedPanel
 part 'music/music_playlist_overlay.dart'; // _PlaylistOverlay + state

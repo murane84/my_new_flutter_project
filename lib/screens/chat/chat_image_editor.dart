@@ -650,7 +650,7 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
   }
 
   Widget _moreMenu(ColorScheme scheme) {
-    return PopupMenuButton<String>(
+    return GeniePopupMenuButton<String>(
       tooltip: 'More tools',
       color: const Color(0xFF1C1C1E),
       icon: Icon(Icons.more_vert_rounded,

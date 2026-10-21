@@ -99,6 +99,7 @@ part 'chat/chat_unread.dart';         // "N new messages" divider + last-seen
 part 'chat/chat_search.dart';         // in-chat search pill + hit stepping
 part 'chat/chat_mentions_seen.dart';  // "@" stepper + DM seen avatar
 part 'chat/chat_polls_admin.dart';    // group admins + polls
+part 'chat/chat_rituals.dart';        // good night + on this day
 
 // ─── Timestamp helpers ───────────────────────────────────────────────────────
 
@@ -452,6 +453,10 @@ class _ChatPageState extends State<ChatPage>
   int? _mentionBase;
   // Group settings mirrored from the server (chat/chat_polls_admin.dart).
   bool _adminsOnly = false;
+  // Rituals (chat/chat_rituals.dart): already shown/used today.
+  bool _gnDoneToday = false;
+  bool _memoryDoneToday = false;
+  bool _annivToday = false;
   bool _amAdmin = false;
   final Set<String> _mentionCleared = {};
   List<Map<String, dynamic>>? _mentionCacheOf;
@@ -559,6 +564,7 @@ class _ChatPageState extends State<ChatPage>
     ConnectionStatus.instance.online.addListener(_onConnStatusChanged);
     _initChat();
     _loadMySpaces();
+    _loadRitualFlags();
     _loadSavedMediaKeys();
     KeystrokeSounds.instance.init();
     HeartLock.instance.init();
@@ -4756,6 +4762,8 @@ class _ChatPageState extends State<ChatPage>
           // @-mention picker: inline, so it rides above the keyboard with the
           // composer instead of floating somewhere the keyboard can cover.
           // Secret heart: mood · seal-until · note starters.
+          // Rituals: good night (bonded DM, late) · on this day.
+          _buildRitualChips(scheme, isDark),
           if (_heartMode && !_isRecording && _editing == null)
             Align(
               alignment: Alignment.centerLeft,

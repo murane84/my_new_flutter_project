@@ -95,6 +95,8 @@ import '../state/playback_state.dart';
 import '../state/unread_state.dart';
 import '../state/presence_state.dart';
 import '../widgets/genie_menu.dart';
+import '../widgets/moment_card.dart';
+import '../services/aluta_mood.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
@@ -159,6 +161,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // Whether the app is currently in the foreground (drives whether an incoming
   // message pops a local notification).
   bool _appForeground = true;
+  // Welcome-back moments: when the app went to the background, and when we
+  // last greeted (so it stays special, not nagging).
+  DateTime? _bgSince;
+  DateTime? _lastMomentAt;
   List<Map<String, dynamic>> _filteredFriends = [];
   // Group conversations the user belongs to. They sit at the TOP of the same
   // list as DMs, so a created/joined group appears right alongside friends.
@@ -605,7 +611,19 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     _appForeground = state == AppLifecycleState.resumed;
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _bgSince ??= DateTime.now();
+    }
     if (state == AppLifecycleState.resumed) {
+      final since = _bgSince;
+      _bgSince = null;
+      if (since != null) {
+        final away = DateTime.now().difference(since);
+        // Let the screen settle (reconnect, repaint) before greeting.
+        Future.delayed(const Duration(milliseconds: 1400),
+            () => _maybeMusicWelcome(away));
+      }
       // Coming back from idle/background — re-check the server and go online.
       _discoverServer();
       _autoReconnect();
@@ -613,6 +631,86 @@ class HomePageState extends rp.ConsumerState<HomePage>
       // backgrounded).
       NowPlayingPresence.instance.loadSnapshot();
     }
+  }
+
+  /// Came back to Aluta with music still playing → a warm, one-off moment
+  /// card: share it with your partner, tune in if they're listening too, or
+  /// message them. Needs ≥1 min away, at most once every 25 min, and never
+  /// during a live session (you're already together).
+  void _maybeMusicWelcome(Duration away) {
+    if (!mounted || !_appForeground) return;
+    if (away < const Duration(minutes: 1)) return;
+    final last = _lastMomentAt;
+    if (last != null &&
+        DateTime.now().difference(last) < const Duration(minutes: 25)) {
+      return;
+    }
+    if (ref.read(liveSessionProvider).active) return;
+    final np = ref.read(nowPlayingProvider);
+    final playing = np.playing || (playbackBus.isPlaying?.call() ?? false);
+    if (!playing) return;
+    _lastMomentAt = DateTime.now();
+
+    final me = _username.trim().split(RegExp(r'\s+')).first;
+    final space = _primarySpace;
+    int? pid;
+    var pname = '';
+    if (space != null) {
+      for (final m
+          in ((space['members'] as List?) ?? const []).whereType<Map>()) {
+        final id = (m['id'] as num?)?.toInt();
+        if (id == null || id == _myUserId) continue;
+        pid = id;
+        final f = _allFriends.firstWhere(
+            (x) => (x['id'] as num?)?.toInt() == id,
+            orElse: () => <String, dynamic>{});
+        final full = _contactDisplayName(
+            (f['phone'] ?? m['phone'])?.toString(),
+            (m['username'] ?? f['username'] ?? '').toString());
+        pname = full.trim().split(RegExp(r'\s+')).first;
+        break;
+      }
+    }
+    final partnerListening =
+        pid != null && NowPlayingPresence.instance.trackFor(pid) != null;
+    final track = np.track;
+    final title = AlutaMood.musicWelcome(
+      me: me,
+      track: track,
+      partner: pname,
+      partnerListening: partnerListening,
+    );
+    final artist = np.artist.trim();
+    final subtitle = track.trim().isEmpty
+        ? null
+        : 'Now playing · ${track.trim()}${artist.isEmpty ? '' : ' — $artist'}';
+    final actions = <MomentAction>[];
+    if (space != null && pid != null) {
+      final id = pid;
+      final name = pname.isEmpty ? 'them' : pname;
+      actions.add(partnerListening
+          ? MomentAction(Icons.headphones_rounded, 'Tune in with $name',
+              () => _tuneInto(id, name),
+              primary: true)
+          : MomentAction(Icons.favorite_rounded, 'Listen together',
+              () => _openSpace(space),
+              primary: true));
+      actions.add(MomentAction(Icons.chat_bubble_rounded, 'Message $name',
+          () => _messageSpacemate(space)));
+    } else if (playbackBus.onShareToChat != null) {
+      actions.add(MomentAction(Icons.send_rounded, 'Share to a chat',
+          () => playbackBus.onShareToChat?.call(),
+          primary: true));
+    }
+    showMomentCard(
+      context,
+      title: title,
+      subtitle: subtitle,
+      leading: partnerListening
+          ? Icons.headphones_rounded
+          : Icons.music_note_rounded,
+      actions: actions,
+    );
   }
 
   // Sends a presence heartbeat to the server and makes it the single source of

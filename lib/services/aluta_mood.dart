@@ -55,7 +55,9 @@ class AlutaMood {
           'Up with the sun$you',
           'Early start$you? ☀️',
           'Habari za asubuhi$you',
+          'Umeamka mapema$you 🌅',
           'A quiet morning with Aluta$you',
+          'Asubuhi njema$you',
         ]);
         break;
       case AlutaMoment.morning:
@@ -63,7 +65,9 @@ class AlutaMood {
           'Good morning$you',
           'Morning tea and music$you? ☕',
           'Habari za asubuhi$you',
+          'Chai na muziki$you? ☕',
           'Fresh day, fresh tunes$you',
+          'Siku njema$you ☀️',
         ]);
         break;
       case AlutaMoment.afternoon:
@@ -71,7 +75,9 @@ class AlutaMood {
           'Good afternoon$you',
           'Lunch break with Aluta$you? 🍲',
           'Habari za mchana$you',
+          'Mchana mwema$you',
           'Afternoon catch-up$you',
+          'Pumzika kidogo$you 🍲',
         ]);
         break;
       case AlutaMoment.evening:
@@ -79,7 +85,9 @@ class AlutaMood {
           'Good evening$you',
           'Nice evening$you 🌇',
           'Habari za jioni$you',
+          'Jioni njema$you 🌇',
           'Wind down with your circle$you',
+          'Karibu nyumbani$you',
         ]);
         break;
       case AlutaMoment.night:
@@ -87,13 +95,19 @@ class AlutaMood {
           'Late night tunes$you? 🌙',
           'Still up$you?',
           'Usiku mwema$you',
+          'Bado uko macho$you? 🌙',
           'A calm night in$you',
+          'Usiku wa utulivu$you',
         ]);
         break;
     }
-    if (wd == DateTime.friday) lines.add('Happy Friday$you 🎉');
-    if (wd == DateTime.sunday) lines.add('Slow Sunday$you');
-    if (n.isNotEmpty) lines.add('Welcome back$you');
+    if (wd == DateTime.friday) {
+      lines.addAll(['Happy Friday$you 🎉', 'Ijumaa njema$you 🎉']);
+    }
+    if (wd == DateTime.sunday) {
+      lines.addAll(['Slow Sunday$you', 'Jumapili njema$you']);
+    }
+    if (n.isNotEmpty) lines.addAll(['Welcome back$you', 'Karibu tena$you']);
     return _pick('greet', lines);
   }
 
@@ -103,13 +117,13 @@ class AlutaMood {
     switch (moment) {
       case AlutaMoment.dawn:
       case AlutaMoment.morning:
-        return _pick('wake', ['Opening the curtains…', 'Brewing your feed…', 'Waking up…']);
+        return _pick('wake', ['Opening the curtains…', 'Brewing your feed…', 'Tunaamka…', 'Waking up…']);
       case AlutaMoment.afternoon:
-        return _pick('wake', ['Catching you up…', 'Gathering your circle…', 'Warming up…']);
+        return _pick('wake', ['Catching you up…', 'Gathering your circle…', 'Tunakuletea habari…', 'Warming up…']);
       case AlutaMoment.evening:
-        return _pick('wake', ['Lighting the lamps…', 'Gathering your circle…', 'Settling in…']);
+        return _pick('wake', ['Lighting the lamps…', 'Gathering your circle…', 'Tunawaita wapendwa…', 'Settling in…']);
       case AlutaMoment.night:
-        return _pick('wake', ['Tiptoeing in…', 'Quietly catching up…', 'Dimming the lights…']);
+        return _pick('wake', ['Tiptoeing in…', 'Quietly catching up…', 'Taratibu…', 'Dimming the lights…']);
     }
   }
 
@@ -139,13 +153,13 @@ class AlutaMood {
     switch (moment) {
       case AlutaMoment.dawn:
       case AlutaMoment.morning:
-        return _pick('wait', ['One sip and we\'re there…', 'Getting things ready…', 'Almost there…']);
+        return _pick('wait', ['One sip and we\'re there…', 'Getting things ready…', 'Subiri kidogo…', 'Almost there…']);
       case AlutaMoment.afternoon:
-        return _pick('wait', ['Just a moment…', 'Catching up…', 'Almost there…']);
+        return _pick('wait', ['Just a moment…', 'Catching up…', 'Karibu tunamaliza…', 'Almost there…']);
       case AlutaMoment.evening:
-        return _pick('wait', ['Bringing your circle in…', 'Just a moment…', 'Almost there…']);
+        return _pick('wait', ['Bringing your circle in…', 'Just a moment…', 'Kidogo tu…', 'Almost there…']);
       case AlutaMoment.night:
-        return _pick('wait', ['Quietly loading…', 'Just a moment…', 'Almost there…']);
+        return _pick('wait', ['Quietly loading…', 'Just a moment…', 'Polepole…', 'Almost there…']);
     }
   }
 
@@ -164,6 +178,59 @@ class AlutaMood {
   static String slowCaption() => _pick('slow', [
         'Still working — your connection seems slow',
         'Hang on, the network is taking its time',
+        'Mtandao uko polepole — bado tunajaribu',
         'Still here, still loading…',
       ]);
+
+  // ── Welcome-back while music plays ───────────────────────────────────────
+  /// Headline when the user comes back to Aluta with a song still playing.
+  /// [partner] = first name of the bonded partner (may be empty);
+  /// [partnerListening] = they're playing music right now too.
+  static String musicWelcome({
+    required String me,
+    required String track,
+    String partner = '',
+    bool partnerListening = false,
+  }) {
+    final you = me.isEmpty ? '' : ', $me';
+    final song = track.trim().isEmpty ? 'your song' : '“${track.trim()}”';
+    if (partner.isNotEmpty && partnerListening) {
+      return _pick('mw_both', [
+        '$partner is listening too 🎧 — tune in together?',
+        '$partner yuko kwenye muziki pia 🎧 — msikilize pamoja?',
+        'You and $partner, both in the music right now 💞',
+      ]);
+    }
+    final lines = <String>[
+      'Still vibing to $song$you? 🎶',
+      'Bado unaburudika na $song$you? 🎶',
+      '$song sounds better shared$you',
+    ];
+    if (partner.isNotEmpty) {
+      lines.addAll([
+        'Share $song with $partner? 💞',
+        'Msikilize $song pamoja na $partner? 💞',
+        '$partner would love this one 🎧',
+      ]);
+    }
+    switch (moment) {
+      case AlutaMoment.dawn:
+      case AlutaMoment.morning:
+        lines.add('Morning soundtrack on$you ☕');
+        lines.add('Muziki wa asubuhi$you ☀️');
+        break;
+      case AlutaMoment.afternoon:
+        lines.add('Music with your lunch$you? 🍲');
+        break;
+      case AlutaMoment.evening:
+        lines.add('Evening tunes$you 🌇');
+        lines.add('Burudani ya jioni$you 🌇');
+        break;
+      case AlutaMoment.night:
+        lines.add('Late night listening$you 🌙');
+        lines.add('Muziki wa usiku$you 🌙');
+        break;
+    }
+    return _pick('mw', lines);
+  }
 }

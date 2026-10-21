@@ -896,7 +896,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final partner = _partnerInfo();
     final pname = partner?.name ?? '';
     final bridge = SongBridge.instance;
-    final playingNow = ref.read(nowPlayingProvider).track.trim() == title;
+    final playingNow = ref.read(nowPlayingProvider).track.trim() == title &&
+        playbackBus.onShareToChat != null; // web player can't share yet
     final sharer = await _whoSharedSong(title, exclude: partner?.id);
     if (!mounted) return;
     final actions = <MomentAction>[];

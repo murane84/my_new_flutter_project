@@ -79,12 +79,15 @@ extension _ChatRituals on _ChatPageState {
     rebuildWith(() {
       if (r['heart'] == true) {
         _heartMode = true;
-        _heartMood = 'love';
+        _heartMood = (r['mood'] ?? 'love').toString();
         _heartUnlockAt = null;
       }
       if (text.isNotEmpty) {
+        // Never wipe what they'd already written — add to it.
+        final cur = _ctrl.text.trim();
+        final t = cur.isEmpty ? text : '$cur $text';
         _ctrl.value = TextEditingValue(
-            text: text, selection: TextSelection.collapsed(offset: text.length));
+            text: t, selection: TextSelection.collapsed(offset: t.length));
       }
     });
     _composerFocus.requestFocus();

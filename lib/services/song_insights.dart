@@ -28,11 +28,13 @@ enum SongFeel {
 
 /// A nudge the app would like to show (home decides when it's welcome).
 class SongNudge {
-  const SongNudge(this.kind, this.title, {this.artist = '', this.feel});
+  const SongNudge(this.kind, this.title,
+      {this.artist = '', this.feel, required this.day});
   final String kind; // 'repeat' · 'missing' · 'ours'
   final String title;
   final String artist;
   final SongFeel? feel;
+  final String day; // yyyymmdd it was queued (stale ones get replaced)
 }
 
 /// Aluta learns, on this device only, what you listen to and how it makes
@@ -65,7 +67,7 @@ class SongInsights {
   String? _lastNudgeDay;
   String? _lastRecapWeek;
   Map<String, int> _together = {}; // yyyymmdd → live sessions started
-  bool _loaded = false;
+  Future<void>? _loading;
 
   static String _day(DateTime d) =>
       '${d.year}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
@@ -78,12 +80,19 @@ class SongInsights {
     return '${d.year}-w$w';
   }
 
-  static String _keyOf(String title) =>
-      title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
+  static String _keyOf(String title) {
+    final k = title
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), ' ')
+        .trim();
+    return k.isEmpty ? title.trim().toLowerCase() : k;
+  }
 
-  Future<void> load() async {
-    if (_loaded) return;
-    _loaded = true;
+  /// One shared load — every caller awaits the same read, so nobody works
+  /// on (or saves over) an empty memory.
+  Future<void> load() => _loading ??= _doLoad();
+
+  Future<void> _doLoad() async {
     try {
       final p = await SharedPreferences.getInstance();
       enabled.value = p.getBool(_enabledKey) ?? true;
@@ -168,24 +177,37 @@ class SongInsights {
   }
 
   void _maybeQueue(Map<String, dynamic> s) {
-    if (!enabled.value || _nudgedToday || pending.value != null) return;
+    if (!enabled.value || _nudgedToday) return;
+    final pend = pending.value;
+    if (pend != null && pend.day == _today) return; // today's is waiting
     if (((s['ig'] as num?)?.toInt() ?? 0) >= 2) return; // ignored twice
     final title = s['t'].toString();
     final artist = (s['a'] ?? '').toString();
     final feel = SongFeel.of(s['f'] as String?);
     final today = _playsOn(s, _today);
-    // 7) A "missing someone" song coming back on → a heart for them.
-    if (feel == SongFeel.missing && today >= 1) {
-      pending.value =
-          SongNudge('missing', title, artist: artist, feel: feel);
-      return;
-    }
+    final now = DateTime.now();
+    int ago(String k) => now
+        .difference(DateTime.fromMillisecondsSinceEpoch(
+            (s[k] as num?)?.toInt() ?? 0))
+        .inDays;
     // 5) Your song for weeks, felt with love → make it part of "us".
     if ((feel == SongFeel.love || feel == SongFeel.missing) &&
         s['ours'] != true &&
-        _playsSince(s, DateTime.now().subtract(const Duration(days: 30))) >=
-            10) {
-      pending.value = SongNudge('ours', title, artist: artist, feel: feel);
+        _playsSince(s, now.subtract(const Duration(days: 30))) >= 10) {
+      pending.value =
+          SongNudge('ours', title, artist: artist, feel: feel, day: _today);
+      return;
+    }
+    // 7) A "missing someone" song COMING BACK after a gap → a heart.
+    final playedYesterday =
+        _playsOn(s, _day(now.subtract(const Duration(days: 1)))) > 0;
+    if (feel == SongFeel.missing &&
+        today == 1 &&
+        !playedYesterday &&
+        ago('nAt') >= 7 &&
+        ago('fAt') >= 2) {
+      pending.value =
+          SongNudge('missing', title, artist: artist, feel: feel, day: _today);
       return;
     }
     // 1) On repeat today (3+) and we haven't asked how it feels lately.
@@ -195,13 +217,15 @@ class SongInsights {
             .inDays <
         14;
     if (today >= 3 && !askedRecently) {
-      pending.value = SongNudge('repeat', title, artist: artist, feel: feel);
+      pending.value =
+          SongNudge('repeat', title, artist: artist, feel: feel, day: _today);
     }
   }
 
   /// The home page showed [n] — that spends today's nudge.
   void markShown(SongNudge n) {
     _lastNudgeDay = _today;
+    _songs[_keyOf(n.title)]?['nAt'] = DateTime.now().millisecondsSinceEpoch;
     if (identical(pending.value, n)) pending.value = null;
     _save();
   }
@@ -320,7 +344,7 @@ class SongBridge {
   String? Function()? partnerName;
 
   /// Open the partner's chat; [text] pre-fills it, [heart] seals it.
-  void Function({String? text, bool heart})? messagePartner;
+  void Function({String? text, bool heart, String? mood})? messagePartner;
 
   /// Open Our Space (where Listen Together lives).
   VoidCallback? listenTogether;

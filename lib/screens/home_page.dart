@@ -513,6 +513,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void dispose() {
     _glowTimer?.cancel();
     SongInsights.instance.pending.removeListener(_onSongNudge);
+    final sb = SongBridge.instance;
+    sb.partnerName = null;
+    sb.messagePartner = null;
+    sb.listenTogether = null;
+    sb.shareCurrent = null;
+    sb.addToOurs = null;
     WidgetsBinding.instance.removeObserver(this);
     ConnectionStatus.instance.online.removeListener(_onGlobalConnChanged);
     SessionEvents.instance.expired.removeListener(_onSessionExpired);
@@ -634,11 +640,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         Future.delayed(const Duration(milliseconds: 1400), () {
           if (_maybeMusicWelcome(away)) return;
           // A music nudge that waited for you to come back.
-          if (SongInsights.instance.pending.value != null) {
-            _onSongNudge();
-            return;
-          }
-          _maybeWeeklyRecap();
+          if (_onSongNudge() || _maybeWeeklyRecap()) return;
           // Long time away → wait for the reconnect refresh, then summarise.
           if (away >= const Duration(hours: 3)) {
             Future.delayed(const Duration(milliseconds: 2600),
@@ -748,13 +750,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void _wireSongMoments() {
     final b = SongBridge.instance;
     b.partnerName = () => _partnerInfo()?.name;
-    b.messagePartner = ({String? text, bool heart = false}) {
+    b.messagePartner = ({String? text, bool heart = false, String? mood}) {
       final p = _partnerInfo();
       if (p == null) return;
       chatComposeRequest.value = {
         'friendId': p.id,
         'text': text ?? '',
         'heart': heart,
+        'mood': ?mood,
       };
       _messageSpacemate(p.space);
     };
@@ -776,6 +779,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       return r != null;
     };
     SongInsights.instance.load().then((_) {
+      if (!mounted) return;
       SongInsights.instance.pending.addListener(_onSongNudge);
       Future.delayed(const Duration(seconds: 6), _maybeWeeklyRecap);
     });
@@ -787,20 +791,33 @@ class HomePageState extends rp.ConsumerState<HomePage>
     });
   }
 
-  void _onSongNudge() {
+  /// Returns true when a nudge is (about to be) shown.
+  bool _onSongNudge() {
     final n = SongInsights.instance.pending.value;
-    if (n == null || !mounted || !_appForeground) return;
-    if (ref.read(liveSessionProvider).active) return; // already together
-    // Let it breathe: never on top of another moment card.
-    if (_momentCooling) return;
+    if (n == null || !mounted || !_appForeground) return false;
+    // Already together, or another moment card just showed → try again in a
+    // bit rather than dropping it.
+    if (ref.read(liveSessionProvider).active || _momentCooling) {
+      Future.delayed(const Duration(minutes: 2), () {
+        if (mounted) _onSongNudge();
+      });
+      return false;
+    }
     Future.delayed(const Duration(milliseconds: 900), () {
       if (!mounted || SongInsights.instance.pending.value != n) return;
       _showSongNudge(n);
     });
+    return true;
   }
 
   void _showSongNudge(SongNudge n) {
     final si = SongInsights.instance;
+    // Partner-only nudges with no partner: drop quietly (no slot spent, no
+    // "ignore" counted).
+    if (n.kind != 'repeat' && _partnerInfo() == null) {
+      si.pending.value = null;
+      return;
+    }
     si.markShown(n);
     _lastMomentAt = DateTime.now();
     final partner = _partnerInfo();
@@ -836,7 +853,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
               MomentAction(Icons.favorite_rounded, 'Send a heart', () {
                 acted();
                 SongBridge.instance.messagePartner?.call(
-                    text: '“${n.title}” made me miss you 🥹', heart: true);
+                    text: '“${n.title}” made me miss you 🥹', heart: true, mood: 'miss');
               }, primary: true),
           ],
         );
@@ -852,10 +869,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
               MomentAction(Icons.playlist_add_rounded, 'Add to Our Playlist',
                   () async {
                 acted();
-                si.markOurs(n.title);
                 final ok = await SongBridge.instance.addToOurs
                         ?.call(n.title, n.artist) ??
                     false;
+                if (ok) si.markOurs(n.title);
                 if (mounted) {
                   showToast(
                       context,
@@ -907,7 +924,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         if (partner != null) {
           actions.add(MomentAction(Icons.favorite_rounded, 'Send a heart',
               () => bridge.messagePartner?.call(
-                  text: '“$title” made me miss you 🥹', heart: true),
+                  text: '“$title” made me miss you 🥹', heart: true, mood: 'miss'),
               primary: true));
           actions.add(MomentAction(Icons.headphones_rounded,
               'Listen together', () => bridge.listenTogether?.call()));
@@ -996,10 +1013,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   }
 
   /// 6) Sunday evening: your week in music, shareable with your partner.
-  void _maybeWeeklyRecap() {
-    if (!mounted || !_appForeground || _momentCooling) return;
+  bool _maybeWeeklyRecap() {
+    if (!mounted || !_appForeground || _momentCooling) return false;
     final r = SongInsights.instance.weeklyRecapDue();
-    if (r == null) return;
+    if (r == null) return false;
     SongInsights.instance.markRecapShown();
     _lastMomentAt = DateTime.now();
     final partner = _partnerInfo();
@@ -1035,6 +1052,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           }, primary: true),
       ],
     );
+    return true;
   }
 
   // ── Heartbeat tap ─────────────────────────────────────────────────────────

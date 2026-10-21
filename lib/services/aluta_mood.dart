@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/painting.dart' show Color;
+import 'package:flutter/widgets.dart' show Color, StringCharacters;
 
 /// Aluta's mood of the moment — so the welcome, the loader and its captions
 /// feel like the app noticed the time of day, not like a machine repeating
@@ -138,7 +138,7 @@ class AlutaMood {
         ]);
       }
       if (topSong != null && topSong.isNotEmpty) {
-        final t = topSong.length > 32 ? '${topSong.substring(0, 31)}…' : topSong;
+        final t = _cut(topSong, 32);
         return _pick('wake_s', [
           switch (moment) {
             AlutaMoment.dawn || AlutaMoment.morning => 'Your morning favourite: “$t” ☀️',
@@ -219,7 +219,13 @@ class AlutaMood {
       ]);
 
   // ── Song feelings ───────────────────────────────────────────────────────
-  static String _q(String t) => '“${t.length > 40 ? '${t.substring(0, 39)}…' : t}”';
+  /// Trim by user-visible characters (never splits an emoji).
+  static String _cut(String t, int n) {
+    final c = t.characters;
+    return c.length <= n ? t : '${c.take(n - 1).toString()}…';
+  }
+
+  static String _q(String t) => '“${_cut(t, 40)}”';
 
   static String songOnRepeat(String title) => _pick('rep', [
         '${_q(title)} on repeat 🔁 — how does it make you feel?',

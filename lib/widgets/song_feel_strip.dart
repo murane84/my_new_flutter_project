@@ -141,7 +141,7 @@ class _SongFeelStripState extends State<SongFeelStrip> {
                 actions.add(_pill('Send $partner a heart 💌',
                     strong: true,
                     onTap: () => b.messagePartner?.call(
-                        text: '“$t” made me miss you 🥹', heart: true)));
+                        text: '“$t” made me miss you 🥹', heart: true, mood: 'miss')));
                 actions.add(_pill('Together',
                     icon: Icons.headphones_rounded,
                     onTap: () => b.listenTogether?.call()));

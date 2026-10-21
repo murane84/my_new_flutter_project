@@ -406,7 +406,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
 
             // ── Disc + track info card ────────────────────────────────
             Container(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 // Subtle brand-tinted wash: a whisper of red in the corner that
                 // fades out — modern and "alive" without overpowering the text.
@@ -430,7 +430,10 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                       : accent.withAlpha(40),
                 ),
               ),
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+              Row(
                 children: [
                   // Spinning disc — swipe ←/→ to skip, double-tap to like,
                   // swipe up to open the queue.
@@ -580,17 +583,22 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                   ),
                 ],
               ),
+              // How this song feels → who it's for, folded INTO the card
+              // (one surface, no extra block to scroll past).
+              if (!live && hasTrack)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: SongFeelStrip(
+                      title: _trackName,
+                      artist: _artistName,
+                      accent: accent,
+                      framed: false),
+                ),
+                ],
+              ),
             ),
 
-            // How this song feels → who it's for (music ⇄ chat harmony).
-            if (!live && hasTrack)
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: SongFeelStrip(
-                    title: _trackName, artist: _artistName, accent: accent),
-              ),
-
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
 
             // ── Position bar — accent colour, taller thumb ────────────
             Row(
@@ -734,18 +742,18 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
 
-            // ── Utilities ─────────────────────────────────────────────
-            // Shuffle & repeat now live in the transport row, so this row
-            // is reserved for the less-frequent library actions. Each one
-            // is a labelled tile, evenly spaced to breathe across the width.
+            // ── Tools: one compact row (no scrolling) ─────────────────
+            // Playlist · Sleep · Equalizer · Lyrics · Volume · Identify ·
+            // Speed — icon tiles with tooltips; badges carry the counts.
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 _utility(
                   scheme,
                   onSurface,
+                  compact: true,
                   // "Add" folded in here: first tap scans the device, later
                   // taps just open the playlist.
                   icon: Icons.queue_music_rounded,
@@ -758,6 +766,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                 _utility(
                   scheme,
                   onSurface,
+                  compact: true,
                   // Snooze "Zᶻ" glyph — deliberately distinct from the crescent
                   // moon used by the dark-theme toggle in the app header.
                   icon: Icons.snooze_rounded,
@@ -772,6 +781,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                 _utility(
                   scheme,
                   onSurface,
+                  compact: true,
                   icon: Icons.graphic_eq_rounded,
                   label: 'Equalizer',
                   color: accent,
@@ -780,24 +790,12 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                 _utility(
                   scheme,
                   onSurface,
+                  compact: true,
                   icon: Icons.lyrics_rounded,
                   label: 'Lyrics',
                   color: accent,
                   onTap: _openLyrics,
                 ),
-              ],
-            ),
-
-            const SizedBox(height: 18),
-            Divider(height: 1, color: scheme.outlineVariant.withAlpha(50)),
-            const SizedBox(height: 14),
-
-            // ── Volume (left ~45%) + Speed button (right) on same row ────
-            Row(
-              children: [
-                // Volume — tap to reveal a popup slider that auto-hides. Keeps
-                // the row clean and stops the volume track from clashing with
-                // the accent seek bar above it.
                 CompositedTransformTarget(
                   link: _volumeLink,
                   child: GestureDetector(
@@ -865,19 +863,13 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                     ),
                   ),
                 ),
-                const Spacer(),
-
-                // ── Identify song (Shazam-style) — centred between the volume
-                // and speed controls. Listens via the mic and names the song.
-                // Uses an "ear/listen" icon so it never reads like the Equalizer
-                // (which is graphic-eq bars). ──
                 Tooltip(
                   message: 'Identify song',
                   child: GestureDetector(
                     onTap: () => showSongIdentifier(context),
                     child: Container(
-                      width: 42,
-                      height: 42,
+                      width: 40,
+                      height: 40,
                       decoration: BoxDecoration(
                         color: accent.withAlpha(28),
                         shape: BoxShape.circle,
@@ -887,30 +879,6 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                     ),
                   ),
                 ),
-                const Spacer(),
-
-                const SizedBox(width: 10),
-
-                // Sleep remaining (compact, inline)
-                if (_sleepRemaining != null) ...[
-                  Icon(Icons.timer_outlined,
-                      size: 11, color: Colors.indigo.withAlpha(200)),
-                  const SizedBox(width: 3),
-                  Text(
-                    _fmtSleep(_sleepRemaining!),
-                    style: TextStyle(
-                        fontSize: 10, color: Colors.indigo.withAlpha(200)),
-                  ),
-                  GestureDetector(
-                    onTap: () => _setSleepTimer(null),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Icon(Icons.close,
-                          size: 11, color: onSurface.withAlpha(110)),
-                    ),
-                  ),
-                ],
-
                 // Speed button — anchored right so popup scales from here
                 GestureDetector(
                   onTap: _toggleSpeedPanel,
@@ -1092,8 +1060,13 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
     required VoidCallback onTap,
     bool active = false,
     String? badge,
+    // Compact: a 40px icon tile with a tooltip instead of a caption, so the
+    // whole tools row fits on one line.
+    bool compact = false,
   }) {
-    return Tactile(child: GestureDetector(
+    return Tooltip(
+      message: compact ? label : '',
+      child: Tactile(child: GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Column(
@@ -1104,8 +1077,8 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
             children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
-                width: 46,
-                height: 46,
+                width: compact ? 40 : 46,
+                height: compact ? 40 : 46,
                 decoration: BoxDecoration(
                   gradient: active
                       ? null
@@ -1153,7 +1126,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                 ),
                 child: Icon(
                   icon,
-                  size: 21,
+                  size: compact ? 19 : 21,
                   color: active
                       ? color
                       : Color.alphaBlend(
@@ -1187,17 +1160,20 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                 ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w500,
-              color: active ? color : onSurface.withAlpha(160),
+          if (!compact) ...[
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w500,
+                color: active ? color : onSurface.withAlpha(160),
+              ),
             ),
-          ),
+          ],
         ],
       ),
-    ));
+    )),
+    );
   }
 }

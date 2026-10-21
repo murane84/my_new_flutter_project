@@ -20,12 +20,16 @@ class SongFeelStrip extends StatefulWidget {
     this.artist = '',
     required this.accent,
     this.centered = false,
+    this.framed = true,
     this.onLeave,
   });
   final String title;
   final String artist;
   final Color accent;
   final bool centered;
+  /// false = no frosted card of its own (sits inside the now-playing card,
+  /// slimmer emoji) — the compact player panel.
+  final bool framed;
   final VoidCallback? onLeave;
 
   @override
@@ -71,7 +75,7 @@ class _SongFeelStripState extends State<SongFeelStrip> {
   // ── pieces ───────────────────────────────────────────────────────────────
   Widget _emoji(SongFeel f, bool selected) {
     final a = widget.accent;
-    final size = widget.centered ? 44.0 : 36.0;
+    final size = widget.centered ? 44.0 : (widget.framed ? 36.0 : 30.0);
     return Tooltip(
       message: f.label,
       child: GestureDetector(
@@ -93,7 +97,8 @@ class _SongFeelStripState extends State<SongFeelStrip> {
           ),
           alignment: Alignment.center,
           child: Text(f.emoji,
-              style: TextStyle(fontSize: widget.centered ? 22 : 18)),
+              style: TextStyle(
+                  fontSize: widget.centered ? 22 : (widget.framed ? 18 : 15))),
         ),
       ),
     );
@@ -222,6 +227,7 @@ class _SongFeelStripState extends State<SongFeelStrip> {
   }
 
   Widget _frame(Widget child) {
+    if (!widget.framed) return child;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
@@ -258,7 +264,9 @@ class _SongFeelStripState extends State<SongFeelStrip> {
         Widget body;
         if (feel == null || _choosing) {
           final label = Text(
-            feel == null ? 'How does this song feel?' : 'Change the feeling',
+            feel == null
+                ? (widget.framed ? 'How does this song feel?' : 'Feels like…')
+                : 'Change the feeling',
             style: TextStyle(
                 fontSize: widget.centered ? 13 : 12,
                 fontWeight: FontWeight.w700,

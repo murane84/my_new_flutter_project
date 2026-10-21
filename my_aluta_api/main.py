@@ -197,6 +197,9 @@ def ensure_media_schema():
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS sealed_content TEXT",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS opened_at TIMESTAMPTZ",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS heart_opens TEXT",
+        # Group admins-only posting + polls (polls.py).
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS admins_only BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS poll TEXT",
         # Ozilane Key: opaque per-user subject, linked-at cache, two-step flag.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_subject VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_linked_at TIMESTAMPTZ",

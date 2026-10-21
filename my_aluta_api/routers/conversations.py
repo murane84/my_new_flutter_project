@@ -79,6 +79,7 @@ def _conversation_out(db: Session, conv: Conversation, me: int) -> schemas.Conve
         last_sender_id=(last.sender_id if last else None),
         unread_count=cc.unread_count(db, conv.id, me),
         my_role=my_role,
+        admins_only=bool(getattr(conv, "admins_only", False)),
     )
 
 
@@ -207,7 +208,16 @@ def send_message(
     current_user: User = Depends(get_current_user),
 ):
     conv = _require_member(db, cid, current_user.id)
-    msg = cc.add_message(db, cid, current_user.id, payload)
+    if (conv.is_group and getattr(conv, "admins_only", False)
+            and not cc.is_admin(db, cid, current_user.id)):
+        raise HTTPException(status_code=403,
+                            detail="Only admins can send messages in this group")
+    if (payload.message_type or "") == "poll" and not conv.is_group:
+        raise HTTPException(status_code=400, detail="Polls are for groups")
+    try:
+        msg = cc.add_message(db, cid, current_user.id, payload)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     validated = schemas.MessageWithSender.model_validate(msg)
     serialized = _serialize(msg)
     members = cc.member_ids(db, cid)
@@ -413,9 +423,84 @@ def update_group(
         raise HTTPException(status_code=400, detail="Not a group")
     if not cc.is_admin(db, cid, current_user.id):
         raise HTTPException(status_code=403, detail="Only admins can edit the group")
-    cc.update_group(db, cid, title=payload.title, avatar_url=payload.avatar_url)
+    cc.update_group(db, cid, title=payload.title, avatar_url=payload.avatar_url,
+                    admins_only=payload.admins_only)
+    conv = cc.get_conversation(db, cid)
+    safe_broadcast_users(
+        cc.member_ids(db, cid),
+        {"type": "conversation_updated", "conversation_id": cid,
+         "admins_only": bool(conv.admins_only)},
+    )
+    return _conversation_out(db, conv, current_user.id)
+
+
+@router.patch("/{cid}/members/{uid}/role", response_model=schemas.ConversationOut)
+def set_member_role(
+    cid: int,
+    uid: int,
+    payload: schemas.RoleUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Make a member an admin, or step an admin down (yourself included) —
+    admins only, and a group always keeps at least one admin."""
+    conv = _require_member(db, cid, current_user.id)
+    if not conv.is_group:
+        raise HTTPException(status_code=400, detail="Not a group")
+    if not cc.is_admin(db, cid, current_user.id):
+        raise HTTPException(status_code=403, detail="Only admins can change roles")
+    role = (payload.role or "").strip().lower()
+    if role not in ("admin", "member"):
+        raise HTTPException(status_code=422, detail="role must be admin or member")
+    m = cc.get_member(db, cid, uid)
+    if not m:
+        raise HTTPException(status_code=404, detail="Not a member")
+    if role == "member" and m.role == "admin":
+        admins = (
+            db.query(ConversationMember)
+            .filter(ConversationMember.conversation_id == cid,
+                    ConversationMember.role == "admin")
+            .count()
+        )
+        if admins <= 1:
+            raise HTTPException(status_code=400,
+                                detail="A group needs at least one admin")
+    m.role = role
+    db.commit()
     safe_broadcast_users(
         cc.member_ids(db, cid),
         {"type": "conversation_updated", "conversation_id": cid},
     )
-    return _conversation_out(db, cc.get_conversation(db, cid), current_user.id)
+    return _conversation_out(db, conv, current_user.id)
+
+
+@router.post("/{cid}/messages/{mid}/vote")
+def vote_poll(
+    cid: int,
+    mid: int,
+    payload: schemas.PollVote,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Cast / change / retract ([]) my vote. Any member may vote, even in an
+    admins-only group."""
+    from polls import apply_vote
+    _require_member(db, cid, current_user.id)
+    msg = (
+        db.query(Message)
+        .filter(Message.id == mid, Message.conversation_id == cid)
+        .first()
+    )
+    if not msg or msg.is_deleted or (msg.message_type or "") != "poll":
+        raise HTTPException(status_code=404, detail="Poll not found")
+    try:
+        poll = apply_vote(msg, current_user.id, payload.options)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    db.commit()
+    safe_broadcast_users(
+        cc.member_ids(db, cid),
+        {"type": "poll_updated", "conversation_id": cid,
+         "message_id": mid, "poll": poll},
+    )
+    return {"message_id": mid, "poll": poll}

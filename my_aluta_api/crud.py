@@ -281,6 +281,8 @@ def list_preview(msg) -> str:
     if (getattr(msg, "message_type", None) or "").lower() == "heart":
         return "❤️ Secret message"
     content = (msg.content or "").strip()
+    if (getattr(msg, "message_type", None) or "").lower() == "poll":
+        return f"📊 {content}" if content else "📊 Poll"
     if content:
         return content
     mtype = (msg.message_type or "text").lower()

@@ -137,6 +137,9 @@ class Message(Base):
     # Every opener: JSON {"<user id>": "<iso time>"} — a DM has one entry, a
     # group one per member who opened it (the "2 of 3 opened" count + info).
     heart_opens = Column(Text, nullable=True)
+    # ── Polls (message_type 'poll', groups) — see polls.py ───────────────────
+    # JSON {"q": str, "options": [str], "multi": bool, "votes": {uid: [idx]}}
+    poll = Column(Text, nullable=True)
 
     # New fields for visibility
     visible_to_sender = Column(Boolean, default=True)
@@ -167,6 +170,9 @@ class Conversation(Base):
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Group setting: only admins may post (members can still react / vote).
+    admins_only = Column(Boolean, default=False, nullable=False,
+                         server_default="false")
 
     members = relationship(
         "ConversationMember",

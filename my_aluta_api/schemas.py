@@ -93,6 +93,7 @@ class Message(BaseModel):
     unlock_at: Optional[datetime] = None
     opened_at: Optional[datetime] = None
     heart_opens: Optional[str] = None   # JSON {uid: iso} — who opened it
+    poll: Optional[str] = None          # JSON poll state (polls.py)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -122,6 +123,7 @@ class MessageWithSender(BaseModel):
     unlock_at: Optional[datetime] = None
     opened_at: Optional[datetime] = None
     heart_opens: Optional[str] = None   # JSON {uid: iso} — who opened it
+    poll: Optional[str] = None          # JSON poll state (polls.py)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -173,6 +175,8 @@ class GroupMessageCreate(BaseModel):
     # Secret hearts: optional mood + timed unsealing (hearts.py).
     heart_mood: Optional[str] = None
     unlock_at: Optional[datetime] = None
+    # Polls (message_type 'poll'): JSON {"q", "options": [..], "multi"}.
+    poll: Optional[str] = None
 
 
 class AddMembers(BaseModel):
@@ -180,9 +184,19 @@ class AddMembers(BaseModel):
 
 
 class RenameGroup(BaseModel):
-    # Group settings update — either/both. (Kept the name for compatibility.)
+    # Group settings update — any subset. (Kept the name for compatibility.)
     title: Optional[str] = None
     avatar_url: Optional[str] = None
+    admins_only: Optional[bool] = None
+
+
+class RoleUpdate(BaseModel):
+    role: str  # "admin" | "member"
+
+
+class PollVote(BaseModel):
+    # Option indexes; [] retracts my vote.
+    options: List[int] = []
 
 
 class ReadUpTo(BaseModel):
@@ -216,6 +230,7 @@ class ConversationOut(BaseModel):
     last_sender_id: Optional[int] = None
     unread_count: int = 0
     my_role: Optional[str] = None
+    admins_only: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

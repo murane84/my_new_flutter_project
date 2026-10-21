@@ -122,8 +122,17 @@ def create_group(
 
 def add_message(db: Session, conversation_id: int, sender_id: int, payload) -> Message:
     """Append a message to a conversation (group send). `payload` carries
-    content + optional media fields (a GroupMessageCreate)."""
+    content + optional media fields (a GroupMessageCreate). A 'poll' payload
+    is validated here (ValueError → the router answers 422)."""
+    poll_json = None
+    if (getattr(payload, "message_type", None) or "") == "poll":
+        import json
+        from polls import clean_poll
+        spec = clean_poll(getattr(payload, "poll", None))
+        poll_json = json.dumps(spec, separators=(",", ":"))
+        payload.content = spec["q"]
     msg = Message(
+        poll=poll_json,
         sender_id=int(sender_id),
         receiver_id=None,  # group message: no single receiver
         conversation_id=int(conversation_id),
@@ -475,10 +484,13 @@ def update_group(
     conversation_id: int,
     title: str | None = None,
     avatar_url: str | None = None,
+    admins_only: bool | None = None,
 ) -> None:
     conv = get_conversation(db, conversation_id)
     if not conv:
         return
+    if admins_only is not None:
+        conv.admins_only = bool(admins_only)
     if title is not None:
         new = title.strip()
         if new:

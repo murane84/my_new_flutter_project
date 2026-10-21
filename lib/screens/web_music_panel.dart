@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/live_session_service.dart' show BytesAudioSource;
 import '../services/now_playing_presence.dart';
 import '../services/song_insights.dart';
+import '../widgets/song_feel_strip.dart';
 import 'home_page.dart' show playbackBus;
 import 'web_fs/music_folder.dart';
 import 'web_fs/blob_url.dart';
@@ -466,6 +467,15 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           child: Column(
             children: [
               _nowPlayingCard(theme),
+              // How this song feels → who it's for (same as the native player).
+              if (_index >= 0 && _index < _queue.length)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: SongFeelStrip(
+                    title: _cleanTitle(_queue[_index].name),
+                    accent: theme.colorScheme.primary,
+                  ),
+                ),
               const SizedBox(height: 8),
               _seekBar(theme),
               _transport(theme),

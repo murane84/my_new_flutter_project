@@ -432,6 +432,8 @@ class _ChatPageState extends State<ChatPage>
   // Scrolled well up (e.g. after jumping to a quoted message) → show the
   // round "back to latest" button.
   bool _farFromBottom = false;
+  // The message field has focus → the composer pill shows its brand ring.
+  bool _composerFocused = false;
 
   Timer? _statusTimer;
   Timer? _pollTimer;
@@ -4639,7 +4641,9 @@ class _ChatPageState extends State<ChatPage>
                     children: [
                       // Rounded input field: emoji · text · attach · camera.
                       Expanded(
-                        child: Container(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeOut,
                           // Matches the 48px mic/send disc beside it.
                           constraints: const BoxConstraints(minHeight: 48),
                           // Centre the 40px icon/text row in the 48px pill
@@ -4658,11 +4662,24 @@ class _ChatPageState extends State<ChatPage>
                                     scheme.surface)
                                 : scheme.surface,
                             borderRadius: BorderRadius.circular(26),
+                            // Focused → a clear brand ring + soft brand glow
+                            // (you're typing here); idle → a quiet hairline.
                             border: Border.all(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.10)
-                                    : Colors.black.withValues(alpha: 0.06)),
+                                width: _composerFocused ? 1.6 : 1.0,
+                                color: _composerFocused
+                                    ? scheme.primary
+                                        .withValues(alpha: isDark ? 0.85 : 0.75)
+                                    : (isDark
+                                        ? Colors.white.withValues(alpha: 0.10)
+                                        : Colors.black.withValues(alpha: 0.06))),
                             boxShadow: [
+                              if (_composerFocused)
+                                BoxShadow(
+                                  color: scheme.primary
+                                      .withValues(alpha: isDark ? 0.35 : 0.22),
+                                  blurRadius: 14,
+                                  spreadRadius: 0.5,
+                                ),
                               BoxShadow(
                                 color: Colors.black
                                     .withValues(alpha: isDark ? 0.45 : 0.16),
@@ -4751,6 +4768,12 @@ class _ChatPageState extends State<ChatPage>
                               // Text field. Desktop: Enter=send, Shift+Enter=newline.
                               Expanded(
                                 child: Focus(
+                                  // Ring the pill while you're typing.
+                                  onFocusChange: (f) {
+                                    if (f != _composerFocused) {
+                                      setState(() => _composerFocused = f);
+                                    }
+                                  },
                                   onKeyEvent: (node, event) {
                                     if (event is KeyDownEvent &&
                                         event.logicalKey ==

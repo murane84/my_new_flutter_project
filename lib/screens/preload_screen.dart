@@ -60,6 +60,7 @@ class _PreloadScreenState extends State<PreloadScreen>
   @override
   void initState() {
     super.initState();
+    splashOnScreen.value++; // no extra logo spinner over the preload screen
     _ticker = Timer.periodic(const Duration(milliseconds: 40), (_) {
       if (!mounted) return;
       final diff = _target - _shown;
@@ -196,6 +197,7 @@ class _PreloadScreenState extends State<PreloadScreen>
 
   @override
   void dispose() {
+    splashOnScreen.value = (splashOnScreen.value - 1).clamp(0, 99);
     _ticker?.cancel();
     _reveal.dispose();
     _beat.dispose();

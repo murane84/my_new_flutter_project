@@ -54,5 +54,11 @@ class AppBusy {
   }
 }
 
+/// How many full-screen loading splashes (the launch splash, the preload
+/// screen) are on screen. The centred busy loader stays hidden while any is
+/// up — they already show the Aluta mark, so a second logo spinner on top
+/// would just clutter the moment.
+final ValueNotifier<int> splashOnScreen = ValueNotifier<int>(0);
+
 /// App-wide singleton.
 final appBusy = AppBusy.instance;

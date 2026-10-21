@@ -24,24 +24,33 @@ class _BusyOverlayState extends State<BusyOverlay> {
   void initState() {
     super.initState();
     appBusy.major.addListener(_onBusy);
+    splashOnScreen.addListener(_onBusy);
     _onBusy();
   }
 
   void _onBusy() {
-    final busy = appBusy.major.value > 0;
+    final busy = appBusy.major.value > 0 && splashOnScreen.value == 0;
     if (busy) {
       // Only reveal once the work has lasted past a brief window, so a fast op
       // doesn't flicker a spinner on screen.
       _delay ??= Timer(const Duration(milliseconds: 300), () {
         _delay = null;
-        if (mounted && appBusy.major.value > 0 && !_show) {
+        if (mounted &&
+            appBusy.major.value > 0 &&
+            splashOnScreen.value == 0 &&
+            !_show) {
           setState(() => _show = true);
         }
       });
     } else {
       _delay?.cancel();
       _delay = null;
-      if (_show && mounted) setState(() => _show = false);
+      // Deferred: this can fire from a splash's initState/dispose (mid-build).
+      if (_show) {
+        Future.microtask(() {
+          if (mounted && _show) setState(() => _show = false);
+        });
+      }
     }
   }
 
@@ -49,6 +58,7 @@ class _BusyOverlayState extends State<BusyOverlay> {
   void dispose() {
     _delay?.cancel();
     appBusy.major.removeListener(_onBusy);
+    splashOnScreen.removeListener(_onBusy);
     super.dispose();
   }
 

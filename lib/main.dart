@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'widgets/busy_overlay.dart';
+import 'services/app_busy.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:provider/provider.dart';
 // Prefixed: package:provider also exports Consumer/ChangeNotifierProvider.
@@ -636,6 +637,7 @@ class SplashScreenState extends State<SplashScreen>
   @override
   void initState() {
     super.initState();
+    splashOnScreen.value++; // hide the busy loader while the splash is up
     // Route host-facing live-session notifications (e.g. "X left the session")
     // through the app's global overlay, so they show even when the Listen
     // Together popup is minimised. Set once; survives this screen's disposal.
@@ -686,6 +688,7 @@ class SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
+    splashOnScreen.value = (splashOnScreen.value - 1).clamp(0, 99);
     _entrance.dispose();
     _pulse.dispose();
     _float.dispose();

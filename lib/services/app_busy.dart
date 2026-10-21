@@ -38,18 +38,34 @@ class AppBusy {
   /// noisy on every small op.
   final ValueNotifier<int> major = ValueNotifier<int>(0);
 
-  void beginMajor() => major.value = major.value + 1;
-  void endMajor() {
+  /// What the newest labelled major task is doing ("Reconnecting…"), shown
+  /// under the loader when a wait runs long. Null = let the mood speak.
+  final ValueNotifier<String?> majorLabel = ValueNotifier<String?>(null);
+  final List<String> _labels = [];
+
+  void beginMajor({String? label}) {
+    if (label != null) {
+      _labels.add(label);
+      majorLabel.value = label;
+    }
+    major.value = major.value + 1;
+  }
+
+  void endMajor({String? label}) {
+    if (label != null) {
+      _labels.remove(label);
+      majorLabel.value = _labels.isEmpty ? null : _labels.last;
+    }
     final n = major.value - 1;
     major.value = n < 0 ? 0 : n;
   }
 
-  Future<T> runMajor<T>(Future<T> Function() task) async {
-    beginMajor();
+  Future<T> runMajor<T>(Future<T> Function() task, {String? label}) async {
+    beginMajor(label: label);
     try {
       return await task();
     } finally {
-      endMajor();
+      endMajor(label: label);
     }
   }
 }

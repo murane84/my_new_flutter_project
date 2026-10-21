@@ -78,6 +78,7 @@ import 'package:flutter_contacts/flutter_contacts.dart';
 import '../utils/app_config.dart';
 import '../utils/loose_url_linkifier.dart';
 import '../services/app_busy.dart';
+import '../services/aluta_mood.dart';
 import 'chat/attach_sheet.dart';
 import 'chat/contact_picker_sheet.dart';
 import 'stories/camera_capture.dart';
@@ -1640,18 +1641,21 @@ class _ChatPageState extends State<ChatPage>
             style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
           ),
           const SizedBox(height: 14),
-          FilledButton.tonalIcon(
-            onPressed: () {
-              const hi = 'Hi 👋';
-              _ctrl.value = const TextEditingValue(
-                text: hi,
-                selection: TextSelection.collapsed(offset: hi.length),
-              );
-              setState(() {});
-            },
-            icon: const Text('👋', style: TextStyle(fontSize: 16)),
-            label: const Text('Say hi'),
-          ),
+          Builder(builder: (_) {
+            // The nudge follows the time of day (AlutaMood).
+            final (label, hi) = AlutaMood.opener();
+            return FilledButton.tonalIcon(
+              onPressed: () {
+                _ctrl.value = TextEditingValue(
+                  text: hi,
+                  selection: TextSelection.collapsed(offset: hi.length),
+                );
+                setState(() {});
+              },
+              icon: Text(hi.characters.last, style: const TextStyle(fontSize: 16)),
+              label: Text(label),
+            );
+          }),
         ],
       ),
     );

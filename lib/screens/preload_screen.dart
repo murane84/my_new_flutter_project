@@ -11,6 +11,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'home_page.dart';
 import 'api_service.dart';
 import '../services/connected_contacts_service.dart';
+import '../services/aluta_mood.dart';
 
 /// The post-unlock warm-up gate.
 ///
@@ -45,7 +46,8 @@ class _PreloadScreenState extends State<PreloadScreen>
   double _target = 0; // where the bar should be as tasks complete
   double _shown = 0; // eased, displayed value
   String _stage = 'Waking up…';
-  String _name = ''; // cached username → "Welcome back, <first>"
+  String _name = ''; // cached username → the greeting's first name
+  String _greeting = ''; // mood-of-the-moment welcome (AlutaMood)
   Timer? _ticker;
   bool _done = false;
 
@@ -105,12 +107,16 @@ class _PreloadScreenState extends State<PreloadScreen>
     final firstRun = prefs.getString('cached_friends_v1') == null;
     final cached = (prefs.getString('username') ?? '').trim();
     if (cached.isNotEmpty && mounted) setState(() => _name = cached);
+    if (mounted) {
+      final first = cached.isEmpty ? '' : cached.split(RegExp(r'\s+')).first;
+      setState(() => _greeting = AlutaMood.greeting(first));
+    }
 
     // Show the branded moment for at least this long so the hand-off + animation
     // read smoothly even when everything loads instantly (web / warm relaunch).
     final minShow = DateTime.now().add(const Duration(milliseconds: 1300));
 
-    _bump(_wInit, firstRun ? 'Waking up…' : 'Welcome back…');
+    _bump(_wInit, AlutaMood.wakeLine(firstRun: firstRun));
     final online = await _isOnline();
     final api = ApiService();
 
@@ -125,10 +131,12 @@ class _PreloadScreenState extends State<PreloadScreen>
       // repeat scans, so this still pre-warms them.
       Future.delayed(const Duration(seconds: 5), () {
         unawaited(appBusy
-            .runMajor(() => ConnectedContactsService.instance.refresh())
+            .runMajor(() => ConnectedContactsService.instance.refresh(),
+                label: 'Finding your people…')
             .then((_) {}).catchError((_) {}));
         unawaited(appBusy
-            .runMajor(() => SongLibrary.songs())
+            .runMajor(() => SongLibrary.songs(),
+                label: 'Tuning up your music…')
             .then((_) {}).catchError((_) {}));
       });
     }
@@ -278,8 +286,11 @@ class _PreloadScreenState extends State<PreloadScreen>
                         AnimatedSwitcher(
                           duration: const Duration(milliseconds: 300),
                           child: Text(
-                            first.isEmpty ? 'Aluta' : 'Welcome back, $first',
-                            key: ValueKey(first),
+                            _greeting.isNotEmpty
+                                ? _greeting
+                                : (first.isEmpty ? 'Aluta' : 'Welcome back, $first'),
+                            key: ValueKey('$first|$_greeting'),
+                            textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontSize: 21,
                               fontWeight: FontWeight.w800,

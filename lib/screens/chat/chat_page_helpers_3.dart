@@ -138,7 +138,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                   if (dlBusy)
                     Text(
                       dlP == null
-                          ? 'Downloading\u2026 · tap \u2715 to cancel'
+                          ? 'Downloading\u2026'
                           : 'Downloading ${(dlP * 100).round()}%',
                       style: TextStyle(
                           color: scheme.primary,

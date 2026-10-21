@@ -37,6 +37,11 @@ class MainActivity : AudioServiceFragmentActivity() {
     private val telecomChannel = "aluta/telecom"
     private val connectedContactsChannel = "aluta/connected_contacts"
     private val downloadsChannel = "aluta/downloads"
+    // Held while attachment downloads run (DownloadManager.dart → holdAwake),
+    // so turning the screen off / the phone sleeping doesn't stall the
+    // transfer: CPU stays up, Wi-Fi stays in full-performance mode.
+    private var dlWake: android.os.PowerManager.WakeLock? = null
+    private var dlWifi: android.net.wifi.WifiManager.WifiLock? = null
     private val keystrokeChannel = "aluta/keystroke"
     private var keystrokeSoundPool: SoundPool? = null
     private val keystrokeSoundIds = HashMap<String, Int>()
@@ -102,6 +107,13 @@ class MainActivity : AudioServiceFragmentActivity() {
                     // The device's API level, so Dart can request the legacy
                     // storage permission only on Android 9 and below.
                     "sdkInt" -> result.success(Build.VERSION.SDK_INT)
+                    "holdAwake" -> {
+                        val on = call.argument<Boolean>("on") ?: false
+                        try {
+                            holdAwake(on)
+                        } catch (_: Exception) {}
+                        result.success(null)
+                    }
                     // Write a file straight into the public Downloads folder
                     // (no "Save to" picker). Heavy I/O runs off the main thread.
                     "saveToDownloads" -> {
@@ -568,5 +580,35 @@ class MainActivity : AudioServiceFragmentActivity() {
             ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
         } catch (_: Exception) {}
+    }
+
+    private fun holdAwake(on: Boolean) {
+        if (on) {
+            if (dlWake?.isHeld != true) {
+                val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+                dlWake = pm.newWakeLock(
+                    android.os.PowerManager.PARTIAL_WAKE_LOCK, "aluta:download"
+                ).apply {
+                    setReferenceCounted(false)
+                    acquire(60 * 60 * 1000L) // safety cap: 1 hour
+                }
+            }
+            if (dlWifi?.isHeld != true) {
+                val wm = applicationContext.getSystemService(Context.WIFI_SERVICE)
+                    as android.net.wifi.WifiManager
+                @Suppress("DEPRECATION")
+                dlWifi = wm.createWifiLock(
+                    android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF, "aluta:download"
+                ).apply {
+                    setReferenceCounted(false)
+                    acquire()
+                }
+            }
+        } else {
+            try { if (dlWake?.isHeld == true) dlWake?.release() } catch (_: Exception) {}
+            try { if (dlWifi?.isHeld == true) dlWifi?.release() } catch (_: Exception) {}
+            dlWake = null
+            dlWifi = null
+        }
     }
 }

@@ -64,6 +64,8 @@ import 'chat/conversation_media.dart';
 import '../services/keystroke_sounds.dart';
 import '../services/upload_manager.dart';
 import '../services/heart_lock.dart';
+import '../services/download_manager.dart';
+import '../main.dart' show scaffoldMessengerKey;
 import 'package:float_column/float_column.dart';
 import 'package:linkify/linkify.dart' show linkify;
 import 'package:geolocator/geolocator.dart';
@@ -520,6 +522,9 @@ class _ChatPageState extends State<ChatPage>
     KeystrokeSounds.instance.init();
     HeartLock.instance.init();
     UploadManager.instance.rev.addListener(_onUploadsChanged);
+    // Attachment downloads live app-wide; repaint bubbles as they progress.
+    DownloadManager.instance.init();
+    DownloadManager.instance.rev.addListener(_onDownloadsChanged);
     // Tell the notifier which conversation is on screen, so a foreground push
     // for THIS chat doesn't pop a redundant banner while the user reads it.
     if (_isGroup) {
@@ -657,6 +662,7 @@ class _ChatPageState extends State<ChatPage>
     _sendActivePresence(false);
     _ws.close();
     UploadManager.instance.rev.removeListener(_onUploadsChanged);
+    DownloadManager.instance.rev.removeListener(_onDownloadsChanged);
     super.dispose();
   }
 
@@ -1471,6 +1477,10 @@ class _ChatPageState extends State<ChatPage>
 
     _outbox[tempId] = attempt;
     unawaited(attempt());
+  }
+
+  void _onDownloadsChanged() {
+    if (mounted) setState(() {});
   }
 
   void _insertOptimistic(Map<String, dynamic> msg) {

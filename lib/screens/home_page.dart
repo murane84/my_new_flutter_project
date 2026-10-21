@@ -51,6 +51,7 @@ import '../services/live_session_service.dart'
     show activeLiveSession, endActiveLiveSession, ActiveLiveSession;
 import '../services/notif_service.dart';
 import '../services/fcm_service.dart';
+import '../services/download_manager.dart';
 import '../services/share_inbox.dart';
 import '../services/contact_names.dart';
 import '../services/metadata_overrides.dart';
@@ -384,6 +385,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // authed home only mounts after login, so this doubles as "register on
     // login" and re-registers on every relaunch (token can rotate).
     FcmService.instance.registerToken();
+    // Pick up any file downloads left unfinished (app killed / slept).
+    DownloadManager.instance.init();
 
     // Android "Connected apps": surface Aluta actions ("Voice call on Aluta",
     // "Message on Aluta") under matched phone-book contacts, like WhatsApp /

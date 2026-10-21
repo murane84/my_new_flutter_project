@@ -560,3 +560,65 @@ Future<bool?> askFullScreenIntentPermission() async {
     return null;
   }
 }
+
+// ── Attachment downloads (DownloadManager) ──────────────────────────────────
+// A quiet, ongoing progress notification while a file downloads in the
+// background, so the user sees it keep going after leaving the chat or
+// turning the screen off; it turns into "Downloaded" when done.
+
+const String _dlChannelId = 'aluta_downloads';
+
+/// Stable id per download (derived from the url).
+int downloadNotifId(String key) => 70000 + (key.hashCode & 0x7fff);
+
+Future<void> showDownloadProgress(String key, String name, int? percent) async {
+  if (kIsWeb) return;
+  try {
+    await initNotifications();
+    await _fln.show(
+      id: downloadNotifId(key),
+      title: name,
+      body: percent == null ? 'Downloading…' : 'Downloading · $percent%',
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          _dlChannelId,
+          'Downloads',
+          channelDescription: 'Files downloading from your chats',
+          importance: Importance.low,
+          priority: Priority.low,
+          onlyAlertOnce: true,
+          ongoing: true,
+          autoCancel: false,
+          showProgress: true,
+          indeterminate: percent == null,
+          maxProgress: 100,
+          progress: percent ?? 0,
+          icon: '@mipmap/launcher_icon',
+        ),
+      ),
+    );
+  } catch (_) {}
+}
+
+Future<void> finishDownloadNotif(String key, String name, bool ok) async {
+  if (kIsWeb) return;
+  try {
+    await _fln.show(
+      id: downloadNotifId(key),
+      title: name,
+      body: ok ? 'Downloaded · open it from the chat' : 'Download paused — tap the file to resume',
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _dlChannelId,
+          'Downloads',
+          channelDescription: 'Files downloading from your chats',
+          importance: Importance.low,
+          priority: Priority.low,
+          onlyAlertOnce: true,
+          autoCancel: true,
+          icon: '@mipmap/launcher_icon',
+        ),
+      ),
+    );
+  } catch (_) {}
+}

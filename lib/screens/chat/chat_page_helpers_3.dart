@@ -90,8 +90,12 @@ extension _ChatPageHelpers3 on _ChatPageState {
       ColorScheme scheme) {
     final name = (msg['media_name'] as String?) ?? 'File';
     final size = (msg['media_size'] as num?)?.toInt();
-    final dlBusy = msg['__dlBusy'] == true;
-    final dlP = (msg['__dlProgress'] as num?)?.toDouble();
+    // Live state comes from the app-wide DownloadManager (so it survives
+    // leaving and re-opening the chat); the per-message flag only covers the
+    // short "preparing" moment before the job starts.
+    final job = DownloadManager.instance.job(url);
+    final dlBusy = job != null || msg['__dlBusy'] == true;
+    final dlP = job?.progress ?? (msg['__dlProgress'] as num?)?.toDouble();
     // "Owned" = the sender's own file (they always have it) OR a file this
     // device has already downloaded. Owned shows the Aluta mark; not-yet-owned
     // shows the download arrow.
@@ -240,44 +244,6 @@ extension _ChatPageHelpers3 on _ChatPageState {
     return Icons.insert_drive_file_rounded;
   }
 
-  /// Stream a GET straight to [dest] on disk, reporting progress, WITHOUT ever
-  /// holding the whole file in memory. A 140MB APK buffered as a `List<int>` is
-  /// ~1GB of boxed ints on the UI isolate - that GC storm is what froze the app
-  /// into "Aluta isn't responding". Writing chunk-by-chunk keeps memory flat.
-  /// Returns the HTTP status (200 on a complete read).
-  Future<int> _streamToFile(String url, File dest,
-      void Function(int received, int total)? onProgress,
-      {int expectedTotal = 0}) async {
-    final client = http.Client();
-    IOSink? sink;
-    try {
-      final req = http.Request('GET', Uri.parse(url))
-        ..headers.addAll(mediaAuthHeaders(url));
-      final resp = await client.send(req);
-      if (resp.statusCode != 200) return resp.statusCode;
-      final headerTotal = resp.contentLength ?? 0;
-      final total = headerTotal > 0 ? headerTotal : expectedTotal;
-      sink = dest.openWrite();
-      var received = 0;
-      final stream = total > 0
-          ? resp.stream
-          : resp.stream.timeout(const Duration(seconds: 30));
-      await for (final chunk in stream) {
-        sink.add(chunk);
-        received += chunk.length;
-        if (onProgress != null) onProgress(received, total);
-        if (total > 0 && received >= total) break;
-      }
-      await sink.flush();
-      return 200;
-    } finally {
-      try {
-        await sink?.close();
-      } catch (_) {}
-      client.close();
-    }
-  }
-
   Future<void> _openUrl(String url, Map<String, dynamic> msg) async {
     // Attachments are auth-protected: fetch the bytes WITH our token, save them
     // under the file's REAL name (with extension), and hand them to the system
@@ -285,6 +251,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
     // Reuse an already-downloaded copy when we can, and STREAM the fetch to disk
     // with a live % on the bubble (never buffer a big APK in RAM -> ANR).
     if (msg['__dlBusy'] == true) return;
+    if (DownloadManager.instance.isBusy(url)) {
+      showToast(context, 'Still downloading — it keeps going in the background');
+      return;
+    }
     try {
       final mime = ((msg['media_mime'] as String?) ?? '').trim();
       var name = ((msg['media_name'] as String?) ?? '').trim();
@@ -338,62 +308,51 @@ extension _ChatPageHelpers3 on _ChatPageState {
       }
 
       if (!ready) {
-        rebuildWith(() {
-          msg['__dlBusy'] = true;
-          msg['__dlProgress'] = null;
-        });
-        final part = File('${file.path}.part');
-        try {
-          var ok = false;
-          for (var attempt = 0; attempt < 3 && !ok; attempt++) {
-            if (attempt > 0) {
-              if (mounted) {
-                showToast(context, 'Connection dropped - retrying...');
-              }
-              await Future.delayed(Duration(seconds: 2 * attempt));
-            }
-            try {
-              final status = await appBusy.run(() => _streamToFile(url, part,
-                  (received, total) {
-                if (!mounted) return;
-                final q = total > 0
-                    ? (received / total).clamp(0.0, 1.0).toDouble()
-                    : null;
-                final prev = msg['__dlProgress'] as double?;
-                if (q != null && prev != null && (q - prev).abs() < 0.01) {
-                  return;
-                }
-                rebuildWith(() => msg['__dlProgress'] = q);
-              }, expectedTotal: expected));
-              if (status == 200) {
-                ok = true;
-              } else if (status == 410 || status == 404) {
-                break;
-              }
-            } catch (_) {
-              // network error - loop and retry
-            }
-          }
-          if (!ok) {
-            try {
-              if (await part.exists()) await part.delete();
-            } catch (_) {}
-            if (mounted) {
-              showToast(context, 'Could not open file', type: ToastType.error);
-            }
-            return;
-          }
-          try {
-            if (await file.exists()) await file.delete();
-          } catch (_) {}
-          await part.rename(file.path);
-        } finally {
+        // Runs in the app-wide DownloadManager: survives leaving this chat,
+        // resumes from the partial file, keeps going with the screen off.
+        // Tapping again while it runs just re-attaches to the same job.
+        final res = await DownloadManager.instance.fetch(
+          url,
+          file,
+          headers: mediaAuthHeaders(url),
+          expectedTotal: expected,
+          name: name,
+          onRetry: (_) {
+            if (mounted) showToast(context, 'Connection dropped - resuming...');
+          },
+        );
+        if (!res.ok) {
           if (mounted) {
-            rebuildWith(() {
-              msg['__dlBusy'] = false;
-              msg['__dlProgress'] = null;
-            });
+            showToast(
+                context,
+                res.outcome == DownloadOutcome.gone
+                    ? 'File is no longer available'
+                    : 'Download paused — tap again to resume',
+                type: ToastType.error);
           }
+          return;
+        }
+        // Another caller may have fetched the same url to its own spot.
+        if (res.file != null && res.file!.path != file.path) {
+          await res.file!.copy(file.path);
+        }
+        _markMediaSaved(msg['media_url'] as String?);
+        if (!mounted) {
+          // Finished while you were elsewhere in the app: offer to open it
+          // instead of throwing an installer/viewer over another screen.
+          final effMime0 = (mime.isEmpty || mime == 'application/octet-stream')
+              ? null
+              : mime;
+          scaffoldMessengerKey.currentState?.showSnackBar(SnackBar(
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 8),
+            content: Text('$name downloaded'),
+            action: SnackBarAction(
+              label: 'Open',
+              onPressed: () => OpenFilex.open(file.path, type: effMime0),
+            ),
+          ));
+          return;
         }
       }
 
@@ -559,26 +518,27 @@ extension _ChatPageHelpers3 on _ChatPageState {
 
       // 3) Stream the server copy to a temp file - never buffer a big file in
       //    RAM (that was the download-button ANR) - retrying on a dropped line.
+      // A stable spot per attachment (not a timestamped temp name), so the
+      // app-wide DownloadManager can resume it after navigation / sleep / a
+      // restart, and a second tap joins the running job.
       final dir = await getTemporaryDirectory();
-      final tmp = File(
-          '${dir.path}/dl_${DateTime.now().millisecondsSinceEpoch}_tmp');
-      var ok = false;
-      for (var attempt = 0; attempt < 3 && !ok; attempt++) {
-        if (attempt > 0) {
-          if (mounted) showToast(context, 'Connection dropped — retrying…');
-          await Future.delayed(Duration(seconds: 2 * attempt));
-        }
-        try {
-          final status = await appBusy.run(() =>
-              _streamToFile(url, tmp, onProgress, expectedTotal: expected));
-          if (status == 200) {
-            ok = true;
-          } else if (status == 410 || status == 404) {
-            break;
-          }
-        } catch (_) {
-          // network error - loop and retry
-        }
+      final seg = Uri.parse(url).pathSegments;
+      final keyId = (seg.isNotEmpty ? seg.last : '${url.hashCode}')
+          .replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
+      final tmp = File('${dir.path}/aluta_dl/$keyId/download');
+      final res = await DownloadManager.instance.fetch(
+        url,
+        tmp,
+        headers: mediaAuthHeaders(url),
+        expectedTotal: expected,
+        name: outName,
+        onRetry: (_) {
+          if (mounted) showToast(context, 'Connection dropped — resuming…');
+        },
+      );
+      final ok = res.ok;
+      if (ok && res.file != null && res.file!.path != tmp.path) {
+        await res.file!.copy(tmp.path);
       }
       if (!ok || !await tmp.exists() || await tmp.length() == 0) {
         try {

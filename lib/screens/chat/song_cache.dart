@@ -1,8 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+
+import '../../services/download_manager.dart';
 
 /// Local cache for EPHEMERAL shared songs.
 ///
@@ -119,10 +120,15 @@ class SongCache {
     final existing = await cachedPath(id, filename: filename, mime: mime);
     if (existing != null) return existing;
     try {
-      final res = await http.get(Uri.parse(url), headers: headers);
-      if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
-        return await putBytes(id, res.bodyBytes, filename: filename, mime: mime);
-      }
+      final f = await _fileFor(id, filename: filename, mime: mime);
+      if (f == null) return null;
+      // Streamed to disk (not buffered in RAM) via the app-wide
+      // DownloadManager, so leaving the chat / screen-off doesn't kill it.
+      final res = await DownloadManager.instance.fetch(url, f,
+          headers: headers, name: filename ?? 'Song');
+      if (!res.ok || res.file == null) return null;
+      if (res.file!.path != f.path) await res.file!.copy(f.path);
+      if (await f.exists() && await f.length() > 0) return f.path;
     } catch (_) {}
     return null;
   }

@@ -1,8 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+
+import 'download_manager.dart';
 
 /// A small on-device cache for downloaded media (space background photos,
 /// pinned-moment photos/voice, …), keyed by the attachment id in its URL.
@@ -87,15 +88,18 @@ class MediaStore {
     if (hit != null) return hit;
     if (kIsWeb) return null;
     try {
-      final res = await http.get(Uri.parse(url), headers: headers);
-      if (res.statusCode >= 200 &&
-          res.statusCode < 300 &&
-          res.bodyBytes.isNotEmpty) {
-        final f = await _fileFor(url);
-        if (f == null) return null;
-        await f.writeAsBytes(res.bodyBytes, flush: true);
-        return f;
+      final f = await _fileFor(url);
+      if (f == null) return null;
+      // Streamed to disk by the app-wide DownloadManager: survives leaving
+      // the screen, resumes, joins a duplicate request. Silent (no shade
+      // notification) — these are photos / wallpapers / clips.
+      final res = await DownloadManager.instance
+          .fetch(url, f, headers: headers, notify: false);
+      if (!res.ok || res.file == null) return null;
+      if (res.file!.path != f.path) {
+        await res.file!.copy(f.path);
       }
+      return (await f.exists() && await f.length() > 0) ? f : null;
     } catch (_) {}
     return null;
   }

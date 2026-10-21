@@ -1205,3 +1205,114 @@ class _SwipeToReplyState extends State<_SwipeToReply>
     );
   }
 }
+
+
+// ─── Stable image box ────────────────────────────────────────────────────────
+/// A chat photo / GIF / sticker in a FIXED, whole-pixel box. A plain Image
+/// with no width/height re-lays-out its parents on every animation frame (and
+/// jumps from the loader size to the image size), which made animated GIF
+/// bubbles shimmer. Here the aspect ratio is read once from the first frame
+/// (and remembered per URL, so scrolling back never jumps), the box is
+/// sized from it and then never changes; frames only repaint, inside their
+/// own RepaintBoundary.
+class _StableImage extends StatefulWidget {
+  const _StableImage({
+    super.key,
+    required this.sizeKey,
+    required this.provider,
+    required this.loader,
+    required this.broken,
+  });
+
+  final String sizeKey;
+  final ImageProvider provider;
+  final Widget Function() loader;
+  final Widget Function() broken;
+
+  static final Map<String, double> _aspects = {};
+
+  @override
+  State<_StableImage> createState() => _StableImageState();
+}
+
+class _StableImageState extends State<_StableImage> {
+  ImageStream? _stream;
+  ImageStreamListener? _listener;
+  bool _failed = false;
+
+  double? get _aspect => _StableImage._aspects[widget.sizeKey];
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(_StableImage old) {
+    super.didUpdateWidget(old);
+    if (old.provider != widget.provider) {
+      _failed = false; // e.g. the network try failed, the local copy arrived
+      _resolve();
+    }
+  }
+
+  void _resolve() {
+    if (_aspect != null) return; // the Image itself does the loading
+    final s = widget.provider.resolve(createLocalImageConfiguration(context));
+    if (s.key == _stream?.key) return;
+    _unlisten();
+    _listener = ImageStreamListener((info, _) {
+      final w = info.image.width, h = info.image.height;
+      if (w > 0 && h > 0) _StableImage._aspects[widget.sizeKey] = w / h;
+      _unlisten();
+      if (mounted) setState(() {});
+    }, onError: (_, _) {
+      _unlisten();
+      if (mounted) setState(() => _failed = true);
+    });
+    _stream = s..addListener(_listener!);
+  }
+
+  void _unlisten() {
+    final l = _listener;
+    if (l != null) _stream?.removeListener(l);
+    _listener = null;
+  }
+
+  @override
+  void dispose() {
+    _unlisten();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_failed) return widget.broken();
+    final a = _aspect;
+    if (a == null) return widget.loader();
+    // Fit 240×300, keep at least 120×80 (cover crops the rest); whole pixels.
+    var w = 240.0, h = w / a;
+    if (h > 300) {
+      h = 300;
+      w = h * a;
+    }
+    w = w.clamp(120.0, 240.0).roundToDouble();
+    h = h.clamp(80.0, 300.0).roundToDouble();
+    return SizedBox(
+      width: w,
+      height: h,
+      child: RepaintBoundary(
+        child: Image(
+          image: widget.provider,
+          width: w,
+          height: h,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          filterQuality: FilterQuality.medium,
+          errorBuilder: (_, _, _) => widget.broken(),
+        ),
+      ),
+    );
+  }
+}

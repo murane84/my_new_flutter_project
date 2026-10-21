@@ -944,15 +944,34 @@ extension _ChatPageHelpers2 on _ChatPageState {
   }
 
   Widget _imageBubble(String url) {
+    final dpr = MediaQuery.of(context).devicePixelRatio.clamp(1.0, 3.0);
+    final thumbW = (240 * dpr).round();
+    ImageProvider provider(File? f) => ResizeImage.resizeIfNeeded(
+        thumbW,
+        null,
+        f != null
+            ? FileImage(f)
+            : authNetworkImageProvider(url, mediaAuthHeaders(url)));
+    Widget box(ImageProvider p) => _StableImage(
+          key: ValueKey(url),
+          sizeKey: url,
+          provider: p,
+          loader: _imgLoader,
+          broken: _imgBroken,
+        );
     return GestureDetector(
       onTap: () => _openImageViewer(url),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(
-              maxWidth: 240, maxHeight: 300, minWidth: 120, minHeight: 80),
-          child: _imageData(url),
-        ),
+        child: kIsWeb
+            ? box(provider(null))
+            : FutureBuilder<File?>(
+                future: _imgFile(url),
+                builder: (ctx, snap) =>
+                    snap.connectionState == ConnectionState.waiting
+                        ? box(provider(null))
+                        : box(provider(snap.data)),
+              ),
       ),
     );
   }

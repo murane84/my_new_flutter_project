@@ -4556,6 +4556,12 @@ class _ChatPageState extends State<ChatPage>
                         child: Container(
                           // Matches the 48px mic/send disc beside it.
                           constraints: const BoxConstraints(minHeight: 48),
+                          // Centre the 40px icon/text row in the 48px pill
+                          // (it sat at the top, looking nudged upward). A
+                          // multi-line message still grows the pill evenly.
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 2, vertical: 4),
                           // Solid, lifted pill: readable on ANY wallpaper (no
                           // see-through), with a soft drop shadow + hairline so
                           // it floats like a card.
@@ -4706,7 +4712,7 @@ class _ChatPageState extends State<ChatPage>
                                       focusedBorder: InputBorder.none,
                                       disabledBorder: InputBorder.none,
                                       contentPadding: const EdgeInsets.symmetric(
-                                          vertical: 10, horizontal: 2),
+                                          vertical: 10, horizontal: 4),
                                     ),
                                   ),
                                 ),

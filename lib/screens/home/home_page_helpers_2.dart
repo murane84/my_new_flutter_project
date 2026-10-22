@@ -157,11 +157,11 @@ extension _HomePageHelpers2 on HomePageState {
               Expanded(
                 // Own paint layer: the player ticks many times a second (position,
                 // spinning disc) — keep those repaints from spreading into the chat.
-                child: RepaintBoundary(child: kIsWeb
+                child: PixelSnap(child: RepaintBoundary(child: kIsWeb
                     ? WebMusicPanel(
                         key: _webMusicPanelKey, textColor: scheme.onSurface)
                     : MusicControls(
-                        key: _musicPanelKey, textColor: scheme.onSurface)),
+                        key: _musicPanelKey, textColor: scheme.onSurface))),
               ),
             ],
           ),

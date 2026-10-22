@@ -99,6 +99,7 @@ import '../widgets/moment_card.dart';
 import '../services/aluta_mood.dart';
 import '../services/song_insights.dart';
 import '../widgets/glow_feed.dart';
+import '../widgets/pixel_snap.dart';
 import '../data/glow_cards.dart';
 import '../services/moment_prefs.dart';
 import '../widgets/welcome_tour.dart';
@@ -3309,8 +3310,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
                   child: child,
                 ),
               ),
-              child: RepaintBoundary(
+              // Whole-pixel origin + own layer: no 1px twitch on desktop /
+              // web at fractional scaling, and repaints stay inside.
+              child: PixelSnap(
                 key: ValueKey('rb_${_activeGroup?['id']}_$_activeFriendId'),
+                child: RepaintBoundary(
                 child: _activeGroup != null
                   ? ChatPage(
                       key: ValueKey('g${_activeGroup!['id']}'),
@@ -3359,6 +3363,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       initialJumpMessageId: _pendingJumpMessageId,
                     )
                   : _buildFriendList(context),
+                ),
                 ),
                 ),
                 _playlistDrawerHost(context, music: false),

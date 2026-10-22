@@ -86,6 +86,7 @@ import 'chat/attach_sheet.dart';
 import 'chat/contact_picker_sheet.dart';
 import 'stories/camera_capture.dart';
 import '../widgets/genie_menu.dart';
+import '../widgets/pixel_snap.dart';
 
 // Split out for maintainability (Dart parts — same library, shared
 // imports & privacy, zero behaviour change):
@@ -5339,7 +5340,9 @@ class _ChatPageState extends State<ChatPage>
             // The wallpaper fills the WHOLE card — under the composer too —
             // so the typing area floats on it. Messages stay above the
             // composer and dissolve into the wallpaper just before it.
-            child: Stack(
+            // PixelSnap: when the chat runs full-screen (its own route) the
+            // thread still starts on a whole pixel.
+            child: PixelSnap(child: Stack(
               children: [
                 // ── Chat wallpaper background ─────────────────────────────
                 Positioned.fill(
@@ -5666,7 +5669,7 @@ class _ChatPageState extends State<ChatPage>
                   ],
                 ),
               ],
-            ),
+            )),
           ),
         ),
       ],

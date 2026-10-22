@@ -113,7 +113,7 @@ class MusicControls extends ConsumerStatefulWidget {
 }
 
 class _MusicControlsState extends ConsumerState<MusicControls>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late final AudioPlayer _player;
   // Riverpod subscription that replaces liveSessionNotifier.addListener.
   ProviderSubscription<LiveSession>? _liveSub;
@@ -125,6 +125,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   List<String> _playlist = [];
   Timer? _lastTrackTimer; // periodic save of the last-played track + position
   bool _lastTrackRestored = false;
+  // True while the saved song is being re-opened and seeked on launch: the
+  // player emits position 0 in between, and saving that would wipe the spot
+  // the user was cut off at.
+  bool _restoringPos = false;
   // Android scoped storage can't reliably open many media by raw file PATH
   // (WhatsApp audio, downloads, etc.) — playback then fails with a bogus
   // "check file format". So we play through each song's MediaStore CONTENT URI
@@ -385,11 +389,13 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _loadGroups();
     _loadStats();
     _loadLyrics();
+    WidgetsBinding.instance.addObserver(this);
+    _restorePlayModes();
     _restorePlaylist();
     _listenPlayer();
     // Keep the "last played" marker fresh so an update/relaunch lands the user
     // back on their song at roughly where they left it.
-    _lastTrackTimer = Timer.periodic(const Duration(seconds: 6), (_) {
+    _lastTrackTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (_player.playing) _saveLastTrack();
     });
     if (Platform.isAndroid) _restoreEqualizer();
@@ -491,6 +497,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _sleepTimer?.cancel();
     _sleepTick?.cancel();
     _lastTrackTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _saveLastTrack();
     _discCtrl.dispose();
     _queueCtrl.dispose();
@@ -1119,6 +1126,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // await so it's safe to call from dispose().
   Future<void> _saveLastTrack({bool resetPos = false}) async {
     try {
+      if (_restoringPos) return;
       if (_currentIndex < 0 || _currentIndex >= _playlist.length) return;
       final path = _playlist[_currentIndex];
       final pos = resetPos ? 0 : _player.position.inMilliseconds;
@@ -1159,6 +1167,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           track: initTitle, artist: initArtist, playing: false);
       _syncFavoriteAmbient();
       _switching = true; // don't let a prepare emit a spurious auto-advance
+      _restoringPos = posMs > 0;
       final err = await _openSource(path, autoplay: false);
       Future.delayed(const Duration(milliseconds: 600), () {
         _switching = false;
@@ -1168,10 +1177,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           try {
             await _player.seek(Duration(milliseconds: posMs));
           } catch (_) {}
+          _restoringPos = false;
         }
         if (_isMobile) _fetchMetadata(path);
       }
     } catch (_) {}
+    _restoringPos = false; // never leave saving blocked if the reopen failed
   }
 
   // ── Effective repeat/shuffle: during a live session these read the SHARED
@@ -1221,6 +1232,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         _snack('Repeat Off');
       }
     });
+    _savePlayModes();
   }
 
   void _toggleShuffle() {
@@ -1241,6 +1253,43 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       }
       _snack(_shuffle ? 'Shuffle On' : 'Shuffle Off');
     });
+    _savePlayModes();
+  }
+
+  // Backgrounded, swiped away, or about to be replaced by an APK update (which
+  // kills the process with no further warning): write the exact spot now.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      _saveLastTrack();
+    }
+  }
+
+  // Repeat One / Repeat All / Off and Shuffle are the listener's own habit —
+  // keep them across restarts and APK updates instead of resetting to Off.
+  Future<void> _savePlayModes() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString('music_repeat_mode',
+          _repeatOne ? 'one' : (_repeatAll ? 'all' : 'off'));
+      await p.setBool('music_shuffle', _shuffle);
+    } catch (_) {}
+  }
+
+  Future<void> _restorePlayModes() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final mode = p.getString('music_repeat_mode') ?? 'off';
+      final shuffle = p.getBool('music_shuffle') ?? false;
+      if (!mounted) return;
+      setState(() {
+        _repeatOne = mode == 'one';
+        _repeatAll = mode == 'all';
+        _shuffle = shuffle && mode == 'off';
+      });
+    } catch (_) {}
   }
 
   void _setVolume(double v) {

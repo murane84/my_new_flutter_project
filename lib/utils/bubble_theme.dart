@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart' show HSLColor;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// User-chosen message-bubble colours.
@@ -111,6 +112,22 @@ Color _bestOn(Color bg, List<Color> candidates) {
     }
   }
   return best;
+}
+
+/// [tint] nudged (lighter or darker, keeping its hue) until it reads on [bg]
+/// with at least [min] contrast — for coloured words inside a bubble (group
+/// sender names, quote bars, badges) so no wallpaper or bubble theme can
+/// swallow them. Falls back to the plain on-bubble text colour.
+Color bubbleTintOn(Color tint, Color bg, {double min = 4.5}) {
+  if (bubbleContrast(tint, bg) >= min) return tint;
+  final hsl = HSLColor.fromColor(tint);
+  final darker = bg.computeLuminance() > 0.35;
+  for (var i = 1; i <= 12; i++) {
+    final l = (hsl.lightness + (darker ? -0.06 : 0.06) * i).clamp(0.0, 1.0);
+    final c = hsl.withLightness(l).toColor();
+    if (bubbleContrast(c, bg) >= min) return c;
+  }
+  return bubbleTextOn(bg);
 }
 
 /// A readable text colour for content painted on [bg]: whichever of near-black

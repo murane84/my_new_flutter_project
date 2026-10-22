@@ -2000,13 +2000,17 @@ extension _ChatPageHelpers3 on _ChatPageState {
   // be grouped: same sender, within 3 minutes of each other.
   // Stable, readable colour per sender name (group sender labels) — same idea
   // as WhatsApp's per-participant name colours.
-  Color _senderColor(String name, bool isDark) {
+  // [on]: the bubble it's painted on — the colour is nudged to stay readable
+  // there whatever the bubble theme.
+  Color _senderColor(String name, bool isDark, {Color? on}) {
     int h = 0;
     for (final c in name.codeUnits) {
       h = (h * 31 + c) & 0x7fffffff;
     }
     final hue = (h % 360).toDouble();
-    return HSLColor.fromAHSL(1.0, hue, 0.55, isDark ? 0.72 : 0.42).toColor();
+    final base =
+        HSLColor.fromAHSL(1.0, hue, 0.55, isDark ? 0.72 : 0.42).toColor();
+    return on == null ? base : bubbleTintOn(base, on);
   }
 
   bool _grouped(int index) {
@@ -2035,8 +2039,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
             padding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
             decoration: BoxDecoration(
-              // Slightly translucent — sits on top of wallpaper
-              color: scheme.surface.withAlpha(220),
+              // Solid, so no wallpaper can wash the date out.
+              color: scheme.surface,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: lineColor),
             ),

@@ -4239,9 +4239,14 @@ class _ChatPageState extends State<ChatPage>
         : (isDark
             ? const Color(0xFF9FD0FF)
             : (isMe ? const Color(0xFF0B4EA2) : const Color(0xFF1565C0)));
-    final quoteBarColor = isMe
-        ? (isDark ? const Color(0xFFFF8A93) : scheme.primary)
-        : scheme.primary;
+    // Accent for the quote bar / quoted author / Glow card, kept readable on
+    // this very bubble (any custom bubble theme or accent).
+    final quoteBarColor = bubbleTintOn(
+        isMe
+            ? (isDark ? const Color(0xFFFF8A93) : scheme.primary)
+            : scheme.primary,
+        isMe ? sentBubble : recvBubble,
+        min: 3.6);
     // Cap the quoted-reply preview so a long quote can't stretch the bubble
     // past what the actual message needs: size it to the message's own width
     // (a readable minimum, up to the bubble max). The quote truncates with an
@@ -4496,7 +4501,8 @@ class _ChatPageState extends State<ChatPage>
                                                 inPhonebook
                                                     ? headerName
                                                     : rxName,
-                                                isDark),
+                                                isDark,
+                                                on: bubbleColor),
                                             borderRadius:
                                                 BorderRadius.circular(2),
                                           ),
@@ -4515,14 +4521,15 @@ class _ChatPageState extends State<ChatPage>
                                                   inPhonebook
                                                       ? headerName
                                                       : rxName,
-                                                  isDark),
+                                                  isDark,
+                                                  on: bubbleColor),
                                             ),
                                           ),
                                         ),
                                         if (_isMemberAdmin(
                                             msg['sender_id'])) ...[
                                           const SizedBox(width: 6),
-                                          _adminTag(scheme),
+                                          _adminTag(scheme, on: bubbleColor),
                                         ],
                                         if (!inPhonebook &&
                                             rxPhone.isNotEmpty) ...[
@@ -4533,7 +4540,7 @@ class _ChatPageState extends State<ChatPage>
                                               fontSize: 10.5,
                                               fontWeight: FontWeight.w400,
                                               letterSpacing: 0.2,
-                                              color: textColor.withAlpha(135),
+                                              color: bubbleMutedOn(bubbleColor),
                                             ),
                                           ),
                                         ],
@@ -4550,7 +4557,8 @@ class _ChatPageState extends State<ChatPage>
                                                     inPhonebook
                                                         ? headerName
                                                         : rxName,
-                                                    isDark)
+                                                    isDark,
+                                                    on: bubbleColor)
                                                 .withAlpha(
                                                     isDark ? 120 : 95),
                                             Colors.transparent,
@@ -4688,8 +4696,8 @@ class _ChatPageState extends State<ChatPage>
                             padding: EdgeInsets.only(top: isMedia ? 6 : 0),
                             // A Glow card shared from the Glow feed renders
                             // as a little card, not a plain paragraph.
-                            child: _glowCardBubble(mainText, textColor,
-                                    isMe ? quoteBarColor : scheme.primary) ??
+                            child: _glowCardBubble(
+                                    mainText, textColor, quoteBarColor) ??
                                 _bubbleTextOnly(
                                     mainText, textColor, linkColor),
                           ),

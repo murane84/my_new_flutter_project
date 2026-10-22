@@ -21,15 +21,18 @@ extension _ChatPollsAdmin on _ChatPageState {
   /// Members can't post right now (group set to admins-only, I'm no admin).
   bool get _postingLocked => _isGroup && _adminsOnly && !_amAdmin;
 
-  Widget _adminTag(ColorScheme scheme) => Container(
+  // [on]: the bubble it sits on — the badge colour stays readable there.
+  Widget _adminTag(ColorScheme scheme, {Color? on}) {
+    final c = on == null ? scheme.primary : bubbleTintOn(scheme.primary, on);
+    return Container(
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
         decoration: BoxDecoration(
-          color: scheme.primary.withValues(alpha: 0.13),
+          color: c.withValues(alpha: 0.13),
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: scheme.primary.withValues(alpha: 0.35)),
+          border: Border.all(color: c.withValues(alpha: 0.45)),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.shield_rounded, size: 9, color: scheme.primary),
+          Icon(Icons.shield_rounded, size: 9, color: c),
           const SizedBox(width: 2),
           Text('admin',
               style: TextStyle(
@@ -37,9 +40,10 @@ extension _ChatPollsAdmin on _ChatPageState {
                   height: 1.0,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.3,
-                  color: scheme.primary)),
+                  color: c)),
         ]),
       );
+  }
 
   Widget _buildAdminsOnlyBar(ColorScheme scheme, bool isDark) {
     return Padding(

@@ -307,11 +307,11 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
               SafeArea(
                 child: LayoutBuilder(builder: (lctx, lc) {
                   final wideQ = lc.maxWidth >= 720;
-                  Widget playerCol(double openT) => Padding(
-                  padding: EdgeInsets.fromLTRB(22, 6 - 4 * openT.clamp(0.0, 1.0),
-                      22, 14 - 8 * openT.clamp(0.0, 1.0)),
-                  child: Column(
-                    children: [
+                  // Desktop-wide (queue closed): split — the disc + title on
+                  // the left, the feel strip, lyric, waveform and controls on
+                  // the right — instead of one narrow centred column.
+                  Widget playerCol(double openT, {bool split = false}) {
+                  final topBar = <Widget>[
                       // Top bar.
                       Row(
                         children: [
@@ -359,6 +359,8 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                           ),
                         ],
                       ),
+                  ];
+                  final art = <Widget>[
                       // Big art.
                       Expanded(
                         flex: 5,
@@ -411,6 +413,8 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                           }),
                         ),
                       ),
+                  ];
+                  final titleBlock = <Widget>[
                       const SizedBox(height: 10),
                       // Title + artist.
                       // Always reserve the title line's height (28) so the
@@ -454,6 +458,8 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                               )
                             : null,
                       ),
+                  ];
+                  final rest = <Widget>[
                       // Synced-lyric ticker — shows only when the song has LRC
                       // timing; tap it to open the full lyrics sheet.
                       _syncedLyricLine(scheme, accent, false),
@@ -686,9 +692,55 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                           ),
                         ),
                       ),
-                    ],
+                  ];
+                  final pad = EdgeInsets.fromLTRB(22, 6 - 4 * openT.clamp(0.0, 1.0),
+                      22, 14 - 8 * openT.clamp(0.0, 1.0));
+                  if (split) {
+                    return Padding(
+                      padding: pad,
+                      child: Column(
+                        children: [
+                          ...topBar,
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 11,
+                                  child: Column(
+                                    children: [...art, ...titleBlock,
+                                        const SizedBox(height: 18)],
+                                  ),
+                                ),
+                                const SizedBox(width: 56),
+                                Expanded(
+                                  flex: 10,
+                                  child: Center(
+                                    child: ConstrainedBox(
+                                      constraints:
+                                          const BoxConstraints(maxWidth: 560),
+                                      child: SingleChildScrollView(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: rest,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  return Padding(
+                  padding: pad,
+                  child: Column(
+                    children: [...topBar, ...art, ...titleBlock, ...rest],
                   ),
                 );
+                  }
                   // Animated open/close: the side panel grows + fades in on
                   // wide screens (player reflows to the left), and the bottom
                   // sheet rises + fades on phones (player shrinks up) — no more
@@ -706,13 +758,24 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Expanded(
-                              child: Center(
-                                child: ConstrainedBox(
-                                  constraints:
-                                      const BoxConstraints(maxWidth: 560),
-                                  child: playerCol(0.0),
-                                ),
-                              ),
+                              // Roomy desktop with the queue closed: use the
+                              // width (split layout); otherwise the centred
+                              // column beside the queue panel.
+                              child: (lc.maxWidth >= 1000 && !showPanel)
+                                  ? Center(
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                            maxWidth: 1240),
+                                        child: playerCol(0.0, split: true),
+                                      ),
+                                    )
+                                  : Center(
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                            maxWidth: 560),
+                                        child: playerCol(0.0),
+                                      ),
+                                    ),
                             ),
                             if (showPanel)
                               SizedBox(

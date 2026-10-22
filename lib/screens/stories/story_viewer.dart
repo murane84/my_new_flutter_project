@@ -570,9 +570,13 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   @override
   Widget build(BuildContext context) {
     final item = _story;
-    final canPrev = _s > 0 || _g > 0;
-    final canNext = true; // the last story closes the viewer
-    // Desktop / web: visible ‹ › arrows on the sides, plus ← → / Space / Esc.
+    // ‹ › arrows between this person's statuses — only when they posted more
+    // than one, and only toward a status that exists. (← → / Space / Esc
+    // work on a keyboard too.)
+    final many = _group.stories.length > 1;
+    final canPrev = many && _s > 0;
+    final canNext = many && _s < _group.stories.length - 1;
+    final wide = MediaQuery.sizeOf(context).width >= 700;
     Widget arrow(IconData icon, String tip, VoidCallback onTap) => Tooltip(
           message: tip,
           child: Material(
@@ -583,13 +587,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
               customBorder: const CircleBorder(),
               onTap: onTap,
               child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Icon(icon, color: Colors.white, size: 30),
+                padding: EdgeInsets.all(wide ? 10 : 6),
+                child: Icon(icon, color: Colors.white, size: wide ? 30 : 24),
               ),
             ),
           ),
         );
-    final wide = MediaQuery.sizeOf(context).width >= 700;
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.arrowRight): () {
@@ -652,22 +655,22 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                 ],
               ),
             ),
-            if (wide && canPrev)
+            if (canPrev)
               Positioned(
-                left: 16,
+                left: wide ? 16 : 6,
                 top: 0,
                 bottom: 0,
                 child: Center(
-                    child: arrow(Icons.chevron_left_rounded, 'Previous',
+                    child: arrow(Icons.chevron_left_rounded, 'Previous status',
                         _prev)),
               ),
-            if (wide && canNext)
+            if (canNext)
               Positioned(
-                right: 16,
+                right: wide ? 16 : 6,
                 top: 0,
                 bottom: 0,
                 child: Center(
-                    child: arrow(Icons.chevron_right_rounded, 'Next', _next)),
+                    child: arrow(Icons.chevron_right_rounded, 'Next status', _next)),
               ),
           ],
         ),

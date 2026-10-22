@@ -47,11 +47,10 @@ class AlutaMood {
     if (options.isEmpty) return '';
     if (options.length == 1) return options.first;
     final last = _lastLine[slot];
-    String s;
-    var guard = 0;
-    do {
-      s = options[_rng.nextInt(options.length)];
-    } while (s == last && ++guard < 6);
+    // Never the same line twice in a row (when there's a choice).
+    final pool = options.where((o) => o != last).toList();
+    final from = pool.isEmpty ? options : pool;
+    final s = from[_rng.nextInt(from.length)];
     _lastLine[slot] = s;
     return s;
   }

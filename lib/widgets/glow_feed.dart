@@ -8,12 +8,6 @@ import '../data/glow_cards.dart';
 import '../services/aluta_mood.dart';
 import '../services/song_insights.dart';
 
-/// GLOW — the third friend-page layer: a calm feed of love writing, research
-/// -inspired insights, small things to try together, and healthy-love care.
-/// A "Today's glow" card leads (picked by the date, the time of day and the
-/// feeling you last gave a song), then the rest of the pack, shuffled fresh
-/// each day. Save ♡ what speaks to you; send any card to your partner.
-/// Bundled and on-device — no server. Encouragement, not therapy.
 int _glowDaySeed() {
   final d = DateTime.now();
   return d.year * 1000 + d.difference(DateTime(d.year)).inDays;
@@ -95,6 +89,12 @@ GlowCard? glowForUs() {
   return pool[(pair + _glowDaySeed() * 31) % pool.length];
 }
 
+/// GLOW — the third friend-page layer: a calm feed of love writing, research
+/// -inspired insights, small things to try together, and healthy-love care.
+/// A "Today's glow" card leads (picked by the date, the time of day and the
+/// feeling you last gave a song), then the rest of the pack, shuffled fresh
+/// each day. Save ♡ what speaks to you; send any card to your partner.
+/// Bundled and on-device — no server. Encouragement, not therapy.
 class GlowFeed extends StatefulWidget {
   const GlowFeed({super.key});
 
@@ -132,17 +132,7 @@ class _GlowFeedState extends State<GlowFeed> {
     } catch (_) {}
   }
 
-  String _shareText(GlowCard c) {
-    switch (c.kind) {
-      case GlowKind.quote:
-        return '✨ “${c.text.replaceAll('\n', ' ')}”\n— ${c.source}';
-      case GlowKind.together:
-        return '💞 ${c.text}';
-      case GlowKind.insight:
-      case GlowKind.healthy:
-        return '✨ ${c.title}\n${c.text}';
-    }
-  }
+  String _shareText(GlowCard c) => glowShareText(c);
 
   void _send(GlowCard c) {
     final b = SongBridge.instance;
@@ -165,9 +155,12 @@ class _GlowFeedState extends State<GlowFeed> {
     final today = _today;
     // A gentle, stable-per-day shuffle (no flicker on rebuild).
     final list = [...glowCards]..shuffle(math.Random(_daySeed));
-    list.remove(today);
-    final us = glowForUs();
-    if (us != null) list.remove(us);
+    // Only "For you" shows them on top; every other filter lists them too.
+    if (_filter == _Filter.all) {
+      list.remove(today);
+      final us = glowForUs();
+      if (us != null) list.remove(us);
+    }
     bool keep(GlowCard c) => switch (_filter) {
           _Filter.all => true,
           _Filter.quotes => c.kind == GlowKind.quote,

@@ -63,6 +63,9 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
   @override
   void initState() {
     super.initState();
+    SongInsights.instance.load().then((_) {
+      if (mounted) setState(() {});
+    });
     _init();
   }
 

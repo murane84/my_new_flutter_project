@@ -78,11 +78,10 @@ void main() {
     });
 
     test('long emoji titles are trimmed without breaking characters', () {
-      final title = '${'🎵' * 30}💞 love';
+      final title = '${'🎵' * 45}💞 love';
       final line = AlutaMood.songOnRepeat(title);
-      // A broken surrogate pair would make this throw.
-      expect(() => line.runes.toList(), returnsNormally);
-      expect(line.contains('…'), isTrue);
+      // Cut by whole characters: 39 notes + "…", never half an emoji.
+      expect(line, contains('“${'🎵' * 39}…”'));
     });
 
     test('away summary prefers the partner', () {

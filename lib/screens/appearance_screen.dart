@@ -1360,7 +1360,7 @@ class _MusicNudgesSection extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                         on
-                            ? 'Songs on repeat, how they feel, who they\'re for · stays on this phone'
+                            ? 'Songs on repeat, the feel strip and your Sunday recap · stays on this phone'
                             : 'Aluta won\'t nudge you about your music',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,

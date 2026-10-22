@@ -182,7 +182,7 @@ extension _ChatMusicMoments on _ChatPageState {
       source = t.substring(cut + 3).trim();
     } else if (t.startsWith('✨ ') && t.contains('\n')) {
       final nl = t.indexOf('\n');
-      kind = 'GLOW';
+      kind = 'INSIGHT';
       title = t.substring(2, nl).trim();
       body = t.substring(nl + 1).trim();
       if (title.isEmpty || title.length > 60 || body.isEmpty) return null;
@@ -221,7 +221,7 @@ extension _ChatMusicMoments on _ChatPageState {
                   size: 11,
                   color: accent),
               const SizedBox(width: 4),
-              Text(kind == 'QUOTE' ? 'GLOW · QUOTE' : 'GLOW · $kind',
+              Text('GLOW · $kind',
                   style: TextStyle(
                       fontSize: 9.5,
                       letterSpacing: 1.0,

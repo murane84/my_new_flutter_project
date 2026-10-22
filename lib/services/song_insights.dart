@@ -43,7 +43,7 @@ class SongNudge {
 /// Guardrails (by design):
 ///  • at most ONE music nudge per day (the weekly recap has its own slot);
 ///  • a nudge ignored twice for a song never comes back for that song;
-///  • a "Music nudges" switch turns it all off (Appearance);
+///  • a "Music nudges" switch turns it all off (Moments & nudges);
 ///  • nothing leaves the phone — no server, no analytics.
 class SongInsights {
   SongInsights._();
@@ -52,7 +52,7 @@ class SongInsights {
   static const _prefsKey = 'song_insights_v1';
   static const _enabledKey = 'music_nudges_on';
 
-  /// ON by default; mirrored live so Appearance can flip it.
+  /// ON by default; mirrored live so the settings switches can flip it.
   final ValueNotifier<bool> enabled = ValueNotifier<bool>(true);
 
   /// Set when a nudge is due; the home page shows it and clears it.
@@ -83,7 +83,7 @@ class SongInsights {
   static String _keyOf(String title) {
     final k = title
         .toLowerCase()
-        .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), ' ')
+        .replaceAll(RegExp(r'[^\p{L}\p{M}\p{N}]+', unicode: true), ' ')
         .trim();
     return k.isEmpty ? title.trim().toLowerCase() : k;
   }
@@ -276,7 +276,7 @@ class SongInsights {
   SongFeel? feelOf(String title) =>
       SongFeel.of(_songs[_keyOf(title)]?['f'] as String?);
 
-  /// Songs I tagged calm (newest feelings first).
+  /// Songs I tagged calm (in the order first tagged).
   List<String> get calmSongs => [
         for (final s in _songs.values)
           if (s['f'] == SongFeel.calm.key) s['t'].toString(),

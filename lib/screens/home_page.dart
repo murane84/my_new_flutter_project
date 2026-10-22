@@ -704,6 +704,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// nudge to say hi when it's quiet). Opens the partner's chat in one tap.
   void _maybeAwaySummary() {
     if (!MomentPrefs.instance.welcomeCards.value) return;
+    if (WelcomeTour.showing) return;
     if (!mounted || !_appForeground || _momentCooling) return;
     if (ref.read(liveSessionProvider).active) return;
     final p = _partnerInfo();
@@ -831,6 +832,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
   bool _onSongNudge() {
     final n = SongInsights.instance.pending.value;
     if (n == null || !mounted || !_appForeground) return false;
+    if (WelcomeTour.showing) {
+      Future.delayed(const Duration(minutes: 1), () {
+        if (mounted) _onSongNudge();
+      });
+      return false;
+    }
     // Already together, or another moment card just showed → try again in a
     // bit rather than dropping it.
     if (ref.read(liveSessionProvider).active || _momentCooling) {
@@ -1089,12 +1096,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
         }, primary: true),
         if (partner != null)
           MomentAction(Icons.send_rounded, 'Send to ${partner.name}', () {
-            final text = c.kind == GlowKind.quote
-                ? '✨ “${c.text.replaceAll('\n', ' ')}”\n— ${c.source}'
-                : c.kind == GlowKind.together
-                    ? '💞 ${c.text}'
-                    : '✨ ${c.title}\n${c.text}';
-            SongBridge.instance.messagePartner?.call(text: text);
+            SongBridge.instance.messagePartner
+                ?.call(text: glowShareText(c));
           }),
       ],
     );
@@ -1231,6 +1234,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   bool _maybeMusicWelcome(Duration away) {
     if (!mounted || !_appForeground) return false;
     if (!MomentPrefs.instance.welcomeCards.value) return false;
+    if (WelcomeTour.showing) return false;
     if (away < const Duration(minutes: 1)) return false;
     if (_momentCooling) return false;
     if (ref.read(liveSessionProvider).active) return false;

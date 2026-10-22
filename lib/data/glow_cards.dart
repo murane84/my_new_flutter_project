@@ -13,6 +13,14 @@ library;
 
 enum GlowKind { quote, insight, together, healthy }
 
+/// The one text form of a card sent into a chat. The chat recognises exactly
+/// this shape and draws it as a Glow card — keep every sender on this.
+String glowShareText(GlowCard c) => switch (c.kind) {
+      GlowKind.quote => '✨ “${c.text.replaceAll('\n', ' ')}”\n— ${c.source}',
+      GlowKind.together => '💞 ${c.text}',
+      GlowKind.insight || GlowKind.healthy => '✨ ${c.title}\n${c.text}',
+    };
+
 class GlowCard {
   const GlowCard(this.id, this.kind, this.text,
       {this.source = '', this.title = '', this.tags = const []});

@@ -116,7 +116,7 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
             icon: Icons.graphic_eq_rounded,
             title: 'Music nudges',
             subtitle:
-                'Songs on repeat, how they feel, who they’re for · max one a day',
+                'Songs on repeat, the feel strip and your Sunday recap · max one nudge a day',
             value: si.enabled,
             onChanged: si.setEnabled,
           ),

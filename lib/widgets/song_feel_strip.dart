@@ -227,7 +227,7 @@ class _SongFeelStripState extends State<SongFeelStrip> {
         }
         break;
       case SongFeel.calm:
-        out.add(_pill(l('Kept with your calm songs', 'In calm songs', 'Calm'),
+        out.add(_pill(l('Saved to your calm songs', 'In calm songs', 'Calm'),
             icon: Icons.spa_rounded));
         break;
       case SongFeel.hurting:

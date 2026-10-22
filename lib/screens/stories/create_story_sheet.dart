@@ -9,6 +9,7 @@ import 'package:video_player/video_player.dart';
 import '../../services/audio_handler.dart';
 import '../../utils/emoji_field.dart';
 import '../../widgets/aluta_composer_field.dart';
+import '../../theme/aluta_palette.dart';
 import '../api_service.dart';
 import '../gif_picker.dart';
 import 'camera_capture.dart';
@@ -164,6 +165,10 @@ Future<void> showCreateStorySheet(
 
 /// Shared status backgrounds — solids and premium gradients — used by both the
 /// text-status and GIF/sticker composers so they stay visually consistent.
+/// Status backgrounds: the default purple, the gradient moods, and the deep
+/// darks. Every solid colour comes from Aluta's shared palette instead (the
+/// 🎨 button first in each strip opens it), so status, stories, the app
+/// accent, bubbles and Our Space all offer the same colours.
 const List<List<Color>> kStatusBgs = [
   [Color(0xFF5B2C83)], // purple (default)
   [Color(0xFF7C4DFF), Color(0xFF00E5FF)], // purple to cyan
@@ -175,20 +180,149 @@ const List<List<Color>> kStatusBgs = [
   [Color(0xFFD500F9), Color(0xFF7C4DFF)], // violet to purple
   [Color(0xFFEE0979), Color(0xFFFF6A00)], // pink to orange
   [Color(0xFF00C853), Color(0xFF76FF03)], // green to lime
+  [Color(0xFFB24592), Color(0xFFF15F79)], // rose wine
+  [Color(0xFF870000), Color(0xFF190A05)], // deep love
   [Color(0xFF141E30), Color(0xFF243B55)], // deep navy
-  [Color(0xFF76FF03)], // neon lime
-  [Color(0xFFFFEA00)], // neon yellow
-  [Color(0xFF00E5FF)], // neon cyan
-  [Color(0xFFFF4081)], // neon pink
-  [Color(0xFFE040FB)], // neon orchid
-  [Color(0xFFFF1744)], // neon red
-  [Color(0xFF00C853)], // green
-  [Color(0xFF1E88E5)], // blue
-  [Color(0xFFFF9100)], // orange
   [Color(0xFF0F2027)], // near-black
   [Color(0xFF232526)], // charcoal
   [Color(0xFF1A1A2E)], // midnight
 ];
+
+/// First swatch of every status background strip: opens Aluta's shared
+/// palette. Shows the picked palette colour (ringed) once one is chosen.
+class StatusPaletteButton extends StatelessWidget {
+  const StatusPaletteButton({
+    super.key,
+    required this.ink,
+    required this.onPicked,
+    this.current,
+    this.size = 32,
+  });
+  final Color ink;
+  final Color? current;
+  final double size;
+  final ValueChanged<Color> onPicked;
+
+  Future<void> _open(BuildContext context) async {
+    final scheme = Theme.of(context).colorScheme;
+    final picked = await showModalBottomSheet<Color>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 22),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Background colour',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurface)),
+              const SizedBox(height: 10),
+              AlutaPaletteGrid(
+                dot: (sw, sz, glow) {
+                  final sel = current?.toARGB32() == sw.color.toARGB32();
+                  return Tooltip(
+                    message: sw.name,
+                    waitDuration: const Duration(milliseconds: 500),
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(ctx, sw.color),
+                      child: Container(
+                        width: sz,
+                        height: sz,
+                        decoration: BoxDecoration(
+                          color: sw.color,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                              color: sel ? scheme.surface : Colors.transparent,
+                              width: sel ? 2.5 : 0),
+                          boxShadow: [
+                            if (sel)
+                              BoxShadow(
+                                  color: sw.color,
+                                  spreadRadius: 2.5,
+                                  blurRadius: 0),
+                            BoxShadow(
+                              color: sw.color.withValues(
+                                  alpha: glow ? 0.55 : 0.25),
+                              blurRadius: glow ? 12 : 5,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: sel
+                            ? Icon(Icons.check_rounded,
+                                size: 18,
+                                color: sw.color.computeLuminance() > 0.55
+                                    ? Colors.black87
+                                    : Colors.white)
+                            : null,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked != null) onPicked(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = current;
+    return Tooltip(
+      message: 'All colours',
+      child: GestureDetector(
+        onTap: () => _open(context),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: c,
+            gradient: c == null
+                ? const SweepGradient(colors: [
+                    Color(0xFFFF2E88),
+                    Color(0xFFB026FF),
+                    Color(0xFF2D7DFF),
+                    Color(0xFF17E9E0),
+                    Color(0xFF2BE86B),
+                    Color(0xFFFFE500),
+                    Color(0xFFFF7A00),
+                    Color(0xFFFF2E88),
+                  ])
+                : null,
+            border: Border.all(
+              color: c != null ? ink : ink.withValues(alpha: 0.35),
+              width: c != null ? 3 : 1.5,
+            ),
+          ),
+          child: Icon(
+            c != null ? Icons.check_rounded : Icons.palette_rounded,
+            size: 16,
+            color: c == null
+                ? Colors.white
+                : (c.computeLuminance() > 0.55
+                    ? Colors.black87
+                    : Colors.white),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// Open the GIF / sticker picker and post the chosen one as a standalone
 /// "sticker" status — a non-superseding story that animates in the viewer
@@ -544,6 +678,8 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
   final TextEditingController _artist = TextEditingController();
   final TextEditingController _caption = TextEditingController();
   int _bg = 0;
+  List<Color>? _custom; // a palette colour (as a soft self-gradient)
+  List<Color> get _cur => _custom ?? _palettes[_bg];
   String? _stickerUrl; // chosen GIF/sticker (animates with the song)
   bool _posting = false;
   bool _showEmoji = false; // inline emoji panel (field stays visible above it)
@@ -593,7 +729,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
   }
 
   String _hex(Color c) => '#${c.toARGB32().toRadixString(16).padLeft(8, '0')}';
-  String _bgValue() => '${_hex(_palettes[_bg][0])},${_hex(_palettes[_bg][1])}';
+  String _bgValue() => '${_hex(_cur[0])},${_hex(_cur[1])}';
 
   /// Foreground "ink" for a gradient: near-black on light backgrounds (warm
   /// white / cream), white on dark ones — so overlaid text is always legible.
@@ -656,7 +792,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final ink = _ink(_palettes[_bg]);
+    final ink = _ink(_cur);
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -683,7 +819,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: _palettes[_bg],
+            colors: _cur,
           ),
         ),
         // Fill the whole screen so the gradient has no black blank below the
@@ -843,13 +979,27 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: _palettes.length,
+          itemCount: _palettes.length + 1,
           separatorBuilder: (_, _) => const SizedBox(width: 10),
           itemBuilder: (_, i) {
-            final pair = _palettes[i];
-            final selected = i == _bg;
+            if (i == 0) {
+              return StatusPaletteButton(
+                ink: ink,
+                current: _custom?.first,
+                size: _custom != null ? 38 : 30,
+                onPicked: (c) => setState(() => _custom = [
+                      c,
+                      Color.lerp(c, Colors.black, 0.35)!,
+                    ]),
+              );
+            }
+            final pair = _palettes[i - 1];
+            final selected = _custom == null && i - 1 == _bg;
             return GestureDetector(
-              onTap: () => setState(() => _bg = i),
+              onTap: () => setState(() {
+                _bg = i - 1;
+                _custom = null;
+              }),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 160),
                 width: selected ? 38 : 30,
@@ -938,6 +1088,8 @@ class _TextStoryPageState extends State<_TextStoryPage> {
 
   final TextEditingController _text = TextEditingController();
   int _bg = 0;
+  List<Color>? _custom; // a solid from the Aluta palette
+  List<Color> get _cur => _custom ?? _bgs[_bg];
   bool _posting = false;
   bool _showEmoji = false; // inline emoji panel (text stays visible above it)
 
@@ -960,7 +1112,7 @@ class _TextStoryPageState extends State<_TextStoryPage> {
   String _hex(Color c) => '#${c.toARGB32().toRadixString(16).padLeft(8, '0')}';
 
   String _bgValue() {
-    final cs = _bgs[_bg];
+    final cs = _cur;
     return cs.length >= 2 ? '${_hex(cs[0])},${_hex(cs[1])}' : _hex(cs[0]);
   }
 
@@ -1024,7 +1176,7 @@ class _TextStoryPageState extends State<_TextStoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = _bgs[_bg];
+    final cs = _cur;
     final ink = _inkFor(cs);
     final onDark = ink == Colors.white;
     final fontSize = _fontFor(_text.text);
@@ -1060,9 +1212,11 @@ class _TextStoryPageState extends State<_TextStoryPage> {
                       tooltip: 'Surprise background',
                       icon: const Icon(Icons.auto_awesome_rounded),
                       color: ink,
-                      onPressed: () => setState(() =>
-                          _bg = (_bg + 1 + (_text.text.length % 3)) %
-                              _bgs.length),
+                      onPressed: () => setState(() {
+                        _custom = null;
+                        _bg = (_bg + 1 + (_text.text.length % 3)) %
+                            _bgs.length;
+                      }),
                     ),
                     IconButton(
                       tooltip: 'GIF / Sticker',
@@ -1165,13 +1319,24 @@ class _TextStoryPageState extends State<_TextStoryPage> {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: _bgs.length,
+        itemCount: _bgs.length + 1,
         separatorBuilder: (_, _) => const SizedBox(width: 10),
         itemBuilder: (_, i) {
-          final cs = _bgs[i];
-          final selected = i == _bg;
+          if (i == 0) {
+            return StatusPaletteButton(
+              ink: ink,
+              current: _custom?.first,
+              size: _custom != null ? 40 : 32,
+              onPicked: (c) => setState(() => _custom = [c]),
+            );
+          }
+          final cs = _bgs[i - 1];
+          final selected = _custom == null && i - 1 == _bg;
           return GestureDetector(
-            onTap: () => setState(() => _bg = i),
+            onTap: () => setState(() {
+              _bg = i - 1;
+              _custom = null;
+            }),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 160),
               width: selected ? 40 : 32,
@@ -1225,12 +1390,14 @@ class _StickerComposePage extends StatefulWidget {
 
 class _StickerComposePageState extends State<_StickerComposePage> {
   int _bg = 0;
+  List<Color>? _custom; // a solid from the Aluta palette
+  List<Color> get _cur => _custom ?? kStatusBgs[_bg];
   bool _posting = false;
 
   String _hex(Color c) => '#${c.toARGB32().toRadixString(16).padLeft(8, '0')}';
 
   String _bgValue() {
-    final cs = kStatusBgs[_bg];
+    final cs = _cur;
     return cs.length >= 2 ? '${_hex(cs[0])},${_hex(cs[1])}' : _hex(cs[0]);
   }
 
@@ -1270,7 +1437,7 @@ class _StickerComposePageState extends State<_StickerComposePage> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = kStatusBgs[_bg];
+    final cs = _cur;
     final ink = _inkFor(cs);
     return Scaffold(
       body: Container(
@@ -1341,13 +1508,24 @@ class _StickerComposePageState extends State<_StickerComposePage> {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: kStatusBgs.length,
+        itemCount: kStatusBgs.length + 1,
         separatorBuilder: (_, _) => const SizedBox(width: 10),
         itemBuilder: (_, i) {
-          final cs = kStatusBgs[i];
-          final selected = i == _bg;
+          if (i == 0) {
+            return StatusPaletteButton(
+              ink: ink,
+              current: _custom?.first,
+              size: _custom != null ? 40 : 32,
+              onPicked: (c) => setState(() => _custom = [c]),
+            );
+          }
+          final cs = kStatusBgs[i - 1];
+          final selected = _custom == null && i - 1 == _bg;
           return GestureDetector(
-            onTap: () => setState(() => _bg = i),
+            onTap: () => setState(() {
+              _bg = i - 1;
+              _custom = null;
+            }),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 160),
               width: selected ? 40 : 32,

@@ -17,6 +17,7 @@ class _EditSpaceSheet extends StatefulWidget {
   // swatch to the palette.
   final bool inTuneUnlocked;
   const _EditSpaceSheet({
+    super.key,
     required this.initialName,
     required this.initialTheme,
     required this.initialPrimary,

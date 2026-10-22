@@ -903,6 +903,267 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
               ],
             ),
           );
+      Widget discWidget(double side) =>
+GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    // Tap the art to open the immersive full-screen player.
+                    onTap: (hasTrack || live)
+                        ? _openFullPlayer
+                        : _openOrScanPlaylist,
+                    onDoubleTap: (!live && hasTrack)
+                        ? () => _toggleFavorite(_playlist[_currentIndex])
+                        : null,
+                    onHorizontalDragEnd: controlsOn
+                        ? (d) {
+                            final v = d.primaryVelocity ?? 0;
+                            if (v < -120) {
+                              _transportNext();
+                            } else if (v > 120) {
+                              _transportPrev();
+                            }
+                          }
+                        : null,
+                    onVerticalDragEnd: (d) {
+                      if ((d.primaryVelocity ?? 0) < -200) {
+                        _openOrScanPlaylist();
+                      }
+                    },
+                    child: AnimatedBuilder(
+                    animation: PlayerStyleController.instance,
+                    builder: (context, _) {
+                      final mScheme = Theme.of(context).colorScheme;
+                      return PlayerDisc(
+                        style: PlayerStyleController.instance.style,
+                        side: side,
+                        accent: accent,
+                        scheme: mScheme,
+                        isDark: isDark,
+                        spin: _discCtrl,
+                        playing: isPlaying,
+                        dimmed: PlayerStyleController.instance.orbDimmed,
+                        artBuilder: (d, [c]) => _discCenter(d, c),
+                      );
+                    },
+                  ),
+                  );
+      Widget sideActions() =>
+Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      PresenceShareButton(color: accent, size: 20),
+                      if (!live && hasTrack) ...[
+                        // Clear gap + a padded hit area so the heart and the
+                        // broadcast toggle above it are distinct tap targets.
+                        const SizedBox(height: 10),
+                        BounceTap(
+                          onTap: () =>
+                              _toggleFavorite(_playlist[_currentIndex]),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              child: Icon(
+                                isFav
+                                    ? Icons.favorite
+                                    : Icons.favorite_border,
+                                key: ValueKey(isFav),
+                                color: isFav
+                                    ? Colors.pinkAccent
+                                    : onSurface.withAlpha(130),
+                                size: 24,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  );
+
+      // ── Android tall hero: the song card grows to fill the space under
+      // the header with a big spinning disc, the title, the live lyric line
+      // and what's up next, so there is no empty band above the controls.
+      Widget heroCard() {
+        final upNextOn = !live &&
+            hasTrack &&
+            _playlist.length > 1 &&
+            !_effShuffle &&
+            _effRepeatMode != 'one' &&
+            !(_effRepeatMode == 'off' &&
+                _currentIndex >= _playlist.length - 1);
+        final nextPath = upNextOn
+            ? _playlist[(_currentIndex + 1) % _playlist.length]
+            : null;
+        final nextTitle = nextPath == null
+            ? ''
+            : metadataStore.title(nextPath, _nameFromPath(nextPath));
+        return Container(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isDark
+                  ? [accent.withAlpha(38), Colors.white.withAlpha(10)]
+                  : [accent.withAlpha(28), accent.withAlpha(8)],
+            ),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: isDark ? Colors.white.withAlpha(20) : accent.withAlpha(40),
+            ),
+          ),
+          child: Column(
+            children: [
+              // Position · share · like
+              Row(
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: accent.withAlpha(isDark ? 40 : 26),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      live
+                          ? 'LIVE'
+                          : (_playlist.isNotEmpty
+                              ? '${_currentIndex + 1} / ${_playlist.length}'
+                              : 'No songs yet'),
+                      style: TextStyle(
+                        color: live ? accent : onSurface.withAlpha(170),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: live ? 1 : 0.2,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  PresenceShareButton(color: accent, size: 20),
+                  if (!live && hasTrack) BounceTap(
+                          onTap: () =>
+                              _toggleFavorite(_playlist[_currentIndex]),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              child: Icon(
+                                isFav
+                                    ? Icons.favorite
+                                    : Icons.favorite_border,
+                                key: ValueKey(isFav),
+                                color: isFav
+                                    ? Colors.pinkAccent
+                                    : onSurface.withAlpha(130),
+                                size: 24,
+                              ),
+                            ),
+                          ),
+                        ),
+                ],
+              ),
+              // The disc takes whatever height is left, kept round.
+              Expanded(
+                child: LayoutBuilder(builder: (c, cc) {
+                  final side = (cc.maxWidth * 0.66 < cc.maxHeight - 8
+                          ? cc.maxWidth * 0.66
+                          : cc.maxHeight - 8)
+                      .clamp(80.0, 260.0)
+                      .toDouble();
+                  return Center(child: discWidget(side));
+                }),
+              ),
+              SizedBox(
+                height: 24,
+                child: Align(
+                  alignment: Alignment.center,
+                  child: MarqueeText(
+                    text: displayTitle,
+                    height: 24,
+                    style: TextStyle(
+                      color: onSurface,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+              if (displayArtist.isNotEmpty)
+                SizedBox(
+                  height: 18,
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: MarqueeText(
+                      text: displayArtist,
+                      height: 18,
+                      style: TextStyle(
+                        color: live ? accent : onSurface.withAlpha(160),
+                        fontWeight: live ? FontWeight.w600 : FontWeight.normal,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ),
+                ),
+              _syncedLyricLine(scheme, accent, false),
+              if (upNextOn) ...[
+                const SizedBox(height: 10),
+                // Up next — tap to jump to it.
+                BounceTap(
+                  onTap: _transportNext,
+                  child: Container(
+                    height: 34,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withAlpha(10)
+                          : Colors.white.withAlpha(150),
+                      borderRadius: BorderRadius.circular(17),
+                      border: Border.all(color: accent.withAlpha(50)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.queue_music_rounded,
+                            size: 16, color: accent),
+                        const SizedBox(width: 6),
+                        Text('Up next',
+                            style: TextStyle(
+                                color: accent,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: MarqueeText(
+                            text: nextTitle,
+                            height: 16,
+                            style: TextStyle(
+                                color: onSurface.withAlpha(190),
+                                fontSize: 12),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.skip_next_rounded,
+                            size: 18, color: onSurface.withAlpha(150)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              if (!live && hasTrack)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: SongFeelStrip(
+                      title: _trackName,
+                      artist: _artistName,
+                      accent: accent,
+                      framed: false),
+                ),
+            ],
+          ),
+        );
+      }
+
       final topBlock = Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -940,48 +1201,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                 children: [
                   // Spinning disc — swipe ←/→ to skip, double-tap to like,
                   // swipe up to open the queue.
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    // Tap the art to open the immersive full-screen player.
-                    onTap: (hasTrack || live)
-                        ? _openFullPlayer
-                        : _openOrScanPlaylist,
-                    onDoubleTap: (!live && hasTrack)
-                        ? () => _toggleFavorite(_playlist[_currentIndex])
-                        : null,
-                    onHorizontalDragEnd: controlsOn
-                        ? (d) {
-                            final v = d.primaryVelocity ?? 0;
-                            if (v < -120) {
-                              _transportNext();
-                            } else if (v > 120) {
-                              _transportPrev();
-                            }
-                          }
-                        : null,
-                    onVerticalDragEnd: (d) {
-                      if ((d.primaryVelocity ?? 0) < -200) {
-                        _openOrScanPlaylist();
-                      }
-                    },
-                    child: AnimatedBuilder(
-                    animation: PlayerStyleController.instance,
-                    builder: (context, _) {
-                      final mScheme = Theme.of(context).colorScheme;
-                      return PlayerDisc(
-                        style: PlayerStyleController.instance.style,
-                        side: isNarrow ? 58.0 : 76.0,
-                        accent: accent,
-                        scheme: mScheme,
-                        isDark: isDark,
-                        spin: _discCtrl,
-                        playing: isPlaying,
-                        dimmed: PlayerStyleController.instance.orbDimmed,
-                        artBuilder: (d, [c]) => _discCenter(d, c),
-                      );
-                    },
-                  ),
-                  ),
+                  discWidget(isNarrow ? 58.0 : 76.0),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
@@ -1052,38 +1272,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                   // Stacked on the card's right edge: the listening-now share
                   // toggle on top (moved off the panel header, where tapping it
                   // minimised the player), the favourite heart below.
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      PresenceShareButton(color: accent, size: 20),
-                      if (!live && hasTrack) ...[
-                        // Clear gap + a padded hit area so the heart and the
-                        // broadcast toggle above it are distinct tap targets.
-                        const SizedBox(height: 10),
-                        BounceTap(
-                          onTap: () =>
-                              _toggleFavorite(_playlist[_currentIndex]),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
-                              child: Icon(
-                                isFav
-                                    ? Icons.favorite
-                                    : Icons.favorite_border,
-                                key: ValueKey(isFav),
-                                color: isFav
-                                    ? Colors.pinkAccent
-                                    : onSurface.withAlpha(130),
-                                size: 24,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+                  sideActions(),
                 ],
               ),
               // How this song feels → who it's for, folded INTO the card
@@ -1107,6 +1296,46 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
             ],
                 ],
               );
+      final controlsCard = Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: _controlsGlass(
+          scheme,
+          accent,
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              controlsBody,
+              const SizedBox(height: 14),
+              bottomRow,
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(12, 14, 12, 0),
+        ),
+      );
+      if (tall && !kIsWeb && Platform.isAndroid) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(0, 6, 0, isNarrow ? 8 : 12),
+          child: Column(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: LayoutBuilder(
+                    builder: (c, cc) => cc.maxHeight >= 300
+                        ? heroCard()
+                        : Align(
+                            alignment: Alignment.bottomCenter,
+                            child: SingleChildScrollView(child: topBlock),
+                          ),
+                  ),
+                ),
+              ),
+              SizedBox(height: 30, child: _fusionBridge(scheme, accent)),
+              controlsCard,
+            ],
+          ),
+        );
+      }
       if (tall) {
         // Song card → a short fused neck → the controls glass, kept together
         // as one group, controls staying low for the thumb. Spare height

@@ -1088,9 +1088,14 @@ extension _ChatPageHelpers2 on _ChatPageState {
 
   // Back (gesture / app-bar arrow) closes the open photo before leaving chat.
   Widget _wrapViewerBack(Widget child) => PopScope(
-        canPop: _viewerImages == null,
+        canPop: _viewerImages == null && _mediaBrowser == null,
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) _closeViewer();
+          if (didPop) return;
+          if (_viewerImages != null) {
+            _closeViewer();
+          } else {
+            _closeMediaBrowser();
+          }
         },
         child: child,
       );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../utils/net_image.dart' show authNetworkImageProvider;
@@ -86,7 +87,15 @@ class ConversationMediaScreen extends StatefulWidget {
     required this.links,
     required this.docs,
     this.songs = const [],
+    this.onJump,
+    this.onClose,
   });
+
+  /// Inline mode (inside the chat panel): tapping an item calls [onJump]
+  /// with its message id and the back button calls [onClose]. Without them
+  /// the screen behaves as a pushed page and pops with the id.
+  final ValueChanged<String>? onJump;
+  final VoidCallback? onClose;
 
   @override
   State<ConversationMediaScreen> createState() =>
@@ -103,7 +112,14 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
     super.dispose();
   }
 
-  void _jump(String messageId) => Navigator.of(context).pop(messageId);
+  void _jump(String messageId) {
+    final j = widget.onJump;
+    if (j != null) {
+      j(messageId);
+    } else {
+      Navigator.of(context).pop(messageId);
+    }
+  }
 
   Future<void> _openLink(String url) async {
     try {
@@ -122,9 +138,114 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
     }
   }
 
+  TabBar _tabBar(ColorScheme scheme) => TabBar(
+        controller: _tabs,
+        labelColor: scheme.primary,
+        unselectedLabelColor: scheme.onSurfaceVariant,
+        indicatorColor: scheme.primary,
+        indicatorSize: TabBarIndicatorSize.label,
+        dividerColor: scheme.outlineVariant.withValues(alpha: 0.4),
+        isScrollable: true,
+        tabAlignment: TabAlignment.start,
+        labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+        unselectedLabelStyle:
+            const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+        tabs: [
+          Tab(text: 'Songs (${widget.songs.length})'),
+          Tab(text: 'Media (${widget.media.length})'),
+          Tab(text: 'Links (${widget.links.length})'),
+          Tab(text: 'Docs (${widget.docs.length})'),
+        ],
+      );
+
+  // Inside the chat panel: the conversation header stays above and the
+  // composer below; this is a surface over the thread with its own slim bar.
+  Widget _inline(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final total = widget.songs.length +
+        widget.media.length +
+        widget.links.length +
+        widget.docs.length;
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): () =>
+            widget.onClose?.call(),
+      },
+      child: Focus(
+        autofocus: true,
+        child: Material(
+          color: isDark
+              ? Color.alphaBlend(
+                  Colors.white.withValues(alpha: 0.03), scheme.surface)
+              : scheme.surface,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(6, 6, 12, 0),
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Back to chat',
+                      onPressed: widget.onClose,
+                      icon: const Icon(Icons.arrow_back_rounded),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Shared in ${widget.title}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: scheme.onSurface)),
+                          Text(
+                              total == 0
+                                  ? 'Nothing shared yet'
+                                  : '$total item${total == 1 ? '' : 's'} · tap one to find it in the chat',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: scheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close',
+                      onPressed: widget.onClose,
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+              ),
+              Align(alignment: Alignment.centerLeft, child: _tabBar(scheme)),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabs,
+                  children: [
+                    _songsTab(scheme),
+                    _mediaTab(scheme),
+                    _linksTab(scheme),
+                    _docsTab(scheme),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    if (widget.onClose != null) return _inline(context);
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title, overflow: TextOverflow.ellipsis),

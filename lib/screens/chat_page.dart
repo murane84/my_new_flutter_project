@@ -2347,6 +2347,15 @@ class _ChatPageState extends State<ChatPage>
   // In-body photo viewer state (fills only the conversation card so the
   // header + composer stay live and the user can keep typing / replying).
   List<String>? _viewerImages;
+
+  // Songs / Media / Links / Docs browser, shown inside the chat panel (under
+  // the conversation header, above the composer) like the photo viewer.
+  Widget? _mediaBrowser;
+
+  void _closeMediaBrowser() {
+    if (_mediaBrowser == null) return;
+    setState(() => _mediaBrowser = null);
+  }
   List<Map<String, dynamic>?> _viewerMsgs = const <Map<String, dynamic>?>[];
   List<ImageProvider> _viewerProviders = const <ImageProvider>[];
   int _viewerIndex = 0;
@@ -3604,18 +3613,27 @@ class _ChatPageState extends State<ChatPage>
     }
 
     if (!mounted) return;
-    final jumpId = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => ConversationMediaScreen(
-          title: _isGroup ? widget.groupTitle : widget.friendName,
-          media: media,
-          links: links,
-          docs: docs,
-          songs: songs,
-        ),
-      ),
-    );
-    if (jumpId != null && jumpId.isNotEmpty && mounted) {
+    _closeViewer();
+    setState(() {
+      _mediaBrowser = ConversationMediaScreen(
+        key: UniqueKey(),
+        title: _isGroup ? widget.groupTitle : widget.friendName,
+        media: media,
+        links: links,
+        docs: docs,
+        songs: songs,
+        onClose: _closeMediaBrowser,
+        onJump: (id) {
+          _closeMediaBrowser();
+          _jumpFromBrowser(id, msgs);
+        },
+      );
+    });
+  }
+
+  Future<void> _jumpFromBrowser(
+      String jumpId, List<Map<String, dynamic>> msgs) async {
+    if (jumpId.isNotEmpty && mounted) {
       // The browser reaches further back than the thread holds — fold that
       // history in first so the jump can land on older items too.
       if (!_messages.any((m) => m['id'].toString() == jumpId)) {
@@ -5657,6 +5675,21 @@ class _ChatPageState extends State<ChatPage>
                         ),
                       ),
                     ),
+                    if (_mediaBrowser != null)
+                      Positioned.fill(
+                        child: TweenAnimationBuilder<double>(
+                          key: _mediaBrowser!.key,
+                          tween: Tween(begin: 0, end: 1),
+                          duration: const Duration(milliseconds: 260),
+                          curve: Curves.easeOutCubic,
+                          builder: (_, v, child) => Opacity(
+                            opacity: v,
+                            child: Transform.translate(
+                                offset: Offset(0, 18 * (1 - v)), child: child),
+                          ),
+                          child: _mediaBrowser,
+                        ),
+                      ),
                     if (_viewerImages != null) _buildInlineViewer(),
                   ],
                 ),

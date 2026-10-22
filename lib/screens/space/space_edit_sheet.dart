@@ -833,20 +833,48 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
       child: LayoutBuilder(builder: (context, c) {
         final wide = c.maxWidth >= 860;
         final pad = wide ? 20.0 : 14.0;
+        // The bar is its own solid, raised card (like the cards below), so
+        // the wallpaper never shows through it.
         final bar = Padding(
-          padding: EdgeInsets.fromLTRB(pad - 8, 2, pad, 6),
-          child: Row(
-            children: [
-              IconButton(
-                tooltip: 'Back to Our Space',
-                icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: _busy ? null : () => _finish(null),
-              ),
-              _titleRow(scheme, accent),
-              const Spacer(),
-              if (wide)
-                SizedBox(width: 160, child: saveBtn),
-            ],
+          padding: EdgeInsets.fromLTRB(pad, 2, pad, 10),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(4, 6, 8, 6),
+            decoration: BoxDecoration(
+              color: _cardColor(scheme),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.35)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  tooltip: 'Back to Our Space',
+                  icon: Icon(Icons.arrow_back_rounded,
+                      color: scheme.onSurface),
+                  onPressed: _busy ? null : () => _finish(null),
+                ),
+                _titleRow(scheme, accent),
+                const Spacer(),
+                if (wide)
+                  SizedBox(width: 150, child: saveBtn)
+                else if (_dirty)
+                  // Phones: a compact Save appears here once something
+                  // changed (the full button also waits below).
+                  TextButton(
+                    onPressed: _busy ? null : _save,
+                    style: TextButton.styleFrom(foregroundColor: accent),
+                    child: const Text('Save',
+                        style: TextStyle(fontWeight: FontWeight.w800)),
+                  ),
+              ],
+            ),
           ),
         );
         final Widget body;

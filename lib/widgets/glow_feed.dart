@@ -185,11 +185,15 @@ class _GlowFeedState extends State<GlowFeed> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final feed = _feed;
     final showToday = _filter == _Filter.all;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(2, 0, 2, 20),
+    // The filter chips stay pinned; only the cards scroll under them.
+    return Column(
       children: [
         _filters(scheme),
         const SizedBox(height: 10),
+        Expanded(
+          child: ListView(
+      padding: const EdgeInsets.fromLTRB(2, 0, 2, 20),
+      children: [
         if (showToday) ...[
           _todayCard(scheme, isDark, _today),
           const SizedBox(height: 14),
@@ -216,6 +220,9 @@ class _GlowFeedState extends State<GlowFeed> {
         ],
         const SizedBox(height: 8),
         _footer(scheme),
+      ],
+          ),
+        ),
       ],
     );
   }
@@ -408,7 +415,7 @@ class _GlowFeedState extends State<GlowFeed> {
                   color: scheme.onSurface.withValues(alpha: 0.9))),
           Row(children: [
             Expanded(
-              child: Text('${p.isEmpty ? 'They' : p} see this one today too',
+              child: Text(p.isEmpty ? 'They see this one today too' : '$p sees this one today too',
                   style: TextStyle(
                       fontSize: 11.5, color: scheme.onSurfaceVariant)),
             ),

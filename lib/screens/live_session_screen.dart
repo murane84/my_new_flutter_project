@@ -1809,7 +1809,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               ),
             ),
           )
-        : AnimatedReaction(emoji: r.emoji, size: 40);
+        : AnimatedReaction(emoji: r.emoji, size: 40, loops: 0);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       child: Row(

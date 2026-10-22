@@ -11,9 +11,13 @@ import 'package:flutter/material.dart';
 enum _ReactMotion { heart, laugh, cry, fire, star, clap, music, pulse }
 
 class AnimatedReaction extends StatefulWidget {
-  const AnimatedReaction({super.key, required this.emoji, this.size = 40});
+  const AnimatedReaction(
+      {super.key, required this.emoji, this.size = 40, this.loops = 3});
   final String emoji;
   final double size;
+  /// How many times it plays when it appears (then it rests; hover or tap
+  /// plays it again). 0 = forever — only for the live-session overlay.
+  final int loops;
 
   @override
   State<AnimatedReaction> createState() => _AnimatedReactionState();
@@ -85,7 +89,32 @@ class _AnimatedReactionState extends State<AnimatedReaction>
   void initState() {
     super.initState();
     _m = _classify(widget.emoji);
-    _c = AnimationController(vsync: this, duration: _durationFor(_m))..repeat();
+    _c = AnimationController(vsync: this, duration: _durationFor(_m));
+    _play();
+  }
+
+  // A few beats, then still. A forever-looping glyph kept the whole chat
+  // compositing every frame; on desktop at fractional scaling that flipped
+  // the thread between cached and fresh rasters — a 1px "shake" each beat.
+  int _left = 0;
+  void _play() {
+    if (widget.loops <= 0) {
+      _c.repeat();
+      return;
+    }
+    _left = widget.loops;
+    _c.removeStatusListener(_onStatus);
+    _c.addStatusListener(_onStatus);
+    _c.forward(from: 0);
+  }
+
+  void _onStatus(AnimationStatus s) {
+    if (s != AnimationStatus.completed || !mounted) return;
+    if (--_left > 0) {
+      _c.forward(from: 0);
+    } else {
+      _c.value = 0; // rest on the neutral pose
+    }
   }
 
   @override
@@ -106,7 +135,11 @@ class _AnimatedReactionState extends State<AnimatedReaction>
     // Its own layer: the beat repaints ONLY this little box. Without it each
     // frame repainted the whole thread — re-running the list's edge fade and
     // the frosted (blurred) heart pills — which read as the chat shaking.
-    return RepaintBoundary(
+    return MouseRegion(
+      onEnter: (_) {
+        if (!_c.isAnimating) _play();
+      },
+      child: RepaintBoundary(
       child: SizedBox(
       width: box,
       height: box,
@@ -173,6 +206,7 @@ class _AnimatedReactionState extends State<AnimatedReaction>
           );
         },
       ),
+    ),
     ),
     );
   }

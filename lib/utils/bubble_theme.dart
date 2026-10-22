@@ -133,8 +133,14 @@ Color bubbleTintOn(Color tint, Color bg, {double min = 4.5}) {
 /// A readable text colour for content painted on [bg]: whichever of near-black
 /// or near-white contrasts MORE with it. (A plain luminance cut-off picked white
 /// on mid tones like amber or teal, where it was hard to read.)
-Color bubbleTextOn(Color bg) =>
-    _bestOn(bg, const [Color(0xFF17191C), Color(0xFFF4F1F2)]);
+Color bubbleTextOn(Color bg) {
+  // Same three tiers as the app's ink: darkish → near-white, normal →
+  // graphite, shining (neon / pastel) → near-black.
+  final l = bg.computeLuminance();
+  if (l < 0.21) return const Color(0xFFF4F1F2);
+  if (l < 0.5) return const Color(0xFF2A2A30);
+  return const Color(0xFF111114);
+}
 
 /// A muted variant of the on-bubble text colour, for timestamps, "edited" and
 /// the sent/delivered ticks — faded, but never below a readable contrast.

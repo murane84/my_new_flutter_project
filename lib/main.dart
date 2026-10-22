@@ -37,6 +37,7 @@ import 'utils/popup_shell.dart' show GlobalTapOrigin;
 import 'screens/token_helper.dart' show warmMediaAuth;
 import 'state/playback_state.dart' show providerContainer;
 import 'services/web_update_checker.dart';
+import 'utils/readable.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
@@ -359,12 +360,9 @@ class MyApp extends StatelessWidget {
           // Use the EXACT chosen accent (like Our Space) so a vivid pick stays
           // vivid, instead of Material's tone-mapped (muted) seed primary.
           primary: customAccent ? lightAccent : const Color(0xFFD90429),
-          onPrimary: customAccent
-              ? (ThemeData.estimateBrightnessForColor(lightAccent) ==
-                      Brightness.dark
-                  ? Colors.white
-                  : Colors.black)
-              : Colors.white,
+          // Three-tier ink: white on darkish, graphite on normal, black on
+          // shining accents (see readableOn).
+          onPrimary: customAccent ? readableOn(lightAccent) : Colors.white,
           primaryContainer: lightP?.primaryContainer ?? const Color(0xFFFFDAD7),
           onPrimaryContainer:
               lightP?.onPrimaryContainer ?? const Color(0xFF40000A),
@@ -393,10 +391,7 @@ class MyApp extends StatelessWidget {
           // Exact accent here too — a neon stays neon on the dark surface.
           primary: customAccent ? accent : const Color(0xFFFF5A5F),
           onPrimary: customAccent
-              ? (ThemeData.estimateBrightnessForColor(accent) ==
-                      Brightness.dark
-                  ? Colors.white
-                  : Colors.black)
+              ? readableOn(accent)
               : const Color(0xFF3A0007),
           primaryContainer: darkP?.primaryContainer ?? const Color(0xFF8E1420),
           onPrimaryContainer:

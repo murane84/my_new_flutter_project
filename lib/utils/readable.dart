@@ -1,18 +1,26 @@
 import 'package:flutter/material.dart';
 
-import 'bubble_theme.dart' show bubbleContrast, bubbleTintOn;
+import 'bubble_theme.dart' show bubbleTintOn;
 
-/// Text / icon colour for anything painted ON a coloured fill (an accent
-/// button, a theme-coloured hero, a lit key…): white whenever it reads (≥3:1,
-/// the large/bold-text bar), otherwise a near-black — so a pale theme like
-/// Butter, Petal or Neon yellow never swallows its own labels.
-const Color kInkDark = Color(0xFF17191C);
+/// Ink for words and icons painted ON a coloured fill (an accent button, a
+/// theme-coloured hero, a lit key…), in three tiers by how bright the fill is:
+///  • darkish fills  → white ink
+///  • normal fills   → a soft graphite (grey) ink
+///  • shining fills (neon, pastel, butter…) → black ink
+/// The cut between white and graphite sits where both read equally well
+/// (relative luminance ≈ 0.21), so every tier keeps a readable contrast.
+const Color kInkDark = Color(0xFF111114); // shining fills
+const Color kInkGraphite = Color(0xFF2A2A30); // normal fills
 
 Color readableOn(Color bg) {
-  final w = bubbleContrast(Colors.white, bg);
-  if (w >= 3.0) return Colors.white;
-  return bubbleContrast(kInkDark, bg) > w ? kInkDark : Colors.white;
+  final l = bg.computeLuminance();
+  if (l < 0.21) return Colors.white;
+  if (l < 0.5) return kInkGraphite;
+  return kInkDark;
 }
+
+/// True when [readableOn] gives white for [bg] (handy for shadows / glows).
+bool inkIsLightOn(Color bg) => readableOn(bg) == Colors.white;
 
 /// [tint] shaded (same hue) until it reads as text on [bg] — for accent-
 /// coloured words on a light card, a white key, etc.

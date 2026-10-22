@@ -1606,6 +1606,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       EqualizerScreen(
         equalizer: _equalizer,
         loudness: _loudness,
+        songTitle: _trackName,
       ),
     );
   }

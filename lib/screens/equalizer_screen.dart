@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/popup_shell.dart';
+import '../services/song_insights.dart';
 
 /// A functional equalizer + sound-enhancement screen.
 ///
@@ -11,7 +12,10 @@ import '../utils/popup_shell.dart';
 class EqualizerScreen extends StatefulWidget {
   final AndroidEqualizer? equalizer;
   final AndroidLoudnessEnhancer? loudness;
-  const EqualizerScreen({super.key, this.equalizer, this.loudness});
+  /// The song playing now — its feeling (if tagged) is suggested first.
+  final String? songTitle;
+  const EqualizerScreen(
+      {super.key, this.equalizer, this.loudness, this.songTitle});
 
   @override
   State<EqualizerScreen> createState() => _EqualizerScreenState();
@@ -30,6 +34,20 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
     'Classical': [4, 2, -1, 2, 4],
     'Dance': [6, 3, 0, 2, 4],
     'Hip-Hop': [6, 4, 1, 2, 3],
+    // Feeling curves (the "Match the feeling" row).
+    'Feel: In love': [2, 3, 2, 0, -1], // warm, close
+    'Feel: Missing': [-1, 1, 4, 1, -2], // the voice forward
+    'Feel: Hyped': [6, 3, 0, 3, 5], // punch + sparkle
+    'Feel: Calm': [2, 1, 0, -2, -4], // soft top end
+    'Feel: Hurting': [1, 2, 2, 0, -2], // gentle, rounded
+  };
+
+  static const Map<SongFeel, String> _feelPreset = {
+    SongFeel.love: 'Feel: In love',
+    SongFeel.missing: 'Feel: Missing',
+    SongFeel.hyped: 'Feel: Hyped',
+    SongFeel.calm: 'Feel: Calm',
+    SongFeel.hurting: 'Feel: Hurting',
   };
 
   bool _supported = false;
@@ -174,6 +192,10 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
                     shrinkWrap: true,
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
                     children: [
+                      _sectionTitle('Match the feeling'),
+                      const SizedBox(height: 8),
+                      _feelRow(scheme),
+                      const SizedBox(height: 14),
                       _sectionTitle('Recommended presets'),
                       const SizedBox(height: 8),
                       _presetGrid(scheme),
@@ -230,8 +252,54 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
         style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
       );
 
+  /// Five feeling curves; the one matching how you tagged this song glows.
+  Widget _feelRow(ColorScheme scheme) {
+    final t = widget.songTitle;
+    final mine = (t == null || t.isEmpty)
+        ? null
+        : SongInsights.instance.feelOf(t);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        for (final f in SongFeel.values)
+          Builder(builder: (_) {
+            final name = _feelPreset[f]!;
+            final active = _preset == name;
+            final suggested = mine == f && !active;
+            return Tooltip(
+              message: suggested ? '${f.label} · your feeling for this song' : f.label,
+              child: GestureDetector(
+                onTap: () => _applyPreset(name),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: 52,
+                  height: 52,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: active
+                        ? scheme.primary.withValues(alpha: 0.22)
+                        : scheme.surfaceContainerHighest,
+                    border: Border.all(
+                        width: suggested ? 2 : 1,
+                        color: active || suggested
+                            ? scheme.primary
+                            : scheme.outlineVariant.withValues(alpha: 0.5)),
+                  ),
+                  child: Text(f.emoji, style: const TextStyle(fontSize: 24)),
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
   Widget _presetGrid(ColorScheme scheme) {
-    final names = ['Custom', ..._presets.keys];
+    final names = [
+      'Custom',
+      ..._presets.keys.where((k) => !k.startsWith('Feel: ')),
+    ];
     const spacing = 8.0;
     // Size each chip from the ACTUAL available width so a whole number of
     // columns fills the row edge-to-edge — no more fixed 104px chips leaving a

@@ -148,13 +148,17 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
     }
   }
 
-  TabBar _tabBar(ColorScheme scheme) => TabBar(
+  TabBar _tabBar(ColorScheme scheme, {bool inline = false}) => TabBar(
         controller: _tabs,
         labelColor: scheme.primary,
         unselectedLabelColor: scheme.onSurfaceVariant,
         indicatorColor: scheme.primary,
         indicatorSize: TabBarIndicatorSize.label,
-        dividerColor: scheme.outlineVariant.withValues(alpha: 0.4),
+        dividerColor: inline
+            ? Colors.transparent
+            : scheme.outlineVariant.withValues(alpha: 0.4),
+        labelPadding:
+            inline ? const EdgeInsets.symmetric(horizontal: 12) : null,
         isScrollable: true,
         tabAlignment: TabAlignment.start,
         labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
@@ -191,49 +195,34 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
               : scheme.surface,
           child: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(6, 6, 12, 0),
+              // One slim row: back + the tabs. The conversation header above
+              // already names the chat, so no second title here.
+              Container(
+                padding: const EdgeInsets.only(left: 2, right: 6),
+                decoration: BoxDecoration(
+                  border: Border(
+                      bottom: BorderSide(
+                          color: scheme.outlineVariant.withValues(alpha: 0.4))),
+                ),
                 child: Row(
                   children: [
                     IconButton(
                       tooltip: 'Back to chat',
+                      visualDensity: VisualDensity.compact,
                       onPressed: widget.onClose,
-                      icon: const Icon(Icons.arrow_back_rounded),
+                      icon: const Icon(Icons.arrow_back_rounded, size: 20),
                     ),
-                    const SizedBox(width: 4),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('Shared in ${widget.title}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: scheme.onSurface)),
-                          Text(
-                              total == 0
-                                  ? 'Nothing shared yet'
-                                  : '$total item${total == 1 ? '' : 's'} · tap one to find it in the chat',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                  fontSize: 11.5,
-                                  color: scheme.onSurfaceVariant)),
-                        ],
+                      child: Tooltip(
+                        message: total == 0
+                            ? 'Nothing shared yet'
+                            : '$total shared · tap one to find it in the chat',
+                        child: _tabBar(scheme, inline: true),
                       ),
-                    ),
-                    IconButton(
-                      tooltip: 'Close',
-                      onPressed: widget.onClose,
-                      icon: const Icon(Icons.close_rounded),
                     ),
                   ],
                 ),
               ),
-              Align(alignment: Alignment.centerLeft, child: _tabBar(scheme)),
               Expanded(
                 child: TabBarView(
                   controller: _tabs,

@@ -167,8 +167,9 @@ class _AlutaLoaderState extends State<AlutaLoader>
                     orbit: widget.style == LoaderStyle.orbit,
                     still: _still,
                     done: d,
-                    // The arc sits just off the disc's edge.
-                    ring: disc / 2 + 3.5 + 2.6,
+                    // The arc rides right on the disc's edge — no gap that
+                    // reads as a second ring.
+                    ring: disc / 2 + 2.6,
                     disc: disc / 2,
                     color: accent,
                   ),
@@ -189,8 +190,8 @@ class _AlutaLoaderState extends State<AlutaLoader>
                                   Colors.black, accent,
                                   0.35 * glow.clamp(0.0, 1.0))!
                               .withValues(alpha: isDark ? 0.40 : 0.12),
-                          blurRadius: 10,
-                          offset: const Offset(0, 3),
+                          blurRadius: 6,
+                          offset: const Offset(0, 1.5),
                         ),
                       ],
                     ),

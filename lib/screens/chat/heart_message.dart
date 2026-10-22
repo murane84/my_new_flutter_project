@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:math' as math;
@@ -265,16 +266,45 @@ class _HeartBubbleState extends State<HeartBubble>
   // its sheen slides with the light.
   final ValueNotifier<Offset> _tilt = ValueNotifier<Offset>(Offset.zero);
 
+  void _tiltAt(Offset p) {
+    if (_reduceMotion) return;
+    const w = 160.0, h = 142.0;
+    _tilt.value = Offset(
+      ((p.dx / w) * 2 - 1).clamp(-1.0, 1.0),
+      ((p.dy / h) * 2 - 1).clamp(-1.0, 1.0),
+    );
+  }
+
+  // Touch: the heart presses in under the finger (same turn + light as the
+  // mouse) while it's down, and eases back when it lifts or the touch turns
+  // into a scroll.
+  bool get _touchTilting => _touchAt != null;
+  Offset? _touchAt;
+
+  void _touchDown(PointerDownEvent e) {
+    if (e.kind == PointerDeviceKind.mouse) return;
+    _touchAt = e.position;
+    _tiltAt(e.localPosition);
+  }
+
+  void _touchMove(PointerMoveEvent e) {
+    if (!_touchTilting) return;
+    if ((e.position - _touchAt!).distance > 14) {
+      _touchEnd(); // it's a scroll, not a touch on the heart
+    } else {
+      _tiltAt(e.localPosition);
+    }
+  }
+
+  void _touchEnd() {
+    if (!_touchTilting) return;
+    _touchAt = null;
+    _tilt.value = Offset.zero;
+  }
+
   Widget _tiltable(Widget Function(Offset light) build) {
     return MouseRegion(
-      onHover: (e) {
-        const w = 160.0, h = 142.0;
-        final p = e.localPosition;
-        _tilt.value = Offset(
-          ((p.dx / w) * 2 - 1).clamp(-1.0, 1.0),
-          ((p.dy / h) * 2 - 1).clamp(-1.0, 1.0),
-        );
-      },
+      onHover: (e) => _tiltAt(e.localPosition),
       onExit: (_) => _tilt.value = Offset.zero,
       child: ValueListenableBuilder<Offset>(
         valueListenable: _tilt,
@@ -750,10 +780,22 @@ class _HeartBubbleState extends State<HeartBubble>
         }
       },
       child: Listener(
-        onPointerDown: _pointerDown,
-        onPointerMove: _pointerMove,
-        onPointerUp: _pointerUp,
-        onPointerCancel: (_) => _cancelHold(nudge: false),
+        onPointerDown: (e) {
+          _touchDown(e);
+          _pointerDown(e);
+        },
+        onPointerMove: (e) {
+          _touchMove(e);
+          _pointerMove(e);
+        },
+        onPointerUp: (e) {
+          _touchEnd();
+          _pointerUp(e);
+        },
+        onPointerCancel: (_) {
+          _touchEnd();
+          _cancelHold(nudge: false);
+        },
         child: GestureDetector(
           onTap: _onTap,
           onLongPressStart: (_canHold || widget.onMenu == null)

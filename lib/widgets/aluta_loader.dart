@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../services/aluta_mood.dart';
+import 'glossy_heart.dart';
 
 /// The Aluta logo loader. One look, four moods (see [AlutaMood.loaderStyle]):
 ///  • heartbeat — the mark gives a soft "lub-dub" every beat
@@ -210,14 +211,13 @@ class _AlutaLoaderState extends State<AlutaLoader>
                 // Goodbye heart: pops up from the disc and floats off.
                 if (d > 0)
                   Transform.translate(
-                    offset: Offset(0, -disc * 0.55 - 14 * d),
+                    offset: Offset(0, -disc * 0.58 - 16 * d),
                     child: Opacity(
                       opacity: (d < 0.6 ? d / 0.6 : (1 - d) / 0.4)
                           .clamp(0.0, 1.0),
                       child: Transform.scale(
                         scale: 0.4 + 0.8 * Curves.elasticOut.transform(d),
-                        child: Icon(Icons.favorite_rounded,
-                            size: 14, color: accent),
+                        child: GlossyHeart(size: 20, color: accent),
                       ),
                     ),
                   ),

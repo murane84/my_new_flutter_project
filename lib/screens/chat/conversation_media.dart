@@ -113,11 +113,43 @@ class ConversationMediaScreen extends StatefulWidget {
 }
 
 class _ConversationMediaScreenState extends State<ConversationMediaScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final TabController _tabs = TabController(length: 4, vsync: this);
+
+  // Swipe-back (inline): the panel follows the finger to the right — from
+  // the left edge, or by pulling past the first tab — and closes past a
+  // third of the width (or on a quick flick); otherwise it springs back.
+  double _dragX = 0;
+  double _width = 1;
+  late final AnimationController _settle =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 220))
+        ..addListener(() {
+          if (_settleTween != null) {
+            setState(() => _dragX = _settleTween!.evaluate(_settle));
+          }
+        });
+  Tween<double>? _settleTween;
+  bool _closing = false;
+
+  void _dragBy(double dx) {
+    if (_closing) return;
+    _settle.stop();
+    setState(() => _dragX = (_dragX + dx).clamp(0.0, _width));
+  }
+
+  void _dragEnd(double velocity) {
+    if (_closing || _dragX == 0) return;
+    final close = _dragX > _width * 0.33 || velocity > 700;
+    _closing = close;
+    _settleTween = Tween(begin: _dragX, end: close ? _width : 0.0);
+    _settle.forward(from: 0).whenComplete(() {
+      if (close) widget.onClose?.call();
+    });
+  }
 
   @override
   void dispose() {
+    _settle.dispose();
     _tabs.dispose();
     super.dispose();
   }
@@ -181,7 +213,7 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
         widget.media.length +
         widget.links.length +
         widget.docs.length;
-    return CallbackShortcuts(
+    final panel = CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): () =>
             widget.onClose?.call(),
@@ -220,18 +252,45 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
                         child: _tabBar(scheme, inline: true),
                       ),
                     ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 6, right: 6),
+                      child: Text(
+                        total == 0 ? 'Shared' : 'Shared · $total',
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: scheme.onSurfaceVariant),
+                      ),
+                    ),
                   ],
                 ),
               ),
               Expanded(
-                child: TabBarView(
-                  controller: _tabs,
-                  children: [
-                    _songsTab(scheme),
-                    _mediaTab(scheme),
-                    _linksTab(scheme),
-                    _docsTab(scheme),
-                  ],
+                // Pulling right past the first tab = swipe back.
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: (n) {
+                    if (n.depth != 0 || n.metrics.axis != Axis.horizontal) {
+                      return false;
+                    }
+                    if (n is OverscrollNotification &&
+                        n.overscroll < 0 &&
+                        n.dragDetails != null &&
+                        _tabs.index == 0) {
+                      _dragBy(-n.overscroll);
+                    } else if (n is ScrollEndNotification && _dragX > 0) {
+                      _dragEnd(n.dragDetails?.primaryVelocity ?? 0);
+                    }
+                    return false;
+                  },
+                  child: TabBarView(
+                    controller: _tabs,
+                    children: [
+                      _songsTab(scheme),
+                      _mediaTab(scheme),
+                      _linksTab(scheme),
+                      _docsTab(scheme),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -239,6 +298,34 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
         ),
       ),
     );
+    return LayoutBuilder(builder: (context, c) {
+      _width = c.maxWidth.isFinite && c.maxWidth > 0 ? c.maxWidth : 1;
+      final p = (_dragX / _width).clamp(0.0, 1.0);
+      return Stack(
+        children: [
+          Positioned.fill(
+            child: Transform.translate(
+              offset: Offset(_dragX, 0),
+              child: Opacity(opacity: 1 - 0.5 * p, child: panel),
+            ),
+          ),
+          // Left-edge swipe (works on every tab, and on iOS where pages
+          // bounce instead of overscrolling).
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 20,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragUpdate: (d) => _dragBy(d.delta.dx),
+              onHorizontalDragEnd: (d) => _dragEnd(d.primaryVelocity ?? 0),
+              onHorizontalDragCancel: () => _dragEnd(0),
+            ),
+          ),
+        ],
+      );
+    });
   }
 
   @override

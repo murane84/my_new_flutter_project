@@ -11,6 +11,8 @@ import '../token_helper.dart' show mediaAuthHeaders;
 import 'story_models.dart';
 import '../../widgets/aluta_composer_field.dart';
 import '../../utils/readable.dart';
+import '../../utils/emoji_field.dart' show inlineEmojiPicker;
+import '../gif_picker.dart';
 
 /// Full-screen, tap-through story viewer (Instagram/WhatsApp style).
 ///
@@ -56,6 +58,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   final TextEditingController _replyCtrl = TextEditingController();
   final FocusNode _replyFocus = FocusNode();
   bool _replySending = false;
+  bool _replyEmoji = false; // full emoji panel open inside the reply card
 
   StoryGroup get _group => widget.groups[_g];
   StoryItem get _story => _group.stories[_s];
@@ -88,10 +91,50 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   void _onReplyFocus() {
     if (_replyFocus.hasFocus) {
       _pause();
-    } else if (_replyCtrl.text.trim().isEmpty && !_replySending) {
+      _replyEmoji = false; // the keyboard takes over from the emoji panel
+    } else if (_replyCtrl.text.trim().isEmpty &&
+        !_replySending &&
+        !_replyEmoji) {
       _resume();
     }
     if (mounted) setState(() {});
+  }
+
+  void _toggleReplyEmoji() {
+    setState(() => _replyEmoji = !_replyEmoji);
+    if (_replyEmoji) {
+      _replyFocus.unfocus();
+      _pause();
+    } else if (_replyCtrl.text.trim().isEmpty) {
+      _resume();
+    }
+  }
+
+  /// Reply with a GIF / sticker (same picker as the chat).
+  Future<void> _replyWithSticker() async {
+    _pause();
+    final url = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1B1B1F),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(ctx).size.height * 0.6,
+          child: GifPicker(
+            onSelected: (gif) => Navigator.pop(ctx, gif.fullUrl),
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (url == null || url.isEmpty) {
+      _resume();
+      return;
+    }
+    await _sendReply(null, gifUrl: url);
   }
 
   void _onReplyText() {
@@ -124,21 +167,28 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     }
   }
 
-  Future<void> _sendReply([String? quick]) async {
-    final text = (quick ?? _replyCtrl.text).trim();
-    if (text.isEmpty || _replySending) return;
+  Future<void> _sendReply([String? quick, {String? gifUrl}]) async {
+    final text = gifUrl != null ? '' : (quick ?? _replyCtrl.text).trim();
+    if ((text.isEmpty && gifUrl == null) || _replySending) return;
     final item = _story;
     final to = _group.authorId;
     setState(() => _replySending = true);
     final content = '> ${_statusQuote(item)}\n\n$text';
-    final sent = await ApiService().sendMessage(to, content);
+    final sent = gifUrl != null
+        ? await ApiService().sendMessage(to, content,
+            messageType: 'image',
+            mediaUrl: gifUrl,
+            mediaName: 'sticker.gif',
+            mediaMime: 'image/gif')
+        : await ApiService().sendMessage(to, content);
     if (!mounted) return;
     setState(() => _replySending = false);
     final name = _displayName();
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (sent != null) {
-      _replyCtrl.clear();
+      if (gifUrl == null && quick == null) _replyCtrl.clear();
       _replyFocus.unfocus();
+      _replyEmoji = false;
       messenger?.showSnackBar(SnackBar(
         content: Text('Sent to ${name.isEmpty ? 'them' : name}'),
         duration: const Duration(milliseconds: 1600),
@@ -153,92 +203,186 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     }
   }
 
-  /// Quick reactions (while typing) + the reply pill + send.
+  /// One glossy card holding the whole reply: quick reactions (and ＋ for
+  /// every emoji), then the composer with emoji · GIF/sticker · send — so it
+  /// reads as YOUR reply, not part of their status.
   Widget _replyBar() {
-    const quick = ['❤️', '😂', '😮', '😢', '🔥', '👏'];
+    const quick = ['❤️', '😍', '😂', '😮', '😢', '🔥', '👏', '🙏'];
     final scheme = Theme.of(context).colorScheme;
     final hasText = _replyCtrl.text.trim().isNotEmpty;
     final name = _displayName();
+    Widget tool(IconData icon, String tip, VoidCallback onTap,
+            {bool active = false}) =>
+        IconButton(
+          tooltip: tip,
+          visualDensity: VisualDensity.compact,
+          onPressed: onTap,
+          icon: Icon(icon,
+              color: active ? scheme.primary : Colors.white.withValues(alpha: 0.8)),
+        );
     // Swallow taps so they don't page the story.
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTapUp: (_) {},
       onLongPressStart: (_) {},
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedSize(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOutCubic,
-              child: (_replyFocus.hasFocus && !hasText)
-                  ? Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          for (final e in quick)
-                            InkResponse(
-                              radius: 26,
-                              onTap: () => _sendReply(e),
-                              child: Padding(
-                                padding: const EdgeInsets.all(4),
-                                child: Text(e,
-                                    style: const TextStyle(fontSize: 30)),
-                              ),
-                            ),
-                        ],
-                      ),
-                    )
-                  : const SizedBox(width: double.infinity),
-            ),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: AlutaComposerField(
-                    controller: _replyCtrl,
-                    focusNode: _replyFocus,
-                    hint: name.isEmpty ? 'Reply…' : 'Reply to $name…',
-                    maxLines: 3,
-                    dark: true,
-                    sendOnAction: true,
-                    onSubmit: _sendReply,
-                  ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620),
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(10, 6, 10, 0),
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(26),
+              // Glossy dark glass: a lit top edge fading into a deep base.
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color.alphaBlend(Colors.white.withValues(alpha: 0.14),
+                      const Color(0xE61C1A1F)),
+                  const Color(0xF0141216),
+                ],
+              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
                 ),
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOutCubic,
-                  child: hasText || _replySending
-                      ? Padding(
-                          padding: const EdgeInsets.only(left: 8),
-                          child: Material(
-                            color: scheme.primary,
-                            shape: const CircleBorder(),
-                            child: InkWell(
-                              customBorder: const CircleBorder(),
-                              onTap: _replySending ? null : _sendReply,
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: _replySending
-                                    ? SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: readableOn(scheme.primary)))
-                                    : Icon(Icons.send_rounded,
-                                        size: 20, color: scheme.onPrimary),
-                              ),
-                            ),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
+                BoxShadow(
+                  color: scheme.primary.withValues(alpha: 0.12),
+                  blurRadius: 18,
                 ),
               ],
             ),
-          ],
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Quick reactions — one tap sends.
+                SizedBox(
+                  height: 44,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            for (final e in quick)
+                              Flexible(
+                                child: InkResponse(
+                                  radius: 24,
+                                  onTap: _replySending
+                                      ? null
+                                      : () => _sendReply(e),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(3),
+                                    child: FittedBox(
+                                      child: Text(e,
+                                          style:
+                                              const TextStyle(fontSize: 26)),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      tool(
+                          _replyEmoji
+                              ? Icons.expand_more_rounded
+                              : Icons.add_reaction_outlined,
+                          _replyEmoji ? 'Hide emoji' : 'All emoji',
+                          _toggleReplyEmoji,
+                          active: _replyEmoji),
+                    ],
+                  ),
+                ),
+                Divider(
+                    height: 10,
+                    color: Colors.white.withValues(alpha: 0.10)),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: AlutaComposerField(
+                        controller: _replyCtrl,
+                        focusNode: _replyFocus,
+                        hint: name.isEmpty ? 'Reply…' : 'Reply to $name…',
+                        maxLines: 3,
+                        dark: true,
+                        sendOnAction: true,
+                        onSubmit: _sendReply,
+                        leading: tool(
+                            _replyEmoji
+                                ? Icons.keyboard_rounded
+                                : Icons.emoji_emotions_outlined,
+                            _replyEmoji ? 'Keyboard' : 'Emoji',
+                            () {
+                          if (_replyEmoji) {
+                            _toggleReplyEmoji();
+                            _replyFocus.requestFocus();
+                          } else {
+                            _toggleReplyEmoji();
+                          }
+                        }, active: _replyEmoji),
+                        trailing: tool(Icons.gif_box_outlined,
+                            'GIF / sticker', _replyWithSticker),
+                      ),
+                    ),
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOutCubic,
+                      child: hasText || _replySending
+                          ? Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Material(
+                                color: scheme.primary,
+                                shape: const CircleBorder(),
+                                child: InkWell(
+                                  customBorder: const CircleBorder(),
+                                  onTap: _replySending ? null : _sendReply,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: _replySending
+                                        ? SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: readableOn(
+                                                    scheme.primary)))
+                                        : Icon(Icons.send_rounded,
+                                            size: 20,
+                                            color: scheme.onPrimary),
+                                  ),
+                                ),
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ),
+                // Every emoji, inside the same card.
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 240),
+                  curve: Curves.easeOutCubic,
+                  child: _replyEmoji
+                      ? Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(18),
+                            child: SizedBox(
+                              height: 260,
+                              child: inlineEmojiPicker(context, _replyCtrl),
+                            ),
+                          ),
+                        )
+                      : const SizedBox(width: double.infinity),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

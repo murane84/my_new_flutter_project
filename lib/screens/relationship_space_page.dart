@@ -52,6 +52,7 @@ part 'space/space_page_helpers_1.dart'; // _RelationshipSpacePageState helpers (
 part 'space/space_page_helpers_2.dart'; // _RelationshipSpacePageState helpers (15 methods)
 part 'space/space_page_helpers_3.dart'; // _RelationshipSpacePageState helpers (23 methods)
 part 'space/space_page_helpers_4.dart'; // _RelationshipSpacePageState helpers (36 methods)
+part 'space/space_dashboard_layout.dart'; // compact sticky hero + responsive dashboard
 
 /// "Our Space" — a bond rendered as a *place*, not a chat thread. Opening a
 /// pinned Space shows the story of that connection: who you are together, how
@@ -147,8 +148,6 @@ Color spaceThemeColor(String? key) {
 // The matched fixed size of the two hero stat chips. Both share this exact size
 // so they read as a pair, and it's kept a touch under the avatar cluster's
 // height (~58px) so the two photos remain the banner's anchor.
-const double _kHeroStatW = 96;
-const double _kHeroStatH = 54;
 
 // Diary reactions: the quick presets shown first; "More…" opens the full emoji
 // keyboard so any emoji can be used. Both partners can react to any entry.
@@ -1060,7 +1059,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             ? RefreshIndicator(
                 key: const ValueKey('dashboard'),
                 onRefresh: _load,
-                child: _dashboardBody(scheme, title, moments),
+                child: _spaceDashboard(scheme, title, moments),
               )
             : Padding(
                 key: const ValueKey('section'),

@@ -2,6 +2,9 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
+import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'widgets/splash_particles.dart';
 import 'widgets/busy_overlay.dart';
 import 'services/app_busy.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
@@ -105,7 +108,11 @@ Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
 }
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  // Hold the native launch logo until the splash has its logo decoded
+  // (SplashScreen lifts it), with a safety net so it can never get stuck.
+  FlutterNativeSplash.preserve(widgetsBinding: binding);
+  Future.delayed(const Duration(seconds: 4), _liftNativeSplash);
   // Paint the app (its splash) AS SOON AS POSSIBLE. Only Sentry wraps runApp, so
   // it still installs capture of BOTH uncaught Flutter framework errors and
   // async (PlatformDispatcher / zone) errors. Everything heavy — the audio
@@ -501,49 +508,55 @@ class SplashScreen extends StatefulWidget {
   SplashScreenState createState() => SplashScreenState();
 }
 
-/// A decorative glyph that drifts/twinkles around the splash tagline.
-class _SplashGlyph {
-  const _SplashGlyph(
-    this.icon,
-    this.align,
-    this.size,
-    this.color,
-    this.phase,
-    this.bob,
-    this.drift,
-  );
-  final IconData icon;
-  final Alignment align;
-  final double size;
-  final Color color;
-  final double phase; // 0..1 offset into the loop
-  final double bob; // vertical travel (px)
-  final double drift; // horizontal travel (px)
+/// Native launch mark on Android: the 864px splash canvas shows as 288dp with
+/// the mark 126dp wide. logo.png's mark fills 65.8% of its frame, so 191.5dp
+/// of logo.png lines up exactly with what the user saw the instant they
+/// tapped the icon. The splash starts there, so the handoff has no jump.
+const double _kNativeLogo = 191.5;
+
+bool _nativeSplashUp = true;
+void _liftNativeSplash() {
+  if (!_nativeSplashUp) return;
+  _nativeSplashUp = false;
+  FlutterNativeSplash.remove();
 }
+const double _kLogo = 120;
+// Column below the logo: gap 18 + title 46 + gap 8 + tagline 24 + gap 34 +
+// loader 30 → the logo's resting centre sits 80px above the screen centre.
+const double _kLogoRise = 80;
 
 class SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
-  // Staggered entrance (logo → wordmark → tagline → spinner) + a gentle,
-  // continuous brand-glow pulse behind the logo.
+  // One timeline from the tap: heartbeat → burst → logo glides up with a 3D
+  // turn → wordmark flips in letter by letter → tagline → living field →
+  // equalizer. Then a soft fade-out so the next screen never overlaps it.
   late final AnimationController _entrance = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1500));
+      vsync: this, duration: const Duration(milliseconds: 2300));
   late final AnimationController _pulse = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 2200));
-  // Continuous (non-reversing) loop that drives the floating glyph field.
-  late final AnimationController _float = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 7000));
-  late final Animation<double> _logoAnim = CurvedAnimation(
+  late final AnimationController _eq = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1100));
+  late final AnimationController _exit = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 360));
+  late final Animation<double> _beat = CurvedAnimation(
+      parent: _entrance, curve: const Interval(0.03, 0.24));
+  late final Animation<double> _burst = CurvedAnimation(
+      parent: _entrance, curve: const Interval(0.08, 0.66));
+  late final Animation<double> _glide = CurvedAnimation(
       parent: _entrance,
-      curve: const Interval(0.0, 0.55, curve: Curves.easeOutBack));
+      curve: const Interval(0.22, 0.52, curve: Curves.easeInOutCubic));
   late final Animation<double> _titleAnim = CurvedAnimation(
-      parent: _entrance,
-      curve: const Interval(0.28, 0.68, curve: Curves.easeOut));
+      parent: _entrance, curve: const Interval(0.42, 0.74));
   late final Animation<double> _taglineAnim = CurvedAnimation(
       parent: _entrance,
-      curve: const Interval(0.5, 0.92, curve: Curves.easeOut));
+      curve: const Interval(0.58, 0.86, curve: Curves.easeOut));
+  late final Animation<double> _fieldAnim = CurvedAnimation(
+      parent: _entrance,
+      curve: const Interval(0.3, 0.85, curve: Curves.easeOut));
   late final Animation<double> _spinAnim = CurvedAnimation(
       parent: _entrance,
-      curve: const Interval(0.78, 1.0, curve: Curves.easeOut));
+      curve: const Interval(0.82, 1.0, curve: Curves.easeOut));
+  bool _started = false;
 
   // Fade + rise-up entrance for a widget, driven by [a].
   Widget _rise(Animation<double> a, double dy, Widget child) {
@@ -561,75 +574,169 @@ class SplashScreenState extends State<SplashScreen>
     );
   }
 
-  // One floating glyph: gentle bob + sideways drift + soft twinkle, faded in
-  // with the tagline's entrance so it never pops before the words arrive.
-  Widget _floatingGlyph(_SplashGlyph g) {
+  // lub-dub: two quick swells, the second smaller, like a real heartbeat.
+  double _beatScale(double t) {
+    if (t <= 0 || t >= 1) return 1;
+    final a = math.sin((t / 0.45).clamp(0.0, 1.0) * math.pi) * 0.075;
+    final b = t > 0.5 ? math.sin(((t - 0.5) / 0.4).clamp(0.0, 1.0) * math.pi) * 0.045 : 0.0;
+    return 1 + a + b;
+  }
+
+  // The logo, from the native launch spot to its place above the wordmark.
+  Widget _logoLayer(ColorScheme scheme) {
     return AnimatedBuilder(
-      animation: Listenable.merge([_float, _taglineAnim]),
-      builder: (_, _) {
-        final ang = (_float.value + g.phase) * 2 * math.pi;
-        final dy = math.sin(ang) * g.bob;
-        final dx = math.cos(ang * 0.8) * g.drift;
-        final twinkle =
-            0.42 + 0.42 * (0.5 + 0.5 * math.sin(ang * 1.3 + g.phase * 6));
-        final entrance = _taglineAnim.value.clamp(0.0, 1.0);
-        return Align(
-          alignment: g.align,
+      animation: Listenable.merge([_entrance, _pulse, _exit]),
+      builder: (_, child) {
+        final g = _glide.value;
+        final size = _kNativeLogo + (_kLogo - _kNativeLogo) * g;
+        final ignite = (_entrance.value / 0.18).clamp(0.0, 1.0);
+        final glow = ignite * (0.22 + _pulse.value * 0.38);
+        // A half-turn of depth while it travels, settling flat.
+        final tilt = math.sin(g * math.pi) * 0.42;
+        final m = Matrix4.identity()
+          ..setEntry(3, 2, 0.0012)
+          ..rotateY(tilt)
+          ..rotateX(-tilt * 0.25);
+        return Center(
           child: Transform.translate(
-            offset: Offset(dx, dy),
-            child: Opacity(
-              opacity: (twinkle * entrance).clamp(0.0, 1.0),
-              child: Icon(g.icon, size: g.size, color: g.color),
+            offset: Offset(0, -_kLogoRise * g),
+            child: Transform(
+              alignment: Alignment.center,
+              transform: m,
+              child: Transform.scale(
+                scale: _beatScale(_beat.value),
+                child: Container(
+                  width: size,
+                  height: size,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: scheme.primary.withValues(alpha: glow * 0.9),
+                        blurRadius: 46 + 20 * (1 - g),
+                        spreadRadius: -size * 0.12,
+                      ),
+                    ],
+                  ),
+                  child: child,
+                ),
+              ),
             ),
           ),
         );
       },
+      child: Image.asset(
+        'assets/images/logo.png',
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) =>
+            Icon(Icons.forum_rounded, size: 72, color: scheme.primary),
+      ),
     );
   }
 
-  // The tagline, wrapped in a field of stars / music notes / hearts that
-  // float around the words.
-  Widget _taglineWithGlyphs(ColorScheme scheme) {
-    final primary = scheme.primary;
-    const soft = Color(0xE6FFFFFF); // white @ ~90%
-    final glyphs = <_SplashGlyph>[
-      _SplashGlyph(Icons.star_rounded, const Alignment(-0.92, -1.3), 13,
-          primary, 0.00, 5, 3),
-      _SplashGlyph(Icons.music_note_rounded, const Alignment(0.86, -1.5), 16,
-          soft, 0.33, 6, 2),
-      _SplashGlyph(Icons.favorite_rounded, const Alignment(0.72, 1.35), 13,
-          primary, 0.58, 5, 3),
-      _SplashGlyph(Icons.star_rounded, const Alignment(-0.78, 1.45), 10, soft,
-          0.80, 4, 2),
-      _SplashGlyph(Icons.music_note_rounded, const Alignment(-1.28, 0.1), 12,
-          primary, 0.18, 5, 2),
-      _SplashGlyph(Icons.favorite_rounded, const Alignment(1.30, 0.2), 11, soft,
-          0.48, 5, 2),
-      _SplashGlyph(Icons.star_rounded, const Alignment(0.04, -1.7), 9, soft,
-          0.66, 4, 2),
-    ];
+  // "Aluta": each letter flips up out of the page, glossy, one after another.
+  Widget _wordmark(ColorScheme scheme) {
+    const word = 'Aluta';
+    final base = scheme.primary;
     return SizedBox(
-      width: 300,
-      height: 74,
-      child: Stack(
-        alignment: Alignment.center,
-        clipBehavior: Clip.none,
-        children: [
-          for (final g in glyphs) _floatingGlyph(g),
-          _rise(
-            _taglineAnim,
-            12,
-            Text(
-              'Closer, in harmony',
-              style: TextStyle(
-                fontSize: 14.5,
-                color: Colors.white.withValues(alpha: 0.82),
-                letterSpacing: 1.4,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
+      height: 46,
+      child: AnimatedBuilder(
+        animation: _titleAnim,
+        builder: (_, _) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < word.length; i++)
+              Builder(builder: (_) {
+                final t = ((_titleAnim.value * 1.6) - i * 0.15).clamp(0.0, 1.0);
+                final e = Curves.easeOutBack.transform(t);
+                return Opacity(
+                  opacity: t,
+                  child: Transform(
+                    alignment: Alignment.bottomCenter,
+                    transform: Matrix4.identity()
+                      ..setEntry(3, 2, 0.003)
+                      ..rotateX((1 - e) * 1.35),
+                    child: ShaderMask(
+                      blendMode: BlendMode.srcIn,
+                      shaderCallback: (r) => LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color.lerp(base, Colors.white, 0.55)!,
+                          base,
+                          Color.lerp(base, Colors.black, 0.35)!,
+                        ],
+                        stops: const [0.0, 0.5, 1.0],
+                      ).createShader(r),
+                      child: Text(
+                        word[i],
+                        style: TextStyle(
+                          fontSize: 36,
+                          height: 1.2,
+                          fontWeight: FontWeight.bold,
+                          color: base,
+                          letterSpacing: 2,
+                          shadows: [
+                            Shadow(
+                              color: base.withValues(alpha: 0.55),
+                              blurRadius: 18,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // A small live equalizer instead of a generic spinner: music is on its way.
+  Widget _equalizer(ColorScheme scheme) {
+    return FadeTransition(
+      opacity: _spinAnim,
+      child: SizedBox(
+        width: 46,
+        height: 30,
+        child: AnimatedBuilder(
+          animation: _eq,
+          builder: (_, _) => Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              for (var i = 0; i < 5; i++)
+                Container(
+                  width: 5.5,
+                  height: 6 +
+                      22 *
+                          (0.5 +
+                              0.5 *
+                                  math.sin(_eq.value * 2 * math.pi * (i.isEven ? 1 : 2) +
+                                      i * 1.3)),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(3),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color.lerp(scheme.primary, Colors.white, 0.5)!,
+                        scheme.primary,
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: scheme.primary.withValues(alpha: 0.5),
+                        blurRadius: 6,
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -646,9 +753,34 @@ class SplashScreenState extends State<SplashScreen>
       if (ctx != null) showToast(ctx, message, type: ToastType.info);
     };
     _checkLoginStatus();
-    _entrance.forward();
     _pulse.repeat(reverse: true);
-    _float.repeat();
+    _eq.repeat();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    // Keep the native launch logo up until our logo is decoded, then lift it
+    // and start the timeline on the very same picture — no black blink.
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    precacheImage(const AssetImage('assets/images/logo.png'), context)
+        .timeout(const Duration(milliseconds: 600), onTimeout: () {})
+        .catchError((_) {})
+        .whenComplete(() {
+      _liftNativeSplash();
+      if (!mounted) return;
+      if (still) {
+        _entrance.value = 1;
+      } else {
+        _entrance.forward();
+        // Feel the heartbeat on phones.
+        Future.delayed(const Duration(milliseconds: 90), () {
+          if (mounted) HapticFeedback.lightImpact();
+        });
+      }
+    });
   }
 
   Future<void> _checkLoginStatus() async {
@@ -664,12 +796,9 @@ class SplashScreenState extends State<SplashScreen>
     await Future.wait([
       _bootstrapServices()
           .timeout(const Duration(seconds: 8), onTimeout: () {}),
-      // Hold long enough for the splash entrance animation (logo → wordmark →
-      // "Closer, in harmony" tagline → floating glyphs, ~1.5s) to actually play
-      // out before we navigate on — otherwise, on a fast / biometric-enabled
-      // launch the splash was being replaced by the lock screen in ~0.6s and
-      // the animation was never seen.
-      Future.delayed(const Duration(milliseconds: 1800)),
+      // Hold long enough for the whole entrance (heartbeat → burst → glide →
+      // wordmark → tagline → field) to play before moving on.
+      Future.delayed(const Duration(milliseconds: 2400)),
     ]);
     if (!mounted) return;
     final prefs = await SharedPreferences.getInstance();
@@ -677,6 +806,12 @@ class SplashScreenState extends State<SplashScreen>
     // Signed in + quick-unlock enrolled → gate entry behind the biometric lock
     // screen. Otherwise fall straight through to Home (or Auth if signed out).
     final bioLocked = isLoggedIn && await BiometricService.instance.isEnabled();
+    if (!mounted) return;
+    // Bow out first, so the next screen arrives on black instead of sliding
+    // over the wordmark.
+    try {
+      await _exit.forward().orCancel;
+    } catch (_) {}
     if (!mounted) return;
     Navigator.pushReplacementNamed(
       context,
@@ -691,7 +826,8 @@ class SplashScreenState extends State<SplashScreen>
     splashOnScreen.value = (splashOnScreen.value - 1).clamp(0, 99);
     _entrance.dispose();
     _pulse.dispose();
-    _float.dispose();
+    _eq.dispose();
+    _exit.dispose();
     super.dispose();
   }
 
@@ -701,86 +837,73 @@ class SplashScreenState extends State<SplashScreen>
     // in both light and dark modes.
     return BrandTheme(
       child: Builder(builder: (context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Rounded (squircle) logo — scales in with a bouncy overshoot and a
-            // soft, continuously pulsing brand glow.
-            AnimatedBuilder(
-              animation: Listenable.merge([_logoAnim, _pulse]),
-              builder: (_, child) {
-                final v = _logoAnim.value;
-                final glow = 0.22 + _pulse.value * 0.38;
-                return Opacity(
-                  opacity: v.clamp(0.0, 1.0),
-                  child: Transform.scale(
-                    scale: 0.82 + 0.18 * v,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(28),
-                        boxShadow: [
-                          BoxShadow(
-                            color: scheme.primary.withValues(alpha: glow),
-                            blurRadius: 44,
-                            spreadRadius: 4,
-                          ),
+        final scheme = Theme.of(context).colorScheme;
+        return Scaffold(
+          backgroundColor: Colors.black,
+          body: AnimatedBuilder(
+            animation: _exit,
+            builder: (_, child) {
+              final e = Curves.easeIn.transform(_exit.value);
+              return Opacity(
+                opacity: 1 - e,
+                child: Transform.scale(scale: 1 + 0.05 * e, child: child),
+              );
+            },
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Soft red bloom from below, so the black has depth.
+                FadeTransition(
+                  opacity: _fieldAnim,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: const Alignment(0, 0.15),
+                        radius: 0.95,
+                        colors: [
+                          scheme.primary.withValues(alpha: 0.16),
+                          Colors.transparent,
                         ],
                       ),
-                      child: child,
                     ),
                   ),
-                );
-              },
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(28),
-                child: Image.asset(
-                  'assets/images/logo.png',
-                  width: 120,
-                  height: 120,
-                  errorBuilder: (_, _, _) => Icon(
-                    Icons.forum_rounded,
-                    size: 72,
-                    color: scheme.primary,
+                ),
+                SplashParticles(color: scheme.primary, reveal: _fieldAnim),
+                SplashBurst(progress: _burst, color: scheme.primary),
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(height: _kLogo), // the logo layer sits here
+                      const SizedBox(height: 18),
+                      _wordmark(scheme),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 24,
+                        child: _rise(
+                          _taglineAnim,
+                          12,
+                          Text(
+                            'Closer, in harmony',
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              color: Colors.white.withValues(alpha: 0.82),
+                              letterSpacing: 1.4,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 34),
+                      _equalizer(scheme),
+                    ],
                   ),
                 ),
-              ),
+                _logoLayer(scheme),
+              ],
             ),
-            const SizedBox(height: 18),
-            _rise(
-              _titleAnim,
-              14,
-              Text(
-                'Aluta',
-                style: TextStyle(
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold,
-                  color: scheme.primary,
-                  letterSpacing: 2,
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            _taglineWithGlyphs(scheme),
-            const SizedBox(height: 30),
-            FadeTransition(
-              opacity: _spinAnim,
-              child: SizedBox(
-                width: 30,
-                height: 30,
-                child: CircularProgressIndicator(
-                  strokeWidth: 3,
-                  color: scheme.primary,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+          ),
+        );
       }),
     );
   }

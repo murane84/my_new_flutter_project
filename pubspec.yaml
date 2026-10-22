@@ -72,6 +72,8 @@ dependencies:
   device_info_plus: ^13.1.0
   # Secret heart leans with the phone (accelerometer). 7.x needs AGP 8.12.1+.
   sensors_plus: ^6.1.1
+  # Runtime too: the splash holds the native launch logo until its own is ready.
+  flutter_native_splash: ^2.4.5
 
   # Chat media sharing (images / files / voice notes)
   image_picker: ^1.1.2
@@ -192,7 +194,6 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
-  flutter_native_splash: ^2.4.5
 
 flutter_launcher_icons:
   android: "launcher_icon"

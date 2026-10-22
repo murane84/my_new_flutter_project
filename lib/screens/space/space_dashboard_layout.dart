@@ -86,7 +86,26 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
           // Cards scroll independently under the pinned hero and soften as
           // they slide beneath it.
           Expanded(
-            child: ShaderMask(
+            // Settings take this area in place (same door in and out: a soft
+            // fade + rise), the hero staying put above.
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, anim) => FadeTransition(
+                opacity: anim,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                          begin: const Offset(0, 0.03), end: Offset.zero)
+                      .animate(anim),
+                  child: child,
+                ),
+              ),
+              child: _settingsOpen
+                  ? _settingsPanel()
+                  : KeyedSubtree(
+                      key: const ValueKey('space-cards'),
+                      child: ShaderMask(
               blendMode: BlendMode.dstIn,
               shaderCallback: (r) => const LinearGradient(
                 begin: Alignment.topCenter,
@@ -95,6 +114,8 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
                 stops: [0.0, 0.035],
               ).createShader(r),
               child: list,
+            ),
+                    ),
             ),
           ),
         ],

@@ -25,7 +25,13 @@ class _EditSpaceSheet extends StatefulWidget {
     required this.apiBase,
     this.onSpaceUpdated,
     this.inTuneUnlocked = false,
+    this.onDone,
   });
+
+  /// Embedded mode (inside Our Space, under the pinned hero): no page chrome,
+  /// a responsive layout, and the result ('saved' / 'unpin' / null) comes
+  /// back here instead of popping a route.
+  final ValueChanged<String?>? onDone;
 
   @override
   State<_EditSpaceSheet> createState() => _EditSpaceSheetState();
@@ -55,6 +61,23 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
   String? _pendingName;
   String? _pendingMime;
   bool _bgDirty = false;
+
+  /// Anything changed since the page opened? Save only lights up then.
+  bool get _dirty =>
+      _bgDirty ||
+      _c.text.trim() != widget.initialName.trim() ||
+      _theme != widget.initialTheme ||
+      _primary != widget.initialPrimary;
+
+  @override
+  void initState() {
+    super.initState();
+    _c.addListener(_onNameChanged); // so Save wakes as you type
+  }
+
+  void _onNameChanged() {
+    if (mounted) setState(() {});
+  }
 
   Future<void> _pickPhoto() async {
     FilePickerResult? res;
@@ -249,6 +272,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
 
   @override
   void dispose() {
+    _c.removeListener(_onNameChanged);
     _c.dispose();
     super.dispose();
   }
@@ -285,8 +309,16 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     setState(() => _busy = false);
     final updated = ok ?? bgUpdated;
     if (updated != null) widget.onSpaceUpdated?.call(updated);
-    Navigator.pop(
-        context, (ok != null || bgUpdated != null) ? 'saved' : null);
+    _finish((ok != null || bgUpdated != null) ? 'saved' : null);
+  }
+
+  void _finish(String? result) {
+    final done = widget.onDone;
+    if (done != null) {
+      done(result);
+    } else {
+      Navigator.pop(context, result);
+    }
   }
 
   Widget _label(ColorScheme scheme, String t) => Padding(
@@ -444,45 +476,8 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     // The settings preview the CHOSEN theme live: the picked swatch, the Save
     // button and the Hero switch all adopt this colour as you tap around.
     final accent = spaceThemeColor(_theme);
-    return Stack(
-      children: [
-        Positioned.fill(child: _settingsBackdrop(scheme, accent)),
-        Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        titleSpacing: 0,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(Icons.tune_rounded, size: 18, color: accent),
-            ),
-            const SizedBox(width: 10),
-            Text('Settings',
-                style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 18,
-                    color: scheme.onSurface)),
-          ],
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(20, 8, 20, 20 + bottom),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-          _card(scheme, Column(
+
+    final nameCard = _card(scheme, Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -506,9 +501,8 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
             ),
           ),
             ],
-          )),
-          const SizedBox(height: 14),
-          _card(scheme, Column(
+          ));
+    final themeCard = _card(scheme, Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -530,9 +524,8 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
             ),
           ),
             ],
-          )),
-          const SizedBox(height: 14),
-          _card(scheme, Column(
+          ));
+    final bgCard = _card(scheme, Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -609,11 +602,8 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
             ],
           ),
             ],
-          )),
-          const SizedBox(height: 14),
-          // Hero row as its own opaque card. Already-hero shows a clear
-          // "Leading" badge instead of a dead, greyed-out toggle.
-          _card(
+          ));
+    final heroCard = _card(
             scheme,
             Row(
               children: [
@@ -669,15 +659,21 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                   ),
               ],
             ),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
+          );
+    final saveBtn = SizedBox(
             width: double.infinity,
             child: FilledButton(
-              onPressed: _busy ? null : _save,
+              // Quiet until something changes, then the bright accent.
+              onPressed: (_busy || !_dirty) ? null : _save,
               style: FilledButton.styleFrom(
                 backgroundColor: accent,
                 foregroundColor: Colors.white,
+                disabledBackgroundColor: _busy
+                    ? accent.withValues(alpha: 0.7)
+                    : accent.withValues(alpha: 0.18),
+                disabledForegroundColor: _busy
+                    ? Colors.white
+                    : scheme.onSurfaceVariant.withValues(alpha: 0.7),
                 padding: const EdgeInsets.symmetric(vertical: 15),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14)),
@@ -692,16 +688,13 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                       style: TextStyle(
                           fontSize: 15, fontWeight: FontWeight.w700)),
             ),
-          ),
-          const SizedBox(height: 16),
-          // Danger zone — Unpin set apart in a faint red panel so it reads as
-          // the destructive action, not just another link.
-          Material(
+          );
+    final unpinCard = Material(
             color: _cardColor(scheme),
             borderRadius: BorderRadius.circular(16),
             child: InkWell(
               borderRadius: BorderRadius.circular(16),
-              onTap: _busy ? null : () => Navigator.pop(context, 'unpin'),
+              onTap: _busy ? null : () => _finish('unpin'),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                 decoration: BoxDecoration(
@@ -738,18 +731,173 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                 ),
               ),
             ),
+          );
+
+    if (widget.onDone != null) {
+      return _embedded(scheme, accent,
+          nameCard: nameCard,
+          themeCard: themeCard,
+          bgCard: bgCard,
+          heroCard: heroCard,
+          saveBtn: saveBtn,
+          unpinCard: unpinCard);
+    }
+
+    return Stack(
+      children: [
+        Positioned.fill(child: _settingsBackdrop(scheme, accent)),
+        Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            titleSpacing: 0,
+            title: _titleRow(scheme, accent),
           ),
-        ],
-        ),
+          body: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(20, 8, 20, 20 + bottom),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    nameCard,
+                    const SizedBox(height: 14),
+                    themeCard,
+                    const SizedBox(height: 14),
+                    bgCard,
+                    const SizedBox(height: 14),
+                    heroCard,
+                    const SizedBox(height: 20),
+                    saveBtn,
+                    const SizedBox(height: 16),
+                    unpinCard,
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
         ),
       ],
     );
   }
-}
 
+  Widget _titleRow(ColorScheme scheme, Color accent) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.tune_rounded, size: 18, color: accent),
+          ),
+          const SizedBox(width: 10),
+          Text('Settings',
+              style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                  color: scheme.onSurface)),
+        ],
+      );
+
+  /// Inside Our Space, right under the pinned hero: a slim bar (back · title
+  /// · Save), then the cards — two balanced columns on wide screens (name,
+  /// background, hero and unpin beside the theme palette), one column on
+  /// phones. Only this area scrolls.
+  Widget _embedded(
+    ColorScheme scheme,
+    Color accent, {
+    required Widget nameCard,
+    required Widget themeCard,
+    required Widget bgCard,
+    required Widget heroCard,
+    required Widget saveBtn,
+    required Widget unpinCard,
+  }) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Material(
+      type: MaterialType.transparency,
+      child: LayoutBuilder(builder: (context, c) {
+        final wide = c.maxWidth >= 860;
+        final pad = wide ? 20.0 : 14.0;
+        final bar = Padding(
+          padding: EdgeInsets.fromLTRB(pad - 8, 2, pad, 6),
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: 'Back to Our Space',
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: _busy ? null : () => _finish(null),
+              ),
+              _titleRow(scheme, accent),
+              const Spacer(),
+              if (wide)
+                SizedBox(width: 160, child: saveBtn),
+            ],
+          ),
+        );
+        final Widget body;
+        if (wide) {
+          body = Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 44,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    nameCard,
+                    const SizedBox(height: 14),
+                    bgCard,
+                    const SizedBox(height: 14),
+                    heroCard,
+                    const SizedBox(height: 14),
+                    unpinCard,
+                  ],
+                ),
+              ),
+              const SizedBox(width: 18),
+              Expanded(flex: 56, child: themeCard),
+            ],
+          );
+        } else {
+          body = Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              nameCard,
+              const SizedBox(height: 12),
+              themeCard,
+              const SizedBox(height: 12),
+              bgCard,
+              const SizedBox(height: 12),
+              heroCard,
+              const SizedBox(height: 16),
+              saveBtn,
+              const SizedBox(height: 14),
+              unpinCard,
+            ],
+          );
+        }
+        return Column(
+          children: [
+            bar,
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(pad, 2, pad, 20 + bottom),
+                child: body,
+              ),
+            ),
+          ],
+        );
+      }),
+    );
+  }
+}
 
 /// Full-screen wallpaper picker (a sub-page of Space Settings). The header
 /// stays pinned while the grid scrolls, a back arrow returns to Settings, and

@@ -484,6 +484,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   Color get _accent => spaceThemeColor(_space['theme'] as String?);
 
   bool _nudging = false;
+  // Settings open in place, right under the pinned hero.
+  bool _settingsOpen = false;
   // Today's "Us" question: inline text answer + submit guard.
   final TextEditingController _qAnswerCtrl = TextEditingController();
   bool _qSubmitting = false;
@@ -962,12 +964,18 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     }
   }
 
+  /// The header's settings button: settings open in place under the pinned
+  /// hero (the dashboard's cards make way); tapping it again closes them.
   Future<void> _editSpace() async {
-    // The settings sheet returns 'saved' (name/theme/hero changed), 'unpin'
-    // (the user chose Unpin from inside settings), or null (dismissed).
-    final result = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => _EditSpaceSheet(
+    setState(() {
+      _settingsOpen = !_settingsOpen;
+      _section = null;
+      _navDrawerOpen = false;
+    });
+  }
+
+  Widget _settingsPanel() => _EditSpaceSheet(
+        key: const ValueKey('space-settings'),
         initialName: deriveSpaceName(_space, widget.myUserId),
         initialTheme: (_space['theme'] as String?) ?? 'coral',
         initialPrimary: _space['is_primary'] == true,
@@ -978,10 +986,14 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         onSpaceUpdated: (m) {
           if (mounted) setState(() => _space = {..._space, ...m});
         },
-      ),
-      ),
-    );
+        onDone: _onSettingsDone,
+      );
+
+  // The settings return 'saved' (name/theme/hero changed), 'unpin' (the user
+  // chose Unpin from inside settings), or null (back).
+  Future<void> _onSettingsDone(String? result) async {
     if (!mounted) return;
+    setState(() => _settingsOpen = false);
     if (result == 'saved') {
       await _load(keepCurrent: true);
       widget.onChanged?.call();
@@ -1073,10 +1085,12 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       // Only let the route itself pop when we're already at the top level (the
       // dashboard, no drawer showing). Otherwise we intercept back and unwind
       // one layer at a time below.
-      canPop: _section == null && !_navDrawerOpen,
+      canPop: _section == null && !_navDrawerOpen && !_settingsOpen,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        if (_navDrawerOpen) {
+        if (_settingsOpen) {
+          setState(() => _settingsOpen = false);
+        } else if (_navDrawerOpen) {
           setState(() => _navDrawerOpen = false);
         } else if (_section != null) {
           // Return to the Our Space dashboard instead of closing the page — the
@@ -1130,6 +1144,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         _section = key;
         _navDrawerOpen = false;
         _guideOpen = false;
+        _settingsOpen = false;
       });
 
   // ── Section navigation (master–detail) ────────────────────────────────────

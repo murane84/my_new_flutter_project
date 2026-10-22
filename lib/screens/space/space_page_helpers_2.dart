@@ -107,14 +107,50 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
   /// scattered chips.
   Widget _headerCluster(ColorScheme scheme) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    Widget seg(IconData icon, String tip, VoidCallback onTap) => Tooltip(
+    // Active = the raised, lit key (same 3D style as the chat header).
+    Widget seg(IconData icon, String tip, VoidCallback onTap,
+            {bool active = false}) =>
+        Tooltip(
           message: tip,
           child: InkResponse(
             onTap: onTap,
             radius: 24,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-              child: Icon(icon, size: 20, color: _accent),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                gradient: active
+                    ? LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color.lerp(_accent, Colors.white, 0.30)!,
+                          _accent,
+                          Color.lerp(_accent, Colors.black, 0.18)!,
+                        ],
+                        stops: const [0.0, 0.55, 1.0],
+                      )
+                    : null,
+                border: Border.all(
+                    width: 0.8,
+                    color: active
+                        ? Colors.white.withValues(alpha: 0.38)
+                        : Colors.transparent),
+                boxShadow: active
+                    ? [
+                        BoxShadow(
+                          color: _accent.withValues(alpha: 0.40),
+                          blurRadius: 5,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : const [],
+              ),
+              child: Icon(icon,
+                  size: 20, color: active ? Colors.white : _accent),
             ),
           ),
         );
@@ -144,7 +180,10 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            seg(Icons.tune_rounded, 'Space settings', _editSpace),
+            seg(Icons.tune_rounded,
+                _settingsOpen ? 'Close settings' : 'Space settings',
+                _editSpace,
+                active: _settingsOpen),
             if (widget.mainMenuBuilder != null) ...[
               divider(),
               // The platform ⋮ menu, tinted to the accent so it belongs to the

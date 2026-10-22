@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../services/device_lean.dart';
 import 'dart:math' as math;
 import 'dart:ui' show FontFeature, PathMetric;
+import 'dart:ui' as ui;
 import 'package:intl/intl.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'dart:async';
@@ -1482,6 +1483,28 @@ class _HeartGenieState extends State<_HeartGenie>
   // Drains from full to empty over the idle window — the visible reseal.
   late final AnimationController _drain =
       AnimationController(vsync: this, duration: HeartLock.idleRelock);
+  // The spotlight's soft lub-dub around the heart the letter came from.
+  late final AnimationController _beat = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1400));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (still) {
+      _beat.stop();
+    } else if (!_beat.isAnimating) {
+      _beat.repeat();
+    }
+  }
+
+  static double _lubDub(double t) {
+    double bump(double a, double b) {
+      if (t < a || t > b) return 0;
+      return math.sin((t - a) / (b - a) * math.pi);
+    }
+    return bump(0.0, 0.18) + 0.7 * bump(0.18, 0.38);
+  }
   late final AnimationController _c = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 420))
     ..forward();
@@ -1527,6 +1550,7 @@ class _HeartGenieState extends State<_HeartGenie>
     HeartLock.instance.relockEpoch.removeListener(_closeNow);
     _idle?.cancel();
     _drain.dispose();
+    _beat.dispose();
     _c.dispose();
     super.dispose();
   }
@@ -1554,11 +1578,27 @@ class _HeartGenieState extends State<_HeartGenie>
               Curves.easeOut.transform(((_c.value - 0.45) / 0.55).clamp(0.0, 1.0));
           return Stack(
             children: [
+              // The dark backdrop keeps a soft, gently beating opening around
+              // the heart this letter came from — you always see which heart
+              // you're reading, and the letter folds back into that spot.
               Positioned.fill(
                 child: GestureDetector(
                   onTap: _close,
-                  child: Container(
-                      color: Colors.black.withValues(alpha: 0.6 * fade)),
+                  child: RepaintBoundary(
+                    child: AnimatedBuilder(
+                      animation: _beat,
+                      builder: (context, _) => CustomPaint(
+                        painter: _SpotlightScrim(
+                          hole: widget.originRect.shortestSide >= 24
+                              ? widget.originRect
+                              : null,
+                          alpha: 0.6 * fade,
+                          pulse: _lubDub(_beat.value),
+                          accent: widget.accent,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
               Center(
@@ -2002,6 +2042,62 @@ class _HeartGenieState extends State<_HeartGenie>
       ),
     );
   }
+}
+
+/// The letter's backdrop: a dark scrim with a soft lit opening around the
+/// source heart, plus a faint accent glow that beats.
+class _SpotlightScrim extends CustomPainter {
+  _SpotlightScrim({
+    required this.hole,
+    required this.alpha,
+    required this.pulse,
+    required this.accent,
+  });
+
+  final Rect? hole;
+  final double alpha, pulse;
+  final Color accent;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final full = Offset.zero & size;
+    final dark = Colors.black.withValues(alpha: alpha.clamp(0.0, 1.0));
+    final h = hole;
+    if (h == null) {
+      canvas.drawRect(full, Paint()..color = dark);
+      return;
+    }
+    final c = h.center;
+    final r = h.longestSide * 0.58 * (1 + 0.05 * pulse);
+    canvas.drawRect(
+      full,
+      Paint()
+        ..shader = ui.Gradient.radial(
+          c,
+          r * 1.9,
+          [Colors.transparent, Colors.transparent, dark],
+          const [0.0, 0.5, 1.0],
+        ),
+    );
+    // A soft beating halo ring around the heart (not over it).
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 14
+        ..color = accent.withValues(
+            alpha: (alpha / 0.6) * (0.18 + 0.20 * pulse))
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_SpotlightScrim o) =>
+      o.hole != hole ||
+      o.alpha != alpha ||
+      o.pulse != pulse ||
+      o.accent != accent;
 }
 
 /// Faint corner motifs for the genie card — a tiny scatter of hearts, music

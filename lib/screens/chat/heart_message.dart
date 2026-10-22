@@ -260,6 +260,45 @@ class _HeartBubbleState extends State<HeartBubble>
   final GlobalKey _heartKey = GlobalKey();
   bool _revealedInHeart = false;
 
+  // Mouse hover tilt: where the pointer is over the heart, -1..1 on each
+  // axis (0,0 = centre / not hovering). The heart turns subtly toward it and
+  // its sheen slides with the light.
+  final ValueNotifier<Offset> _tilt = ValueNotifier<Offset>(Offset.zero);
+
+  Widget _tiltable(Widget Function(Offset light) build) {
+    return MouseRegion(
+      onHover: (e) {
+        const w = 160.0, h = 142.0;
+        final p = e.localPosition;
+        _tilt.value = Offset(
+          ((p.dx / w) * 2 - 1).clamp(-1.0, 1.0),
+          ((p.dy / h) * 2 - 1).clamp(-1.0, 1.0),
+        );
+      },
+      onExit: (_) => _tilt.value = Offset.zero,
+      child: ValueListenableBuilder<Offset>(
+        valueListenable: _tilt,
+        builder: (context, target, _) => TweenAnimationBuilder<Offset>(
+          tween: Tween(end: target),
+          duration: Duration(milliseconds: target == Offset.zero ? 420 : 160),
+          curve: Curves.easeOutCubic,
+          builder: (context, t, _) {
+            const maxTurn = 0.16; // ~9°, subtle
+            final m = Matrix4.identity()
+              ..setEntry(3, 2, 0.0014)
+              ..rotateX(t.dy * maxTurn)
+              ..rotateY(-t.dx * maxTurn);
+            return Transform(
+              alignment: Alignment.center,
+              transform: m,
+              child: build(t),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   /// Open/close the in-heart note — also tells HeartLock, which keeps the
   /// window screenshot-proof while any note is open.
   void _setRevealed(bool v) {
@@ -488,6 +527,7 @@ class _HeartBubbleState extends State<HeartBubble>
 
   @override
   void dispose() {
+    _tilt.dispose();
     HeartLock.instance.relockEpoch.removeListener(_onRelockAll);
     _relock?.cancel();
     _hintTimer?.cancel();
@@ -809,7 +849,7 @@ class _HeartBubbleState extends State<HeartBubble>
   }
 
   Widget _withStars(bool revealed) {
-    final heart = AnimatedBuilder(
+    Widget beating(Offset light) => AnimatedBuilder(
       animation: Listenable.merge([_scale, _hold, _seal]),
       builder: (context, _) {
         // Hold: the heart swells and races; seal: it lands with a bounce.
@@ -821,11 +861,12 @@ class _HeartBubbleState extends State<HeartBubble>
         final s = racing * (0.35 + 0.65 * stamp);
         return Transform.scale(
           scale: s,
-          child: _heart(revealed, h),
+          child: _heart(revealed, h, light),
         );
       },
     );
-    if (_reduceMotion) return RepaintBoundary(child: heart);
+    if (_reduceMotion) return RepaintBoundary(child: beating(Offset.zero));
+    final heart = _tiltable(beating);
     return SizedBox(
       width: 160,
       height: 142,
@@ -883,7 +924,7 @@ class _HeartBubbleState extends State<HeartBubble>
     );
   }
 
-  Widget _heart(bool revealed, double hold) {
+  Widget _heart(bool revealed, double hold, [Offset light = Offset.zero]) {
     final sealed = _sealedByTime;
     double? progress;
     if (sealed && widget.sentAt != null) {
@@ -900,7 +941,7 @@ class _HeartBubbleState extends State<HeartBubble>
       width: 160,
       height: 142,
       child: CustomPaint(
-        painter: _HeartPainter(base),
+        painter: _HeartPainter(base, light),
         foregroundPainter: (sealed && progress != null)
             ? _HeartRingPainter(progress, Color.lerp(_accent, Colors.white, 0.45)!)
             : (hold > 0
@@ -1082,8 +1123,12 @@ class _HeartRingPainter extends CustomPainter {
 }
 
 class _HeartPainter extends CustomPainter {
-  _HeartPainter(this.accent);
+  _HeartPainter(this.accent, [this.light = Offset.zero]);
   final Color accent;
+
+  /// Where the light leans (-1..1), from the hover tilt: the sheen and
+  /// sparkle slide a little toward it.
+  final Offset light;
 
   static Path heartPath(Size s) {
     final w = s.width, h = s.height;
@@ -1154,7 +1199,8 @@ class _HeartPainter extends CustomPainter {
         ).createShader(rect),
     );
     // 4c) Big soft specular sheen on the upper-left lobe.
-    final hlCenter = Offset(w * 0.33, h * 0.22);
+    final lean = Offset(light.dx * w * 0.07, light.dy * h * 0.06);
+    final hlCenter = Offset(w * 0.33, h * 0.22) + lean;
     canvas.drawCircle(
       hlCenter,
       w * 0.32,
@@ -1166,7 +1212,7 @@ class _HeartPainter extends CustomPainter {
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
     );
     // 4d) Secondary smaller glossy catch on the right lobe → both bumps lit.
-    final hl2 = Offset(w * 0.66, h * 0.26);
+    final hl2 = Offset(w * 0.66, h * 0.26) + lean * 0.6;
     canvas.drawCircle(
       hl2,
       w * 0.17,
@@ -1179,7 +1225,7 @@ class _HeartPainter extends CustomPainter {
     );
     // 4e) Crisp hotspot sparkle on the main lobe.
     canvas.drawCircle(
-      Offset(w * 0.3, h * 0.18),
+      Offset(w * 0.3, h * 0.18) + lean,
       w * 0.05,
       Paint()
         ..color = Colors.white.withValues(alpha: 0.85)
@@ -1205,7 +1251,8 @@ class _HeartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_HeartPainter old) => old.accent != accent;
+  bool shouldRepaint(_HeartPainter old) =>
+      old.accent != accent || old.light != light;
 }
 
 /// A gentle field of tiny twinkling stars drifting down around the heart.

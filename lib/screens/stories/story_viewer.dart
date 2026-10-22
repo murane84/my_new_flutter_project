@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../services/contact_names.dart';
@@ -569,7 +570,43 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   @override
   Widget build(BuildContext context) {
     final item = _story;
-    return Scaffold(
+    final canPrev = _s > 0 || _g > 0;
+    final canNext = true; // the last story closes the viewer
+    // Desktop / web: visible ‹ › arrows on the sides, plus ← → / Space / Esc.
+    Widget arrow(IconData icon, String tip, VoidCallback onTap) => Tooltip(
+          message: tip,
+          child: Material(
+            color: Colors.black.withValues(alpha: 0.38),
+            shape: CircleBorder(
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.22))),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Icon(icon, color: Colors.white, size: 30),
+              ),
+            ),
+          ),
+        );
+    final wide = MediaQuery.sizeOf(context).width >= 700;
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.arrowRight): () {
+          if (!_replyFocus.hasFocus) _next();
+        },
+        const SingleActivator(LogicalKeyboardKey.arrowLeft): () {
+          if (!_replyFocus.hasFocus) _prev();
+        },
+        const SingleActivator(LogicalKeyboardKey.escape): _close,
+        const SingleActivator(LogicalKeyboardKey.space): () {
+          if (_replyFocus.hasFocus) return;
+          _paused ? _resume() : _pause();
+        },
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
         onTapUp: (d) {
@@ -615,7 +652,26 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                 ],
               ),
             ),
+            if (wide && canPrev)
+              Positioned(
+                left: 16,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                    child: arrow(Icons.chevron_left_rounded, 'Previous',
+                        _prev)),
+              ),
+            if (wide && canNext)
+              Positioned(
+                right: 16,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                    child: arrow(Icons.chevron_right_rounded, 'Next', _next)),
+              ),
           ],
+        ),
+      ),
         ),
       ),
     );

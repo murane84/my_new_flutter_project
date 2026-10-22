@@ -91,7 +91,12 @@ class ConversationMediaScreen extends StatefulWidget {
     this.onClose,
     this.onOpenMedia,
     this.songPlayer,
+    this.onSwipedAway,
   });
+
+  /// Called instead of [onClose] when a swipe has already carried the panel
+  /// off screen (so the host removes it without animating it again).
+  final VoidCallback? onSwipedAway;
 
   /// Open media item [index] (of [media]) in the chat's viewer. Without it a
   /// tap jumps to the message.
@@ -144,7 +149,7 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
     _closing = close;
     _settleTween = Tween(begin: _dragX, end: close ? -_width : 0.0);
     _settle.forward(from: 0).whenComplete(() {
-      if (close) widget.onClose?.call();
+      if (close) (widget.onSwipedAway ?? widget.onClose)?.call();
     });
   }
 

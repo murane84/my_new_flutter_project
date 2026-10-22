@@ -697,6 +697,7 @@ class _ChatPageState extends State<ChatPage>
     if (_isAtBottom) _markSeenUpToNewest();
     chatSearchRequest.removeListener(_onSearchRequest);
     chatMediaRequest.removeListener(_onMediaRequest);
+    _browserAnim.dispose();
     if (_mediaBrowser != null) {
       // Not mid-teardown: let the host's header button settle next frame.
       WidgetsBinding.instance
@@ -2359,13 +2360,43 @@ class _ChatPageState extends State<ChatPage>
   // The history the open browser was built from (for "Show in chat").
   List<Map<String, dynamic>> _browserMsgs = const [];
 
-  void _closeMediaBrowser() {
+  // One door, both ways: the panel slides in from the left (the way the
+  // back arrow points) with a fade, and leaves back out through the same
+  // side — the exit is the entry played in reverse, never a snap.
+  late final AnimationController _browserAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+      reverseDuration: const Duration(milliseconds: 240));
+  late final Animation<double> _browserIn = CurvedAnimation(
+      parent: _browserAnim,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic);
+  bool _browserClosing = false;
+  Key? _browserKey;
+
+  /// [instant]: already off screen (swiped away) — just remove it.
+  void _closeMediaBrowser({bool instant = false}) {
     if (_mediaBrowser == null) return;
-    setState(() {
-      _mediaBrowser = null;
-      _browserMsgs = const [];
-    });
     chatMediaOpen.value = false;
+    void remove() {
+      if (!mounted) return;
+      setState(() {
+        _mediaBrowser = null;
+        _browserMsgs = const [];
+        _browserKey = null;
+        _browserClosing = false;
+      });
+    }
+    if (instant) {
+      _browserAnim.value = 0;
+      remove();
+      return;
+    }
+    if (_browserClosing) return;
+    _browserClosing = true;
+    _browserAnim.reverse().whenComplete(() {
+      if (_browserClosing) remove();
+    });
   }
 
   // From the viewer opened out of the browser: close both, land on the message.
@@ -3558,7 +3589,7 @@ class _ChatPageState extends State<ChatPage>
   // The header button toggles: open the panel, or close it if it's showing.
   void _onMediaRequest() {
     if (!mounted) return;
-    if (_mediaBrowser != null) {
+    if (_mediaBrowser != null && !_browserClosing) {
       _closeMediaBrowser();
     } else {
       _openMediaBrowser();
@@ -3566,6 +3597,16 @@ class _ChatPageState extends State<ChatPage>
   }
 
   Future<void> _openMediaBrowser() async {
+    // Open at once from what the thread already holds (no wait, no spinner),
+    // then fold in the longer history when it arrives — same panel, same tab.
+    final key = UniqueKey();
+    _browserKey = key;
+    _browserClosing = false;
+    _closeViewer();
+    _showBrowserFrom(_merge(const [], _messages), key);
+    chatMediaOpen.value = true;
+    _browserAnim.forward();
+
     List<Map<String, dynamic>> msgs = const [];
     try {
       if (_isGroup) {
@@ -3577,10 +3618,14 @@ class _ChatPageState extends State<ChatPage>
             .fetchMessagesBetween(uid, widget.friendId, skip: 0, limit: 300);
       }
     } catch (_) {}
-    if (!mounted) return;
-    // Newest first (the gallery reads top-down from now), de-duplicated.
-    msgs = _merge(const [], msgs);
+    if (!mounted || _browserKey != key || _browserClosing) return;
+    // Newest first (the gallery reads top-down from now), de-duplicated,
+    // plus anything newer the thread already has.
+    msgs = _merge(_merge(const [], _messages), msgs);
+    _showBrowserFrom(msgs, key);
+  }
 
+  void _showBrowserFrom(List<Map<String, dynamic>> msgs, Key key) {
     String shortDate(String iso) {
       final d = DateTime.tryParse(iso)?.toLocal();
       if (d == null) return '';
@@ -3673,12 +3718,10 @@ class _ChatPageState extends State<ChatPage>
     }
 
     if (!mounted) return;
-    _closeViewer();
-    chatMediaOpen.value = true;
     setState(() {
       _browserMsgs = msgs;
       _mediaBrowser = ConversationMediaScreen(
-        key: UniqueKey(),
+        key: key,
         title: _isGroup ? widget.groupTitle : widget.friendName,
         media: media,
         links: links,
@@ -3687,6 +3730,8 @@ class _ChatPageState extends State<ChatPage>
         // Esc closes the viewer first when one is open over the browser.
         onClose: () =>
             _viewerImages != null ? _closeViewer() : _closeMediaBrowser(),
+        // A swipe already carried it off screen through the same side.
+        onSwipedAway: () => _closeMediaBrowser(instant: true),
         // Photos / videos open in the in-panel viewer, paging through
         // everything shared (newest first); closing it returns here.
         onOpenMedia: (i) {
@@ -5752,17 +5797,23 @@ class _ChatPageState extends State<ChatPage>
                     ),
                     if (_mediaBrowser != null)
                       Positioned.fill(
-                        child: TweenAnimationBuilder<double>(
-                          key: _mediaBrowser!.key,
-                          tween: Tween(begin: 0, end: 1),
-                          duration: const Duration(milliseconds: 260),
-                          curve: Curves.easeOutCubic,
-                          builder: (_, v, child) => Opacity(
-                            opacity: v,
-                            child: Transform.translate(
-                                offset: Offset(0, 18 * (1 - v)), child: child),
+                        child: RepaintBoundary(
+                          child: AnimatedBuilder(
+                            animation: _browserIn,
+                            builder: (_, child) {
+                              final v = _browserIn.value;
+                              return IgnorePointer(
+                                ignoring: _browserClosing,
+                                child: FractionalTranslation(
+                                  translation: Offset(-0.22 * (1 - v), 0),
+                                  child: Opacity(
+                                      opacity: v.clamp(0.0, 1.0),
+                                      child: child),
+                                ),
+                              );
+                            },
+                            child: _mediaBrowser,
                           ),
-                          child: _mediaBrowser,
                         ),
                       ),
                     if (_viewerImages != null) _buildInlineViewer(),

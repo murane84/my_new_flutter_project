@@ -134,7 +134,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       _resume();
       return;
     }
-    await _sendReply(null, gifUrl: url);
+    await _sendReply(gifUrl: url);
   }
 
   void _onReplyText() {
@@ -167,7 +167,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     }
   }
 
-  Future<void> _sendReply([String? quick, {String? gifUrl}]) async {
+  Future<void> _sendReply({String? quick, String? gifUrl}) async {
     final text = gifUrl != null ? '' : (quick ?? _replyCtrl.text).trim();
     if ((text.isEmpty && gifUrl == null) || _replySending) return;
     final item = _story;
@@ -274,7 +274,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                                   radius: 24,
                                   onTap: _replySending
                                       ? null
-                                      : () => _sendReply(e),
+                                      : () => _sendReply(quick: e),
                                   child: Padding(
                                     padding: const EdgeInsets.all(3),
                                     child: FittedBox(

@@ -212,7 +212,9 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
         if (!await _fileExists(path)) return 'missing';
         await _player.setFilePath(path).timeout(loadTimeout);
       }
-      await _player.setVolume(_muted ? 0 : _volume);
+      _appliedVol = -1; // new source: re-apply the faded level
+      _edgeFade = 0.2;
+      _applyVolume();
       await _player.setSpeed(_speed);
       if (autoplay) await _player.play();
       return null;

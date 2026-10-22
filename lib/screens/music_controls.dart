@@ -275,6 +275,41 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   bool _shuffle = false;
   double _volume = 1.0;
   bool _muted = false;
+  // Soft transitions: a short fade-in at the start of a track and fade-out
+  // over its last moments, so songs flow into each other instead of cutting.
+  // [_edgeFade] is that envelope; [_sleepFade] eases the music away during
+  // the sleep timer's final 30s. Effective volume = volume × both.
+  double _edgeFade = 1.0;
+  double _sleepFade = 1.0;
+  double _appliedVol = -1;
+
+  void _applyVolume() {
+    final v = _muted ? 0.0 : (_volume * _edgeFade * _sleepFade);
+    if ((v - _appliedVol).abs() < 0.015) return;
+    _appliedVol = v;
+    _player.setVolume(v);
+  }
+
+  /// Fade envelope for the current position (1.0 = full).
+  void _updateEdgeFade(Duration pos) {
+    final dur = _player.duration;
+    var f = 1.0;
+    if (!_liveActive &&
+        dur != null &&
+        dur.inMilliseconds > 8000 &&
+        _effRepeatMode != 'one') {
+      const inMs = 700.0, outMs = 2200.0;
+      final p = pos.inMilliseconds.toDouble();
+      final rem = (dur.inMilliseconds - pos.inMilliseconds).toDouble();
+      final fin = (p / inMs).clamp(0.2, 1.0);
+      final fout = (rem / outMs).clamp(0.0, 1.0);
+      f = fin < fout ? fin : fout;
+    }
+    if ((f - _edgeFade).abs() > 0.01) {
+      _edgeFade = f;
+      _applyVolume();
+    }
+  }
   double _speed = 1.0;
   final Random _rng = Random();
 
@@ -743,6 +778,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     });
 
     _player.positionStream.listen((pos) {
+      _updateEdgeFade(pos);
       // Feed the ambient bar's slim progress indicator (0..1). This updates a
       // standalone ValueNotifier so only that widget rebuilds, not the chat.
       final dur = _player.duration;
@@ -1207,12 +1243,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   void _setVolume(double v) {
     setState(() => _volume = v);
-    _player.setVolume(_muted ? 0 : v);
+    _applyVolume();
   }
 
   void _toggleMute() {
     setState(() => _muted = !_muted);
-    _player.setVolume(_muted ? 0 : _volume);
+    _applyVolume();
   }
 
   void _setSpeed(double s) {
@@ -1319,14 +1355,20 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _sleepTimer?.cancel();
     _sleepTick?.cancel();
     if (d == null) {
+      _sleepFade = 1.0;
+      _applyVolume();
       setState(() => _sleepRemaining = null);
       _snack('Sleep timer off');
       return;
     }
     setState(() => _sleepRemaining = d);
     _snack('Sleep in ${d.inMinutes} min');
-    _sleepTimer = Timer(d, () {
-      _player.pause();
+    _sleepTimer = Timer(d, () async {
+      await _player.pause();
+      // Restore the level for next time (the fade did its job).
+      _sleepFade = 1.0;
+      _applyVolume();
+      _sleepTick?.cancel();
       if (mounted) setState(() => _sleepRemaining = null);
     });
     _sleepTick = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -1336,6 +1378,13 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           _sleepRemaining = _sleepRemaining! - const Duration(seconds: 1);
         }
       });
+      // The last 30s: ease the music away instead of a sudden stop.
+      final r = _sleepRemaining?.inSeconds ?? 99;
+      final f = r >= 30 ? 1.0 : (r / 30).clamp(0.0, 1.0);
+      if (f != _sleepFade) {
+        _sleepFade = f;
+        _applyVolume();
+      }
     });
   }
 

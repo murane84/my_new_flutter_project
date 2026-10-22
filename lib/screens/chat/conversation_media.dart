@@ -245,9 +245,8 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
                 ),
                 child: LayoutBuilder(builder: (context, c) {
                   // Phones: the four tabs share the row evenly (no
-                  // scrolling, no hidden first tab) and the total stays out
-                  // so it can't read as a fifth tab. Wider panels add the
-                  // total as a small tinted chip.
+                  // scrolling, no hidden first tab); the total sits at the
+                  // end as a raised badge so it can't read as a fifth tab.
                   final narrow = c.maxWidth < 560;
                   return Row(
                   children: [
@@ -265,32 +264,55 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
                         child: _tabBar(scheme, inline: true, fit: narrow),
                       ),
                     ),
-                    if (!narrow)
-                      Container(
-                        margin: const EdgeInsets.only(left: 8, right: 4),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 9, vertical: 3),
+                    // The total as a small raised 3D badge — a lit pink
+                    // key, clearly not a flat tab label. Phones show just
+                    // the heart + number.
+                    Tooltip(
+                      message: '$total shared in this chat',
+                      child: Container(
+                        margin: const EdgeInsets.only(left: 6, right: 4),
+                        padding: EdgeInsets.symmetric(
+                            horizontal: narrow ? 7 : 9, vertical: 4),
                         decoration: BoxDecoration(
-                          color: scheme.primary.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(20),
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Color.lerp(scheme.primary, Colors.white, 0.30)!,
+                              scheme.primary,
+                              Color.lerp(scheme.primary, Colors.black, 0.18)!,
+                            ],
+                            stops: const [0.0, 0.55, 1.0],
+                          ),
+                          border: Border.all(
+                              width: 0.8,
+                              color: Colors.white.withValues(alpha: 0.38)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: scheme.primary.withValues(alpha: 0.35),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.favorite_rounded,
-                                size: 11,
-                                color: scheme.primary.withValues(alpha: 0.8)),
+                            const Icon(Icons.favorite_rounded,
+                                size: 11, color: Colors.white),
                             const SizedBox(width: 4),
                             Text(
-                              total == 0 ? 'nothing shared' : '$total shared',
-                              style: TextStyle(
+                              narrow ? '$total' : '$total shared',
+                              style: const TextStyle(
                                   fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: scheme.onSurfaceVariant),
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white),
                             ),
                           ],
                         ),
                       ),
+                    ),
                   ],
                 );
                 }),

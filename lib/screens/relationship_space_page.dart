@@ -41,6 +41,7 @@ import 'package:video_player/video_player.dart';
 import '../widgets/genie_menu.dart';
 import '../theme/aluta_palette.dart';
 import '../utils/readable.dart';
+import '../utils/marquee_text.dart';
 
 part 'space/space_moment_composer.dart'; // moment composer + add-to-playlist sheet
 part 'space/space_edit_sheet.dart'; // edit-space sheet + wallpaper picker

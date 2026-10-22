@@ -850,10 +850,9 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
             ),
           ),
           const SizedBox(height: 8),
-          Text(title,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          MarqueeText(
+              text: title,
+              height: 18,
               style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 13,
@@ -943,10 +942,12 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
                     size: 18,
                     color: active ? _accent : scheme.onSurfaceVariant),
                 const SizedBox(width: 10),
-                Flexible(
-                  child: Text(s.$3,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                // Too long for the drawer? It glides (marquee) instead of
+                // being cut with "…".
+                Expanded(
+                  child: MarqueeText(
+                      text: s.$3,
+                      height: 20,
                       style: TextStyle(
                           fontSize: 13.5,
                           fontWeight:
@@ -958,7 +959,6 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
                   const SizedBox(width: 6),
                   const _NewDot(),
                 ],
-                const Spacer(),
                 if (count != null && count > 0) ...[
                   const SizedBox(width: 8),
                   _sidebarCountBadge(count, active),

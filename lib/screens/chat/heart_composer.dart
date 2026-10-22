@@ -87,7 +87,7 @@ extension _ChatHeartComposer on _ChatPageState {
   /// The tray shown above the composer while a secret heart is being written.
   Widget _buildHeartTray(ColorScheme scheme, bool isDark) {
     final mood = HeartMood.of(_heartMood);
-    final tint = mood.color ?? scheme.primary;
+    final tint = mood.color;
     final empty = _ctrl.text.trim().isEmpty;
 
     Widget chip({
@@ -191,7 +191,7 @@ extension _ChatHeartComposer on _ChatPageState {
                   chip(
                     label: Text(m.label),
                     icon: m.icon,
-                    color: m.color ?? scheme.primary,
+                    color: m.color,
                     on: m.key == _heartMood,
                     onTap: () {
                       HapticFeedback.selectionClick();

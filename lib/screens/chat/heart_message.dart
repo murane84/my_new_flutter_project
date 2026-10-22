@@ -36,7 +36,7 @@ class HeartMood {
   final String title; // heading of the opened letter
   // Every mood owns its colour — fixed, never the user's app/bubble theme —
   // so "with love" is always red, "missing you" always violet, and so on.
-  final Color? color;
+  final Color color;
   final IconData icon;
   final List<String> prompts; // starters offered in the composer
 
@@ -412,7 +412,8 @@ class _HeartBubbleState extends State<HeartBubble>
   Timer? _tick; // timed-heart countdown
 
   HeartMood get _mood => HeartMood.of(widget.mood);
-  Color get _accent => _mood.color ?? widget.accent;
+  // The mood's own fixed colour — never the theme accent.
+  Color get _accent => _mood.color;
 
   bool get _sealedByTime =>
       widget.unlockAt != null && DateTime.now().isBefore(widget.unlockAt!);

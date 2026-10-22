@@ -119,7 +119,7 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
   Widget _letterCard(
       ColorScheme scheme, Map<String, dynamic> l, String partner) {
     final mood = HeartMood.of(l['heart_mood']?.toString());
-    final tint = mood.color ?? _accent;
+    final tint = mood.color;
     final mine = (l['sender_id'] as num?)?.toInt() == widget.myUserId;
     final sent = parseLocal(l['timestamp']);
     final unlock = parseLocal(l['unlock_at']);

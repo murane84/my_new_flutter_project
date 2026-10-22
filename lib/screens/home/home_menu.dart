@@ -129,6 +129,11 @@ extension _HomeMenu on HomePageState {
                 onTap: () =>
                     showAppPopup(context, const AppearanceScreen())),
             GenieMenuEntry(
+                icon: Icons.auto_awesome_rounded,
+                label: 'Moments & nudges',
+                onTap: () =>
+                    showAppPopup(context, const MomentsSettingsScreen())),
+            GenieMenuEntry(
                 icon: Icons.lock_outline_rounded,
                 label: 'Backup & restore',
                 onTap: () => showAppPopup(context, const BackupScreen())),

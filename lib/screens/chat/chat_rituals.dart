@@ -251,6 +251,7 @@ extension _ChatRituals on _ChatPageState {
 
   /// The chips row above the composer (good night / on this day).
   Widget _buildRitualChips(ColorScheme scheme, bool isDark) {
+    if (!MomentPrefs.instance.rituals.value) return const SizedBox.shrink();
     final chips = <Widget>[];
     if (_showGoodNight) {
       chips.add(_ritualChip(

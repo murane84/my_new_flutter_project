@@ -100,6 +100,9 @@ import '../services/aluta_mood.dart';
 import '../services/song_insights.dart';
 import '../widgets/glow_feed.dart';
 import '../data/glow_cards.dart';
+import '../services/moment_prefs.dart';
+import '../widgets/welcome_tour.dart';
+import 'moments_settings_screen.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
@@ -699,6 +702,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// Back after hours away → "Belyner sent you 4 messages 💌" (or a gentle
   /// nudge to say hi when it's quiet). Opens the partner's chat in one tap.
   void _maybeAwaySummary() {
+    if (!MomentPrefs.instance.welcomeCards.value) return;
     if (!mounted || !_appForeground || _momentCooling) return;
     if (ref.read(liveSessionProvider).active) return;
     final p = _partnerInfo();
@@ -753,6 +757,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // the partner / chats / Our Space through SongBridge (also used by the
   // player's feel strip). On-device only; ignored twice → never again.
   void _wireSongMoments() {
+    MomentPrefs.instance.load();
+    // First run on this device: the short Aluta tour.
+    Future.delayed(const Duration(milliseconds: 1600), () {
+      if (mounted) WelcomeTour.maybeShow(context);
+    });
     final b = SongBridge.instance;
     b.partnerName = () => _partnerInfo()?.name;
     b.messagePartner = ({String? text, bool heart = false, String? mood}) {
@@ -1040,7 +1049,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     if (!mounted || !_appForeground || _momentCooling) return false;
     try {
       final p = await SharedPreferences.getInstance();
-      if (!(p.getBool('glow_daily_on') ?? true)) return false;
+      await MomentPrefs.instance.load();
+      if (!MomentPrefs.instance.glowDaily.value) return false;
       final d = DateTime.now();
       final key = '${d.year}-${d.month}-${d.day}';
       if (p.getString('glow_nudge_day') == key) return false;
@@ -1211,6 +1221,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// Returns true when it showed a card.
   bool _maybeMusicWelcome(Duration away) {
     if (!mounted || !_appForeground) return false;
+    if (!MomentPrefs.instance.welcomeCards.value) return false;
     if (away < const Duration(minutes: 1)) return false;
     if (_momentCooling) return false;
     if (ref.read(liveSessionProvider).active) return false;

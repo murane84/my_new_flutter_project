@@ -704,14 +704,12 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                           Expanded(
                             child: Row(
                               children: [
+                                // The disc alone, centred in its half.
                                 Expanded(
                                   flex: 11,
-                                  child: Column(
-                                    children: [...art, ...titleBlock,
-                                        const SizedBox(height: 18)],
-                                  ),
+                                  child: Column(children: art),
                                 ),
-                                const SizedBox(width: 56),
+                                const SizedBox(width: 48),
                                 Expanded(
                                   flex: 10,
                                   child: Center(
@@ -719,9 +717,10 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                                       constraints:
                                           const BoxConstraints(maxWidth: 560),
                                       child: SingleChildScrollView(
+                                        // Title + artist lead the controls.
                                         child: Column(
                                           mainAxisSize: MainAxisSize.min,
-                                          children: rest,
+                                          children: [...titleBlock, ...rest],
                                         ),
                                       ),
                                     ),
@@ -758,10 +757,14 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Expanded(
-                              // Roomy desktop with the queue closed: use the
-                              // width (split layout); otherwise the centred
-                              // column beside the queue panel.
-                              child: (lc.maxWidth >= 1000 && !showPanel)
+                              // Roomy desktop: the split layout stays put
+                              // whether the queue is open or not, so opening /
+                              // closing it is one continuous motion — the
+                              // queue grows + fades in at the right while the
+                              // controls column glides over (and back). Only
+                              // windows too narrow for split + queue use the
+                              // centred column.
+                              child: lc.maxWidth >= 1260
                                   ? Center(
                                       child: ConstrainedBox(
                                         constraints: const BoxConstraints(

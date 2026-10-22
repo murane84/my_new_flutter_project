@@ -8,8 +8,8 @@ import '../services/aluta_mood.dart';
 ///  • heartbeat — the mark gives a soft "lub-dub" every beat
 ///  • ripple    — each beat sends one faint ring outward, like sound leaving a speaker
 ///  • breathe   — slow, calm swell (dawn / late night)
-///  • orbit     — a brisker, shorter comet
-/// Always: ONE thin comet arc hugging the disc in the theme colour (warmer in
+///  • orbit     — a brisker, shorter comet with a slightly bigger head
+/// Always: ONE thin comet arc (with a small head dot) hugging the disc in the theme colour (warmer in
 /// the morning, softer at night). No track ring, no halo — the mark and one
 /// moving line, nothing else around it. With system "remove animations" on,
 /// it holds still.
@@ -263,7 +263,7 @@ class _RingPainter extends CustomPainter {
     }
 
     // Comet: a sweep that fades out into its tail; closes to a full ring on
-    // done. The head is just the bright rounded end of the stroke.
+    // done.
     final base = orbit ? 0.55 : 0.62;
     final sweep = base + (1 - base) * done;
     canvas.save();
@@ -277,6 +277,15 @@ class _RingPainter extends CustomPainter {
       tileMode: TileMode.clamp,
     ).createShader(rect);
     canvas.drawArc(rect, 0, 2 * math.pi * sweep, false, arc);
+    // The comet's head: one small solid dot leading the arc (no glow).
+    if (done < 0.9) {
+      final a = 2 * math.pi * sweep;
+      canvas.drawCircle(
+        Offset(c.dx + r * math.cos(a), c.dy + r * math.sin(a)),
+        orbit ? 2.6 : 2.2,
+        Paint()..color = color.withValues(alpha: 1 - done),
+      );
+    }
     canvas.restore();
   }
 

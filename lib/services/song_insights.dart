@@ -369,6 +369,10 @@ class SongBridge {
   /// Whether this player can share its track (the web player can't yet).
   bool Function()? canShare;
 
+  /// Same number on both partners' phones (from the two user ids) — lets
+  /// Glow pick one shared "For you two" card a day without a server.
+  int? Function()? pairSeed;
+
   /// Add a song to Our Playlist with the partner.
   Future<bool> Function(String title, String artist)? addToOurs;
 }

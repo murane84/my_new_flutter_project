@@ -12,6 +12,47 @@ import '../services/song_insights.dart';
 /// feeling you last gave a song), then the rest of the pack, shuffled fresh
 /// each day. Save ♡ what speaks to you; send any card to your partner.
 /// Bundled and on-device — no server. Encouragement, not therapy.
+int _glowDaySeed() {
+  final d = DateTime.now();
+  return d.year * 1000 + d.difference(DateTime(d.year)).inDays;
+}
+
+/// Today's glow — by date, time of day and the feeling you last gave a song.
+GlowCard glowToday() {
+  final f = SongInsights.instance.lastFeel;
+  final byFeel = switch (f) {
+    SongFeel.missing => ['missing', 'steady'],
+    SongFeel.love => ['admire', 'close'],
+    SongFeel.hyped => ['new', 'team'],
+    SongFeel.calm => ['calm'],
+    SongFeel.hurting => ['repair', 'calm'],
+    null => <String>[],
+  };
+  final byMoment = switch (AlutaMood.moment) {
+    AlutaMoment.dawn || AlutaMoment.morning => ['gratitude', 'new'],
+    AlutaMoment.afternoon => ['team', 'close'],
+    AlutaMoment.evening => ['close', 'repair'],
+    AlutaMoment.night => ['calm', 'steady'],
+  };
+  final want = [...byFeel, ...byMoment];
+  final pool = glowCards
+      .where((c) => c.kind != GlowKind.healthy && c.tags.any(want.contains))
+      .toList();
+  final list = pool.isEmpty ? glowCards : pool;
+  return list[_glowDaySeed() % list.length];
+}
+
+/// "For you two" — the SAME together/insight card on both partners' phones
+/// today (seeded by the pair + the date). Null without a partner.
+GlowCard? glowForUs() {
+  final pair = SongBridge.instance.pairSeed?.call();
+  if (pair == null) return null;
+  final pool = glowCards
+      .where((c) => c.kind == GlowKind.together || c.kind == GlowKind.insight)
+      .toList();
+  return pool[(pair + _glowDaySeed() * 31) % pool.length];
+}
+
 class GlowFeed extends StatefulWidget {
   const GlowFeed({super.key});
 
@@ -75,39 +116,8 @@ class _GlowFeedState extends State<GlowFeed> {
   }
 
   // ── Daily selection ──────────────────────────────────────────────────────
-  int get _daySeed {
-    final d = DateTime.now();
-    return d.year * 1000 + d.difference(DateTime(d.year)).inDays;
-  }
-
-  List<String> get _wantTags {
-    final f = SongInsights.instance.lastFeel;
-    final byFeel = switch (f) {
-      SongFeel.missing => ['missing', 'steady'],
-      SongFeel.love => ['admire', 'close'],
-      SongFeel.hyped => ['new', 'team'],
-      SongFeel.calm => ['calm'],
-      SongFeel.hurting => ['repair', 'calm'],
-      null => <String>[],
-    };
-    final byMoment = switch (AlutaMood.moment) {
-      AlutaMoment.dawn || AlutaMoment.morning => ['gratitude', 'new'],
-      AlutaMoment.afternoon => ['team', 'close'],
-      AlutaMoment.evening => ['close', 'repair'],
-      AlutaMoment.night => ['calm', 'steady'],
-    };
-    return [...byFeel, ...byMoment];
-  }
-
-  GlowCard get _today {
-    final want = _wantTags;
-    final pool = glowCards
-        .where((c) =>
-            c.kind != GlowKind.healthy && c.tags.any(want.contains))
-        .toList();
-    final list = pool.isEmpty ? glowCards : pool;
-    return list[_daySeed % list.length];
-  }
+  int get _daySeed => _glowDaySeed();
+  GlowCard get _today => glowToday();
 
   List<GlowCard> get _feed {
     final today = _today;
@@ -117,6 +127,8 @@ class _GlowFeedState extends State<GlowFeed> {
         ((a.id.hashCode ^ seed) & 0x7fffffff)
             .compareTo((b.id.hashCode ^ seed) & 0x7fffffff));
     list.remove(today);
+    final us = glowForUs();
+    if (us != null) list.remove(us);
     bool keep(GlowCard c) => switch (_filter) {
           _Filter.all => true,
           _Filter.quotes => c.kind == GlowKind.quote,
@@ -142,6 +154,10 @@ class _GlowFeedState extends State<GlowFeed> {
         if (showToday) ...[
           _todayCard(scheme, isDark, _today),
           const SizedBox(height: 14),
+          if (glowForUs() case final us? when us.id != _today.id) ...[
+            _forUsCard(scheme, isDark, us),
+            const SizedBox(height: 14),
+          ],
         ],
         if (feed.isEmpty)
           Padding(
@@ -292,6 +308,79 @@ class _GlowFeedState extends State<GlowFeed> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// The pair's shared card: same on both phones today.
+  Widget _forUsCard(ColorScheme scheme, bool isDark, GlowCard c) {
+    final p = SongBridge.instance.partnerName?.call() ?? '';
+    final a = scheme.primary;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: isDark ? scheme.surfaceContainerHigh : Colors.white,
+        border: Border.all(color: a.withValues(alpha: 0.45), width: 1.4),
+        boxShadow: [
+          BoxShadow(
+              color: a.withValues(alpha: 0.14),
+              blurRadius: 14,
+              offset: const Offset(0, 5)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.favorite_rounded, size: 15, color: a),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                  p.isEmpty ? 'FOR YOU TWO TODAY' : 'FOR YOU & ${p.toUpperCase()} TODAY',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 10.5,
+                      letterSpacing: 1.2,
+                      fontWeight: FontWeight.w800,
+                      color: a)),
+            ),
+            _iconBtn(
+                _saved.contains(c.id)
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
+                'Save',
+                _saved.contains(c.id) ? a : scheme.onSurfaceVariant,
+                () => _toggleSave(c)),
+          ]),
+          if (c.title.isNotEmpty)
+            Text(c.title,
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: scheme.onSurface)),
+          const SizedBox(height: 4),
+          Text(c.text,
+              style: TextStyle(
+                  fontSize: 14,
+                  height: 1.45,
+                  color: scheme.onSurface.withValues(alpha: 0.9))),
+          Row(children: [
+            Expanded(
+              child: Text('${p.isEmpty ? 'They' : p} see this one today too',
+                  style: TextStyle(
+                      fontSize: 11.5, color: scheme.onSurfaceVariant)),
+            ),
+            TextButton.icon(
+              onPressed: () => _send(c),
+              icon: const Icon(Icons.favorite_rounded, size: 15),
+              label: Text(_sendLabel(c)),
+              style: TextButton.styleFrom(
+                  foregroundColor: a, visualDensity: VisualDensity.compact),
+            ),
+          ]),
         ],
       ),
     );

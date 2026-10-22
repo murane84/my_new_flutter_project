@@ -99,6 +99,7 @@ import '../widgets/moment_card.dart';
 import '../services/aluta_mood.dart';
 import '../services/song_insights.dart';
 import '../widgets/glow_feed.dart';
+import '../data/glow_cards.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
@@ -521,6 +522,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     sb.listenTogether = null;
     sb.shareCurrent = null;
     sb.canShare = null;
+    sb.pairSeed = null;
     sb.addToOurs = null;
     WidgetsBinding.instance.removeObserver(this);
     ConnectionStatus.instance.online.removeListener(_onGlobalConnChanged);
@@ -777,6 +779,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
     };
     b.shareCurrent = () => playbackBus.onShareToChat?.call();
     b.canShare = () => playbackBus.onShareToChat != null;
+    b.pairSeed = () {
+      final p = _partnerInfo();
+      final me = _myUserId;
+      if (p == null || me == null) return null;
+      return (me < p.id ? me * 7919 + p.id : p.id * 7919 + me);
+    };
     b.addToOurs = (title, artist) async {
       final p = _partnerInfo();
       final sid = (p?.space['id'] as num?)?.toInt();
@@ -792,7 +800,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
     SongInsights.instance.load().then((_) {
       if (!mounted) return;
       SongInsights.instance.pending.addListener(_onSongNudge);
-      Future.delayed(const Duration(seconds: 6), _maybeWeeklyRecap);
+      Future.delayed(const Duration(seconds: 6), () {
+        if (!mounted) return;
+        if (!_maybeWeeklyRecap()) _maybeGlowOfDay();
+      });
     });
     // Listen Together sessions count toward the weekly recap.
     ref.listenManual(liveSessionProvider, (prev, next) {
@@ -1022,6 +1033,54 @@ class HomePageState extends rp.ConsumerState<HomePage>
       }
     } catch (_) {}
     return null;
+  }
+
+  /// Once a day: today's Glow card as a soft moment (Open Glow / send it).
+  Future<bool> _maybeGlowOfDay() async {
+    if (!mounted || !_appForeground || _momentCooling) return false;
+    try {
+      final p = await SharedPreferences.getInstance();
+      if (!(p.getBool('glow_daily_on') ?? true)) return false;
+      final d = DateTime.now();
+      final key = '${d.year}-${d.month}-${d.day}';
+      if (p.getString('glow_nudge_day') == key) return false;
+      await p.setString('glow_nudge_day', key);
+    } catch (_) {
+      return false;
+    }
+    if (!mounted) return false;
+    final c = glowToday();
+    final partner = _partnerInfo();
+    final line = c.title.isNotEmpty
+        ? c.title
+        : (c.text.length > 70 ? '${c.text.characters.take(68)}…' : c.text)
+            .replaceAll('\n', ' ');
+    _lastMomentAt = DateTime.now();
+    showMomentCard(
+      context,
+      title: '✨ Today\'s glow: $line',
+      subtitle: c.source.isEmpty ? null : c.source,
+      leading: Icons.auto_awesome_rounded,
+      actions: [
+        MomentAction(Icons.auto_awesome_rounded, 'Open Glow', () {
+          setState(() {
+            _activeFriendId = null;
+            _activeGroup = null;
+          });
+          _setFriendLayer('glow');
+        }, primary: true),
+        if (partner != null)
+          MomentAction(Icons.send_rounded, 'Send to ${partner.name}', () {
+            final text = c.kind == GlowKind.quote
+                ? '✨ “${c.text.replaceAll('\n', ' ')}”\n— ${c.source}'
+                : c.kind == GlowKind.together
+                    ? '💞 ${c.text}'
+                    : '✨ ${c.title}\n${c.text}';
+            SongBridge.instance.messagePartner?.call(text: text);
+          }),
+      ],
+    );
+    return true;
   }
 
   /// 6) Sunday evening: your week in music, shareable with your partner.

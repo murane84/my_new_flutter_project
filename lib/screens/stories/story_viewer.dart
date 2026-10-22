@@ -9,6 +9,7 @@ import '../../services/media_store.dart';
 import '../api_service.dart';
 import '../token_helper.dart' show mediaAuthHeaders;
 import 'story_models.dart';
+import '../../widgets/aluta_composer_field.dart';
 
 /// Full-screen, tap-through story viewer (Instagram/WhatsApp style).
 ///
@@ -49,6 +50,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   bool _deleting = false;
   bool _videoError = false; // clip couldn't play here (e.g. desktop)
 
+  // Reply to someone else's status — it lands in your DM with them, quoting
+  // the status. Typing pauses the story; leaving the field resumes it.
+  final TextEditingController _replyCtrl = TextEditingController();
+  final FocusNode _replyFocus = FocusNode();
+  bool _replySending = false;
+
   StoryGroup get _group => widget.groups[_g];
   StoryItem get _story => _group.stories[_s];
 
@@ -56,6 +63,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   void initState() {
     super.initState();
     _g = widget.startGroup.clamp(0, widget.groups.length - 1);
+    _replyFocus.addListener(_onReplyFocus);
+    _replyCtrl.addListener(_onReplyText);
     // Open directly on the first UNSEEN story so the viewer doesn't dump the
     // user on old, already-watched ones (they can still swipe back).
     _s = _firstUnseen(widget.groups[_g]);
@@ -75,8 +84,171 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     return 0;
   }
 
+  void _onReplyFocus() {
+    if (_replyFocus.hasFocus) {
+      _pause();
+    } else if (_replyCtrl.text.trim().isEmpty && !_replySending) {
+      _resume();
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _onReplyText() {
+    if (mounted) setState(() {});
+  }
+
+  /// A one-line quote of the status, so the DM shows what was answered.
+  String _statusQuote(StoryItem it) {
+    String clip(String t) {
+      final one = t.trim().replaceAll(RegExp(r'\s+'), ' ');
+      return one.length > 60 ? '${one.substring(0, 57)}…' : one;
+    }
+    final cap = clip(it.caption ?? '');
+    String withCap(String head) => cap.isEmpty ? head : '$head: $cap';
+    switch (it.kind) {
+      case 'video':
+        return withCap('🎬 Status');
+      case 'music':
+        final t = clip(it.musicTitle ?? '');
+        final a = clip(it.musicArtist ?? '');
+        return t.isEmpty
+            ? withCap('🎵 Status')
+            : '🎵 Status: $t${a.isEmpty ? '' : ' — $a'}';
+      case 'text':
+        return cap.isEmpty ? '💬 Status' : '💬 Status: $cap';
+      case 'sticker':
+        return withCap('✨ Status');
+      default:
+        return withCap('📷 Status');
+    }
+  }
+
+  Future<void> _sendReply([String? quick]) async {
+    final text = (quick ?? _replyCtrl.text).trim();
+    if (text.isEmpty || _replySending) return;
+    final item = _story;
+    final to = _group.authorId;
+    setState(() => _replySending = true);
+    final content = '> ${_statusQuote(item)}\n\n$text';
+    final sent = await ApiService().sendMessage(to, content);
+    if (!mounted) return;
+    setState(() => _replySending = false);
+    final name = _displayName();
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (sent != null) {
+      _replyCtrl.clear();
+      _replyFocus.unfocus();
+      messenger?.showSnackBar(SnackBar(
+        content: Text('Sent to ${name.isEmpty ? 'them' : name}'),
+        duration: const Duration(milliseconds: 1600),
+        behavior: SnackBarBehavior.floating,
+      ));
+      _resume();
+    } else {
+      messenger?.showSnackBar(const SnackBar(
+        content: Text('Couldn\'t send — check your connection'),
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+  }
+
+  /// Quick reactions (while typing) + the reply pill + send.
+  Widget _replyBar() {
+    const quick = ['❤️', '😂', '😮', '😢', '🔥', '👏'];
+    final scheme = Theme.of(context).colorScheme;
+    final hasText = _replyCtrl.text.trim().isNotEmpty;
+    final name = _displayName();
+    // Swallow taps so they don't page the story.
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapUp: (_) {},
+      onLongPressStart: (_) {},
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedSize(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              child: (_replyFocus.hasFocus && !hasText)
+                  ? Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          for (final e in quick)
+                            InkResponse(
+                              radius: 26,
+                              onTap: () => _sendReply(e),
+                              child: Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: Text(e,
+                                    style: const TextStyle(fontSize: 30)),
+                              ),
+                            ),
+                        ],
+                      ),
+                    )
+                  : const SizedBox(width: double.infinity),
+            ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: AlutaComposerField(
+                    controller: _replyCtrl,
+                    focusNode: _replyFocus,
+                    hint: name.isEmpty ? 'Reply…' : 'Reply to $name…',
+                    maxLines: 3,
+                    dark: true,
+                    sendOnAction: true,
+                    onSubmit: _sendReply,
+                  ),
+                ),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutCubic,
+                  child: hasText || _replySending
+                      ? Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Material(
+                            color: scheme.primary,
+                            shape: const CircleBorder(),
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: _replySending ? null : _sendReply,
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: _replySending
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white))
+                                    : Icon(Icons.send_rounded,
+                                        size: 20, color: scheme.onPrimary),
+                              ),
+                            ),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
+    _replyFocus.removeListener(_onReplyFocus);
+    _replyCtrl.removeListener(_onReplyText);
+    _replyFocus.dispose();
+    _replyCtrl.dispose();
     _progress.dispose();
     _disposeVideo();
     super.dispose();
@@ -293,7 +465,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                   // content, so skip the bottom caption bar for them.
                   if (!item.isText && (item.caption ?? '').isNotEmpty)
                     _captionBar(item),
-                  if (_group.isMe) _authorFooter(item),
+                  if (_group.isMe) _authorFooter(item) else _replyBar(),
                   const SizedBox(height: 12),
                 ],
               ),

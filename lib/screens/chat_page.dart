@@ -697,6 +697,11 @@ class _ChatPageState extends State<ChatPage>
     if (_isAtBottom) _markSeenUpToNewest();
     chatSearchRequest.removeListener(_onSearchRequest);
     chatMediaRequest.removeListener(_onMediaRequest);
+    if (_mediaBrowser != null) {
+      // Not mid-teardown: let the host's header button settle next frame.
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => chatMediaOpen.value = false);
+    }
     chatComposeRequest.removeListener(_consumeCompose);
     _searchDebounce?.cancel();
     _searchCtrl.dispose();
@@ -2360,6 +2365,7 @@ class _ChatPageState extends State<ChatPage>
       _mediaBrowser = null;
       _browserMsgs = const [];
     });
+    chatMediaOpen.value = false;
   }
 
   // From the viewer opened out of the browser: close both, land on the message.
@@ -3549,8 +3555,14 @@ class _ChatPageState extends State<ChatPage>
   // history, sorts shared items into the three tabs, and — when the user taps
   // an item — jumps back to that message in the thread so playback / saving
   // reuses the thread's own handling. Links open directly.
+  // The header button toggles: open the panel, or close it if it's showing.
   void _onMediaRequest() {
-    if (mounted) _openMediaBrowser();
+    if (!mounted) return;
+    if (_mediaBrowser != null) {
+      _closeMediaBrowser();
+    } else {
+      _openMediaBrowser();
+    }
   }
 
   Future<void> _openMediaBrowser() async {
@@ -3662,6 +3674,7 @@ class _ChatPageState extends State<ChatPage>
 
     if (!mounted) return;
     _closeViewer();
+    chatMediaOpen.value = true;
     setState(() {
       _browserMsgs = msgs;
       _mediaBrowser = ConversationMediaScreen(

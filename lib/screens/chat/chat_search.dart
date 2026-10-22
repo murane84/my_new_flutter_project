@@ -7,6 +7,10 @@ final ValueNotifier<int> chatSearchRequest = ValueNotifier<int>(0);
 /// Bumped by hosts to open the open chat's Songs · Media · Links · Docs.
 final ValueNotifier<int> chatMediaRequest = ValueNotifier<int>(0);
 
+/// True while the open chat's Songs · Media · Links · Docs panel is showing,
+/// so the host's header button can light up as active.
+final ValueNotifier<bool> chatMediaOpen = ValueNotifier<bool>(false);
+
 /// Pre-fill a DM's composer from elsewhere (music nudges): {friendId: int,
 /// text: String, heart: bool}. The matching chat consumes and clears it.
 final ValueNotifier<Map<String, dynamic>?> chatComposeRequest =

@@ -189,11 +189,46 @@ extension _HomePageHelpers2 on HomePageState {
           child: InkResponse(
             onTap: onTap,
             radius: 22,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            // Active = a raised, lit key inside the pill: accent gradient
+            // (light top → deeper base), a fine top-light rim and a soft
+            // accent drop shadow, with the icon in white.
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                gradient: active
+                    ? LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color.lerp(scheme.primary, Colors.white, 0.30)!,
+                          scheme.primary,
+                          Color.lerp(scheme.primary, Colors.black, 0.18)!,
+                        ],
+                        stops: const [0.0, 0.55, 1.0],
+                      )
+                    : null,
+                border: Border.all(
+                    width: 0.8,
+                    color: active
+                        ? Colors.white.withValues(alpha: 0.38)
+                        : Colors.transparent),
+                boxShadow: active
+                    ? [
+                        BoxShadow(
+                          color: scheme.primary.withValues(alpha: 0.40),
+                          blurRadius: 5,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : const [],
+              ),
               child: Icon(icon,
                   size: 20,
-                  color: active ? scheme.primary : scheme.onSurfaceVariant),
+                  color: active ? Colors.white : scheme.onSurfaceVariant),
             ),
           ),
         );
@@ -263,8 +298,15 @@ extension _HomePageHelpers2 on HomePageState {
             if (!compact) ...[
               seg(Icons.search_rounded, 'Search in chat', search),
               divider(),
-              seg(Icons.library_music_rounded, 'Songs, media & docs',
-                  () => chatMediaRequest.value++),
+              ValueListenableBuilder<bool>(
+                valueListenable: chatMediaOpen,
+                builder: (_, open, _) => seg(
+                  Icons.library_music_rounded,
+                  open ? 'Hide songs, media & docs' : 'Songs, media & docs',
+                  () => chatMediaRequest.value++,
+                  active: open,
+                ),
+              ),
               divider(),
               seg(Icons.wallpaper_rounded, 'Wallpaper', openWallpaper),
               divider(),

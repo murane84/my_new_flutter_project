@@ -163,7 +163,7 @@ class _FieldPainter extends CustomPainter {
       final edge = (math.min(travel / 0.12, (1 - travel) / 0.18)).clamp(0.0, 1.0);
       // Keep a calm pocket around the logo + wordmark so the field frames
       // them instead of crossing over the words.
-      final dx = (x - w / 2) / (unit * 0.36), dy = (y - h * 0.47) / (unit * 0.5);
+      final dx = (x - w / 2) / (unit * 0.38), dy = (y - h * 0.49) / (unit * 0.62);
       final d = math.sqrt(dx * dx + dy * dy);
       final clear = d >= 1 ? 1.0 : 0.05 + 0.95 * d * d * d;
       final alpha =

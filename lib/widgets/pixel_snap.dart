@@ -16,8 +16,9 @@ class PixelSnap extends SingleChildRenderObjectWidget {
       _RenderPixelSnap(MediaQuery.devicePixelRatioOf(context));
 
   @override
-  void updateRenderObject(BuildContext context, _RenderPixelSnap r) {
-    r.dpr = MediaQuery.devicePixelRatioOf(context);
+  void updateRenderObject(BuildContext context, RenderObject renderObject) {
+    (renderObject as _RenderPixelSnap).dpr =
+        MediaQuery.devicePixelRatioOf(context);
   }
 }
 

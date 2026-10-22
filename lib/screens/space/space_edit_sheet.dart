@@ -333,7 +333,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
   /// A theme swatch with a clean COLOURED halo (outer ring in the swatch's own
   /// colour + a white gap) when picked — softer and more premium than the old
   /// hard black ring, and it grows a touch so the choice is unmistakable.
-  Widget _swatch(MapEntry<String, Color> entry) {
+  Widget _swatch(MapEntry<String, Color> entry, {double size = 38}) {
     final sel = _theme == entry.key;
     return GestureDetector(
       onTap: () => setState(() => _theme = entry.key),
@@ -347,8 +347,8 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
               color: sel ? entry.value : Colors.transparent, width: 2),
         ),
         child: Container(
-          width: 38,
-          height: 38,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
             color: entry.value,
             shape: BoxShape.circle,
@@ -513,16 +513,21 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
             mainAxisSize: MainAxisSize.min,
             children: [
           _label(scheme, 'THEME'),
-          Wrap(
-            spacing: 14,
-            runSpacing: 14,
-            children: [
-              for (final entry in kSpacePalette.entries) _swatch(entry),
-              // Earned shared theme — shown once the bond unlocks it (7-day
-              // streak), or if it's already the selected theme.
+          // Aluta's shared palette — the same families and order as the app
+          // accent and bubble pickers. The earned shared theme leads once the
+          // bond unlocks it (7-day streak), or if it's already selected.
+          AlutaPaletteGrid(
+            leading: [
               if (widget.inTuneUnlocked || _theme == 'in_tune')
-                _swatch(const MapEntry('in_tune', kInTuneAccent)),
+                const AlutaFamily('Earned', [
+                  AlutaSwatch('in_tune', 'In tune', kInTuneAccent),
+                ]),
             ],
+            dot: (s, size, _) => Tooltip(
+              message: s.name,
+              waitDuration: const Duration(milliseconds: 500),
+              child: _swatch(MapEntry(s.key, s.color), size: size),
+            ),
           ),
             ],
           )),

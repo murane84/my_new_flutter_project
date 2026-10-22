@@ -10,6 +10,7 @@ import '../services/keystroke_sounds.dart';
 import '../services/biometric_service.dart';
 import '../services/heart_lock.dart';
 import '../utils/bubble_theme.dart';
+import '../theme/aluta_palette.dart';
 import '../services/wallpapers_service.dart';
 import '../widgets/wallpaper_gallery.dart';
 import 'api_service.dart';
@@ -59,45 +60,6 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
 
   // Curated app-accent presets. Aluta red is the default (keeps the exact
   // hand-tuned palette); the rest re-tint the primary family only.
-  static const List<_Accent> _accents = [
-    _Accent('Aluta red', ThemeProvider.defaultAccent),
-    // Warm reds & pinks
-    _Accent('Coral', Color(0xFFFF5A5F)),
-    _Accent('Sunset', Color(0xFFFB7185)),
-    _Accent('Rose', Color(0xFFFF4D8D)),
-    _Accent('Magenta', Color(0xFFEC4899)),
-    _Accent('Fuchsia', Color(0xFFD946EF)),
-    // Purples
-    _Accent('Orchid', Color(0xFFA855F7)),
-    _Accent('Violet', Color(0xFF8E7CFF)),
-    _Accent('Grape', Color(0xFF9333EA)),
-    _Accent('Indigo', Color(0xFF6366F1)),
-    // Blues & cyans
-    _Accent('Cobalt', Color(0xFF2563EB)),
-    _Accent('Ocean', Color(0xFF37B0E6)),
-    _Accent('Sky', Color(0xFF38BDF8)),
-    _Accent('Cyan', Color(0xFF06B6D4)),
-    _Accent('Teal', Color(0xFF1FB6A6)),
-    // Greens
-    _Accent('Emerald', Color(0xFF10B981)),
-    _Accent('Forest', Color(0xFF39B54A)),
-    _Accent('Lime', Color(0xFF84CC16)),
-    // Yellows & oranges
-    _Accent('Gold', Color(0xFFEAB308)),
-    _Accent('Amber', Color(0xFFF59E0B)),
-    _Accent('Ember', Color(0xFFFF8A3D)),
-    // Neutral
-    _Accent('Slate', Color(0xFF64748B)),
-    // Neon mixers
-    _Accent('Neon pink', Color(0xFFFF2E88)),
-    _Accent('Neon purple', Color(0xFFB026FF)),
-    _Accent('Neon blue', Color(0xFF2D7DFF)),
-    _Accent('Neon cyan', Color(0xFF17E9E0)),
-    _Accent('Neon green', Color(0xFF2BE86B)),
-    _Accent('Neon lime', Color(0xFFC6FF00)),
-    _Accent('Neon yellow', Color(0xFFFFE500)),
-    _Accent('Neon orange', Color(0xFFFF7A00)),
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -331,10 +293,8 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   // per-swatch labels can go and the grid reads as a clean set of dots.
   Widget _accentHeader(
       BuildContext context, ThemeProvider theme, ColorScheme scheme) {
-    final current = _accents.firstWhere(
-      (a) => a.color.toARGB32() == theme.accent.toARGB32(),
-      orElse: () => _accents.first,
-    );
+    final current = alutaSwatchFor(theme.accent) ??
+        AlutaSwatch('custom', 'Custom', theme.accent);
     return Row(
       children: [
         _sectionLabel(scheme, 'ACCENT'),
@@ -366,123 +326,19 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     );
   }
 
-  // The accents, grouped into labelled colour families of clean dots. On wide
-  // screens the family blocks flow side by side so they fill the width instead
-  // of hugging the left; on mobile they stack (and already fill a phone).
+  // The accents: Aluta's shared palette (same families, same order as the
+  // bubble and Our Space pickers) in one raised card.
   List<Widget> _accentGroups(BuildContext context, ThemeProvider theme,
       ColorScheme scheme, bool isWide) {
-    final groups = <({String title, List<_Accent> items})>[
-      (title: 'Reds & pinks', items: _accents.sublist(0, 6)),
-      (title: 'Purples', items: _accents.sublist(6, 10)),
-      (title: 'Blues & cyans', items: _accents.sublist(10, 15)),
-      (title: 'Greens', items: _accents.sublist(15, 18)),
-      (title: 'Yellows & oranges', items: _accents.sublist(18, 21)),
-      (title: 'Neutral', items: _accents.sublist(21, 22)),
-      (title: 'Neon', items: _accents.sublist(22)),
-    ];
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    // One family = a label column + a tidy wrap of compact dots. Labels share
-    // a fixed width so every row's dots start on the same line.
-    Widget family(({String title, List<_Accent> items}) g, double labelW) =>
-        labelW == 0
-            // Phone: label on top, so a full family of six fits one row.
-            ? Padding(
-                padding: const EdgeInsets.symmetric(vertical: 9),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(g.title,
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: scheme.onSurfaceVariant)),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        for (final a in g.items)
-                          _accentDot(context, theme, scheme, a),
-                      ],
-                    ),
-                  ],
-                ),
-              )
-            : Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: labelW,
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: Text(
-                    g.title,
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: scheme.onSurfaceVariant),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    for (final a in g.items)
-                      _accentDot(context, theme, scheme, a),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-
     return [
       DecoratedBox(
         decoration: _raisedCardDecoration(scheme, isDark),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
-          child: LayoutBuilder(builder: (ctx, c) {
-            // Wide: two balanced columns of families. Narrow: one column with
-            // a slimmer label so six dots still fit a phone row.
-            final twoCols = c.maxWidth >= 720;
-            final labelW = twoCols ? 128.0 : (c.maxWidth >= 480 ? 112.0 : 0.0);
-            Widget column(List<({String title, List<_Accent> items})> gs) =>
-                Column(
-                  children: [
-                    for (var i = 0; i < gs.length; i++) ...[
-                      if (i > 0)
-                        Divider(
-                            height: 1,
-                            color: scheme.outlineVariant
-                                .withValues(alpha: 0.35)),
-                      family(gs[i], labelW),
-                    ],
-                  ],
-                );
-            if (!twoCols) return column(groups);
-            return IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: column(groups.sublist(0, 4))),
-                  VerticalDivider(
-                      width: 28,
-                      color: scheme.outlineVariant.withValues(alpha: 0.35)),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: column(groups.sublist(4)),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
+          child: AlutaPaletteGrid(
+            dot: (s, size, _) => _accentDot(context, theme, scheme, s, size),
+          ),
         ),
       ),
     ];
@@ -490,7 +346,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
 
   // A single clean accent dot: colour circle, glow, ring + check when picked.
   Widget _accentDot(BuildContext context, ThemeProvider theme,
-      ColorScheme scheme, _Accent a) {
+      ColorScheme scheme, AlutaSwatch a, double size) {
     final selected = theme.accent.toARGB32() == a.color.toARGB32();
     return Tooltip(
       message: a.name,
@@ -499,8 +355,8 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
         onTap: () => theme.setAccent(a.color),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
-          width: 38,
-          height: 38,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
             color: a.color,
             shape: BoxShape.circle,
@@ -675,11 +531,6 @@ class _BackdropSlidersCard extends StatelessWidget {
   }
 }
 
-class _Accent {
-  final String name;
-  final Color color;
-  const _Accent(this.name, this.color);
-}
 
 
 /// Sets the all-chats default wallpaper (Appearance → Chat wallpaper). Per-chat
@@ -1747,15 +1598,6 @@ class _BubbleThemeSection extends StatelessWidget {
       ),
       builder: (ctx) {
         final current = sent ? bubbleSentColor : bubbleRecvColor;
-        Widget section(String label) => Padding(
-              padding: const EdgeInsets.only(top: 18, bottom: 10),
-              child: Text(label.toUpperCase(),
-                  style: TextStyle(
-                      fontSize: 11.5,
-                      letterSpacing: 1.2,
-                      fontWeight: FontWeight.w700,
-                      color: scheme.onSurfaceVariant)),
-            );
         return SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(18, 2, 18, 26),
           child: Column(
@@ -1767,23 +1609,17 @@ class _BubbleThemeSection extends StatelessWidget {
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
                       color: scheme.onSurface)),
-              section('Classic'),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  for (final v in bubblePalette)
-                    _swatchCell(ctx, Color(v), current, sent),
-                ],
-              ),
-              section('Neon'),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  for (final v in bubbleNeonPalette)
-                    _swatchCell(ctx, Color(v), current, sent, glow: true),
-                ],
+              const SizedBox(height: 10),
+              // Same families as the app accent + Our Space, with calm
+              // paper / ink basics first for readable chats.
+              AlutaPaletteGrid(
+                leading: const [kBubbleBasics],
+                dot: (sw, size, glow) => Tooltip(
+                  message: sw.name,
+                  waitDuration: const Duration(milliseconds: 500),
+                  child: _swatchCell(ctx, sw.color, current, sent,
+                      glow: glow, size: size),
+                ),
               ),
             ],
           ),
@@ -1793,7 +1629,7 @@ class _BubbleThemeSection extends StatelessWidget {
   }
 
   Widget _swatchCell(BuildContext ctx, Color c, Color current, bool sent,
-      {bool glow = false}) {
+      {bool glow = false, double size = 46}) {
     final selected = _sameColour(c, current);
     final light = bubbleTextOn(c).computeLuminance() < 0.5;
     return GestureDetector(
@@ -1806,8 +1642,8 @@ class _BubbleThemeSection extends StatelessWidget {
         Navigator.pop(ctx);
       },
       child: Container(
-        width: 46,
-        height: 46,
+        width: size,
+        height: size,
         decoration: BoxDecoration(
           color: c,
           shape: BoxShape.circle,

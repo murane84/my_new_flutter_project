@@ -347,15 +347,20 @@ class MyApp extends StatelessWidget {
             ? ColorScheme.fromSeed(
                 seedColor: accent, brightness: Brightness.dark)
             : null;
+        // Very pale picks (butter, petal, neon yellow…) would vanish as text
+        // on the light surface — deepen them a touch for light mode only.
+        final lightAccent = accent.computeLuminance() > 0.55
+            ? Color.lerp(accent, Colors.black, 0.28)!
+            : accent;
         final lightScheme = ColorScheme.fromSeed(
           seedColor: const Color(0xFFD90429),
           brightness: Brightness.light,
         ).copyWith(
           // Use the EXACT chosen accent (like Our Space) so a vivid pick stays
           // vivid, instead of Material's tone-mapped (muted) seed primary.
-          primary: customAccent ? accent : const Color(0xFFD90429),
+          primary: customAccent ? lightAccent : const Color(0xFFD90429),
           onPrimary: customAccent
-              ? (ThemeData.estimateBrightnessForColor(accent) ==
+              ? (ThemeData.estimateBrightnessForColor(lightAccent) ==
                       Brightness.dark
                   ? Colors.white
                   : Colors.black)

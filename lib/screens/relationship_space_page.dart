@@ -39,6 +39,7 @@ import '../services/notif_service.dart'
     show syncDiaryReminders, cancelDiaryReminder, PlanReminder;
 import 'package:video_player/video_player.dart';
 import '../widgets/genie_menu.dart';
+import '../theme/aluta_palette.dart';
 
 part 'space/space_moment_composer.dart'; // moment composer + add-to-playlist sheet
 part 'space/space_edit_sheet.dart'; // edit-space sheet + wallpaper picker
@@ -117,6 +118,21 @@ const Map<String, Color> kSpacePalette = {
   'olive': Color(0xFF9EB23B),
   'graphite': Color(0xFF475569),
   'steel': Color(0xFF7C8AA0),
+  // — appended: rounds every family of the shared Aluta palette to six —
+  'petal': Color(0xFFF9A8D4),
+  'pistachio': Color(0xFFA3E635),
+  'mustard': Color(0xFFCA8A04),
+  'saffron': Color(0xFFF4C430),
+  'sun': Color(0xFFFACC15),
+  'butter': Color(0xFFFDE68A),
+  'tangerine': Color(0xFFFB923C),
+  'charcoal': Color(0xFF334155),
+  'mocha': Color(0xFF8D6E63),
+  'sand': Color(0xFFC2A27A),
+  'neon_red': Color(0xFFFF073A),
+  'neon_magenta': Color(0xFFFF00E5),
+  'neon_violet': Color(0xFF7A00FF),
+  'neon_mint': Color(0xFF00FFC6),
 };
 
 // The earned "In tune" accent — a warm anniversary gold, surfaced as a theme

@@ -99,9 +99,9 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
             child: child,
           ),
           itemCount: _cardOrder.length,
-          onReorder: (from, to) {
+          // newIndex already accounts for the removed item.
+          onReorderItem: (from, to) {
             final next = List.of(_cardOrder);
-            if (to > from) to -= 1;
             next.insert(to, next.removeAt(from));
             _saveCardOrder(next);
           },

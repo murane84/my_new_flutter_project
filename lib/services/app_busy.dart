@@ -76,5 +76,9 @@ class AppBusy {
 /// would just clutter the moment.
 final ValueNotifier<int> splashOnScreen = ValueNotifier<int>(0);
 
+/// How many genie menus are open. The busy loader waits while one is up so
+/// the logo spinner never draws over a menu the user is reading.
+final ValueNotifier<int> menusOnScreen = ValueNotifier<int>(0);
+
 /// App-wide singleton.
 final appBusy = AppBusy.instance;

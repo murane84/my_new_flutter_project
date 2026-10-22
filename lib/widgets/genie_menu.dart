@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/app_busy.dart';
+
 // ─── Genie menus ────────────────────────────────────────────────────────────
 // One menu motion for the whole app: a menu GROWS out of the button that
 // opened it (scaling from that corner with a soft overshoot, fading in, its
@@ -100,6 +102,27 @@ class _GenieMenuRoute extends PopupRoute<void> {
   @override
   Duration get reverseTransitionDuration => const Duration(milliseconds: 200);
 
+  // Keep the busy logo spinner off an open menu.
+  bool _counted = false;
+
+  @override
+  void install() {
+    super.install();
+    if (!_counted) {
+      _counted = true;
+      menusOnScreen.value++;
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_counted) {
+      _counted = false;
+      menusOnScreen.value = (menusOnScreen.value - 1).clamp(0, 99);
+    }
+    super.dispose();
+  }
+
   @override
   Widget buildPage(BuildContext context, Animation<double> animation,
       Animation<double> secondaryAnimation) {
@@ -143,15 +166,26 @@ class _GenieMenuSurface extends StatelessWidget {
     final onRight = anchor.center.dx > size.width / 2;
     final left = (onRight ? anchor.right - w : anchor.left)
         .clamp(8.0, size.width - w - 8);
-    final below = anchor.bottom + 6;
+    // The card's tail (part of its outline) bridges the gap to the button,
+    // so the card body starts a little lower than before.
+    const gap = 1.0;
+    final below = anchor.bottom + gap;
     final roomBelow = size.height - pad.bottom - 8 - below;
-    final roomAbove = anchor.top - 6 - pad.top - 8;
+    final roomAbove = anchor.top - gap - pad.top - 8;
     final openDown = roomBelow >= 220 || roomBelow >= roomAbove;
     final maxH = openDown ? roomBelow : roomAbove;
+    // The tail points at the button's centre, kept clear of the corners.
+    final tailX = _TailedCardBorder.clampTip(anchor.center.dx - left, w);
+    // The genie grows out of the tail's tip.
     final origin = Alignment(
-      onRight ? 1 : -1,
+      (tailX / w) * 2 - 1,
       openDown ? -1 : 1,
     );
+    final fill = color ??
+        (isDark
+            ? Color.alphaBlend(
+                Colors.white.withValues(alpha: 0.05), scheme.surface)
+            : scheme.surface);
 
     return Stack(
       children: [
@@ -159,7 +193,7 @@ class _GenieMenuSurface extends StatelessWidget {
           left: left,
           width: w,
           top: openDown ? below : null,
-          bottom: openDown ? null : size.height - anchor.top + 6,
+          bottom: openDown ? null : size.height - anchor.top + gap,
           child: AnimatedBuilder(
             animation: animation,
             builder: (context, child) {
@@ -192,18 +226,20 @@ class _GenieMenuSurface extends StatelessWidget {
               child: Material(
                 type: MaterialType.transparency,
                 child: Container(
-                  decoration: BoxDecoration(
-                    color: color ??
-                        (isDark
-                            ? Color.alphaBlend(
-                                Colors.white.withValues(alpha: 0.05),
-                                scheme.surface)
-                            : scheme.surface),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                        color: scheme.primary
-                            .withValues(alpha: isDark ? 0.30 : 0.22)),
-                    boxShadow: [
+                  // One continuous outline: rounded card + a soft tail
+                  // pointing at the opener. Fill, border and shadow all
+                  // follow it, so the tail is part of the card, not a
+                  // triangle stuck on its edge.
+                  decoration: ShapeDecoration(
+                    color: fill,
+                    shape: _TailedCardBorder(
+                      tipX: tailX,
+                      up: openDown,
+                      side: BorderSide(
+                          color: scheme.primary
+                              .withValues(alpha: isDark ? 0.30 : 0.22)),
+                    ),
+                    shadows: [
                       BoxShadow(
                         color: Colors.black
                             .withValues(alpha: isDark ? 0.5 : 0.16),
@@ -530,4 +566,96 @@ class GeniePopupMenuButton<T> extends StatelessWidget {
       );
     });
   }
+}
+
+/// A rounded card whose outline grows a soft tail toward its opener. The
+/// tail is a smooth bell (flat where it leaves the edge, rounded at the tip)
+/// so it reads as part of the card. [up] puts it on the top edge (menu opens
+/// downward); otherwise it sits on the bottom edge. [tipX] is the tip's x in
+/// the card's local space.
+class _TailedCardBorder extends ShapeBorder {
+  const _TailedCardBorder({
+    required this.tipX,
+    required this.up,
+    this.side = BorderSide.none,
+    this.radius = 18,
+  });
+
+  final double tipX;
+  final bool up;
+  final BorderSide side;
+  final double radius;
+
+  static const double tailH = 9;
+  static const double halfBase = 14;
+
+  /// Keep the tail's base off the rounded corners.
+  static double clampTip(double x, double width) {
+    const m = 18 + halfBase + 4;
+    if (width <= m * 2) return width / 2;
+    return x.clamp(m, width - m);
+  }
+
+  @override
+  EdgeInsetsGeometry get dimensions =>
+      up ? const EdgeInsets.only(top: tailH) : const EdgeInsets.only(bottom: tailH);
+
+  Path _path(Rect rect) {
+    // Built with the tail on top, mirrored for a bottom tail.
+    final l = rect.left, r = rect.right;
+    final t = rect.top + tailH, b = rect.bottom;
+    final tip = rect.top;
+    final rad = math.min(radius, math.min(rect.width, b - t) / 2);
+    final tx = l + clampTip(tipX, rect.width);
+    final hb = math.min(halfBase, rect.width / 2 - rad);
+    final p = Path()
+      ..moveTo(l + rad, t)
+      ..lineTo(tx - hb, t)
+      // Flat where it leaves the edge, rounded at the tip.
+      ..cubicTo(tx - hb * 0.5, t, tx - hb * 0.32, tip, tx, tip)
+      ..cubicTo(tx + hb * 0.32, tip, tx + hb * 0.5, t, tx + hb, t)
+      ..lineTo(r - rad, t)
+      ..arcToPoint(Offset(r, t + rad), radius: Radius.circular(rad))
+      ..lineTo(r, b - rad)
+      ..arcToPoint(Offset(r - rad, b), radius: Radius.circular(rad))
+      ..lineTo(l + rad, b)
+      ..arcToPoint(Offset(l, b - rad), radius: Radius.circular(rad))
+      ..lineTo(l, t + rad)
+      ..arcToPoint(Offset(l + rad, t), radius: Radius.circular(rad))
+      ..close();
+    if (up) return p;
+    final m = Matrix4.identity()
+      ..translateByDouble(0.0, rect.top + rect.bottom, 0.0, 1.0)
+      ..scaleByDouble(1.0, -1.0, 1.0, 1.0);
+    return p.transform(m.storage);
+  }
+
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) => _path(rect);
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) =>
+      _path(rect.deflate(side.width));
+
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
+    if (side.style == BorderStyle.none || side.width == 0) return;
+    final paint = side.toPaint()..isAntiAlias = true;
+    canvas.drawPath(_path(rect.deflate(side.width / 2)), paint);
+  }
+
+  @override
+  ShapeBorder scale(double t) => _TailedCardBorder(
+      tipX: tipX, up: up, side: side.scale(t), radius: radius * t);
+
+  @override
+  bool operator ==(Object other) =>
+      other is _TailedCardBorder &&
+      other.tipX == tipX &&
+      other.up == up &&
+      other.side == side &&
+      other.radius == radius;
+
+  @override
+  int get hashCode => Object.hash(tipX, up, side, radius);
 }

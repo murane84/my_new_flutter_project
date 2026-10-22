@@ -37,7 +37,9 @@ class _BusyOverlayState extends State<BusyOverlay> {
   DateTime _shownAt = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _delay, _capTimer, _slowTimer, _hideTimer;
 
-  bool get _busy => appBusy.major.value > 0 && splashOnScreen.value == 0;
+  bool get _busy => appBusy.major.value > 0 &&
+      splashOnScreen.value == 0 &&
+      menusOnScreen.value == 0;
 
   @override
   void initState() {
@@ -45,6 +47,7 @@ class _BusyOverlayState extends State<BusyOverlay> {
     appBusy.major.addListener(_onBusy);
     appBusy.majorLabel.addListener(_onLabel);
     splashOnScreen.addListener(_onBusy);
+    menusOnScreen.addListener(_onBusy);
     _onBusy();
   }
 
@@ -131,6 +134,7 @@ class _BusyOverlayState extends State<BusyOverlay> {
     appBusy.major.removeListener(_onBusy);
     appBusy.majorLabel.removeListener(_onLabel);
     splashOnScreen.removeListener(_onBusy);
+    menusOnScreen.removeListener(_onBusy);
     super.dispose();
   }
 

@@ -1090,67 +1090,281 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     );
   }
 
+  /// Nudge a silent viewer: an emoji or sticker straight to their DM,
+  /// quoting the status they watched — so the poster can start the
+  /// conversation instead of waiting for a comment.
+  Future<bool> _nudgeViewer(StoryViewer v, StoryItem item,
+      {String? emoji, String? gifUrl}) async {
+    // The DM shows it as a quote: who it's about + which status.
+    final content = '> 👀 You viewed my status\n> ${_statusQuote(item)}'
+        '\n\n${emoji ?? ''}';
+    final sent = gifUrl != null
+        ? await ApiService().sendMessage(v.userId, content,
+            messageType: 'image',
+            mediaUrl: gifUrl,
+            mediaName: 'sticker.gif',
+            mediaMime: 'image/gif')
+        : await ApiService().sendMessage(v.userId, content);
+    return sent != null;
+  }
+
+  Future<String?> _pickSticker(BuildContext ctx) => showModalBottomSheet<String>(
+        context: ctx,
+        isScrollControlled: true,
+        backgroundColor: const Color(0xFF1B1B1F),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+        ),
+        builder: (sctx) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.of(sctx).size.height * 0.6,
+            child: GifPicker(
+              onSelected: (gif) => Navigator.pop(sctx, gif.fullUrl),
+            ),
+          ),
+        ),
+      );
+
   Future<void> _showViewers(StoryItem item) async {
     _pause();
     final raw = await ApiService().fetchStoryViewers(item.id);
     if (!mounted) return;
-    final viewers = raw.map(StoryViewer.fromJson).toList();
+    final viewers = raw
+        .map(StoryViewer.fromJson)
+        .where((v) => v.userId != widget.myUserId)
+        .toList();
+    // Per viewer: null = idle, '…' = sending, else what was sent.
+    final sentTo = <int, String>{};
+    const nudges = ['👋', '❤️', '😊', '😉', '🔥'];
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
       backgroundColor: const Color(0xFF1B1B1F),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  viewers.isEmpty
-                      ? 'No views yet'
-                      : 'Viewed by ${viewers.length}',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15),
-                ),
-                const SizedBox(height: 8),
-                Flexible(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: viewers.length,
-                    itemBuilder: (_, i) {
-                      final v = viewers[i];
-                      final av = (v.avatarUrl ?? '').isNotEmpty
-                          ? _absUrl(v.avatarUrl!)
-                          : null;
-                      final name = _viewerName(v);
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.white24,
-                          backgroundImage: av != null
-                              ? authNetworkImageProvider(
-                                  av, mediaAuthHeaders(av))
-                              : null,
-                          child: av == null
-                              ? Text(
-                                  name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                  style: const TextStyle(color: Colors.white))
-                              : null,
+        return StatefulBuilder(builder: (ctx, setSheet) {
+          Future<void> send(StoryViewer v,
+              {String? emoji, String? gifUrl}) async {
+            setSheet(() => sentTo[v.userId] = '…');
+            final ok =
+                await _nudgeViewer(v, item, emoji: emoji, gifUrl: gifUrl);
+            if (!ctx.mounted) return;
+            setSheet(() {
+              if (ok) {
+                sentTo[v.userId] = emoji ?? 'sticker';
+              } else {
+                sentTo.remove(v.userId);
+              }
+            });
+            if (!ok) {
+              ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
+                  content: Text('Couldn\'t send — check your connection'),
+                  behavior: SnackBarBehavior.floating));
+            }
+          }
+
+          return SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.7),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 8, 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                viewers.isEmpty
+                                    ? 'No views yet'
+                                    : 'Viewed by ${viewers.length}',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15),
+                              ),
+                              if (viewers.isNotEmpty)
+                                Text(
+                                    'Nudge someone who watched — it lands in your DM with them',
+                                    style: TextStyle(
+                                        color:
+                                            Colors.white.withValues(alpha: 0.6),
+                                        fontSize: 12)),
+                            ],
+                          ),
                         ),
-                        title: Text(name,
-                            style: const TextStyle(color: Colors.white)),
-                      );
-                    },
+                        IconButton(
+                          tooltip: 'Close',
+                          icon: const Icon(Icons.close_rounded,
+                              color: Colors.white70),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.only(bottom: 12),
+                      itemCount: viewers.length,
+                      itemBuilder: (_, i) {
+                        final v = viewers[i];
+                        final av = (v.avatarUrl ?? '').isNotEmpty
+                            ? _absUrl(v.avatarUrl!)
+                            : null;
+                        final name = _viewerName(v);
+                        final state = sentTo[v.userId];
+                        final when = v.viewedAt;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 20,
+                                backgroundColor: Colors.white24,
+                                backgroundImage: av != null
+                                    ? authNetworkImageProvider(
+                                        av, mediaAuthHeaders(av))
+                                    : null,
+                                child: av == null
+                                    ? Text(
+                                        name.isNotEmpty
+                                            ? name[0].toUpperCase()
+                                            : '?',
+                                        style: const TextStyle(
+                                            color: Colors.white))
+                                    : null,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600)),
+                                    if (when != null)
+                                      Text('viewed ${_ago(when)}',
+                                          style: TextStyle(
+                                              color: Colors.white
+                                                  .withValues(alpha: 0.55),
+                                              fontSize: 11.5)),
+                                  ],
+                                ),
+                              ),
+                              // The nudge strip: tap an emoji, or ✨ for a
+                              // sticker. Once sent, it shows what went.
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 220),
+                                child: state == null
+                                    ? Container(
+                                        key: const ValueKey('nudge'),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 4, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.07),
+                                          borderRadius:
+                                              BorderRadius.circular(22),
+                                          border: Border.all(
+                                              color: Colors.white
+                                                  .withValues(alpha: 0.12)),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            for (final e in nudges)
+                                              InkResponse(
+                                                radius: 18,
+                                                onTap: () =>
+                                                    send(v, emoji: e),
+                                                child: Padding(
+                                                  padding:
+                                                      const EdgeInsets.all(4),
+                                                  child: Text(e,
+                                                      style: const TextStyle(
+                                                          fontSize: 19)),
+                                                ),
+                                              ),
+                                            IconButton(
+                                              tooltip: 'Send a sticker',
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              icon: const Icon(
+                                                  Icons.gif_box_outlined,
+                                                  color: Colors.white70,
+                                                  size: 20),
+                                              onPressed: () async {
+                                                final url =
+                                                    await _pickSticker(ctx);
+                                                if (url != null &&
+                                                    url.isNotEmpty) {
+                                                  await send(v, gifUrl: url);
+                                                }
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    : Row(
+                                        key: ValueKey('sent-$state'),
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (state == '…')
+                                            const SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                        color: Colors.white70))
+                                          else ...[
+                                            Text(
+                                                state == 'sticker'
+                                                    ? '✨'
+                                                    : state,
+                                                style: const TextStyle(
+                                                    fontSize: 16)),
+                                            const SizedBox(width: 6),
+                                            Text('Sent',
+                                                style: TextStyle(
+                                                    color: Colors.white
+                                                        .withValues(
+                                                            alpha: 0.75),
+                                                    fontWeight:
+                                                        FontWeight.w600)),
+                                            const SizedBox(width: 2),
+                                            Icon(Icons.check_rounded,
+                                                size: 16,
+                                                color: Colors.white
+                                                    .withValues(alpha: 0.75)),
+                                          ],
+                                        ],
+                                      ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        );
+          );
+        });
       },
     );
     if (mounted) _resume();

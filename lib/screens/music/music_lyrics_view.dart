@@ -9,12 +9,15 @@ class _LyricsView extends StatefulWidget {
   final String artist;
   final String raw;
   final void Function(String) onSave;
+  /// Tap a synced line to jump the song there.
+  final void Function(Duration)? onSeek;
 
   const _LyricsView({
     required this.title,
     required this.artist,
     required this.raw,
     required this.onSave,
+    this.onSeek,
   });
 
   @override
@@ -306,28 +309,73 @@ class _LyricsViewState extends State<_LyricsView> {
         final active = _currentLine(clock.position);
         WidgetsBinding.instance
             .addPostFrameCallback((_) => _autoScroll(active));
-        return ListView.builder(
+        // Soft top/bottom fade so lines drift in and out of view.
+        return ShaderMask(
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (r) => const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.transparent,
+              Colors.white,
+              Colors.white,
+              Colors.transparent
+            ],
+            stops: [0.0, 0.08, 0.88, 1.0],
+          ).createShader(r),
+          child: ListView.builder(
           controller: _scrollCtrl,
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 60),
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 80),
           itemCount: _lines.length,
           itemBuilder: (_, i) {
             final on = i == active;
-            return Padding(
-              padding:
-                  const EdgeInsets.symmetric(vertical: 5, horizontal: 8),
-              child: Text(
-                _lines[i].$2.isEmpty ? '♪' : _lines[i].$2,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: on ? 17 : 14.5,
-                  height: 1.3,
-                  fontWeight: on ? FontWeight.bold : FontWeight.w500,
-                  color:
-                      on ? scheme.primary : scheme.onSurface.withAlpha(140),
+            // Lines further from the current one fade gently; sung lines
+            // sit a little quieter than the ones still to come.
+            final d = active < 0 ? 3 : (i - active).abs();
+            final alpha = on
+                ? 255
+                : (i < active ? 95 : (200 - d * 22).clamp(90, 200));
+            return InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: widget.onSeek == null
+                  ? null
+                  : () => widget.onSeek!(_lines[i].$1),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                child: AnimatedScale(
+                  scale: on ? 1.0 : 0.94,
+                  duration: const Duration(milliseconds: 260),
+                  curve: Curves.easeOutCubic,
+                  child: AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 260),
+                    curve: Curves.easeOutCubic,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 17,
+                      height: 1.35,
+                      fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+                      color: on
+                          ? scheme.primary
+                          : scheme.onSurface.withAlpha(alpha.toInt()),
+                      shadows: on
+                          ? [
+                              Shadow(
+                                  color: scheme.primary.withAlpha(70),
+                                  blurRadius: 12)
+                            ]
+                          : null,
+                    ),
+                    child: Text(
+                      _lines[i].$2.isEmpty ? '♪' : _lines[i].$2,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
                 ),
               ),
             );
           },
+        ),
         );
       },
     );

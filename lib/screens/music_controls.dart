@@ -595,6 +595,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         artist: _artistName,
         raw: _lyricsRaw(path),
         onSave: (text) => _setLyrics(path, text),
+        onSeek: _transportSeek,
       ),
     );
   }

@@ -589,11 +589,13 @@ class _TailedCardBorder extends ShapeBorder {
   static const double tailH = 9;
   static const double halfBase = 14;
 
-  /// Keep the tail's base off the rounded corners.
+  /// The tip sits right under the opener's centre. Near an edge the
+  /// corner on that side tightens (see [_path]) so the tail can still reach
+  /// the button instead of being pushed inward.
+  static const double minEdge = 16;
   static double clampTip(double x, double width) {
-    const m = 18 + halfBase + 4;
-    if (width <= m * 2) return width / 2;
-    return x.clamp(m, width - m);
+    if (width <= minEdge * 2) return width / 2;
+    return x.clamp(minEdge, width - minEdge);
   }
 
   @override
@@ -607,21 +609,26 @@ class _TailedCardBorder extends ShapeBorder {
     final tip = rect.top;
     final rad = math.min(radius, math.min(rect.width, b - t) / 2);
     final tx = l + clampTip(tipX, rect.width);
-    final hb = math.min(halfBase, rect.width / 2 - rad);
+    final dl = tx - l, dr = r - tx;
+    final hb = math.max(8.0, math.min(halfBase, math.min(dl, dr) - 4));
+    // Tail-side corners give way when the tail sits close to them, so the
+    // tail flows out of the corner rather than being shoved off the button.
+    final rl = (dl - hb - 2).clamp(2.0, rad);
+    final rr = (dr - hb - 2).clamp(2.0, rad);
     final p = Path()
-      ..moveTo(l + rad, t)
+      ..moveTo(l + rl, t)
       ..lineTo(tx - hb, t)
       // Flat where it leaves the edge, rounded at the tip.
       ..cubicTo(tx - hb * 0.5, t, tx - hb * 0.32, tip, tx, tip)
       ..cubicTo(tx + hb * 0.32, tip, tx + hb * 0.5, t, tx + hb, t)
-      ..lineTo(r - rad, t)
-      ..arcToPoint(Offset(r, t + rad), radius: Radius.circular(rad))
+      ..lineTo(r - rr, t)
+      ..arcToPoint(Offset(r, t + rr), radius: Radius.circular(rr))
       ..lineTo(r, b - rad)
       ..arcToPoint(Offset(r - rad, b), radius: Radius.circular(rad))
       ..lineTo(l + rad, b)
       ..arcToPoint(Offset(l, b - rad), radius: Radius.circular(rad))
-      ..lineTo(l, t + rad)
-      ..arcToPoint(Offset(l + rad, t), radius: Radius.circular(rad))
+      ..lineTo(l, t + rl)
+      ..arcToPoint(Offset(l + rl, t), radius: Radius.circular(rl))
       ..close();
     if (up) return p;
     final m = Matrix4.identity()

@@ -42,8 +42,8 @@ class HeartMood {
 
   static const love = HeartMood(
       'love', 'Love', 'with love', 'With love',
-      // Bright love red — fixed, never the theme accent (white words read on it).
-      Color(0xFFF0142F),
+      // Neon red — the brightest love red; fixed, never the theme accent.
+      Color(0xFFFF073A),
       Icons.favorite_rounded, [
     'One thing I love about you is ',
     'I fell for you all over again when ',

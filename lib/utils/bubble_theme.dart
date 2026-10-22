@@ -137,7 +137,7 @@ Color bubbleTextOn(Color bg) {
   // Same three tiers as the app's ink: darkish → near-white, normal →
   // graphite, shining (neon / pastel) → near-black.
   final l = bg.computeLuminance();
-  if (l < 0.21) return const Color(0xFFF4F1F2);
+  if (l < 0.227) return const Color(0xFFF4F1F2);
   if (l < 0.5) return const Color(0xFF2A2A30);
   return const Color(0xFF111114);
 }

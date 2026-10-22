@@ -8,13 +8,13 @@ import 'bubble_theme.dart' show bubbleTintOn;
 ///  • normal fills   → a soft graphite (grey) ink
 ///  • shining fills (neon, pastel, butter…) → black ink
 /// The cut between white and graphite sits where both read equally well
-/// (relative luminance ≈ 0.21), so every tier keeps a readable contrast.
+/// (relative luminance ≈ 0.227), so every tier keeps a readable contrast.
 const Color kInkDark = Color(0xFF111114); // shining fills
 const Color kInkGraphite = Color(0xFF2A2A30); // normal fills
 
 Color readableOn(Color bg) {
   final l = bg.computeLuminance();
-  if (l < 0.21) return Colors.white;
+  if (l < 0.227) return Colors.white;
   if (l < 0.5) return kInkGraphite;
   return kInkDark;
 }

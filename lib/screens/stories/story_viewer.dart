@@ -1189,7 +1189,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
             });
             if (ok) remember();
             if (!ok) {
-              ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
+              ScaffoldMessenger.maybeOf(ctx)?.showSnackBar(const SnackBar(
                   content: Text('Couldn\'t send — check your connection'),
                   behavior: SnackBarBehavior.floating));
             }

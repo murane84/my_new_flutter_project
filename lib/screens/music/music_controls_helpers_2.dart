@@ -397,212 +397,12 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
     return LayoutBuilder(builder: (context, box) {
       final isNarrow = box.maxWidth < 220;
 
-      return Column(
+      // Room for everything → the controls live together in one glossy
+      // card pinned to the bottom; a short panel keeps scrolling instead.
+      final tall = box.maxHeight >= 520;
+      final controlsBody = Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding:
-                  EdgeInsets.fromLTRB(16, 14, 16, isNarrow ? 6 : 10),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-
-            // ── Disc + track info card ────────────────────────────────
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                // Subtle brand-tinted wash: a whisper of red in the corner that
-                // fades out — modern and "alive" without overpowering the text.
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: isDark
-                      ? [
-                          accent.withAlpha(38),
-                          Colors.white.withAlpha(10),
-                        ]
-                      : [
-                          accent.withAlpha(28),
-                          accent.withAlpha(8),
-                        ],
-                ),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white.withAlpha(20)
-                      : accent.withAlpha(40),
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-              Row(
-                children: [
-                  // Spinning disc — swipe ←/→ to skip, double-tap to like,
-                  // swipe up to open the queue.
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    // Tap the art to open the immersive full-screen player.
-                    onTap: (hasTrack || live)
-                        ? _openFullPlayer
-                        : _openOrScanPlaylist,
-                    onDoubleTap: (!live && hasTrack)
-                        ? () => _toggleFavorite(_playlist[_currentIndex])
-                        : null,
-                    onHorizontalDragEnd: controlsOn
-                        ? (d) {
-                            final v = d.primaryVelocity ?? 0;
-                            if (v < -120) {
-                              _transportNext();
-                            } else if (v > 120) {
-                              _transportPrev();
-                            }
-                          }
-                        : null,
-                    onVerticalDragEnd: (d) {
-                      if ((d.primaryVelocity ?? 0) < -200) {
-                        _openOrScanPlaylist();
-                      }
-                    },
-                    child: AnimatedBuilder(
-                    animation: PlayerStyleController.instance,
-                    builder: (context, _) {
-                      final mScheme = Theme.of(context).colorScheme;
-                      return PlayerDisc(
-                        style: PlayerStyleController.instance.style,
-                        side: isNarrow ? 58.0 : 76.0,
-                        accent: accent,
-                        scheme: mScheme,
-                        isDark: isDark,
-                        spin: _discCtrl,
-                        playing: isPlaying,
-                        dimmed: PlayerStyleController.instance.orbDimmed,
-                        artBuilder: (d, [c]) => _discCenter(d, c),
-                      );
-                    },
-                  ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        MarqueeText(
-                          text: displayTitle,
-                          height: isNarrow ? 17 : 19,
-                          style: TextStyle(
-                            color: onSurface,
-                            fontSize: isNarrow ? 12 : 13.5,
-                            fontWeight: FontWeight.bold,
-                            height: 1.3,
-                          ),
-                        ),
-                        if (displayArtist.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          // Marquee (not ellipsis) so a long live line like
-                          // "Live · streaming to <name>" scrolls fully instead
-                          // of being cut off.
-                          MarqueeText(
-                            text: displayArtist,
-                            height: 15,
-                            style: TextStyle(
-                                color: live
-                                    ? accent
-                                    : onSurface.withAlpha(160),
-                                fontWeight: live
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                                fontSize: 11.5),
-                          ),
-                        ],
-                        if (live) ...[
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Container(
-                                width: 7,
-                                height: 7,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: accent,
-                                ),
-                              ),
-                              const SizedBox(width: 5),
-                              Text('LIVE',
-                                  style: TextStyle(
-                                      color: accent,
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1)),
-                            ],
-                          ),
-                        ] else if (_playlist.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            '${_currentIndex + 1} / ${_playlist.length}',
-                            style: TextStyle(
-                                color: onSurface.withAlpha(100),
-                                fontSize: 10.5),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  // Stacked on the card's right edge: the listening-now share
-                  // toggle on top (moved off the panel header, where tapping it
-                  // minimised the player), the favourite heart below.
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      PresenceShareButton(color: accent, size: 20),
-                      if (!live && hasTrack) ...[
-                        // Clear gap + a padded hit area so the heart and the
-                        // broadcast toggle above it are distinct tap targets.
-                        const SizedBox(height: 10),
-                        BounceTap(
-                          onTap: () =>
-                              _toggleFavorite(_playlist[_currentIndex]),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
-                              child: Icon(
-                                isFav
-                                    ? Icons.favorite
-                                    : Icons.favorite_border,
-                                key: ValueKey(isFav),
-                                color: isFav
-                                    ? Colors.pinkAccent
-                                    : onSurface.withAlpha(130),
-                                size: 24,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-              // How this song feels → who it's for, folded INTO the card
-              // (one surface, no extra block to scroll past).
-              if (!live && hasTrack)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: SongFeelStrip(
-                      title: _trackName,
-                      artist: _artistName,
-                      accent: accent,
-                      framed: false),
-                ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 14),
-
             // ── Position bar — accent colour, taller thumb ────────────
             Row(
               children: [
@@ -818,18 +618,17 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                 ),
               ],
             ),
-
-                ],
-              ),
-            ),
-          ),
-          // Base motif — the soft dancing equalizer — is now a raised 3D
-          // button: tapping it opens the full Now Playing page, a second way in
-          // alongside tapping the spinning disc.
-          // Volume (left) · Now Playing pill (centre) · Speed (right):
-          // each popup genies in toward the centre.
-          Padding(
-            padding: EdgeInsets.fromLTRB(16, 2, 16, isNarrow ? 8 : 14),
+        ],
+      );
+      // Base motif — the soft dancing equalizer — is now a raised 3D
+      // button: tapping it opens the full Now Playing page, a second way in
+      // alongside tapping the spinning disc.
+      // Volume (left) · Now Playing pill (centre) · Speed (right):
+      // each popup genies in toward the centre.
+      final bottomRow = Padding(
+            padding: tall
+                ? const EdgeInsets.fromLTRB(0, 2, 0, 12)
+                : EdgeInsets.fromLTRB(16, 2, 16, isNarrow ? 8 : 14),
             child: Row(
               children: [
                 CompositedTransformTarget(
@@ -1053,10 +852,287 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                 ),
               ],
             ),
+          );
+      return Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding:
+                  EdgeInsets.fromLTRB(16, 14, 16, isNarrow ? 6 : 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+
+            // ── Disc + track info card ────────────────────────────────
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                // Subtle brand-tinted wash: a whisper of red in the corner that
+                // fades out — modern and "alive" without overpowering the text.
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isDark
+                      ? [
+                          accent.withAlpha(38),
+                          Colors.white.withAlpha(10),
+                        ]
+                      : [
+                          accent.withAlpha(28),
+                          accent.withAlpha(8),
+                        ],
+                ),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withAlpha(20)
+                      : accent.withAlpha(40),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+              Row(
+                children: [
+                  // Spinning disc — swipe ←/→ to skip, double-tap to like,
+                  // swipe up to open the queue.
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    // Tap the art to open the immersive full-screen player.
+                    onTap: (hasTrack || live)
+                        ? _openFullPlayer
+                        : _openOrScanPlaylist,
+                    onDoubleTap: (!live && hasTrack)
+                        ? () => _toggleFavorite(_playlist[_currentIndex])
+                        : null,
+                    onHorizontalDragEnd: controlsOn
+                        ? (d) {
+                            final v = d.primaryVelocity ?? 0;
+                            if (v < -120) {
+                              _transportNext();
+                            } else if (v > 120) {
+                              _transportPrev();
+                            }
+                          }
+                        : null,
+                    onVerticalDragEnd: (d) {
+                      if ((d.primaryVelocity ?? 0) < -200) {
+                        _openOrScanPlaylist();
+                      }
+                    },
+                    child: AnimatedBuilder(
+                    animation: PlayerStyleController.instance,
+                    builder: (context, _) {
+                      final mScheme = Theme.of(context).colorScheme;
+                      return PlayerDisc(
+                        style: PlayerStyleController.instance.style,
+                        side: isNarrow ? 58.0 : 76.0,
+                        accent: accent,
+                        scheme: mScheme,
+                        isDark: isDark,
+                        spin: _discCtrl,
+                        playing: isPlaying,
+                        dimmed: PlayerStyleController.instance.orbDimmed,
+                        artBuilder: (d, [c]) => _discCenter(d, c),
+                      );
+                    },
+                  ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        MarqueeText(
+                          text: displayTitle,
+                          height: isNarrow ? 17 : 19,
+                          style: TextStyle(
+                            color: onSurface,
+                            fontSize: isNarrow ? 12 : 13.5,
+                            fontWeight: FontWeight.bold,
+                            height: 1.3,
+                          ),
+                        ),
+                        if (displayArtist.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          // Marquee (not ellipsis) so a long live line like
+                          // "Live · streaming to <name>" scrolls fully instead
+                          // of being cut off.
+                          MarqueeText(
+                            text: displayArtist,
+                            height: 15,
+                            style: TextStyle(
+                                color: live
+                                    ? accent
+                                    : onSurface.withAlpha(160),
+                                fontWeight: live
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                fontSize: 11.5),
+                          ),
+                        ],
+                        if (live) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Container(
+                                width: 7,
+                                height: 7,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: accent,
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Text('LIVE',
+                                  style: TextStyle(
+                                      color: accent,
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1)),
+                            ],
+                          ),
+                        ] else if (_playlist.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            '${_currentIndex + 1} / ${_playlist.length}',
+                            style: TextStyle(
+                                color: onSurface.withAlpha(100),
+                                fontSize: 10.5),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  // Stacked on the card's right edge: the listening-now share
+                  // toggle on top (moved off the panel header, where tapping it
+                  // minimised the player), the favourite heart below.
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      PresenceShareButton(color: accent, size: 20),
+                      if (!live && hasTrack) ...[
+                        // Clear gap + a padded hit area so the heart and the
+                        // broadcast toggle above it are distinct tap targets.
+                        const SizedBox(height: 10),
+                        BounceTap(
+                          onTap: () =>
+                              _toggleFavorite(_playlist[_currentIndex]),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              child: Icon(
+                                isFav
+                                    ? Icons.favorite
+                                    : Icons.favorite_border,
+                                key: ValueKey(isFav),
+                                color: isFav
+                                    ? Colors.pinkAccent
+                                    : onSurface.withAlpha(130),
+                                size: 24,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+              // How this song feels → who it's for, folded INTO the card
+              // (one surface, no extra block to scroll past).
+              if (!live && hasTrack)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: SongFeelStrip(
+                      title: _trackName,
+                      artist: _artistName,
+                      accent: accent,
+                      framed: false),
+                ),
+                ],
+              ),
+            ),
+
+            if (!tall) ...[
+              const SizedBox(height: 14),
+              _controlsGlass(scheme, accent, controlsBody),
+            ],
+                ],
+              ),
+            ),
           ),
+          if (tall)
+            Padding(
+              padding: EdgeInsets.fromLTRB(12, 0, 12, isNarrow ? 8 : 12),
+              child: _controlsGlass(
+                scheme,
+                accent,
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    controlsBody,
+                    const SizedBox(height: 14),
+                    bottomRow,
+                  ],
+                ),
+                padding: const EdgeInsets.fromLTRB(12, 14, 12, 0),
+              ),
+            )
+          else
+            bottomRow,
         ],
       );
     });
+  }
+
+  /// The glass the player controls sit in: a sheen from the top, a lit rim, a faint accent wash and a shadow underneath, so the waveform,
+  /// transport and tools read as one instrument instead of floating loose.
+  Widget _controlsGlass(ColorScheme scheme, Color accent, Widget child,
+      {EdgeInsets padding = const EdgeInsets.fromLTRB(10, 14, 10, 14)}) {
+    final dark = scheme.brightness == Brightness.dark;
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: dark
+              ? [
+                  Color.alphaBlend(
+                      Colors.white.withAlpha(16), accent.withAlpha(26)),
+                  Colors.white.withAlpha(8),
+                  Colors.black.withAlpha(40),
+                ]
+              : [
+                  Colors.white.withAlpha(235),
+                  Color.alphaBlend(accent.withAlpha(14), Colors.white),
+                  Color.alphaBlend(accent.withAlpha(26), scheme.surface),
+                ],
+          stops: const [0.0, 0.45, 1.0],
+        ),
+        border: Border.all(
+          color: dark ? Colors.white.withAlpha(24) : accent.withAlpha(46),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(dark ? 90 : 26),
+            blurRadius: 22,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: accent.withAlpha(dark ? 22 : 14),
+            blurRadius: 30,
+            spreadRadius: -6,
+          ),
+        ],
+      ),
+      child: child,
+    );
   }
 
   /// A labelled utility tile — icon in a soft rounded chip with a caption

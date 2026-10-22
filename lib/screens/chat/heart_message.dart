@@ -4,11 +4,12 @@ import 'package:flutter/services.dart';
 
 import '../../services/device_lean.dart';
 import 'dart:math' as math;
-import 'dart:ui' show PathMetric;
+import 'dart:ui' show FontFeature, PathMetric;
 import 'package:intl/intl.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'dart:async';
 import '../../services/heart_lock.dart';
+import '../../widgets/glossy_heart.dart';
 
 // ─── Secret hearts — the signature love note ────────────────────────────────
 // A "secret heart" (message_type 'heart') arrives covered, beating softly. It
@@ -70,6 +71,20 @@ class HeartMood {
 
   static HeartMood of(String? key) =>
       all.firstWhere((m) => m.key == key, orElse: () => love);
+}
+
+/// When a heart was sent, for the opened letter: "3:01 AM", "yesterday
+/// 3:01 AM", "Fri 3:01 AM" or "12 Feb".
+String heartSentLabel(DateTime when) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(when.year, when.month, when.day);
+  final diff = today.difference(day).inDays;
+  final t = DateFormat('h:mm a').format(when);
+  if (diff <= 0) return t;
+  if (diff == 1) return 'yesterday $t';
+  if (diff < 7) return '${DateFormat('EEE').format(when)} $t';
+  return DateFormat('d MMM').format(when);
 }
 
 /// "Opens tonight 8:00 PM" / "Opens Fri 8:00 PM" / "Opens 12 Feb, 8:00 PM".
@@ -171,7 +186,11 @@ class HeartBubble extends StatefulWidget {
     this.onReact,
     this.onKeep,
     this.onSendBack,
+    this.senderName,
   });
+
+  /// Who sent it (first name) — shown on the opened letter.
+  final String? senderName;
 
   final String text;
   final bool isMe;
@@ -693,6 +712,8 @@ class _HeartBubbleState extends State<HeartBubble>
           text: widget.text,
           accent: _accent,
           mood: _mood,
+          from: widget.isMe ? 'you' : widget.senderName,
+          sentAt: widget.sentAt,
           onReply: widget.onReply,
           onReact: widget.onReact,
           onKeep: widget.onKeep,
@@ -1393,6 +1414,8 @@ void showHeartGenie(
   required String text,
   required Color accent,
   HeartMood mood = HeartMood.love,
+  String? from,
+  DateTime? sentAt,
   VoidCallback? onReply,
   ValueChanged<String>? onReact,
   VoidCallback? onKeep,
@@ -1411,6 +1434,8 @@ void showHeartGenie(
       text: text,
       accent: accent,
       mood: mood,
+      from: from,
+      sentAt: sentAt,
       onReply: onReply,
       onReact: onReact,
       onKeep: onKeep,
@@ -1429,6 +1454,8 @@ class _HeartGenie extends StatefulWidget {
     required this.accent,
     required this.mood,
     required this.onClosed,
+    this.from,
+    this.sentAt,
     this.onReply,
     this.onReact,
     this.onKeep,
@@ -1438,6 +1465,8 @@ class _HeartGenie extends StatefulWidget {
   final String text;
   final Color accent;
   final HeartMood mood;
+  final String? from;
+  final DateTime? sentAt;
   final VoidCallback onClosed;
   final VoidCallback? onReply;
   final ValueChanged<String>? onReact;
@@ -1449,7 +1478,10 @@ class _HeartGenie extends StatefulWidget {
 }
 
 class _HeartGenieState extends State<_HeartGenie>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
+  // Drains from full to empty over the idle window — the visible reseal.
+  late final AnimationController _drain =
+      AnimationController(vsync: this, duration: HeartLock.idleRelock);
   late final AnimationController _c = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 420))
     ..forward();
@@ -1468,6 +1500,7 @@ class _HeartGenieState extends State<_HeartGenie>
   void _armIdle() {
     _idle?.cancel();
     _idle = Timer(HeartLock.idleRelock, _close);
+    _drain.forward(from: 0);
   }
 
   /// App backgrounded: no frames are drawn while paused, so an animated
@@ -1493,6 +1526,7 @@ class _HeartGenieState extends State<_HeartGenie>
     HeartLock.instance.noteClosed();
     HeartLock.instance.relockEpoch.removeListener(_closeNow);
     _idle?.cancel();
+    _drain.dispose();
     _c.dispose();
     super.dispose();
   }
@@ -1563,28 +1597,56 @@ class _HeartGenieState extends State<_HeartGenie>
     );
   }
 
-  /// Respond right from the letter: a row of loving reactions, then Reply
-  /// and (bonded) Keepsake. Each closes the card first, then acts.
-  Widget _letterActions() {
-    const reactions = ['❤️', '😍', '🥹', '😘', '🙏'];
-    final white = Colors.white.withValues(alpha: 0.9);
-    // Act right away (don't wait on the fold-back animation — if it never
-    // completes, the action would never run), then fold the card away.
-    Future<void> after(VoidCallback fn) async {
-      HapticFeedback.selectionClick();
-      fn();
-      await _close();
-    }
+  // Act right away (don't wait on the fold-back animation — if it never
+  // completes, the action would never run), then fold the card away.
+  Future<void> _after(VoidCallback fn) async {
+    HapticFeedback.selectionClick();
+    fn();
+    await _close();
+  }
 
-    Widget pill(IconData icon, String label, VoidCallback onTap) => Material(
-          color: Colors.white.withValues(alpha: 0.12),
-          shape: StadiumBorder(
-              side: BorderSide(color: Colors.white.withValues(alpha: 0.18))),
-          child: InkWell(
-            customBorder: const StadiumBorder(),
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+  /// Quick loving reactions — one soft row right under the words.
+  Widget _reactions() {
+    const reactions = ['❤️', '😍', '🥹', '😘', '🙏'];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final e in reactions)
+            InkWell(
+              customBorder: const CircleBorder(),
+              onTap: () => _after(() => widget.onReact!(e)),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Text(e, style: const TextStyle(fontSize: 21)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// One action row: Reply · ♥ Send a heart back · Keepsake. The heart is
+  /// the clear main action; on a narrow card the side two become round icon
+  /// buttons.
+  Widget _actionRow(bool narrow) {
+    final white = Colors.white.withValues(alpha: 0.92);
+    final a = widget.accent;
+    Widget side(IconData icon, String label, VoidCallback onTap) {
+      final child = narrow
+          ? Padding(
+              padding: const EdgeInsets.all(10),
+              child: Icon(icon, size: 18, color: white),
+            )
+          : Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1593,98 +1655,136 @@ class _HeartGenieState extends State<_HeartGenie>
                   Text(label,
                       style: TextStyle(
                           color: white,
-                          fontSize: 12,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w600)),
                 ],
               ),
-            ),
+            );
+      return Tooltip(
+        message: label,
+        child: Material(
+          color: Colors.white.withValues(alpha: 0.10),
+          shape: narrow
+              ? CircleBorder(
+                  side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.18)))
+              : StadiumBorder(
+                  side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.18))),
+          child: InkWell(
+            customBorder:
+                narrow ? const CircleBorder() : const StadiumBorder(),
+            onTap: onTap,
+            child: child,
           ),
-        );
+        ),
+      );
+    }
 
-    final a = widget.accent;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // The warmest answer to a heart is a heart.
-        if (widget.onSendBack != null) ...[
-          Material(
-            color: Color.lerp(a, Colors.white, 0.15),
-            shape: const StadiumBorder(),
-            elevation: 0,
-            child: InkWell(
-              customBorder: const StadiumBorder(),
-              onTap: () => after(widget.onSendBack!),
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.favorite_rounded, size: 17, color: Colors.white),
-                    SizedBox(width: 8),
-                    Text('Send a heart back',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.2)),
-                  ],
+    final main = widget.onSendBack == null
+        ? null
+        : DecoratedBox(
+            // Raised, lit key — same 3D language as the rest of Aluta.
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(30),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color.lerp(a, Colors.white, 0.34)!,
+                  Color.lerp(a, Colors.white, 0.12)!,
+                  a,
+                ],
+              ),
+              border:
+                  Border.all(color: Colors.white.withValues(alpha: 0.35)),
+              boxShadow: [
+                BoxShadow(
+                  color: a.withValues(alpha: 0.45),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                customBorder: const StadiumBorder(),
+                onTap: () => _after(widget.onSendBack!),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.favorite_rounded,
+                          size: 17, color: Colors.white),
+                      SizedBox(width: 7),
+                      Text('Send a heart back',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.2)),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
+          );
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (widget.onReply != null) ...[
+          side(Icons.reply_rounded, 'Reply', () => _after(widget.onReply!)),
+          const SizedBox(width: 10),
         ],
-        if (widget.onReact != null)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(22),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final e in reactions)
-                  InkWell(
-                    customBorder: const CircleBorder(),
-                    onTap: () => after(() => widget.onReact!(e)),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 4),
-                      child: Text(e, style: const TextStyle(fontSize: 22)),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        if (widget.onReply != null || widget.onKeep != null) ...[
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.center,
-            children: [
-              if (widget.onReply != null)
-                pill(Icons.reply_rounded, 'Reply',
-                    () => after(widget.onReply!)),
-              if (widget.onKeep != null)
-                pill(Icons.auto_awesome_rounded, 'Keepsake',
-                    () => after(widget.onKeep!)),
-            ],
-          ),
+        ?main,
+        if (widget.onKeep != null) ...[
+          const SizedBox(width: 10),
+          side(Icons.auto_awesome_rounded, 'Keepsake',
+              () => _after(widget.onKeep!)),
         ],
       ],
     );
   }
 
+  /// "✨ Listen to understand\n…" → a title line and the body.
+  static (String?, String) _split(String t) {
+    final i = t.indexOf('\n');
+    if (i > 0 && i <= 64) {
+      final head = t.substring(0, i).trim();
+      final body = t.substring(i + 1).trim();
+      if (head.isNotEmpty && body.isNotEmpty) return (head, body);
+    }
+    return (null, t.trim());
+  }
+
+  String _byline() {
+    final parts = <String>[];
+    final from = widget.from?.trim();
+    if (from != null && from.isNotEmpty) parts.add('from $from');
+    final at = widget.sentAt;
+    if (at != null) parts.add(heartSentLabel(at));
+    return parts.join(' · ');
+  }
+
   Widget _card(BuildContext context, double words) {
     final size = MediaQuery.of(context).size;
     final a = widget.accent;
+    final width = (size.width * 0.84).clamp(260.0, 430.0);
+    final narrow = width < 360;
+    final (title, body) = _split(widget.text);
+    final byline = _byline();
+    final soft = Color.lerp(a, Colors.white, 0.62)!;
+    final hasActions = widget.onReply != null ||
+        widget.onKeep != null ||
+        widget.onSendBack != null;
     return Material(
       color: Colors.transparent,
       child: Container(
-        width: (size.width * 0.84).clamp(260.0, 430.0),
-        constraints: BoxConstraints(maxHeight: size.height * 0.66),
+        width: width,
+        constraints: BoxConstraints(maxHeight: size.height * 0.7),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(28),
           gradient: LinearGradient(
@@ -1731,88 +1831,169 @@ class _HeartGenieState extends State<_HeartGenie>
               ),
               const Positioned(top: 8, left: 10, child: _CardMotifs(flip: false)),
               const Positioned(
-                  bottom: 8, right: 10, child: _CardMotifs(flip: true)),
+                  bottom: 14, right: 10, child: _CardMotifs(flip: true)),
               Padding(
-                padding: const EdgeInsets.fromLTRB(26, 24, 26, 20),
+                padding: const EdgeInsets.fromLTRB(24, 22, 24, 16),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Header: glossy heart medallion + who / when.
                     Container(
-                      padding: const EdgeInsets.all(11),
+                      width: 48,
+                      height: 48,
+                      alignment: Alignment.center,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.white.withValues(alpha: 0.12),
+                        color: Colors.white.withValues(alpha: 0.10),
                         border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.22)),
+                            color: Colors.white.withValues(alpha: 0.20)),
                       ),
-                      child: Icon(widget.mood.icon,
-                          size: 22, color: Color.lerp(a, Colors.white, 0.5)),
+                      child: widget.mood.icon == Icons.favorite_rounded
+                          ? Padding(
+                              padding: const EdgeInsets.only(top: 3),
+                              child: GlossyHeart(
+                                  size: 26,
+                                  color: Color.lerp(a, Colors.white, 0.18)!),
+                            )
+                          : Icon(widget.mood.icon, size: 22, color: soft),
                     ),
-                    const SizedBox(height: 10),
-                    // The letter's heading, by mood.
-                    Text(
-                      widget.mood.title,
-                      style: TextStyle(
-                        color: Color.lerp(a, Colors.white, 0.62),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.6,
-                      ),
+                    const SizedBox(height: 9),
+                    Text.rich(
+                      TextSpan(children: [
+                        TextSpan(
+                          text: widget.mood.title,
+                          style: TextStyle(
+                            color: soft,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.4,
+                          ),
+                        ),
+                        if (byline.isNotEmpty)
+                          TextSpan(
+                            text: '  ·  $byline',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.62),
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                      ]),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
-                    Container(
-                      width: 36,
-                      height: 1.5,
-                      color: Colors.white.withValues(alpha: 0.18),
-                    ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 16),
+                    // The words — calm and readable; long notes scroll.
                     Flexible(
                       child: Opacity(
                         opacity: words,
                         child: Transform.translate(
                           offset: Offset(0, (1 - words) * 10),
                           child: SingleChildScrollView(
-                            child: Text(
-                              widget.text,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.96),
-                                fontSize: 17,
-                                height: 1.55,
-                                fontWeight: FontWeight.w500,
-                                fontStyle: FontStyle.italic,
-                                letterSpacing: 0.2,
-                              ),
+                            child: Column(
+                              children: [
+                                if (title != null) ...[
+                                  Text(
+                                    title,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 17.5,
+                                      height: 1.3,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                ],
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: Text(
+                                    body,
+                                    textAlign: body.length > 160
+                                        ? TextAlign.start
+                                        : TextAlign.center,
+                                    style: TextStyle(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.90),
+                                      fontSize: title == null ? 16.5 : 15.5,
+                                      height: 1.55,
+                                      fontWeight: FontWeight.w400,
+                                      letterSpacing: 0.1,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 14),
-                    if (widget.onReact != null ||
-                        widget.onReply != null ||
-                        widget.onKeep != null ||
-                        widget.onSendBack != null) ...[
-                      _letterActions(),
-                      const SizedBox(height: 12),
+                    if (widget.onReact != null) ...[
+                      const SizedBox(height: 16),
+                      _reactions(),
                     ],
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.lock_clock_rounded,
-                            size: 11,
-                            color: Colors.white.withValues(alpha: 0.5)),
-                        const SizedBox(width: 5),
-                        Text(
-                          'reseals by itself · tap outside to close',
-                          style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.55),
-                              fontSize: 10.5,
-                              letterSpacing: 0.4),
-                        ),
-                      ],
+                    if (hasActions) ...[
+                      const SizedBox(height: 14),
+                      _actionRow(narrow),
+                    ],
+                    const SizedBox(height: 14),
+                    // The visible reseal: a countdown that restarts on touch.
+                    AnimatedBuilder(
+                      animation: _drain,
+                      builder: (context, _) {
+                        final left = HeartLock.idleRelock.inSeconds *
+                            (1 - _drain.value);
+                        final secs = left.ceil();
+                        final label =
+                            '${secs ~/ 60}:${(secs % 60).toString().padLeft(2, '0')}';
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.lock_clock_rounded,
+                                size: 11,
+                                color: Colors.white.withValues(alpha: 0.6)),
+                            const SizedBox(width: 5),
+                            Text(
+                              'reseals in $label · tap outside to close',
+                              style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.62),
+                                  fontSize: 10.5,
+                                  letterSpacing: 0.3,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures()
+                                  ]),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ],
+                ),
+              ),
+              // Drain line along the bottom edge.
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: 3,
+                child: AnimatedBuilder(
+                  animation: _drain,
+                  builder: (context, _) => Align(
+                    alignment: Alignment.centerLeft,
+                    child: FractionallySizedBox(
+                      widthFactor: (1 - _drain.value).clamp(0.0, 1.0),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: [
+                            Color.lerp(a, Colors.white, 0.35)!,
+                            a,
+                          ]),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],

@@ -3955,6 +3955,9 @@ class _ChatPageState extends State<ChatPage>
                   key: ValueKey('heart-$msgId'),
                   text: text,
                   isMe: isMe,
+                  senderName: rxName.trim().isEmpty
+                      ? null
+                      : rxName.trim().split(' ').first,
                   accent: accent,
                   bonded: _canHarmony,
                   heartKeySeed: msgId,

@@ -3426,6 +3426,12 @@ class _ChatPageState extends State<ChatPage>
   }
 
   void _jumpToQuoted(String quoted) {
+    // Statuses live in Stories (and vanish after 24h), not in the thread.
+    if (_isStatusQuote(quoted)) {
+      showToast(context, 'This is about a status — open Stories to see it',
+          type: ToastType.info);
+      return;
+    }
     final target = _findQuotedMessage(quoted);
     if (target == null) {
       showToast(context, 'That message isn\'t on this device anymore',

@@ -1523,7 +1523,26 @@ extension _ChatPageHelpers3 on _ChatPageState {
   /// sender, so a friend replying to your message showed her name instead of
   /// "You".) [replyIsMe] is only used as a fallback if the original isn't
   /// loaded, where a reply almost always quotes the other person.
+  /// A quote that points at a STATUS (a status reply or a "caught you on my
+  /// status" nudge), not at a chat message.
+  bool _isStatusQuote(String q) =>
+      q.startsWith('👀 Caught you on my status') ||
+      q.startsWith('👀 You viewed my status') ||
+      RegExp(r'^(📷|🎬|🎵|💬|✨) Status').hasMatch(q);
+
+  bool _isStatusNudgeQuote(String q) =>
+      q.startsWith('👀 Caught you on my status') ||
+      q.startsWith('👀 You viewed my status');
+
   String _quotedAuthor(String quotedText, bool replyIsMe) {
+    if (_isStatusQuote(quotedText)) {
+      // Whose status: a nudge comes from the status's owner; a reply goes
+      // TO the owner.
+      final first = widget.friendName.split(' ').first;
+      final ownerIsMe =
+          _isStatusNudgeQuote(quotedText) ? replyIsMe : !replyIsMe;
+      return ownerIsMe ? 'Your status' : '$first\'s status';
+    }
     final orig = _findQuotedMessage(quotedText);
     if (orig != null) {
       _rememberQuoteAuthor(quotedText, orig);

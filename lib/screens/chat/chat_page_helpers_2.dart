@@ -1206,6 +1206,8 @@ extension _ChatPageHelpers2 on _ChatPageState {
   // style: it lives in the conversation's input slot, not over the whole app.
   Widget _buildFileCaptionBar(ColorScheme scheme) {
     final name = _captionFileName ?? '';
+    final captionCtrl = _captionCtrl;
+    if (captionCtrl == null) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
       child: Column(
@@ -1258,7 +1260,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
               Expanded(
                 // Same pill (and keystroke ticks) as the chat composer.
                 child: AlutaComposerField(
-                  controller: _captionCtrl,
+                  controller: captionCtrl,
                   hint: 'Add a caption…',
                   maxLines: 4,
                   autofocus: true,

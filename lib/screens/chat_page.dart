@@ -85,6 +85,8 @@ import '../data/glow_cards.dart';
 import 'chat/attach_sheet.dart';
 import 'chat/contact_picker_sheet.dart';
 import 'stories/camera_capture.dart';
+import 'stories/story_models.dart';
+import 'stories/story_viewer.dart';
 import '../widgets/genie_menu.dart';
 import '../widgets/aluta_composer_field.dart';
 import '../widgets/pixel_snap.dart';
@@ -3425,13 +3427,72 @@ class _ChatPageState extends State<ChatPage>
     }
   }
 
-  void _jumpToQuoted(String quoted) {
-    // Statuses live in Stories (and vanish after 24h), not in the thread.
-    if (_isStatusQuote(quoted)) {
-      showToast(context, 'This is about a status — open Stories to see it',
+  /// Tap a status quote → open that very status (still up), else say it's
+  /// gone. [ownerIsMe]: whose status it is (a nudge comes from its owner, a
+  /// reply goes to the owner).
+  Future<void> _openQuotedStatus(String quoted, bool ownerIsMe) async {
+    final ownerId = ownerIsMe ? int.tryParse(_myId ?? '') : widget.friendId;
+    final raw = await ApiService().fetchStoriesFeed();
+    if (!mounted) return;
+    final groups = raw.map(StoryGroup.fromJson).toList();
+    final gi = groups.indexWhere((g) => g.authorId == ownerId);
+    if (ownerId == null || gi < 0 || groups[gi].stories.isEmpty) {
+      showToast(context, 'That status has expired or was deleted',
           type: ToastType.info);
       return;
     }
+    // Which status: the quote's last line is "📷 Status: caption",
+    // "🎵 Status: Title — Artist", "💬 Status: text"…
+    final line = quoted.split('\n').last.trim();
+    final kind = line.startsWith('🎬')
+        ? 'video'
+        : line.startsWith('🎵')
+            ? 'music'
+            : line.startsWith('💬')
+                ? 'text'
+                : line.startsWith('✨')
+                    ? 'sticker'
+                    : 'photo';
+    final colon = line.indexOf(': ');
+    String norm(String t) => t
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll('…', '')
+        .trim()
+        .toLowerCase();
+    final hint = colon > 0 ? norm(line.substring(colon + 2)) : '';
+    final stories = groups[gi].stories;
+    StoryItem? match;
+    for (final st in stories.reversed) {
+      if (st.kind != kind) continue;
+      final hay = norm(kind == 'music'
+          ? '${st.musicTitle ?? ''} — ${st.musicArtist ?? ''}'
+          : (st.caption ?? ''));
+      if (hint.isEmpty || hay.startsWith(hint) || hint.startsWith(hay)) {
+        match = st;
+        if (hint.isNotEmpty) break;
+      }
+    }
+    if (match == null) {
+      showToast(context, 'That status has expired or was deleted',
+          type: ToastType.info);
+      return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => StoryViewerScreen(
+          groups: [groups[gi]],
+          startGroup: 0,
+          startStoryId: match!.id,
+          apiBase: _apiBase,
+          myUserId: int.tryParse(_myId ?? ''),
+        ),
+      ),
+    );
+  }
+
+  void _jumpToQuoted(String quoted) {
     final target = _findQuotedMessage(quoted);
     if (target == null) {
       showToast(context, 'That message isn\'t on this device anymore',
@@ -4646,7 +4707,14 @@ class _ChatPageState extends State<ChatPage>
                         // ── Quoted reply (tap to jump to original) ─────
                         if (!tomb && quotedText != null)
                           GestureDetector(
-                            onTap: () => _jumpToQuoted(quotedText!),
+                            // A status quote opens the status itself.
+                            onTap: () => _isStatusQuote(quotedText!)
+                                ? _openQuotedStatus(
+                                    quotedText,
+                                    _isStatusNudgeQuote(quotedText)
+                                        ? isMe
+                                        : !isMe)
+                                : _jumpToQuoted(quotedText),
                             child: ConstrainedBox(
                               constraints:
                                   BoxConstraints(maxWidth: quoteMaxWidth),

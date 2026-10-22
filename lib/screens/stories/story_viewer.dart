@@ -35,7 +35,12 @@ class StoryViewerScreen extends StatefulWidget {
     required this.startGroup,
     required this.apiBase,
     required this.myUserId,
+    this.startStoryId,
   });
+
+  /// Open on this exact story (e.g. tapped from a status quote in a chat)
+  /// instead of the first unseen one.
+  final String? startStoryId;
 
   @override
   State<StoryViewerScreen> createState() => _StoryViewerScreenState();
@@ -72,8 +77,13 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     _replyFocus.addListener(_onReplyFocus);
     _replyCtrl.addListener(_onReplyText);
     // Open directly on the first UNSEEN story so the viewer doesn't dump the
-    // user on old, already-watched ones (they can still swipe back).
-    _s = _firstUnseen(widget.groups[_g]);
+    // user on old, already-watched ones (they can still swipe back) — or
+    // on the exact story asked for.
+    final want = widget.startStoryId;
+    final at = want == null
+        ? -1
+        : widget.groups[_g].stories.indexWhere((s) => s.id == want);
+    _s = at >= 0 ? at : _firstUnseen(widget.groups[_g]);
     _progress = AnimationController(vsync: this, duration: _photoDuration)
       ..addStatusListener((st) {
         if (st == AnimationStatus.completed) _next();

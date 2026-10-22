@@ -50,25 +50,29 @@ class HeartMood {
     'Tonight I want to ',
   ]);
   static const miss = HeartMood('miss', 'Missing you', 'missing you',
-      'Missing you', Color(0xFF6C63FF), Icons.nights_stay_rounded, [
+      'Missing you', Color(0xFF7A00FF), // neon violet
+      Icons.nights_stay_rounded, [
     'I miss the way you ',
     'Right now I wish I was ',
     'The first thing we\'ll do when I see you: ',
   ]);
   static const sorry = HeartMood('sorry', 'Sorry', 'a soft sorry',
-      'I\'m sorry', Color(0xFFE07A9A), Icons.healing_rounded, [
+      'I\'m sorry', Color(0xFFFF2E88), // neon pink
+      Icons.healing_rounded, [
     'I\'m sorry for ',
     'I understand now that ',
     'Next time I promise to ',
   ]);
   static const thanks = HeartMood('thanks', 'Thank you', 'thank you',
-      'Thank you', Color(0xFFE0A526), Icons.volunteer_activism_rounded, [
+      'Thank you', Color(0xFFFFE500), // neon yellow
+      Icons.volunteer_activism_rounded, [
     'Thank you for ',
     'You made my day when ',
     'I don\'t say it enough, but ',
   ]);
   static const proud = HeartMood('proud', 'Proud of you', 'so proud',
-      'Proud of you', Color(0xFF22A06B), Icons.emoji_events_rounded, [
+      'Proud of you', Color(0xFF2BE86B), // neon green
+      Icons.emoji_events_rounded, [
     'I\'m so proud of you for ',
     'Watching you ',
     'One thing I admire about you is ',

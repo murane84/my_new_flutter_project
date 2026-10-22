@@ -34,12 +34,15 @@ class HeartMood {
   final String label; // chip in the composer
   final String cover; // small label on the covered heart
   final String title; // heading of the opened letter
-  final Color? color; // null = the chat's accent
+  // Every mood owns its colour — fixed, never the user's app/bubble theme —
+  // so "with love" is always red, "missing you" always violet, and so on.
+  final Color? color;
   final IconData icon;
   final List<String> prompts; // starters offered in the composer
 
   static const love = HeartMood(
-      'love', 'Love', 'with love', 'With love', null, Icons.favorite_rounded, [
+      'love', 'Love', 'with love', 'With love', Color(0xFFE3264F),
+      Icons.favorite_rounded, [
     'One thing I love about you is ',
     'I fell for you all over again when ',
     'Tonight I want to ',
@@ -1024,12 +1027,11 @@ class _HeartBubbleState extends State<HeartBubble>
       progress = total <= 0 ? 1.0 : (done / total).clamp(0.0, 1.0);
     }
     // A sealed heart sits a little dimmer, as if waiting.
-    var base = sealed ? Color.lerp(_accent, Colors.grey.shade700, 0.35)! : _accent;
-    // A pale theme (peach, butter…) would swallow the white words on the
-    // heart — deepen it just enough that they read.
-    for (var i = 0; i < 8 && readableOn(base) != Colors.white; i++) {
-      base = Color.lerp(base, Colors.black, 0.12)!;
-    }
+    final base =
+        sealed ? Color.lerp(_accent, Colors.grey.shade700, 0.35)! : _accent;
+    // The heart keeps its mood's own colour; its words take the matching
+    // ink (white on deep moods, graphite / black on bright ones).
+    final ink = readableOn(base);
     return SizedBox(
       key: _heartKey,
       width: 160,
@@ -1057,14 +1059,14 @@ class _HeartBubbleState extends State<HeartBubble>
                       child: Text(
                         widget.text,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            color: Colors.white,
+                        style: TextStyle(
+                            color: ink,
                             fontSize: 13.5,
                             height: 1.2,
                             fontWeight: FontWeight.w600),
                       ),
                     )
-                  : _cover(sealed),
+                  : _cover(sealed, ink),
             ),
           ),
         ),
@@ -1072,8 +1074,8 @@ class _HeartBubbleState extends State<HeartBubble>
     );
   }
 
-  Widget _cover(bool sealed) {
-    final white = Colors.white.withValues(alpha: 0.95);
+  Widget _cover(bool sealed, [Color ink = Colors.white]) {
+    final white = ink.withValues(alpha: 0.95);
     final String line;
     final IconData icon;
     if (sealed) {
@@ -1092,7 +1094,7 @@ class _HeartBubbleState extends State<HeartBubble>
       key: ValueKey('cover-$sealed-$_hint-$_awaitingNote'),
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: Colors.white, size: 20),
+        Icon(icon, color: ink, size: 20),
         const SizedBox(height: 4),
         Text(
           line,
@@ -1113,7 +1115,7 @@ class _HeartBubbleState extends State<HeartBubble>
               softWrap: false,
               overflow: TextOverflow.fade,
               style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.75),
+                  color: ink.withValues(alpha: 0.75),
                   fontSize: 9.5,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.5)),

@@ -1,6 +1,8 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import '../../services/device_lean.dart';
 import 'dart:math' as math;
 import 'dart:ui' show PathMetric;
 import 'package:intl/intl.dart';
@@ -279,6 +281,15 @@ class _HeartBubbleState extends State<HeartBubble>
   // mouse) while it's down, and eases back when it lifts or the touch turns
   // into a scroll.
   bool get _touchTilting => _touchAt != null;
+
+  // Phone lean (accelerometer) while this heart is on screen.
+  bool _leaning = false;
+  void _setLeaning(bool on) {
+    on = on && !_reduceMotion;
+    if (on == _leaning) return;
+    _leaning = on;
+    on ? DeviceLean.instance.acquire() : DeviceLean.instance.release();
+  }
   Offset? _touchAt;
 
   void _touchDown(PointerDownEvent e) {
@@ -306,11 +317,21 @@ class _HeartBubbleState extends State<HeartBubble>
     return MouseRegion(
       onHover: (e) => _tiltAt(e.localPosition),
       onExit: (_) => _tilt.value = Offset.zero,
-      child: ValueListenableBuilder<Offset>(
-        valueListenable: _tilt,
-        builder: (context, target, _) => TweenAnimationBuilder<Offset>(
+      // Mouse / finger win while they're on the heart; otherwise it leans
+      // gently with the phone.
+      child: AnimatedBuilder(
+        animation: Listenable.merge([_tilt, DeviceLean.instance.lean]),
+        builder: (context, _) {
+          final direct = _tilt.value;
+          final target = direct != Offset.zero
+              ? direct
+              : (_leaning ? DeviceLean.instance.lean.value * 0.75 : Offset.zero);
+          return TweenAnimationBuilder<Offset>(
           tween: Tween(end: target),
-          duration: Duration(milliseconds: target == Offset.zero ? 420 : 160),
+          duration: Duration(
+              milliseconds: direct != Offset.zero
+                  ? 160
+                  : (target == Offset.zero ? 420 : 120)),
           curve: Curves.easeOutCubic,
           builder: (context, t, _) {
             const maxTurn = 0.16; // ~9°, subtle
@@ -324,7 +345,8 @@ class _HeartBubbleState extends State<HeartBubble>
               child: build(t),
             );
           },
-        ),
+          );
+        },
       ),
     );
   }
@@ -557,6 +579,7 @@ class _HeartBubbleState extends State<HeartBubble>
 
   @override
   void dispose() {
+    _setLeaning(false);
     _tilt.dispose();
     HeartLock.instance.relockEpoch.removeListener(_onRelockAll);
     _relock?.cancel();
@@ -769,6 +792,7 @@ class _HeartBubbleState extends State<HeartBubble>
         if (v != _visible) {
           _visible = v;
           if (!mounted) return;
+          _setLeaning(v);
           if (v) {
             _wake(); // scrolled into view → stars + beat
           } else {

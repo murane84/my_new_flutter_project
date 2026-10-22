@@ -70,6 +70,8 @@ dependencies:
   platform: ^3.1.6
   connectivity_plus: ^7.0.0
   device_info_plus: ^13.1.0
+  # Secret heart leans with the phone (accelerometer). 7.x needs AGP 8.12.1+.
+  sensors_plus: ^6.1.1
 
   # Chat media sharing (images / files / voice notes)
   image_picker: ^1.1.2

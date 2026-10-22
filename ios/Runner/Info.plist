@@ -56,6 +56,8 @@
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>Aluta shows your recent photos so you can quickly share them in a chat.</string>
 		<!-- In-app camera: take photos and record videos for chats and stories. -->
+		<key>NSMotionUsageDescription</key>
+		<string>Aluta uses motion so secret hearts lean gently as you tilt your phone.</string>
 		<key>NSCameraUsageDescription</key>
 		<string>Aluta uses the camera so you can take photos and record videos for your chats and stories.</string>
 		<!-- Recording a video clip captures sound with it. -->

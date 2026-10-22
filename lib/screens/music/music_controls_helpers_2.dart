@@ -399,16 +399,25 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
 
       // Room for everything → the controls live together in one glossy
       // card pinned to the bottom; a short panel keeps scrolling instead.
-      final tall = box.maxHeight >= 520;
+      final tall = box.maxHeight >= 480;
       final controlsBody = Column(
         mainAxisSize: MainAxisSize.min,
         children: [
             // ── Position bar — accent colour, taller thumb ────────────
             Row(
               children: [
-                Text(_fmt(position),
-                    style: TextStyle(
-                        color: onSurface.withAlpha(150), fontSize: 11)),
+                SizedBox(
+                  width: 40,
+                  child: Text(_fmt(position),
+                      textAlign: TextAlign.left,
+                      maxLines: 1,
+                      style: TextStyle(
+                          color: onSurface.withAlpha(150),
+                          fontSize: 11,
+                          // Same-width digits: the clock ticking no longer
+                          // nudges the waveform sideways every second.
+                          fontFeatures: const [FontFeature.tabularFigures()])),
+                ),
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -428,9 +437,18 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                     ),
                   ),
                 ),
-                Text(_fmt(duration),
-                    style: TextStyle(
-                        color: onSurface.withAlpha(150), fontSize: 11)),
+                SizedBox(
+                  width: 40,
+                  child: Text(_fmt(duration),
+                      textAlign: TextAlign.right,
+                      maxLines: 1,
+                      style: TextStyle(
+                          color: onSurface.withAlpha(150),
+                          fontSize: 11,
+                          // Same-width digits: the clock ticking no longer
+                          // nudges the waveform sideways every second.
+                          fontFeatures: const [FontFeature.tabularFigures()])),
+                ),
               ],
             ),
 
@@ -493,10 +511,22 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                         ),
                         boxShadow: [
                           BoxShadow(
+                            color: Colors.black.withValues(
+                                alpha: isDark ? 0.5 : 0.18),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                          BoxShadow(
                             color: accent
                                 .withAlpha(isPlaying ? 150 : 70),
                             blurRadius: isPlaying ? 24 : 12,
                             spreadRadius: 2,
+                          ),
+                          BoxShadow(
+                            color: Colors.white
+                                .withValues(alpha: isDark ? 0.12 : 0.85),
+                            blurRadius: 3,
+                            offset: const Offset(-1.5, -2),
                           ),
                         ],
                       ),
@@ -676,6 +706,10 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                             ? Colors.transparent
                             : (_muted ? scheme.error.withAlpha(28) : null),
                         borderRadius: BorderRadius.circular(12),
+                        boxShadow: _showVolume
+                            ? null
+                            : _glassLift(scheme,
+                                _muted ? scheme.error : scheme.primary),
                         border: Border.all(
                           color: _showVolume
                               ? Colors.transparent
@@ -754,6 +788,12 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                             blurRadius: isPlaying ? 16 : 10,
                             offset: const Offset(0, 5),
                           ),
+                          BoxShadow(
+                            color: Colors.white
+                                .withValues(alpha: isDark ? 0.10 : 0.9),
+                            blurRadius: 3,
+                            offset: const Offset(-1.2, -1.8),
+                          ),
                           // Tight contact shadow grounds the raised pill.
                           BoxShadow(
                             color: Colors.black
@@ -810,6 +850,8 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                             ),
                       color: _showSpeedPanel ? accent.withAlpha(30) : null,
                       borderRadius: BorderRadius.circular(18),
+                      boxShadow: _glassLift(scheme, scheme.primary,
+                          active: _showSpeedPanel),
                       border: Border.all(
                         color: _showSpeedPanel
                             ? accent
@@ -861,16 +903,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
               ],
             ),
           );
-      return Column(
-        children: [
-          Expanded(
-            child: CustomScrollView(
-              slivers: [
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(
-                      16, 14, 16, tall ? 0 : (isNarrow ? 6 : 10)),
-                  sliver: SliverToBoxAdapter(
-              child: Column(
+      final topBlock = Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
 
@@ -1073,38 +1106,58 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
               _controlsGlass(scheme, accent, controlsBody),
             ],
                 ],
+              );
+      if (tall) {
+        // Song card → a short fused neck → the controls glass, kept together
+        // as one group, controls staying low for the thumb. Spare height
+        // goes mostly above the song card, never as a big hole in the middle.
+        return Padding(
+          padding: EdgeInsets.fromLTRB(0, 10, 0, isNarrow ? 8 : 12),
+          child: Column(
+            children: [
+              const Spacer(flex: 2),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: topBlock,
               ),
-                  ),
+              Flexible(
+                flex: 2,
+                child: ConstrainedBox(
+                  constraints:
+                      const BoxConstraints(minHeight: 18, maxHeight: 52),
+                  child: _fusionBridge(scheme, accent),
                 ),
-                // The space between the song card and the controls glass is
-                // a soft neck of the same glass, so the two flow into one.
-                if (tall)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _fusionBridge(scheme, accent),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: _controlsGlass(
+                  scheme,
+                  accent,
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      controlsBody,
+                      const SizedBox(height: 14),
+                      bottomRow,
+                    ],
                   ),
-              ],
+                  padding: const EdgeInsets.fromLTRB(12, 14, 12, 0),
+                ),
+              ),
+              const Spacer(flex: 1),
+            ],
+          ),
+        );
+      }
+      return Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(16, 14, 16, isNarrow ? 6 : 10),
+              child: topBlock,
             ),
           ),
-          if (tall)
-            Padding(
-              padding: EdgeInsets.fromLTRB(12, 0, 12, isNarrow ? 8 : 12),
-              child: _controlsGlass(
-                scheme,
-                accent,
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    controlsBody,
-                    const SizedBox(height: 14),
-                    bottomRow,
-                  ],
-                ),
-                padding: const EdgeInsets.fromLTRB(12, 14, 12, 0),
-              ),
-            )
-          else
-            bottomRow,
+          bottomRow,
         ],
       );
     });
@@ -1278,16 +1331,9 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                         : scheme.primary.withAlpha(
                             scheme.brightness == Brightness.dark ? 80 : 60),
                   ),
-                  boxShadow: active
-                      ? null
-                      : [
-                          BoxShadow(
-                            color: scheme.primary.withAlpha(
-                                scheme.brightness == Brightness.dark ? 46 : 30),
-                            blurRadius: 7,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
+                  boxShadow: _glassLift(
+                      scheme, active ? color : scheme.primary,
+                      active: active),
                 ),
                 child: Icon(
                   icon,

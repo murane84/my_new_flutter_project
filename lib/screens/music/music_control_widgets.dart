@@ -6,6 +6,52 @@ part of '../music_controls.dart';
 
 // ─── Small reusable widgets ───────────────────────────────────────────────────
 
+/// The lift every player key shares, so the controls read as keys rising out
+/// of the glass: a tight contact shadow underneath, a tinted glow, and a
+/// catch-light on the top-left rim where the glass meets the key.
+List<BoxShadow> _glassLift(ColorScheme scheme, Color tint,
+    {bool active = false}) {
+  final dark = scheme.brightness == Brightness.dark;
+  return [
+    BoxShadow(
+      color: Colors.black.withValues(alpha: dark ? 0.48 : 0.17),
+      blurRadius: 6,
+      spreadRadius: -1,
+      offset: const Offset(0, 3.5),
+    ),
+    BoxShadow(
+      color: tint.withValues(
+          alpha: active ? 0.40 : (dark ? 0.24 : 0.20)),
+      blurRadius: active ? 14 : 10,
+      offset: const Offset(0, 5),
+    ),
+    BoxShadow(
+      color: Colors.white.withValues(alpha: dark ? 0.11 : 0.9),
+      blurRadius: 3,
+      offset: const Offset(-1.2, -1.8),
+    ),
+  ];
+}
+
+/// Top-lit fill for a raised key: bright where the light lands, deeper at
+/// the base, faintly tinted so it belongs to the glass around it.
+LinearGradient _keyFill(ColorScheme scheme, Color tint) {
+  final dark = scheme.brightness == Brightness.dark;
+  return LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color.alphaBlend(tint.withValues(alpha: dark ? 0.16 : 0.06),
+          Color.lerp(scheme.surface, Colors.white, dark ? 0.10 : 0.75)!),
+      Color.alphaBlend(tint.withValues(alpha: dark ? 0.20 : 0.12),
+          scheme.surface),
+      Color.alphaBlend(tint.withValues(alpha: dark ? 0.26 : 0.20),
+          scheme.surfaceContainerHighest),
+    ],
+    stops: const [0.0, 0.5, 1.0],
+  );
+}
+
 class _CtrlBtn extends StatelessWidget {
   final IconData icon;
   final double size;
@@ -38,24 +84,7 @@ class _CtrlBtn extends StatelessWidget {
             // A soft, top-lit accent-tinted disc so the bare transport icons
             // read as raised 3D chips (and never wash out in light mode),
             // matching the shuffle/repeat chips. Disabled = flat & faint.
-            gradient: enabled
-                ? LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color.alphaBlend(
-                        scheme.primary
-                            .withValues(alpha: isDark ? 0.13 : 0.09),
-                        scheme.surface,
-                      ),
-                      Color.alphaBlend(
-                        scheme.primary
-                            .withValues(alpha: isDark ? 0.22 : 0.16),
-                        scheme.surfaceContainerHighest,
-                      ),
-                    ],
-                  )
-                : null,
+            gradient: enabled ? _keyFill(scheme, scheme.primary) : null,
             color: enabled
                 ? null
                 : scheme.surfaceContainerHighest.withValues(alpha: 0.30),
@@ -65,16 +94,7 @@ class _CtrlBtn extends StatelessWidget {
                   : scheme.outlineVariant.withValues(alpha: 0.30),
               width: 1,
             ),
-            boxShadow: enabled
-                ? [
-                    BoxShadow(
-                      color: scheme.primary
-                          .withValues(alpha: isDark ? 0.20 : 0.13),
-                      blurRadius: 7,
-                      offset: const Offset(0, 3),
-                    ),
-                  ]
-                : null,
+            boxShadow: enabled ? _glassLift(scheme, scheme.primary) : null,
           ),
           child: Icon(icon, size: size, color: color),
         ),
@@ -206,28 +226,14 @@ class _CtrlChip extends StatelessWidget {
             // subtle surface gradient when idle, so the controls feel alive
             // instead of flat grey (especially in light mode).
             gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
               colors: active
                   ? [
                       activeColor.withValues(alpha: 0.30),
                       activeColor.withValues(alpha: 0.15),
                     ]
-                  : [
-                      // Idle chips carry a faint wash of the app accent so the
-                      // control cluster feels themed and alive instead of a
-                      // flat grey box — most visible in light mode.
-                      Color.alphaBlend(
-                        scheme.primary
-                            .withValues(alpha: isDark ? 0.10 : 0.07),
-                        scheme.surface,
-                      ),
-                      Color.alphaBlend(
-                        scheme.primary
-                            .withValues(alpha: isDark ? 0.18 : 0.13),
-                        scheme.surfaceContainerHighest,
-                      ),
-                    ],
+                  : _keyFill(scheme, scheme.primary).colors,
             ),
             borderRadius: BorderRadius.circular(13),
             border: Border.all(
@@ -236,16 +242,9 @@ class _CtrlChip extends StatelessWidget {
                   : scheme.primary.withValues(alpha: isDark ? 0.32 : 0.24),
               width: active ? 1.6 : 1,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: active
-                    ? activeColor.withValues(alpha: 0.32)
-                    : scheme.primary
-                        .withValues(alpha: isDark ? 0.22 : 0.14),
-                blurRadius: active ? 12 : 7,
-                offset: Offset(0, active ? 4 : 3),
-              ),
-            ],
+            boxShadow: _glassLift(
+                scheme, active ? activeColor : scheme.primary,
+                active: active),
           ),
           child: Icon(
             icon,

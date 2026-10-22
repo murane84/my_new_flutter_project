@@ -2332,12 +2332,13 @@ class _RecordingPulseState extends State<_RecordingPulse>
   }
 
   @override
-  Widget build(BuildContext context) => SizedBox(
+  Widget build(BuildContext context) => RepaintBoundary(
+        child: SizedBox(
         height: 18,
         child: FadeTransition(
           opacity: Tween<double>(begin: 0.45, end: 1.0).animate(_c),
           child:
               const Icon(Icons.mic_rounded, size: 18, color: Colors.redAccent),
         ),
-      );
+      ));
 }

@@ -103,7 +103,11 @@ class _AnimatedReactionState extends State<AnimatedReaction>
   @override
   Widget build(BuildContext context) {
     final box = widget.size * 1.4;
-    return SizedBox(
+    // Its own layer: the beat repaints ONLY this little box. Without it each
+    // frame repainted the whole thread — re-running the list's edge fade and
+    // the frosted (blurred) heart pills — which read as the chat shaking.
+    return RepaintBoundary(
+      child: SizedBox(
       width: box,
       height: box,
       child: AnimatedBuilder(
@@ -169,6 +173,7 @@ class _AnimatedReactionState extends State<AnimatedReaction>
           );
         },
       ),
+    ),
     );
   }
 }

@@ -825,7 +825,7 @@ class _HeartBubbleState extends State<HeartBubble>
         );
       },
     );
-    if (_reduceMotion) return heart;
+    if (_reduceMotion) return RepaintBoundary(child: heart);
     return SizedBox(
       width: 160,
       height: 142,
@@ -848,7 +848,8 @@ class _HeartBubbleState extends State<HeartBubble>
               ),
             ),
           ),
-          heart,
+          // Own layer: the beat / attract pulse repaints only the heart.
+          RepaintBoundary(child: heart),
           // "Sealed with a kiss" stamp on a freshly sent heart.
           if (widget.justSent)
             IgnorePointer(
@@ -1010,7 +1011,7 @@ class _CoachChipState extends State<_CoachChip>
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return RepaintBoundary(child: Padding(
       padding: const EdgeInsets.only(top: 2, bottom: 2),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
@@ -1049,7 +1050,7 @@ class _CoachChipState extends State<_CoachChip>
           ],
         ),
       ),
-    );
+    ));
   }
 }
 

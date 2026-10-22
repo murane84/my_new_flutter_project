@@ -3305,7 +3305,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
                   child: child,
                 ),
               ),
-              child: _activeGroup != null
+              child: RepaintBoundary(
+                key: ValueKey('rb_${_activeGroup?['id']}_$_activeFriendId'),
+                child: _activeGroup != null
                   ? ChatPage(
                       key: ValueKey('g${_activeGroup!['id']}'),
                       friendName: (_activeGroup!['title'] ?? 'Group').toString(),
@@ -3353,6 +3355,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       initialJumpMessageId: _pendingJumpMessageId,
                     )
                   : _buildFriendList(context),
+                ),
                 ),
                 _playlistDrawerHost(context, music: false),
               ],

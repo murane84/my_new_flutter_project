@@ -506,6 +506,8 @@ class _ChatPageState extends State<ChatPage>
   bool _isRecording = false;
   Timer? _recordTimer;
   int _recordMs = 0;
+  // Ticks the recording timer label WITHOUT rebuilding the whole page.
+  final ValueNotifier<int> _recordMsVN = ValueNotifier<int>(0);
   String _apiBase = ''; // resolved server base for building attachment URLs
 
   // The caller's own bonded Our Spaces (active bonds). Keepsake / Dedicate /
@@ -699,6 +701,7 @@ class _ChatPageState extends State<ChatPage>
     _searchCtrl.dispose();
     _searchFocus.dispose();
     _composerFocus.dispose();
+    _recordMsVN.dispose();
     WidgetsBinding.instance.removeObserver(this);
     if (kIsWeb) webpaste.unregisterClipboardPaste();
     // Release any in-flight caption request so its awaiter unwinds.
@@ -2250,6 +2253,7 @@ class _ChatPageState extends State<ChatPage>
         path: path,
       );
       _recordMs = 0;
+      _recordMsVN.value = 0;
       // Recording over music → remember the song for the note's caption.
       _recordSong = _nowPlayingTitle();
       setState(() => _isRecording = true);
@@ -2260,7 +2264,9 @@ class _ChatPageState extends State<ChatPage>
       _recordPresenceTimer = Timer.periodic(
           const Duration(seconds: 2), (_) => _sendPresence('recording'));
       _recordTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
-        if (mounted) setState(() => _recordMs += 200);
+        if (!mounted) return;
+        _recordMs += 200;
+        _recordMsVN.value = _recordMs;
       });
     } catch (_) {
       if (mounted) showToast(context, 'Could not start recording', type: ToastType.error);
@@ -4871,10 +4877,13 @@ class _ChatPageState extends State<ChatPage>
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             child: _isRecording
-                ? _RecordingBar(
-                    durationLabel: _fmtDur(_recordMs),
-                    onCancel: _cancelRecording,
-                    onSend: _stopAndSendRecording,
+                ? ValueListenableBuilder<int>(
+                    valueListenable: _recordMsVN,
+                    builder: (_, ms, _) => _RecordingBar(
+                      durationLabel: _fmtDur(ms),
+                      onCancel: _cancelRecording,
+                      onSend: _stopAndSendRecording,
+                    ),
                   )
                 : Row(
                     crossAxisAlignment: CrossAxisAlignment.end,

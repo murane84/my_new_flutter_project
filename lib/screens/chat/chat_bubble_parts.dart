@@ -126,7 +126,7 @@ class _DotState extends State<_Dot> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
+    return RepaintBoundary(child: AnimatedBuilder(
       animation: _anim,
       builder: (ctx2, child2) => Transform.translate(
         offset: Offset(0, _anim.value),
@@ -140,7 +140,7 @@ class _DotState extends State<_Dot> with SingleTickerProviderStateMixin {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -516,7 +516,7 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
         : started
             ? _pos
             : _dur;
-    return SizedBox(
+    return RepaintBoundary(child: SizedBox(
       width: 232,
       child: Row(
         children: [
@@ -632,7 +632,7 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
           ),
         ],
       ),
-    );
+    ));
   }
 }
 
@@ -884,7 +884,7 @@ class _SongBubbleState extends State<_SongBubble> {
     final line2 = parts.length > 1 ? parts.sublist(1).join(' — ') : null;
     final shownPos =
         _dragging ? Duration(milliseconds: (total * _dragFrac).round()) : _pos;
-    return SizedBox(
+    return RepaintBoundary(child: SizedBox(
       width: 248,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1041,7 +1041,7 @@ class _SongBubbleState extends State<_SongBubble> {
           ],
         ],
       ),
-    );
+    ));
   }
 }
 

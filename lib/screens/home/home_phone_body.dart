@@ -161,11 +161,13 @@ extension _HomePhoneBody on HomePageState {
           ),
           const SizedBox(height: 10),
           Expanded(
-            child: kIsWeb
+            // Own paint layer: the player ticks many times a second (position,
+            // spinning disc) — keep those repaints from spreading into the chat.
+            child: RepaintBoundary(child: kIsWeb
                 ? WebMusicPanel(
                     key: _webMusicPanelKey, textColor: scheme.onSurface)
                 : MusicControls(
-                    key: _musicPanelKey, textColor: scheme.onSurface),
+                    key: _musicPanelKey, textColor: scheme.onSurface)),
           ),
             ],
           ),

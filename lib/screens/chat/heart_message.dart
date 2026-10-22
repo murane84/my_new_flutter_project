@@ -41,7 +41,9 @@ class HeartMood {
   final List<String> prompts; // starters offered in the composer
 
   static const love = HeartMood(
-      'love', 'Love', 'with love', 'With love', Color(0xFFE3264F),
+      'love', 'Love', 'with love', 'With love',
+      // Bright love red — fixed, never the theme accent (white words read on it).
+      Color(0xFFF0142F),
       Icons.favorite_rounded, [
     'One thing I love about you is ',
     'I fell for you all over again when ',

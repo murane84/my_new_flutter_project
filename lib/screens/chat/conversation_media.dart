@@ -89,7 +89,17 @@ class ConversationMediaScreen extends StatefulWidget {
     this.songs = const [],
     this.onJump,
     this.onClose,
+    this.onOpenMedia,
+    this.songPlayer,
   });
+
+  /// Open media item [index] (of [media]) in the chat's viewer. Without it a
+  /// tap jumps to the message.
+  final ValueChanged<int>? onOpenMedia;
+
+  /// A ready player for a shared song (by message id), or null to fall back
+  /// to a plain row that jumps to the message.
+  final Widget? Function(String messageId)? songPlayer;
 
   /// Inline mode (inside the chat panel): tapping an item calls [onJump]
   /// with its message id and the back button calls [onClose]. Without them
@@ -355,9 +365,20 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
 
   Widget _mediaCell(ColorScheme scheme, MediaItem m) {
     return Tooltip(
-      message: m.dateLabel.isEmpty ? 'Show in chat' : '${m.dateLabel} · show in chat',
+      message: widget.onOpenMedia != null
+          ? (m.dateLabel.isEmpty ? 'Open' : '${m.dateLabel} · open')
+          : (m.dateLabel.isEmpty
+              ? 'Show in chat'
+              : '${m.dateLabel} · show in chat'),
       child: GestureDetector(
-        onTap: () => _jump(m.messageId),
+        onTap: () {
+          final open = widget.onOpenMedia;
+          if (open != null) {
+            open(widget.media.indexOf(m));
+          } else {
+            _jump(m.messageId);
+          }
+        },
         child: ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: Stack(
@@ -444,6 +465,56 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
 
   /// Our soundtrack: every song either of us sent, newest first, with who
   /// sent it — tap to go back to that moment in the chat.
+  // A song that plays right here: who shared it and when, the player, and a
+  // way back to it in the chat.
+  Widget _songCard(ColorScheme scheme, SongItem s, Widget player) {
+    final isDark = scheme.brightness == Brightness.dark;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 6),
+      padding: const EdgeInsets.fromLTRB(12, 6, 4, 8),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.05)
+            : scheme.primary.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.14)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  [s.mine ? 'You shared' : '${s.sender} shared', s.dateLabel]
+                      .where((e) => e.isNotEmpty)
+                      .join(' · '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: scheme.onSurfaceVariant,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Show in chat',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _jump(s.messageId),
+                icon: Icon(Icons.forum_outlined,
+                    size: 18, color: scheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: player,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _songsTab(ColorScheme scheme) {
     if (widget.songs.isEmpty) {
       return _empty(scheme, Icons.library_music_outlined,
@@ -471,6 +542,9 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
           ]),
         ),
         for (final s in widget.songs)
+          if (widget.songPlayer?.call(s.messageId) case final player?)
+            _songCard(scheme, s, player)
+          else
           ListTile(
             leading: Container(
               width: 40,

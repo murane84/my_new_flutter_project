@@ -2351,10 +2351,45 @@ class _ChatPageState extends State<ChatPage>
   // Songs / Media / Links / Docs browser, shown inside the chat panel (under
   // the conversation header, above the composer) like the photo viewer.
   Widget? _mediaBrowser;
+  // The history the open browser was built from (for "Show in chat").
+  List<Map<String, dynamic>> _browserMsgs = const [];
 
   void _closeMediaBrowser() {
     if (_mediaBrowser == null) return;
-    setState(() => _mediaBrowser = null);
+    setState(() {
+      _mediaBrowser = null;
+      _browserMsgs = const [];
+    });
+  }
+
+  // From the viewer opened out of the browser: close both, land on the message.
+  void _showViewerItemInChat(Map<String, dynamic> msg) {
+    final id = msg['id']?.toString() ?? '';
+    final src = _browserMsgs;
+    _closeViewer();
+    _closeMediaBrowser();
+    _jumpFromBrowser(id, src);
+  }
+
+  // A shared song row in the browser plays right there, with the same player
+  // the chat bubble uses.
+  Widget _browserSongPlayer(Map<String, dynamic> msg) {
+    final scheme = Theme.of(context).colorScheme;
+    final rel = (msg['media_url'] as String?) ?? '';
+    final isMe = msg['sender_id']?.toString() == _myId;
+    return _SongBubble(
+      assetId: SongCache.assetId(rel),
+      url: fullMediaUrl(rel),
+      title: (msg['content'] as String?)?.trim().isNotEmpty == true
+          ? (msg['content'] as String).trim()
+          : ((msg['media_name'] as String?) ?? 'Song'),
+      fileName: msg['media_name'] as String?,
+      mime: msg['media_mime'] as String?,
+      isMe: isMe,
+      accent: scheme.primary,
+      onColor: scheme.onSurface,
+      onDownload: () => _saveMediaToDevice(msg),
+    );
   }
   List<Map<String, dynamic>?> _viewerMsgs = const <Map<String, dynamic>?>[];
   List<ImageProvider> _viewerProviders = const <ImageProvider>[];
@@ -2369,13 +2404,14 @@ class _ChatPageState extends State<ChatPage>
   // Anchors the attach menu so it rises out of the composer's "+" button.
   final GlobalKey _attachBtnKey = GlobalKey();
 
-  Future<void> _openImageViewer(String tappedUrl) async {
+  Future<void> _openImageViewer(String tappedUrl,
+      {List<Map<String, dynamic>>? source}) async {
     // Gather EVERY image shared in this thread (chronological order) so the
     // viewer is a swipeable gallery, not a single photo. Opening any image lets
     // the user page left/right through all of them, pinch-zoom each, and save.
     final images = <String>[];
     final imgMsgs = <Map<String, dynamic>?>[];
-    for (final m in _messages) {
+    for (final m in source ?? _messages) {
       final t = (m['message_type'] as String?);
       // The gallery now scrolls through photos AND videos (chronological).
       if (t == 'image' || t == 'video') {
@@ -2750,6 +2786,13 @@ class _ChatPageState extends State<ChatPage>
                               icon: const Icon(Icons.fullscreen_rounded,
                                   color: Colors.white),
                             ),
+                          if (msg != null && _mediaBrowser != null)
+                            IconButton(
+                              tooltip: 'Show in chat',
+                              onPressed: () => _showViewerItemInChat(msg),
+                              icon: const Icon(Icons.forum_outlined,
+                                  color: Colors.white),
+                            ),
                           IconButton(
                             tooltip: 'Reply',
                             onPressed: msg == null
@@ -2757,6 +2800,7 @@ class _ChatPageState extends State<ChatPage>
                                 : () {
                                     setState(() => _replyTo = msg);
                                     _closeViewer();
+                                    _closeMediaBrowser();
                                     FocusScope.of(context)
                                         .requestFocus(FocusNode());
                                   },
@@ -3536,6 +3580,8 @@ class _ChatPageState extends State<ChatPage>
     }
 
     final media = <MediaItem>[];
+    final mediaMsgs = <Map<String, dynamic>>[];
+    final songMsgs = <String, Map<String, dynamic>>{};
     final links = <LinkItem>[];
     final docs = <DocItem>[];
     final songs = <SongItem>[];
@@ -3557,6 +3603,7 @@ class _ChatPageState extends State<ChatPage>
           'January', 'February', 'March', 'April', 'May', 'June', 'July',
           'August', 'September', 'October', 'November', 'December'
         ];
+        mediaMsgs.add(m);
         media.add(MediaItem(
           messageId: id,
           thumbUrl: thumb,
@@ -3578,6 +3625,7 @@ class _ChatPageState extends State<ChatPage>
         final t = content.trim().isNotEmpty
             ? content.trim()
             : ((m['media_name'] as String?)?.trim() ?? 'Song');
+        if (rel.isNotEmpty) songMsgs[id] = m;
         songs.add(SongItem(
           messageId: id,
           title: t,
@@ -3615,6 +3663,7 @@ class _ChatPageState extends State<ChatPage>
     if (!mounted) return;
     _closeViewer();
     setState(() {
+      _browserMsgs = msgs;
       _mediaBrowser = ConversationMediaScreen(
         key: UniqueKey(),
         title: _isGroup ? widget.groupTitle : widget.friendName,
@@ -3622,7 +3671,20 @@ class _ChatPageState extends State<ChatPage>
         links: links,
         docs: docs,
         songs: songs,
-        onClose: _closeMediaBrowser,
+        // Esc closes the viewer first when one is open over the browser.
+        onClose: () =>
+            _viewerImages != null ? _closeViewer() : _closeMediaBrowser(),
+        // Photos / videos open in the in-panel viewer, paging through
+        // everything shared (newest first); closing it returns here.
+        onOpenMedia: (i) {
+          if (i < 0 || i >= mediaMsgs.length) return;
+          final rel = (mediaMsgs[i]['media_url'] ?? '').toString();
+          _openImageViewer(fullMediaUrl(rel), source: mediaMsgs);
+        },
+        songPlayer: (id) {
+          final m = songMsgs[id];
+          return m == null ? null : _browserSongPlayer(m);
+        },
         onJump: (id) {
           _closeMediaBrowser();
           _jumpFromBrowser(id, msgs);

@@ -165,7 +165,7 @@ class _FieldPainter extends CustomPainter {
       // them instead of crossing over the words.
       final dx = (x - w / 2) / (unit * 0.36), dy = (y - h * 0.47) / (unit * 0.5);
       final d = math.sqrt(dx * dx + dy * dy);
-      final clear = d >= 1 ? 1.0 : 0.18 + 0.82 * d * d;
+      final clear = d >= 1 ? 1.0 : 0.05 + 0.95 * d * d * d;
       final alpha =
           (edge * (0.25 + 0.75 * p.z) * reveal * clear).clamp(0.0, 1.0);
       if (alpha <= 0.01) continue;
@@ -230,7 +230,7 @@ class _FieldPainter extends CustomPainter {
           );
         case _Kind.note:
           canvas.rotate(math.sin(ang) * 0.3);
-          final r = s * 0.9;
+          final r = s * 0.5;
           final paint = Paint()
             ..shader = LinearGradient(
               begin: Alignment.topLeft,

@@ -9,9 +9,9 @@ import '../services/aluta_mood.dart';
 ///  • ripple    — each beat sends one faint ring outward, like sound leaving a speaker
 ///  • breathe   — slow, calm swell (dawn / late night)
 ///  • orbit     — a brisker, shorter comet with a slightly bigger head
-/// Always: ONE thin comet arc (with a small head dot) hugging the disc in the theme colour (warmer in
-/// the morning, softer at night). No track ring, no halo — the mark and one
-/// moving line, nothing else around it. With system "remove animations" on,
+/// Always: ONE thin comet arc (glowing head) hugging the disc in the theme
+/// colour (warmer in the morning, softer at night) over a soft halo. No
+/// track ring behind the arc. With system "remove animations" on,
 /// it holds still.
 /// [completing] closes the ring and pops a little heart — the goodbye.
 class AlutaLoader extends StatefulWidget {
@@ -139,6 +139,24 @@ class _AlutaLoaderState extends State<AlutaLoader>
             return Stack(
               alignment: Alignment.center,
               children: [
+                // Halo: the soft theme-colour glow behind the mark, breathing
+                // with the beat.
+                Container(
+                  width: disc + 22,
+                  height: disc + 22,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: accent.withValues(
+                            alpha: (isDark ? 0.20 : 0.14) +
+                                0.10 * glow.clamp(0.0, 1.0)),
+                        blurRadius: 22,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                ),
                 CustomPaint(
                   size: Size(s + 28, s + 28),
                   painter: _RingPainter(
@@ -277,14 +295,14 @@ class _RingPainter extends CustomPainter {
       tileMode: TileMode.clamp,
     ).createShader(rect);
     canvas.drawArc(rect, 0, 2 * math.pi * sweep, false, arc);
-    // The comet's head: one small solid dot leading the arc (no glow).
+    // The comet's glowing head leading the arc.
     if (done < 0.9) {
       final a = 2 * math.pi * sweep;
-      canvas.drawCircle(
-        Offset(c.dx + r * math.cos(a), c.dy + r * math.sin(a)),
-        orbit ? 2.6 : 2.2,
-        Paint()..color = color.withValues(alpha: 1 - done),
-      );
+      final head = Offset(c.dx + r * math.cos(a), c.dy + r * math.sin(a));
+      canvas.drawCircle(head, orbit ? 4.2 : 3.2,
+          Paint()..color = color.withValues(alpha: 0.30 * (1 - done)));
+      canvas.drawCircle(head, orbit ? 2.4 : 1.9,
+          Paint()..color = color.withValues(alpha: 1 - done));
     }
     canvas.restore();
   }

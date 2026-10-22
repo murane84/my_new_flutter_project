@@ -2063,6 +2063,27 @@ class _ChatPageState extends State<ChatPage>
 
   /// Send a structured (non-media) message — `location` / `contact` — whose
   /// JSON payload lives in `content`. Mirrors [_sendGif]'s optimistic insert.
+  /// The one-tap answer under a status nudge: wave back, or — for a music
+  /// status — say yes to listening together.
+  Widget _statusNudgeAnswer(bool music, Color tint) {
+    final label = music ? '🎧 Let\'s listen' : '👋 Wave back';
+    final reply = music ? '🎧 Yes! Let\'s listen together' : '👋';
+    return Material(
+      color: tint.withValues(alpha: 0.14),
+      shape: StadiumBorder(side: BorderSide(color: tint.withValues(alpha: 0.5))),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: () => _sendStructured('text', reply),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Text(label,
+              style: TextStyle(
+                  color: tint, fontWeight: FontWeight.w700, fontSize: 12.5)),
+        ),
+      ),
+    );
+  }
+
   Future<void> _sendStructured(String type, String content) async {
     try {
       final sent = await appBusy.run(() => ApiService().sendMessage(
@@ -4701,6 +4722,20 @@ class _ChatPageState extends State<ChatPage>
                                     mainText, textColor, quoteBarColor) ??
                                 _bubbleTextOnly(
                                     mainText, textColor, linkColor),
+                          ),
+                        // Someone nudged you about their status: answer in
+                        // one tap (shown while it's the newest message).
+                        if (!isMe &&
+                            !tomb &&
+                            quotedText != null &&
+                            (quotedText.startsWith('👀 Caught you on my status') ||
+                                quotedText.startsWith('👀 You viewed my status')) &&
+                            _messages.isNotEmpty &&
+                            _messages.first['id'] == msg['id'])
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: _statusNudgeAnswer(
+                                quotedText.contains('🎵'), quoteBarColor),
                           ),
 
                         // ── Time + delivery status ────────────────────

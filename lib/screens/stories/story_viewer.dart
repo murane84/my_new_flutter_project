@@ -10,6 +10,7 @@ import '../../services/media_store.dart';
 import '../api_service.dart';
 import '../token_helper.dart' show mediaAuthHeaders;
 import 'story_models.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/aluta_composer_field.dart';
 import '../../utils/readable.dart';
 import '../../utils/emoji_field.dart' show inlineEmojiPicker;
@@ -1095,8 +1096,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   /// conversation instead of waiting for a comment.
   Future<bool> _nudgeViewer(StoryViewer v, StoryItem item,
       {String? emoji, String? gifUrl}) async {
-    // The DM shows it as a quote: who it's about + which status.
-    final content = '> 👀 You viewed my status\n> ${_statusQuote(item)}'
+    // The DM shows it as a quote: a warm "caught you" + which status.
+    final content = '> 👀 Caught you on my status\n> ${_statusQuote(item)}'
         '\n\n${emoji ?? ''}';
     final sent = gifUrl != null
         ? await ApiService().sendMessage(v.userId, content,
@@ -1133,9 +1134,36 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         .map(StoryViewer.fromJson)
         .where((v) => v.userId != widget.myUserId)
         .toList();
-    // Per viewer: null = idle, '…' = sending, else what was sent.
+    // Per viewer: null = idle, '…' = sending, else what was sent. One nudge
+    // per viewer per status — remembered on this device, so nobody gets a
+    // second wave for the same status.
     final sentTo = <int, String>{};
-    const nudges = ['👋', '❤️', '😊', '😉', '🔥'];
+    final prefKey = 'story_nudged_v1_${item.id}';
+    SharedPreferences? prefs;
+    try {
+      prefs = await SharedPreferences.getInstance();
+      for (final e in prefs.getStringList(prefKey) ?? const <String>[]) {
+        final i = e.indexOf(':');
+        if (i > 0) sentTo[int.tryParse(e.substring(0, i)) ?? -1] = e.substring(i + 1);
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    void remember() {
+      try {
+        prefs?.setStringList(prefKey, [
+          for (final e in sentTo.entries)
+            if (e.value != '…') '${e.key}:${e.value}'
+        ]);
+      } catch (_) {}
+    }
+    // Nudges that fit what they watched.
+    final nudges = switch (item.kind) {
+      'music' => const ['🎧', '🎶', '❤️', '👋'],
+      'text' => const ['🤗', '❤️', '💭', '👋', '🙏'],
+      'video' => const ['😂', '🔥', '😮', '❤️', '👋'],
+      'sticker' => const ['😂', '😉', '❤️', '👋'],
+      _ => const ['😍', '❤️', '😊', '🔥', '👋'],
+    };
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1159,6 +1187,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                 sentTo.remove(v.userId);
               }
             });
+            if (ok) remember();
             if (!ok) {
               ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
                   content: Text('Couldn\'t send — check your connection'),
@@ -1288,8 +1317,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                                             for (final e in nudges)
                                               InkResponse(
                                                 radius: 18,
-                                                onTap: () =>
-                                                    send(v, emoji: e),
+                                                // On a music status 🎧 asks
+                                                // them to listen together.
+                                                onTap: () => send(v,
+                                                    emoji: e == '🎧'
+                                                        ? '🎧 Listen together?'
+                                                        : e),
                                                 child: Padding(
                                                   padding:
                                                       const EdgeInsets.all(4),
@@ -1334,7 +1367,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                                             Text(
                                                 state == 'sticker'
                                                     ? '✨'
-                                                    : state,
+                                                    : state.characters.first,
                                                 style: const TextStyle(
                                                     fontSize: 16)),
                                             const SizedBox(width: 6),

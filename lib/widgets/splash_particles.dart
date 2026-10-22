@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 /// music notes, twinkling sparkles and soft bokeh in the distance — dozens of
 /// them, at different depths (near ones bigger, brighter and faster; far
 /// ones small, dim and slow), drifting up around the logo like music leaving
-/// a speaker. One painter, one ticker, its own layer.
+/// a speaker — faint and slow, a welcome backdrop behind the logo rather
+/// than a show of its own. One painter, one ticker, its own layer.
 class SplashParticles extends StatefulWidget {
   const SplashParticles({
     super.key,
@@ -44,7 +45,7 @@ class _P {
 class _SplashParticlesState extends State<SplashParticles>
     with SingleTickerProviderStateMixin {
   late final AnimationController _t = AnimationController(
-      vsync: this, duration: const Duration(seconds: 26))
+      vsync: this, duration: const Duration(seconds: 44))
     ..repeat();
   late List<_P> _ps;
 
@@ -167,9 +168,9 @@ class _FieldPainter extends CustomPainter {
       final d = math.sqrt(dx * dx + dy * dy);
       final clear = d >= 1 ? 1.0 : 0.05 + 0.95 * d * d * d;
       final alpha =
-          (edge * (0.25 + 0.75 * p.z) * reveal * clear).clamp(0.0, 1.0);
+          (edge * (0.08 + 0.32 * p.z) * reveal * clear).clamp(0.0, 1.0);
       if (alpha <= 0.01) continue;
-      final s = unit * (0.012 + 0.03 * p.z); // base radius
+      final s = unit * (0.010 + 0.024 * p.z); // base radius
       canvas.save();
       canvas.translate(x, y);
       switch (p.kind) {
@@ -226,7 +227,7 @@ class _FieldPainter extends CustomPainter {
           canvas.drawCircle(
             Offset(hw * (turn >= 0 ? -0.34 : 0.34), -hh * 0.2),
             hw * 0.12,
-            Paint()..color = Colors.white.withValues(alpha: 0.85 * alpha),
+            Paint()..color = Colors.white.withValues(alpha: 0.6 * alpha),
           );
         case _Kind.note:
           canvas.rotate(math.sin(ang) * 0.3);
@@ -267,7 +268,7 @@ class _FieldPainter extends CustomPainter {
             paint,
           );
         case _Kind.sparkle:
-          final tw = 0.55 + 0.45 * math.sin(ang * 2.2);
+          final tw = 0.6 + 0.4 * math.sin(ang * 1.4);
           canvas.rotate(ang * 0.15);
           canvas.scale(tw, tw);
           final rr = s * 1.6;

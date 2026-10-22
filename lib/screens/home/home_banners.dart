@@ -77,7 +77,7 @@ extension _HomeBanners on HomePageState {
                     height: 9,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.white,
+                      color: readableOn(scheme.primary),
                       boxShadow: [
                         BoxShadow(
                             color: Colors.white.withAlpha(160),

@@ -88,6 +88,7 @@ import 'stories/camera_capture.dart';
 import '../widgets/genie_menu.dart';
 import '../widgets/aluta_composer_field.dart';
 import '../widgets/pixel_snap.dart';
+import '../utils/readable.dart';
 
 // Split out for maintainability (Dart parts — same library, shared
 // imports & privacy, zero behaviour change):
@@ -2785,8 +2786,8 @@ class _ChatPageState extends State<ChatPage>
                                       name.isNotEmpty
                                           ? name[0].toUpperCase()
                                           : '?',
-                                      style: const TextStyle(
-                                          color: Colors.white,
+                                      style: TextStyle(
+                                          color: readableOn(accent),
                                           fontWeight: FontWeight.bold))
                                   : null,
                             ),
@@ -5696,15 +5697,15 @@ class _ChatPageState extends State<ChatPage>
                                   ),
                                 ],
                               ),
-                              child: const Row(
+                              child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Icon(Icons.arrow_downward_rounded,
-                                      size: 14, color: Colors.white),
+                                      size: 14, color: readableOn(scheme.primary)),
                                   SizedBox(width: 4),
                                   Text('New messages',
                                       style: TextStyle(
-                                          color: Colors.white,
+                                          color: readableOn(scheme.primary),
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600)),
                                 ],

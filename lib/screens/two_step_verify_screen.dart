@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'api_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/brand_theme.dart';
+import '../utils/readable.dart';
 
 /// Second step of a two-step sign-in: the password was accepted, now the linked
 /// Ozilane Key phone must approve. Shows the match number and polls until the
@@ -257,16 +258,16 @@ class _TwoStepVerifyScreenState extends State<TwoStepVerifyScreen> {
             onPressed: _busy ? null : _completeWithCode,
             style: FilledButton.styleFrom(
               backgroundColor: scheme.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: readableOn(scheme.primary),
               shape:
                   RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
             child: _busy
-                ? const SizedBox(
+                ? SizedBox(
                     width: 22,
                     height: 22,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2.5, color: Colors.white))
+                        strokeWidth: 2.5, color: readableOn(scheme.primary)))
                 : const Text('Sign in',
                     style:
                         TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),

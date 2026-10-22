@@ -16,6 +16,7 @@ import '../utils/toast_helper.dart';
 import '../utils/popup_shell.dart';
 import '../utils/app_config.dart';
 import '../utils/emoji_field.dart';
+import '../utils/readable.dart';
 
 /// Profile popup: edit username / phone / password (email is fixed), or
 /// permanently delete the account and wipe all data from the server. Rendered
@@ -621,11 +622,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: const EdgeInsets.symmetric(vertical: 14),
       ),
       child: _saving
-          ? const SizedBox(
+          ? SizedBox(
               width: 20,
               height: 20,
               child: CircularProgressIndicator(
-                  strokeWidth: 2.5, color: Colors.white),
+                  strokeWidth: 2.5, color: readableOn(scheme.primary)),
             )
           : const Text('Save changes'),
     );
@@ -795,8 +796,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       shape: BoxShape.circle,
                       border: Border.all(color: scheme.surface, width: 2),
                     ),
-                    child: const Icon(Icons.camera_alt_rounded,
-                        size: 15, color: Colors.white),
+                    child: Icon(Icons.camera_alt_rounded,
+                        size: 15, color: readableOn(scheme.primary)),
                   ),
                 ),
               ],

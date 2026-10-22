@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'api_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/brand_theme.dart';
+import '../utils/readable.dart';
 
 enum OzMode { signIn, recover }
 
@@ -264,7 +265,7 @@ class _OzilaneApproveScreenState extends State<OzilaneApproveScreen> {
             label: const Text('Approve on my phone'),
             style: FilledButton.styleFrom(
               backgroundColor: scheme.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: readableOn(scheme.primary),
               shape:
                   RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
@@ -462,15 +463,15 @@ class _OzilaneApproveScreenState extends State<OzilaneApproveScreen> {
         onPressed: _busy ? null : onTap,
         style: FilledButton.styleFrom(
           backgroundColor: scheme.primary,
-          foregroundColor: Colors.white,
+          foregroundColor: readableOn(scheme.primary),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
         child: _busy
-            ? const SizedBox(
+            ? SizedBox(
                 width: 22,
                 height: 22,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2.5, color: Colors.white))
+                    strokeWidth: 2.5, color: readableOn(scheme.primary)))
             : Text(label,
                 style:
                     const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),

@@ -14,6 +14,7 @@ import '../utils/app_config.dart';
 import '../utils/emoji_field.dart';
 import '../widgets/genie_menu.dart';
 import 'user_profile_sheet.dart';
+import '../utils/readable.dart';
 
 // Groups are presented as CARD POPUPS (AppPopupShell) — not full-window routes —
 // so on desktop they never hide the music/chat panels. Selecting or creating a
@@ -156,8 +157,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
                   color: scheme.primary,
                   borderRadius: BorderRadius.circular(20)),
               child: Text('$unread',
-                  style: const TextStyle(
-                      color: Colors.white,
+                  style: TextStyle(
+                      color: readableOn(scheme.primary),
                       fontSize: 12,
                       fontWeight: FontWeight.bold)),
             )
@@ -704,8 +705,8 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
                             color: scheme.primary, shape: BoxShape.circle),
-                        child: const Icon(Icons.camera_alt_rounded,
-                            size: 15, color: Colors.white),
+                        child: Icon(Icons.camera_alt_rounded,
+                            size: 15, color: readableOn(scheme.primary)),
                       ),
                   ],
                 ),

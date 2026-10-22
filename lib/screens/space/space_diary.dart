@@ -726,7 +726,7 @@ class _DiaryComposerState extends State<_DiaryComposer> {
               child: FilledButton.icon(
                 style: FilledButton.styleFrom(
                   backgroundColor: widget.accent,
-                  foregroundColor: Colors.white,
+                  foregroundColor: readableOn(widget.accent),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16)),
                 ),

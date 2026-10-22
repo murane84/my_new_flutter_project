@@ -361,7 +361,7 @@ class _MomentCommentsSheetState extends State<_MomentCommentsSheet> {
                           onPressed: hasText ? _send : null,
                           style: IconButton.styleFrom(
                               backgroundColor: widget.accent,
-                              foregroundColor: Colors.white,
+                              foregroundColor: readableOn(widget.accent),
                               disabledBackgroundColor:
                                   widget.accent.withValues(alpha: 0.35)),
                           icon: const Icon(Icons.send_rounded, size: 18),
@@ -927,7 +927,7 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
                           onPressed: _hasText ? _addComment : null,
                           style: IconButton.styleFrom(
                               backgroundColor: _accent,
-                              foregroundColor: Colors.white,
+                              foregroundColor: readableOn(_accent),
                               disabledBackgroundColor:
                                   _accent.withValues(alpha: 0.35)),
                           icon: const Icon(Icons.send_rounded, size: 18),

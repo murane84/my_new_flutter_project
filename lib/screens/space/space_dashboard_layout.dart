@@ -233,9 +233,10 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
                     ],
                   );
                 },
-                child: const Padding(
-                  padding: EdgeInsets.all(15),
-                  child: Icon(Icons.add_rounded, color: Colors.white, size: 26),
+                child: Padding(
+                  padding: const EdgeInsets.all(15),
+                  child:
+                      Icon(Icons.add_rounded, color: readableOn(_accent), size: 26),
                 ),
               ),
             ),
@@ -255,8 +256,14 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
     final hasStats = hasPartner && (days > 0 || streak > 0);
     final daysTogether = hasPartner ? _daysTogether() : null;
 
-    const shadow = Shadow(
-        color: Color(0x38000000), blurRadius: 4, offset: Offset(0, 1));
+    // Every word on the banner uses one ink that reads on THIS theme (white
+    // on most, near-black on pale ones like butter or petal).
+    final ink = readableOn(_accent);
+    final inkIsLight = ink == Colors.white;
+    final shadow = Shadow(
+        color: inkIsLight ? const Color(0x38000000) : const Color(0x00000000),
+        blurRadius: 4,
+        offset: const Offset(0, 1));
 
     final identity = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -265,19 +272,19 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
         if (hasPartner && roomy)
           Text('OUR WORLD',
               style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.85),
+                  color: ink.withValues(alpha: 0.85),
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 2.2,
-                  shadows: const [shadow])),
+                  shadows: [shadow])),
         Text(title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-                color: Colors.white,
+                color: ink,
                 fontSize: roomy ? 19 : 17,
                 fontWeight: FontWeight.w800,
-                shadows: const [shadow])),
+                shadows: [shadow])),
         const SizedBox(height: 2),
         Text(
           [
@@ -288,10 +295,10 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.92),
+              color: ink.withValues(alpha: 0.92),
               fontSize: roomy ? 12.5 : 11.5,
               fontWeight: FontWeight.w600,
-              shadows: const [shadow]),
+              shadows: [shadow]),
         ),
       ],
     );
@@ -323,20 +330,20 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
             children: [
               Text(emoji,
                   style: TextStyle(
-                      fontSize: roomy ? 14 : 12, shadows: const [shadow])),
+                      fontSize: roomy ? 14 : 12, shadows: [shadow])),
               const SizedBox(width: 6),
               Text(value,
                   style: TextStyle(
-                      color: Colors.white,
+                      color: ink,
                       fontWeight: FontWeight.w800,
                       fontSize: roomy ? 16 : 13.5,
-                      shadows: const [shadow])),
+                      shadows: [shadow])),
               const SizedBox(width: 5),
               Text(label,
                   style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.92),
+                      color: ink.withValues(alpha: 0.92),
                       fontSize: roomy ? 11.5 : 11,
-                      shadows: const [shadow])),
+                      shadows: [shadow])),
             ],
           ),
         );
@@ -359,7 +366,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
     Widget thinking({required bool round}) => Tooltip(
           message: 'Thinking of you',
           child: Material(
-            color: Colors.white,
+            color: ink,
             shape: round ? const CircleBorder() : const StadiumBorder(),
             elevation: 3,
             shadowColor: Colors.black.withValues(alpha: 0.3),
@@ -379,14 +386,14 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2, color: _accent))
+                                strokeWidth: 2, color: readableTint(_accent, Colors.white)))
                         : Icon(Icons.chat_bubble_rounded,
-                            size: 16, color: _accent),
+                            size: 16, color: readableTint(_accent, Colors.white)),
                     if (!round) ...[
                       const SizedBox(width: 8),
                       Text('Thinking of you',
                           style: TextStyle(
-                              color: _accent,
+                              color: readableTint(_accent, Colors.white),
                               fontWeight: FontWeight.w800,
                               fontSize: 13)),
                     ],

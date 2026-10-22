@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'api_service.dart';
+import '../utils/readable.dart';
 
 /// Manual "Add friend" — the discovery path for desktop/web users with no
 /// phone-book to scan (and a quick add on mobile too). You look someone up by
@@ -220,11 +221,11 @@ class _AddFriendSheetState extends State<_AddFriendSheet> {
                   backgroundColor: scheme.primary,
                   foregroundColor: scheme.onPrimary),
               child: _adding
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
+                          strokeWidth: 2, color: readableOn(scheme.primary)))
                   : const Text('Add'),
             ),
         ],

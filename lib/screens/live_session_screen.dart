@@ -26,6 +26,7 @@ import '../utils/marquee_text.dart';
 import '../widgets/animated_reaction.dart';
 import '../widgets/aluta_composer_field.dart';
 import '../services/track_title.dart' show displayTitleForPath;
+import '../utils/readable.dart';
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
 /// Presented with `showDialog(...)` so it floats over the chat instead of
@@ -2951,8 +2952,8 @@ class _LiveWaveformSeekBarState extends State<_LiveWaveformSeekBar> {
                       ),
                       child: Text(
                         widget.labelFor(frac),
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: readableOn(widget.accent),
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),

@@ -17,6 +17,7 @@ import 'api_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/song_insights.dart';
+import '../utils/readable.dart';
 
 /// The personalization surface (build step 5): whole-app **theme** (System /
 /// Light / Dark) + a curated **accent** preset set. Dark stays the brand's
@@ -377,7 +378,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
             ],
           ),
           child: selected
-              ? const Icon(Icons.check_rounded, color: Colors.white, size: 18)
+              ? Icon(Icons.check_rounded, color: readableOn(a.color), size: 18)
               : null,
         ),
       ),

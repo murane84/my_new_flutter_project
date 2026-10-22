@@ -11,6 +11,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'dart:async';
 import '../../services/heart_lock.dart';
 import '../../widgets/glossy_heart.dart';
+import '../../utils/readable.dart';
 
 // ─── Secret hearts — the signature love note ────────────────────────────────
 // A "secret heart" (message_type 'heart') arrives covered, beating softly. It
@@ -1023,7 +1024,12 @@ class _HeartBubbleState extends State<HeartBubble>
       progress = total <= 0 ? 1.0 : (done / total).clamp(0.0, 1.0);
     }
     // A sealed heart sits a little dimmer, as if waiting.
-    final base = sealed ? Color.lerp(_accent, Colors.grey.shade700, 0.35)! : _accent;
+    var base = sealed ? Color.lerp(_accent, Colors.grey.shade700, 0.35)! : _accent;
+    // A pale theme (peach, butter…) would swallow the white words on the
+    // heart — deepen it just enough that they read.
+    for (var i = 0; i < 8 && readableOn(base) != Colors.white; i++) {
+      base = Color.lerp(base, Colors.black, 0.12)!;
+    }
     return SizedBox(
       key: _heartKey,
       width: 160,
@@ -1751,17 +1757,18 @@ class _HeartGenieState extends State<_HeartGenie>
               child: InkWell(
                 customBorder: const StadiumBorder(),
                 onTap: () => _after(widget.onSendBack!),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.favorite_rounded,
-                          size: 17, color: Colors.white),
-                      SizedBox(width: 7),
+                          size: 17, color: readableOn(a)),
+                      const SizedBox(width: 7),
                       Text('Send a heart back',
                           style: TextStyle(
-                              color: Colors.white,
+                              color: readableOn(a),
                               fontSize: 13.5,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.2)),

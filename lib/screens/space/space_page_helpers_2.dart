@@ -150,7 +150,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
                     : const [],
               ),
               child: Icon(icon,
-                  size: 20, color: active ? Colors.white : _accent),
+                  size: 20, color: active ? readableOn(_accent) : _accent),
             ),
           ),
         );

@@ -228,7 +228,9 @@ extension _HomePageHelpers2 on HomePageState {
               ),
               child: Icon(icon,
                   size: 20,
-                  color: active ? Colors.white : scheme.onSurfaceVariant),
+                  color: active
+                      ? readableOn(scheme.primary)
+                      : scheme.onSurfaceVariant),
             ),
           ),
         );

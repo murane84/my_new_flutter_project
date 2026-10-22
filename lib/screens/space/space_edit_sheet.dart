@@ -242,7 +242,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                               color: Colors.black.withValues(alpha: 0.35),
                               shape: BoxShape.circle,
                             ),
-                            child: Icon(icon, size: 18, color: Colors.white),
+                            child: Icon(icon, size: 18, color: readableOn(accent)),
                           ),
                         ),
                       ],
@@ -254,8 +254,8 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                             padding: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
                                 color: accent, shape: BoxShape.circle),
-                            child: const Icon(Icons.check_rounded,
-                                size: 13, color: Colors.white),
+                            child: Icon(Icons.check_rounded,
+                                size: 13, color: readableOn(accent)),
                           ),
                         ),
                     ],
@@ -402,7 +402,8 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
             ],
           ),
           child: sel
-              ? const Icon(Icons.check_rounded, color: Colors.white, size: 20)
+              ? Icon(Icons.check_rounded,
+                  color: readableOn(entry.value), size: 20)
               : null,
         ),
       ),
@@ -675,7 +676,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
               onPressed: (_busy || !_dirty) ? null : _save,
               style: FilledButton.styleFrom(
                 backgroundColor: accent,
-                foregroundColor: Colors.white,
+                foregroundColor: readableOn(accent),
                 disabledBackgroundColor: _busy
                     ? accent.withValues(alpha: 0.7)
                     : accent.withValues(alpha: 0.18),
@@ -687,11 +688,11 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                     borderRadius: BorderRadius.circular(14)),
               ),
               child: _busy
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
+                          strokeWidth: 2, color: readableOn(accent)))
                   : const Text('Save',
                       style: TextStyle(
                           fontSize: 15, fontWeight: FontWeight.w700)),

@@ -10,6 +10,7 @@ import '../api_service.dart';
 import '../token_helper.dart' show mediaAuthHeaders;
 import 'story_models.dart';
 import '../../widgets/aluta_composer_field.dart';
+import '../../utils/readable.dart';
 
 /// Full-screen, tap-through story viewer (Instagram/WhatsApp style).
 ///
@@ -221,12 +222,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                               child: Padding(
                                 padding: const EdgeInsets.all(12),
                                 child: _replySending
-                                    ? const SizedBox(
+                                    ? SizedBox(
                                         width: 20,
                                         height: 20,
                                         child: CircularProgressIndicator(
                                             strokeWidth: 2,
-                                            color: Colors.white))
+                                            color: readableOn(scheme.primary)))
                                     : Icon(Icons.send_rounded,
                                         size: 20, color: scheme.onPrimary),
                               ),

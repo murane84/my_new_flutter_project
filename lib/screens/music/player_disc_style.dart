@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../utils/readable.dart';
 
 /// The look of the big rotating "now playing" glyph. The user can switch
 /// between these from the player; the choice is remembered across launches.
@@ -1335,13 +1336,13 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
-                          children: const [
+                          children: [
                             Icon(Icons.check_rounded,
-                                size: 14, color: Colors.white),
+                                size: 14, color: readableOn(accent)),
                             SizedBox(width: 4),
                             Text('Applied',
                                 style: TextStyle(
-                                    color: Colors.white,
+                                    color: readableOn(accent),
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700)),
                           ],

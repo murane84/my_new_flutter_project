@@ -4,6 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import 'api_service.dart';
 import '../utils/toast_helper.dart';
+import '../utils/readable.dart';
 
 /// Set up (or turn off) authenticator-based two-factor, which doubles as the
 /// password-recovery method. Enrollment is a two-step handshake:
@@ -286,7 +287,7 @@ class _TwoFactorSetupScreenState extends State<TwoFactorSetupScreen> {
             label: const Text('Set up authenticator'),
             style: FilledButton.styleFrom(
               backgroundColor: scheme.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: readableOn(scheme.primary),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
@@ -423,17 +424,17 @@ class _TwoFactorSetupScreenState extends State<TwoFactorSetupScreen> {
             onPressed: _busy ? null : _verify,
             style: FilledButton.styleFrom(
               backgroundColor: scheme.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: readableOn(scheme.primary),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
             ),
             child: _busy
-                ? const SizedBox(
+                ? SizedBox(
                     width: 22,
                     height: 22,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2.5, color: Colors.white),
+                        strokeWidth: 2.5, color: readableOn(scheme.primary)),
                   )
                 : const Text('Verify & turn on',
                     style:

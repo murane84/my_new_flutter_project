@@ -245,15 +245,15 @@ class _MixtapeScreenState extends State<_MixtapeScreen> {
                             offset: const Offset(0, 4)),
                       ],
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.play_arrow_rounded,
-                            color: Colors.white, size: 22),
+                            color: readableOn(accent), size: 22),
                         SizedBox(width: 6),
                         Text('Play the mixtape',
                             style: TextStyle(
-                                color: Colors.white,
+                                color: readableOn(accent),
                                 fontWeight: FontWeight.w800,
                                 fontSize: 14)),
                       ],

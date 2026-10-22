@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'api_service.dart';
 import '../utils/toast_helper.dart';
+import '../utils/readable.dart';
 
 /// Link (or unlink) an Ozilane Key phone to this Aluta account.
 ///
@@ -314,7 +315,7 @@ class _LinkOzilaneScreenState extends State<LinkOzilaneScreen> {
             label: Text(_needProof ? 'Link with backup code' : 'Link a phone'),
             style: FilledButton.styleFrom(
               backgroundColor: scheme.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: readableOn(scheme.primary),
               shape:
                   RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),

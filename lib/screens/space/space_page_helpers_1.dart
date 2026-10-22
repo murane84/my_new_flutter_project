@@ -854,10 +854,10 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 13,
-                  color: Colors.white)),
+                  color: readableOn(_accent))),
         ],
       ),
     );

@@ -503,8 +503,8 @@ class _WaveformSeekBarState extends State<_WaveformSeekBar> {
                       ),
                       child: Text(
                         widget.labelFor(frac),
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: readableOn(widget.accent),
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),

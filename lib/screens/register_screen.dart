@@ -8,6 +8,7 @@ import 'theme_provider.dart';
 import 'auth_page.dart';
 import '../utils/snackbar_helper.dart';
 import '../utils/brand_theme.dart';
+import '../utils/readable.dart';
 
 class RegisterPage extends StatefulWidget {
   static const String routeName = '/register';
@@ -438,7 +439,7 @@ class RegisterPageState extends State<RegisterPage> {
                                           : _performRegister,
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: scheme.primary,
-                                        foregroundColor: Colors.white,
+                                        foregroundColor: readableOn(scheme.primary),
                                         shape: RoundedRectangleBorder(
                                           borderRadius:
                                               BorderRadius.circular(24),
@@ -446,13 +447,13 @@ class RegisterPageState extends State<RegisterPage> {
                                         elevation: 4,
                                       ),
                                       child: _isLoading
-                                          ? const SizedBox(
+                                          ? SizedBox(
                                               width: 20,
                                               height: 20,
                                               child:
                                                   CircularProgressIndicator(
                                                 strokeWidth: 2.5,
-                                                color: Colors.white,
+                                                color: readableOn(scheme.primary),
                                               ),
                                             )
                                           : const Text(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 
 import '../services/song_insights.dart';
+import '../utils/readable.dart';
 
 /// How this song feels to you — and, from that feeling, who it's for.
 /// 😍 → "Send to Belyner 💞" · Together; 🥹 → a heart; 💪 → share the energy;
@@ -109,7 +110,7 @@ class _SongFeelStripState extends State<SongFeelStrip> {
       String? tip}) {
     final a = widget.accent;
     final on = Theme.of(context).colorScheme.onSurface;
-    final fg = strong ? Colors.white : on.withValues(alpha: 0.8);
+    final fg = strong ? readableOn(a) : on.withValues(alpha: 0.8);
     final pill = Material(
       color: Colors.transparent,
       child: Ink(

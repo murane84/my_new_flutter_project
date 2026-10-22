@@ -6,6 +6,7 @@ import '../token_helper.dart' show mediaAuthHeaders;
 import 'create_story_sheet.dart';
 import 'story_models.dart';
 import 'story_viewer.dart';
+import '../../utils/readable.dart';
 
 /// Horizontal "stories" strip shown at the top of the Messages list. Owns its
 /// own data: it fetches the friends-only feed and reloads after posting or
@@ -152,7 +153,7 @@ class _StoriesTrayState extends State<StoriesTray> {
                   color: Theme.of(context).colorScheme.surface, width: 2),
             ),
             child: Icon(Icons.add,
-                color: Colors.white, size: badgeSize * 0.68),
+                color: readableOn(Theme.of(context).colorScheme.primary), size: badgeSize * 0.68),
           ),
         ),
         child: _avatarCircle(avatar, widget.myName, avatarRadius),

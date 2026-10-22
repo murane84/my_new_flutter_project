@@ -1272,7 +1272,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
                 color: scheme.primary,
                 shape: const CircleBorder(),
                 child: IconButton(
-                  icon: const Icon(Icons.send_rounded, color: Colors.white),
+                  icon: Icon(Icons.send_rounded, color: readableOn(scheme.primary)),
                   onPressed: _submitFileCaption,
                   tooltip: 'Send',
                 ),

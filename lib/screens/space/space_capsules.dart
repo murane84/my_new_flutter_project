@@ -334,13 +334,13 @@ class _CapsuleComposeSheetState extends State<_CapsuleComposeSheet> {
                 onPressed: _sending ? null : _seal,
                 style: FilledButton.styleFrom(
                     backgroundColor: widget.accent,
-                    foregroundColor: Colors.white),
+                    foregroundColor: readableOn(widget.accent)),
                 icon: _sending
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
+                            strokeWidth: 2, color: readableOn(widget.accent)))
                     : const Icon(Icons.lock_clock_rounded, size: 18),
                 label: Text(_sending ? 'Sealing…' : 'Seal the capsule'),
               ),

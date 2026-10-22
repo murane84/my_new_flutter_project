@@ -68,10 +68,10 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(label,
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 16,
-                          color: Colors.white)),
+                          color: readableOn(_accent))),
                   const SizedBox(height: 2),
                   Text(line,
                       style: TextStyle(
@@ -441,7 +441,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
               onPressed: _listenTogether,
               style: FilledButton.styleFrom(
                 backgroundColor: _accent,
-                foregroundColor: Colors.white,
+                foregroundColor: readableOn(_accent),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               ),
@@ -632,7 +632,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
               child: FilledButton.icon(
                 onPressed: () => _openCapsule(id),
                 style: FilledButton.styleFrom(
-                    backgroundColor: _accent, foregroundColor: Colors.white),
+                    backgroundColor: _accent, foregroundColor: readableOn(_accent)),
                 icon: const Icon(Icons.lock_open_rounded, size: 18),
                 label: const Text('Open the capsule'),
               ),
@@ -824,11 +824,11 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                           color: _accent,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Text('New',
+                        child: Text('New',
                             style: TextStyle(
                                 fontSize: 9,
                                 fontWeight: FontWeight.w700,
-                                color: Colors.white)),
+                                color: readableOn(_accent))),
                       ),
                     ],
                   ]),

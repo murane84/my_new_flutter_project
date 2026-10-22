@@ -612,12 +612,12 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
                       shape: BoxShape.circle,
                     ),
                     child: _busy
-                        ? const Padding(
+                        ? Padding(
                             padding: EdgeInsets.all(13),
                             child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
+                                strokeWidth: 2, color: readableOn(scheme.primary)),
                           )
-                        : const Icon(Icons.send_rounded, color: Colors.white),
+                        : Icon(Icons.send_rounded, color: readableOn(scheme.primary)),
                   ),
                 ),
               ],

@@ -815,7 +815,7 @@ class _MomentComposerState extends State<_MomentComposer> {
               child: FilledButton(
                 style: FilledButton.styleFrom(
                     backgroundColor: widget.accent,
-                    foregroundColor: Colors.white),
+                    foregroundColor: readableOn(widget.accent)),
                 onPressed: _pin,
                 child: const Text('Pin it'),
               ),
@@ -1015,7 +1015,7 @@ class _PlaylistAddSheetState extends State<_PlaylistAddSheet> {
             child: FilledButton(
               style: FilledButton.styleFrom(
                   backgroundColor: widget.accent,
-                  foregroundColor: Colors.white),
+                  foregroundColor: readableOn(widget.accent)),
               onPressed: _add,
               child: const Text('Add'),
             ),

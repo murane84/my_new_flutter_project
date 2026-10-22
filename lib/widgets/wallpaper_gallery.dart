@@ -7,6 +7,7 @@ import '../services/wallpapers_service.dart';
 import '../services/media_store.dart';
 import '../utils/net_image.dart' show authNetworkImageProvider;
 import '../screens/token_helper.dart' show mediaAuthHeaders;
+import '../utils/readable.dart';
 
 /// Resolve a possibly-relative wallpaper URL (e.g. "/wallpapers/w01") against
 /// the API base into an absolute URL.
@@ -128,8 +129,8 @@ class WallpaperGalleryGrid extends StatelessWidget {
                             padding: const EdgeInsets.all(3),
                             decoration: BoxDecoration(
                                 color: accent, shape: BoxShape.circle),
-                            child: const Icon(Icons.check_rounded,
-                                size: 13, color: Colors.white),
+                            child: Icon(Icons.check_rounded,
+                                size: 13, color: readableOn(accent)),
                           ),
                         ),
                     ],

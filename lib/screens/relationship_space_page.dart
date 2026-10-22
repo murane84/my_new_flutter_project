@@ -40,6 +40,7 @@ import '../services/notif_service.dart'
 import 'package:video_player/video_player.dart';
 import '../widgets/genie_menu.dart';
 import '../theme/aluta_palette.dart';
+import '../utils/readable.dart';
 
 part 'space/space_moment_composer.dart'; // moment composer + add-to-playlist sheet
 part 'space/space_edit_sheet.dart'; // edit-space sheet + wallpaper picker
@@ -483,8 +484,17 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   int get _id => (_space['id'] as num).toInt();
   // Settings preview a theme live on the whole page until Save / Back.
   String? _previewTheme;
-  Color get _accent =>
-      spaceThemeColor(_previewTheme ?? _space['theme'] as String?);
+  Color get _accent {
+    final c = spaceThemeColor(_previewTheme ?? _space['theme'] as String?);
+    // Light mode: a very pale theme (butter, petal…) would vanish as words
+    // and icons on the light cards — deepen it a touch (as the app accent
+    // does). Dark mode keeps the exact colour.
+    final light =
+        !mounted || Theme.of(context).brightness == Brightness.light;
+    return light && c.computeLuminance() > 0.55
+        ? Color.lerp(c, Colors.black, 0.28)!
+        : c;
+  }
 
   bool _nudging = false;
   // Settings open in place, right under the pinned hero.
@@ -1653,7 +1663,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                       child: FilledButton(
                         style: FilledButton.styleFrom(
                             backgroundColor: _accent,
-                            foregroundColor: Colors.white),
+                            foregroundColor: readableOn(_accent)),
                         onPressed: close,
                         child: const Text('Got it'),
                       ),

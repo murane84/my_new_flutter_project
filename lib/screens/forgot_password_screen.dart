@@ -5,6 +5,7 @@ import 'api_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/brand_theme.dart';
 import 'ozilane_approve_screen.dart';
+import '../utils/readable.dart';
 
 /// Recover a forgotten password two ways:
 ///   • Email code  — the backend emails a 6-digit code (works for everyone).
@@ -189,7 +190,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       label: const Text('Approve on Ozilane Key'),
                       style: FilledButton.styleFrom(
                         backgroundColor: scheme.primary,
-                        foregroundColor: Colors.white,
+                        foregroundColor: readableOn(scheme.primary),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14)),
                       ),
@@ -386,17 +387,17 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       onPressed: _busy ? null : _submit,
                       style: FilledButton.styleFrom(
                         backgroundColor: scheme.primary,
-                        foregroundColor: Colors.white,
+                        foregroundColor: readableOn(scheme.primary),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
                       ),
                       child: _busy
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 22,
                               height: 22,
                               child: CircularProgressIndicator(
-                                  strokeWidth: 2.5, color: Colors.white),
+                                  strokeWidth: 2.5, color: readableOn(scheme.primary)),
                             )
                           : const Text('Reset password',
                               style: TextStyle(

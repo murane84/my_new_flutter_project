@@ -21,6 +21,7 @@ import '../services/track_title.dart'
     show cleanDisplayName, splitTitleArtist;
 import 'listening_audience_sheet.dart' show PresenceShareButton;
 import '../widgets/genie_menu.dart';
+import '../utils/readable.dart';
 
 /// Web-only replacement for the native [MusicControls] panel.
 ///
@@ -1198,8 +1199,8 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                       ),
                       child: Text(
                         badge,
-                        style: const TextStyle(
-                            color: Colors.white,
+                        style: TextStyle(
+                            color: readableOn(accent),
                             fontSize: 9,
                             fontWeight: FontWeight.w700),
                       ),
@@ -1782,8 +1783,8 @@ class _WebWaveformSeekBarState extends State<_WebWaveformSeekBar> {
                       ),
                       child: Text(
                         widget.labelFor(frac),
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: readableOn(widget.accent),
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),

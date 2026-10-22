@@ -65,7 +65,7 @@ class _RecordingBar extends StatelessWidget {
               decoration:
                   BoxDecoration(color: scheme.primary, shape: BoxShape.circle),
               child:
-                  const Icon(Icons.send_rounded, color: Colors.white, size: 22),
+                  Icon(Icons.send_rounded, color: readableOn(scheme.primary), size: 22),
             ),
           ),
         ],

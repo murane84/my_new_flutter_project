@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'api_service.dart';
 import 'legal_screen.dart';
+import '../utils/readable.dart';
 
 /// A blocking "read & agree" consent gate for the Privacy Policy + Terms of Use.
 ///
@@ -212,11 +213,11 @@ class _PolicyGateDialogState extends State<_PolicyGateDialog> {
                       minimumSize: const Size.fromHeight(48),
                     ),
                     child: _busy
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
+                                strokeWidth: 2, color: readableOn(scheme.primary)),
                           )
                         : const Text('Agree & Continue'),
                   ),

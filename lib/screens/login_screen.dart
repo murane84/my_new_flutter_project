@@ -20,6 +20,7 @@ import 'token_helper.dart';
 import '../services/biometric_service.dart';
 import '../utils/snackbar_helper.dart';
 import '../utils/brand_theme.dart';
+import '../utils/readable.dart';
 
 class LoginPage extends StatefulWidget {
   static const String routeName = '/login';
@@ -301,11 +302,11 @@ class LoginPageState extends State<LoginPage> {
                         Expanded(
                           child: FilledButton.icon(
                             onPressed: () => Navigator.pop(ctx, true),
-                            icon: const Icon(Icons.fingerprint_rounded,
+                            icon: Icon(Icons.fingerprint_rounded,
                                 size: 18),
                             style: FilledButton.styleFrom(
                               backgroundColor: scheme.primary,
-                              foregroundColor: Colors.white,
+                              foregroundColor: readableOn(scheme.primary),
                               padding:
                                   const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(
@@ -649,7 +650,7 @@ class LoginPageState extends State<LoginPage> {
                                           _isLoading ? null : _performLogin,
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: scheme.primary,
-                                        foregroundColor: Colors.white,
+                                        foregroundColor: readableOn(scheme.primary),
                                         shape: RoundedRectangleBorder(
                                           borderRadius:
                                               BorderRadius.circular(24),
@@ -657,13 +658,13 @@ class LoginPageState extends State<LoginPage> {
                                         elevation: 4,
                                       ),
                                       child: _isLoading
-                                          ? const SizedBox(
+                                          ? SizedBox(
                                               width: 20,
                                               height: 20,
                                               child:
                                                   CircularProgressIndicator(
                                                 strokeWidth: 2.5,
-                                                color: Colors.white,
+                                                color: readableOn(scheme.primary),
                                               ),
                                             )
                                           : const Text(

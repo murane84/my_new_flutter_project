@@ -80,7 +80,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
         );
       }
 
-      return Column(
+      final page = Column(
         children: [
           hero,
           // Cards scroll independently under the pinned hero and soften as
@@ -120,6 +120,9 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
           ),
         ],
       );
+      // Phones: the same drawer as the sections (Overview · sections ·
+      // Settings · Thinking of you), opened from the header's ☰.
+      return c.maxWidth < 720 ? _withNavDrawer(scheme, page, c.maxWidth) : page;
     });
   }
 

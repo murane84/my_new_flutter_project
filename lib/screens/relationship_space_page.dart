@@ -974,6 +974,73 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     });
   }
 
+  /// From the drawer / rail: open settings (never toggles closed).
+  void _openSettings() => setState(() {
+        _settingsOpen = true;
+        _section = null;
+        _navDrawerOpen = false;
+        _guideOpen = false;
+      });
+
+  /// Back to the dashboard cards.
+  void _goOverview() => setState(() {
+        _settingsOpen = false;
+        _section = null;
+        _navDrawerOpen = false;
+        _guideOpen = false;
+      });
+
+  void _openNavDrawer() => setState(() => _navDrawerOpen = true);
+
+  /// The phone drawer over [content] (the same rail as wide screens): slides
+  /// in from the left over a scrim; tap out, its hide button or a swipe left
+  /// closes it. Shared by the dashboard and the sections.
+  Widget _withNavDrawer(ColorScheme scheme, Widget content, double maxWidth) {
+    final drawerW = (maxWidth * 0.74).clamp(230.0, 330.0);
+    return Stack(
+      children: [
+        Positioned.fill(child: content),
+        Positioned.fill(
+          child: IgnorePointer(
+            ignoring: !_navDrawerOpen,
+            child: GestureDetector(
+              onTap: () => setState(() => _navDrawerOpen = false),
+              onHorizontalDragEnd: (d) {
+                if ((d.primaryVelocity ?? 0) < 0) {
+                  setState(() => _navDrawerOpen = false);
+                }
+              },
+              child: AnimatedOpacity(
+                opacity: _navDrawerOpen ? 1 : 0,
+                duration: const Duration(milliseconds: 260),
+                child: Container(color: Colors.black.withValues(alpha: 0.4)),
+              ),
+            ),
+          ),
+        ),
+        AnimatedPositioned(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          top: 0,
+          bottom: 0,
+          width: drawerW,
+          left: _navDrawerOpen ? 0 : -(drawerW + 24),
+          child: GestureDetector(
+            onHorizontalDragEnd: (d) {
+              if ((d.primaryVelocity ?? 0) < 0) {
+                setState(() => _navDrawerOpen = false);
+              }
+            },
+            child: _sectionSidebar(
+              scheme,
+              onClose: () => setState(() => _navDrawerOpen = false),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _settingsPanel() => _EditSpaceSheet(
         key: const ValueKey('space-settings'),
         initialName: deriveSpaceName(_space, widget.myUserId),
@@ -1194,52 +1261,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             ],
           );
         }
-        final drawerW = (c.maxWidth * 0.74).clamp(230.0, 330.0);
-        return Stack(
-          children: [
-            Positioned.fill(child: content),
-            // Scrim — fades in with the drawer; tap or swipe-left dismisses.
-            Positioned.fill(
-              child: IgnorePointer(
-                ignoring: !_navDrawerOpen,
-                child: GestureDetector(
-                  onTap: () => setState(() => _navDrawerOpen = false),
-                  onHorizontalDragEnd: (d) {
-                    if ((d.primaryVelocity ?? 0) < 0) {
-                      setState(() => _navDrawerOpen = false);
-                    }
-                  },
-                  child: AnimatedOpacity(
-                    opacity: _navDrawerOpen ? 1 : 0,
-                    duration: const Duration(milliseconds: 260),
-                    child:
-                        Container(color: Colors.black.withValues(alpha: 0.4)),
-                  ),
-                ),
-              ),
-            ),
-            // The drawer — slides in from the left; swipe-left to close.
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOutCubic,
-              top: 0,
-              bottom: 0,
-              width: drawerW,
-              left: _navDrawerOpen ? 0 : -(drawerW + 24),
-              child: GestureDetector(
-                onHorizontalDragEnd: (d) {
-                  if ((d.primaryVelocity ?? 0) < 0) {
-                    setState(() => _navDrawerOpen = false);
-                  }
-                },
-                child: _sectionSidebar(
-                  scheme,
-                  onClose: () => setState(() => _navDrawerOpen = false),
-                ),
-              ),
-            ),
-          ],
-        );
+        return _withNavDrawer(scheme, content, c.maxWidth);
       },
     );
   }

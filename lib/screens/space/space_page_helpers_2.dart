@@ -180,10 +180,16 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            seg(Icons.tune_rounded,
-                _settingsOpen ? 'Close settings' : 'Space settings',
-                _editSpace,
-                active: _settingsOpen),
+            // Phones: settings live in the drawer, so the header offers the
+            // drawer itself; wider screens keep the settings key here.
+            if (MediaQuery.sizeOf(context).width < 720)
+              seg(Icons.menu_rounded, 'Menu', _openNavDrawer,
+                  active: _navDrawerOpen)
+            else
+              seg(Icons.tune_rounded,
+                  _settingsOpen ? 'Close settings' : 'Space settings',
+                  _editSpace,
+                  active: _settingsOpen),
             if (widget.mainMenuBuilder != null) ...[
               divider(),
               // The platform ⋮ menu, tinted to the accent so it belongs to the

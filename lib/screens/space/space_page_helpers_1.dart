@@ -732,7 +732,18 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
                   height: 1,
                   color: scheme.outlineVariant.withValues(alpha: 0.5)),
               const SizedBox(height: 8),
+              // Overview (the dashboard) leads, so the drawer can always take
+              // you home; Settings closes the list as an option like the rest.
+              _sidebarItem(scheme,
+                  ('overview', Icons.space_dashboard_rounded, 'Overview')),
               for (final s in _visibleSections()) _sidebarItem(scheme, s),
+              const SizedBox(height: 2),
+              Divider(
+                  height: 1,
+                  color: scheme.outlineVariant.withValues(alpha: 0.5)),
+              const SizedBox(height: 8),
+              _sidebarItem(
+                  scheme, ('settings', Icons.tune_rounded, 'Settings')),
               // The "Thinking of you 💭" nudge — the lightest touch across the
               // bond — sits below the section list as a special action, so it's
               // always one tap away from any section (wide rail AND mobile
@@ -842,7 +853,11 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
   }
 
   Widget _sidebarItem(ColorScheme scheme, (String, IconData, String) s) {
-    final active = _section == s.$1;
+    final active = switch (s.$1) {
+      'overview' => _section == null && !_settingsOpen,
+      'settings' => _settingsOpen,
+      _ => _section == s.$1,
+    };
     final count = _sectionCount(s.$1);
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
@@ -850,7 +865,17 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: active ? null : () => _goSection(s.$1),
+          onTap: active
+              ? null
+              : () {
+                  if (s.$1 == 'overview') {
+                    _goOverview();
+                  } else if (s.$1 == 'settings') {
+                    _openSettings();
+                  } else {
+                    _goSection(s.$1);
+                  }
+                },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOut,

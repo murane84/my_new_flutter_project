@@ -86,6 +86,7 @@ import 'chat/attach_sheet.dart';
 import 'chat/contact_picker_sheet.dart';
 import 'stories/camera_capture.dart';
 import '../widgets/genie_menu.dart';
+import '../widgets/aluta_composer_field.dart';
 import '../widgets/pixel_snap.dart';
 
 // Split out for maintainability (Dart parts — same library, shared

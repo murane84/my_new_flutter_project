@@ -1256,44 +1256,13 @@ extension _ChatPageHelpers2 on _ChatPageState {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: scheme.surface,
-                    borderRadius: BorderRadius.circular(26),
-                    border: Border.all(
-                        color: scheme.outlineVariant.withValues(alpha: 0.5)),
-                  ),
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                    child: Focus(
-                      onKeyEvent: (node, event) {
-                        if (event is KeyDownEvent &&
-                            event.logicalKey == LogicalKeyboardKey.enter &&
-                            !HardwareKeyboard.instance.isShiftPressed &&
-                            !HardwareKeyboard.instance.isControlPressed) {
-                          _submitFileCaption();
-                          return KeyEventResult.handled;
-                        }
-                        return KeyEventResult.ignored;
-                      },
-                      child: TextField(
-                        controller: _captionCtrl,
-                        autofocus: true,
-                        minLines: 1,
-                        maxLines: 4,
-                        textInputAction: TextInputAction.newline,
-                        keyboardType: TextInputType.multiline,
-                        decoration: const InputDecoration(
-                          hintText: 'Add a caption…',
-                          isDense: true,
-                          border: InputBorder.none,
-                          contentPadding:
-                              EdgeInsets.symmetric(vertical: 10, horizontal: 2),
-                        ),
-                      ),
-                    ),
-                  ),
+                // Same pill (and keystroke ticks) as the chat composer.
+                child: AlutaComposerField(
+                  controller: _captionCtrl,
+                  hint: 'Add a caption…',
+                  maxLines: 4,
+                  autofocus: true,
+                  onSubmit: _submitFileCaption,
                 ),
               ),
               const SizedBox(width: 6),

@@ -24,6 +24,7 @@ import 'relationship_space_page.dart'
     show pickDiaryReaction, resolveAvatarUrl;
 import '../utils/marquee_text.dart';
 import '../widgets/animated_reaction.dart';
+import '../widgets/aluta_composer_field.dart';
 import '../services/track_title.dart' show displayTitleForPath;
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
@@ -1630,28 +1631,14 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
           ),
           const SizedBox(width: 4),
           Expanded(
-            child: TextField(
+            // Same pill (and keystroke ticks) as the chat composer.
+            child: AlutaComposerField(
               controller: _commentCtrl,
               focusNode: _commentFocus,
-              textInputAction: TextInputAction.send,
-              minLines: 1,
+              hint: 'Message the room…',
               maxLines: 3,
-              onSubmitted: (_) => _sendComment(),
-              style: const TextStyle(fontSize: 13.5),
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: 'Message the room…',
-                hintStyle: TextStyle(
-                    fontSize: 13, color: scheme.onSurfaceVariant),
-                filled: true,
-                fillColor: scheme.surfaceContainerHighest,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(22),
-                  borderSide: BorderSide.none,
-                ),
-              ),
+              sendOnAction: true,
+              onSubmit: _sendComment,
             ),
           ),
           const SizedBox(width: 6),

@@ -592,24 +592,13 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: TextField(
+                  // Same pill (and keystroke ticks) as the chat composer.
+                  child: AlutaComposerField(
                     controller: _captionCtrl,
-                    minLines: 1,
+                    hint: 'Add a caption…',
                     maxLines: 4,
-                    style: const TextStyle(color: Colors.white),
-                    cursorColor: scheme.primary,
-                    decoration: InputDecoration(
-                      hintText: 'Add a caption…',
-                      hintStyle: const TextStyle(color: Colors.white54),
-                      filled: true,
-                      fillColor: Colors.white10,
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
+                    dark: true,
+                    onSubmit: _busy ? null : _send,
                   ),
                 ),
                 const SizedBox(width: 8),

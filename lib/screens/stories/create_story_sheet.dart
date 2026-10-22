@@ -8,6 +8,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../services/audio_handler.dart';
 import '../../utils/emoji_field.dart';
+import '../../widgets/aluta_composer_field.dart';
 import '../api_service.dart';
 import '../gif_picker.dart';
 import 'camera_capture.dart';
@@ -378,37 +379,23 @@ class _MediaComposePageState extends State<_MediaComposePage> {
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
+                  // Same pill (and keystroke ticks) as the chat composer.
+                  child: AlutaComposerField(
                     controller: _caption,
-                    style: const TextStyle(color: Colors.white),
-                    minLines: 1,
+                    hint: 'Add a caption…',
                     maxLines: 3,
-                    // Tapping the field to type dismisses the emoji panel so the
-                    // keyboard can take over.
+                    dark: true,
+                    // Tapping the field to type dismisses the emoji panel so
+                    // the keyboard can take over.
                     onTap: () {
                       if (_showEmoji) setState(() => _showEmoji = false);
                     },
-                    decoration: InputDecoration(
-                      hintText: 'Add a caption…',
-                      hintStyle:
-                          TextStyle(color: Colors.white.withValues(alpha: 0.6)),
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.1),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                            _showEmoji
-                                ? Icons.keyboard_rounded
-                                : Icons.emoji_emotions_outlined,
-                            color: Colors.white.withValues(alpha: 0.75)),
-                        tooltip: _showEmoji ? 'Keyboard' : 'Add emoji',
-                        onPressed: _toggleEmoji,
-                      ),
+                    leading: IconButton(
+                      icon: Icon(_showEmoji
+                          ? Icons.keyboard_rounded
+                          : Icons.emoji_emotions_outlined),
+                      tooltip: _showEmoji ? 'Keyboard' : 'Add emoji',
+                      onPressed: _toggleEmoji,
                     ),
                   ),
                 ),

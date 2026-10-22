@@ -6,12 +6,13 @@ import '../services/aluta_mood.dart';
 
 /// The Aluta logo loader. One look, four moods (see [AlutaMood.loaderStyle]):
 ///  • heartbeat — the mark gives a soft "lub-dub" every beat
-///  • ripple    — each beat sends a thin ring outward, like sound leaving a speaker
+///  • ripple    — each beat sends one faint ring outward, like sound leaving a speaker
 ///  • breathe   — slow, calm swell (dawn / late night)
-///  • orbit     — a brisker comet with a glowing head
-/// Always: a comet-tail ring in the theme colour (warmer in the morning,
-/// softer at night) and a faint halo behind the disc. With system "remove
-/// animations" on, it holds still and only the halo shows.
+///  • orbit     — a brisker, shorter comet
+/// Always: ONE thin comet arc hugging the disc in the theme colour (warmer in
+/// the morning, softer at night). No track ring, no halo — the mark and one
+/// moving line, nothing else around it. With system "remove animations" on,
+/// it holds still.
 /// [completing] closes the ring and pops a little heart — the goodbye.
 class AlutaLoader extends StatefulWidget {
   const AlutaLoader({
@@ -138,23 +139,6 @@ class _AlutaLoaderState extends State<AlutaLoader>
             return Stack(
               alignment: Alignment.center,
               children: [
-                // Halo
-                Container(
-                  width: disc + 22,
-                  height: disc + 22,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: accent.withValues(
-                            alpha: (isDark ? 0.20 : 0.14) +
-                                0.10 * glow.clamp(0.0, 1.0)),
-                        blurRadius: 22,
-                        spreadRadius: 1,
-                      ),
-                    ],
-                  ),
-                ),
                 CustomPaint(
                   size: Size(s + 28, s + 28),
                   painter: _RingPainter(
@@ -164,10 +148,10 @@ class _AlutaLoaderState extends State<AlutaLoader>
                     orbit: widget.style == LoaderStyle.orbit,
                     still: _still,
                     done: d,
-                    ring: s / 2,
+                    // The arc sits just off the disc's edge.
+                    ring: disc / 2 + 3.5 + 2.6,
                     disc: disc / 2,
                     color: accent,
-                    track: accent.withValues(alpha: isDark ? 0.18 : 0.13),
                   ),
                 ),
                 Transform.scale(
@@ -178,12 +162,16 @@ class _AlutaLoaderState extends State<AlutaLoader>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: isDark ? const Color(0xFF26222A) : Colors.white,
+                      // One soft shadow; on the beat it warms a touch toward
+                      // the accent instead of adding another glow layer.
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black
-                              .withValues(alpha: isDark ? 0.45 : 0.14),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
+                          color: Color.lerp(
+                                  Colors.black, accent,
+                                  0.35 * glow.clamp(0.0, 1.0))!
+                              .withValues(alpha: isDark ? 0.40 : 0.12),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
                         ),
                       ],
                     ),
@@ -235,91 +223,60 @@ class _RingPainter extends CustomPainter {
     required this.ring,
     required this.disc,
     required this.color,
-    required this.track,
   });
 
   final double rot, pulse, done, ring, disc;
   final bool ripple, orbit, still;
-  final Color color, track;
+  final Color color;
+
+  static const double stroke = 2.6;
 
   @override
   void paint(Canvas canvas, Size size) {
     final c = size.center(Offset.zero);
-    const stroke = 3.0;
-    final rect = Rect.fromCircle(center: c, radius: ring - stroke / 2);
+    final r = ring - stroke / 2;
+    final rect = Rect.fromCircle(center: c, radius: r);
 
-    // Ripples: two staggered rings leaving the disc.
+    // Ripple mood: a single faint ring leaving the arc on each beat.
     if (ripple) {
-      for (final off in [0.0, 0.5]) {
-        final t = (pulse + off) % 1.0;
-        final r = disc + (ring + 12 - disc) * Curves.easeOut.transform(t);
-        canvas.drawCircle(
-          c,
-          r,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.4 * (1 - t) + 0.4
-            ..color = color.withValues(alpha: 0.35 * (1 - t)),
-        );
-      }
-    }
-
-    // Track
-    canvas.drawCircle(
+      final t = pulse;
+      final rr = r + 12 * Curves.easeOut.transform(t);
+      canvas.drawCircle(
         c,
-        ring - stroke / 2,
+        rr,
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..color = track);
+          ..strokeWidth = 1.0
+          ..color = color.withValues(alpha: 0.22 * (1 - t)),
+      );
+    }
+
+    final arc = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round;
 
     if (still) {
-      canvas.drawArc(
-          rect,
-          -math.pi / 2,
-          2 * math.pi * 0.3,
-          false,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = stroke
-            ..strokeCap = StrokeCap.round
-            ..color = color);
+      canvas.drawArc(rect, -math.pi / 2, 2 * math.pi * 0.3, false,
+          arc..color = color);
       return;
     }
 
-    // Comet: a sweep that fades into its tail; closes to a full ring on done.
-    final sweep = (orbit ? 0.62 : 0.72) + (1 - (orbit ? 0.62 : 0.72)) * done;
-    final start = rot * 2 * math.pi;
+    // Comet: a sweep that fades out into its tail; closes to a full ring on
+    // done. The head is just the bright rounded end of the stroke.
+    final base = orbit ? 0.55 : 0.62;
+    final sweep = base + (1 - base) * done;
     canvas.save();
     canvas.translate(c.dx, c.dy);
-    canvas.rotate(start);
+    canvas.rotate(rot * 2 * math.pi);
     canvas.translate(-c.dx, -c.dy);
-    final shader = SweepGradient(
+    arc.shader = SweepGradient(
       startAngle: 0,
       endAngle: 2 * math.pi * sweep,
       colors: [color.withValues(alpha: done), color],
       tileMode: TileMode.clamp,
     ).createShader(rect);
-    canvas.drawArc(
-        rect,
-        0,
-        2 * math.pi * sweep,
-        false,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..shader = shader);
-    // Glowing head
-    final head = Offset(
-      c.dx + (ring - stroke / 2) * math.cos(2 * math.pi * sweep),
-      c.dy + (ring - stroke / 2) * math.sin(2 * math.pi * sweep),
-    );
-    if (done < 0.9) {
-      canvas.drawCircle(head, orbit ? 4.2 : 3.2,
-          Paint()..color = color.withValues(alpha: 0.30 * (1 - done)));
-      canvas.drawCircle(head, orbit ? 2.4 : 1.9, Paint()..color = color);
-    }
+    canvas.drawArc(rect, 0, 2 * math.pi * sweep, false, arc);
     canvas.restore();
   }
 

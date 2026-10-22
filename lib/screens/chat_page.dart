@@ -3932,15 +3932,17 @@ class _ChatPageState extends State<ChatPage>
                     isMe ? Alignment.centerRight : Alignment.centerLeft,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: BackdropFilter(
-                    filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  // No live blur: re-blurring under the text whenever
+                  // anything near it repainted made the time shimmer on
+                  // desktop. A slightly firmer frost reads the same.
+                  child: RepaintBoundary(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 9, vertical: 3.5),
                       decoration: BoxDecoration(
                         color: isDark
-                            ? Colors.black.withValues(alpha: 0.30)
-                            : Colors.white.withValues(alpha: 0.55),
+                            ? Colors.black.withValues(alpha: 0.42)
+                            : Colors.white.withValues(alpha: 0.74),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                             color: isDark

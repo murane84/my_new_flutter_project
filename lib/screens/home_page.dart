@@ -174,6 +174,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // Heartbeat tap: whose avatar is glowing right now (sent or received).
   int? _glowFriendId;
   DateTime? _lastComposeAt; // SongBridge.messagePartner tap de-bounce
+  String? _lastComposeSig;
   Timer? _glowTimer;
   // "In tune" streak per Space id (Our Space), for the DM header flame.
   final Map<int, int> _streakDays = {};
@@ -770,10 +771,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
       // A double/triple tap is one intent, not three messages.
       final now = DateTime.now();
       final last = _lastComposeAt;
-      _lastComposeAt = now;
-      if (last != null && now.difference(last) < const Duration(seconds: 2)) {
-        return;
+      final sig = '$text|$heart|$mood';
+      if (sig == _lastComposeSig &&
+          last != null &&
+          now.difference(last) < const Duration(seconds: 2)) {
+        return; // the same tap again
       }
+      _lastComposeAt = now;
+      _lastComposeSig = sig;
       chatComposeRequest.value = {
         'friendId': p.id,
         'text': text ?? '',
@@ -1047,6 +1052,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// Once a day: today's Glow card as a soft moment (Open Glow / send it).
   Future<bool> _maybeGlowOfDay() async {
     if (!mounted || !_appForeground || _momentCooling) return false;
+    if (WelcomeTour.showing) return false;
     try {
       final p = await SharedPreferences.getInstance();
       await MomentPrefs.instance.load();
@@ -1058,6 +1064,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     } catch (_) {
       return false;
     }
+    if (!mounted) return false;
+    await loadGlowToday();
     if (!mounted) return false;
     final c = glowToday();
     final partner = _partnerInfo();
@@ -1096,6 +1104,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// 6) Sunday evening: your week in music, shareable with your partner.
   bool _maybeWeeklyRecap() {
     if (!mounted || !_appForeground || _momentCooling) return false;
+    if (WelcomeTour.showing) return false;
     final r = SongInsights.instance.weeklyRecapDue();
     if (r == null) return false;
     SongInsights.instance.markRecapShown();
@@ -2470,6 +2479,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // ── Chat open/close ───────────────────────────────────────────────────────
 
   void openChat(Map<String, dynamic> friend, {String? jumpToMessageId}) {
+    var leftFull = false;
     setState(() {
       _pendingJumpMessageId = jumpToMessageId;
       _clearSearchState();
@@ -2487,8 +2497,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
       if (_isMusicFullScreen) {
         _isMusicFullScreen = false;
         _musicPanelWidth = _prevMusicWidth;
+        leftFull = true;
       }
     });
+    if (leftFull) _saveLayoutState();
     // Optimistically clear the badge (was: friend['unread_count'] = 0).
     ref.read(unreadProvider.notifier).clear(friend['id'] as int);
     ApiService().markMessagesAsReadPatch(friend['id'] as int);

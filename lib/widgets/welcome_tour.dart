@@ -6,6 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 class WelcomeTour {
   static const _seenKey = 'welcome_tour_seen_v1';
 
+  /// True while the tour is on screen (other moments wait).
+  static bool showing = false;
+
   /// Show the tour if this device hasn't seen it yet.
   static Future<void> maybeShow(BuildContext context) async {
     try {
@@ -19,7 +22,16 @@ class WelcomeTour {
     await show(context);
   }
 
-  static Future<void> show(BuildContext context) {
+  static Future<void> show(BuildContext context) async {
+    showing = true;
+    try {
+      await _open(context);
+    } finally {
+      showing = false;
+    }
+  }
+
+  static Future<void> _open(BuildContext context) {
     return showGeneralDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -94,8 +106,7 @@ class _TourPagesState extends State<_TourPages> {
       child: Material(
         color: Colors.transparent,
         child: Container(
-          width: 360,
-          height: 470,
+          constraints: const BoxConstraints(maxWidth: 360, maxHeight: 470),
           margin: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: isDark ? scheme.surfaceContainerHigh : Colors.white,
@@ -167,7 +178,14 @@ class _TourPagesState extends State<_TourPages> {
     final a = scheme.primary;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 28),
-      child: Column(
+      // Short screens / large text: shrink rather than overflow.
+      child: Center(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: SizedBox(
+            width: 304,
+            child: Column(
+        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           TweenAnimationBuilder<double>(
@@ -221,6 +239,9 @@ class _TourPagesState extends State<_TourPages> {
                   height: 1.45,
                   color: scheme.onSurfaceVariant)),
         ],
+            ),
+          ),
+        ),
       ),
     );
   }

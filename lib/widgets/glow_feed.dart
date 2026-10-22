@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData, HapticFeedback;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,8 +19,48 @@ int _glowDaySeed() {
   return d.year * 1000 + d.difference(DateTime(d.year)).inDays;
 }
 
-/// Today's glow — by date, time of day and the feeling you last gave a song.
+/// Today's glow — chosen once per day (by the time of day and the feeling
+/// you last gave a song when first asked), then kept all day so the morning
+/// card and the feed always agree.
+String? _glowTodayDay;
+GlowCard? _glowTodayCard;
+const _glowTodayKey = 'glow_today_v1'; // "y-m-d|cardId"
+
+/// Restore today's pick saved by an earlier session (call before showing).
+Future<void> loadGlowToday() async {
+  try {
+    final p = await SharedPreferences.getInstance();
+    final raw = p.getString(_glowTodayKey);
+    if (raw == null) return;
+    final parts = raw.split('|');
+    if (parts.length != 2 || parts[0] != _glowDayKey()) return;
+    for (final c in glowCards) {
+      if (c.id == parts[1]) {
+        _glowTodayDay = parts[0];
+        _glowTodayCard = c;
+      }
+    }
+  } catch (_) {}
+}
+
+String _glowDayKey() {
+  final d = DateTime.now();
+  return '${d.year}-${d.month}-${d.day}';
+}
+
 GlowCard glowToday() {
+  final day = _glowDayKey();
+  if (_glowTodayDay == day && _glowTodayCard != null) return _glowTodayCard!;
+  final c = _pickGlowToday();
+  _glowTodayDay = day;
+  _glowTodayCard = c;
+  SharedPreferences.getInstance()
+      .then((p) => p.setString(_glowTodayKey, '$day|${c.id}'))
+      .catchError((_) => false);
+  return c;
+}
+
+GlowCard _pickGlowToday() {
   final f = SongInsights.instance.lastFeel;
   final byFeel = switch (f) {
     SongFeel.missing => ['missing', 'steady'],
@@ -74,7 +116,7 @@ class _GlowFeedState extends State<GlowFeed> {
       if (!mounted) return;
       setState(() => _saved = (p.getStringList(_savedKey) ?? const []).toSet());
     }).catchError((_) {});
-    SongInsights.instance.load().then((_) {
+    Future.wait([SongInsights.instance.load(), loadGlowToday()]).then((_) {
       if (mounted) setState(() {});
     });
   }
@@ -122,10 +164,7 @@ class _GlowFeedState extends State<GlowFeed> {
   List<GlowCard> get _feed {
     final today = _today;
     // A gentle, stable-per-day shuffle (no flicker on rebuild).
-    final seed = _daySeed;
-    final list = [...glowCards]..sort((a, b) =>
-        ((a.id.hashCode ^ seed) & 0x7fffffff)
-            .compareTo((b.id.hashCode ^ seed) & 0x7fffffff));
+    final list = [...glowCards]..shuffle(math.Random(_daySeed));
     list.remove(today);
     final us = glowForUs();
     if (us != null) list.remove(us);

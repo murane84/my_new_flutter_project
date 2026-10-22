@@ -216,7 +216,8 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
       _edgeFade = 0.2;
       _applyVolume();
       await _player.setSpeed(_speed);
-      if (autoplay) await _player.play();
+      // play() completes at track END on Android — never await it.
+      if (autoplay) unawaited(_player.play());
       return null;
     } on TimeoutException catch (_) {
       // Treat a stuck open as unplayable so the UI recovers instead of

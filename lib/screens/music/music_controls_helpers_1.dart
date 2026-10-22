@@ -482,9 +482,8 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                                       centered: true,
                                       // Leaving for a chat / Space: close
                                       // the full player first.
-                                      onLeave: () => Navigator.of(context,
-                                              rootNavigator: true)
-                                          .maybePop(),
+                                      onLeave: () =>
+                                          Navigator.of(context).maybePop(),
                                     ),
                                   ),
                                 ),

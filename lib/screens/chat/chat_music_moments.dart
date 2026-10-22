@@ -192,6 +192,15 @@ extension _ChatMusicMoments on _ChatPageState {
     } else {
       return null;
     }
+    // Only cards that really came from the Glow pack — a user's own
+    // "💞 …" or "✨ Happy birthday\n…" stays a normal message.
+    final b = body;
+    final fromPack = glowCards.any((c) => switch (kind) {
+          'QUOTE' => '“${c.text.replaceAll('\n', ' ')}”' == b,
+          'TRY TOGETHER' => c.kind == GlowKind.together && c.text == b,
+          _ => c.title == title && c.text == b,
+        });
+    if (!fromPack) return null;
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 360),
       child: Column(

@@ -1,5 +1,3 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 
@@ -148,13 +146,16 @@ class _SongFeelStripState extends State<SongFeelStrip> {
                 if (text.isNotEmpty) const SizedBox(width: 5),
               ],
               if (text.isNotEmpty)
-              Text(text,
+              Flexible(
+                child: Text(text,
                   maxLines: 1,
                   softWrap: false,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                       fontSize: widget.centered ? 13 : 12,
                       fontWeight: FontWeight.w700,
                       color: fg)),
+              ),
             ]),
           ),
         ),
@@ -247,11 +248,9 @@ class _SongFeelStripState extends State<SongFeelStrip> {
   Widget _frame(Widget child) {
     if (!widget.framed) return child;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
+    // No backdrop blur: it would re-run every frame next to the spinning
+    // disc for no visible gain over a flat translucent card.
+    return Container(
           padding: EdgeInsets.symmetric(
               horizontal: 12, vertical: widget.centered ? 10 : 7),
           decoration: BoxDecoration(
@@ -263,9 +262,7 @@ class _SongFeelStripState extends State<SongFeelStrip> {
                 Border.all(color: widget.accent.withValues(alpha: 0.18)),
           ),
           child: child,
-        ),
-      ),
-    );
+        );
   }
 
   @override
@@ -285,6 +282,8 @@ class _SongFeelStripState extends State<SongFeelStrip> {
             feel == null
                 ? (widget.framed ? 'How does this song feel?' : 'Feels like…')
                 : 'Change the feeling',
+            maxLines: widget.centered ? 2 : 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
                 fontSize: widget.centered ? 13 : 12,
                 fontWeight: FontWeight.w700,
@@ -304,7 +303,15 @@ class _SongFeelStripState extends State<SongFeelStrip> {
                   key: const ValueKey('choose'),
                   children: [
                     Expanded(child: label),
-                    FittedBox(child: row),
+                    const SizedBox(width: 6),
+                    // Shrinks on a narrow panel instead of squeezing the label.
+                    Flexible(
+                      flex: 2,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: FittedBox(fit: BoxFit.scaleDown, child: row),
+                      ),
+                    ),
                   ],
                 );
         } else {
@@ -371,11 +378,18 @@ class _SongFeelStripState extends State<SongFeelStrip> {
                                       style: const TextStyle(fontSize: 20)),
                                 ),
                               ),
-                        const Spacer(),
-                        for (var i = 0; i < acts.length; i++) ...[
-                          if (i > 0) const SizedBox(width: 6),
-                          acts[i],
-                        ],
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              for (var i = 0; i < acts.length; i++) ...[
+                                if (i > 0) const SizedBox(width: 6),
+                                Flexible(child: acts[i]),
+                              ],
+                            ],
+                          ),
+                        ),
                       ],
                     );
                   },

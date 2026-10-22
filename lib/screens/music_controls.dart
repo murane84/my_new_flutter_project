@@ -285,7 +285,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   void _applyVolume() {
     final v = _muted ? 0.0 : (_volume * _edgeFade * _sleepFade);
-    if ((v - _appliedVol).abs() < 0.015) return;
+    if (v != 0 && v != 1 && (v - _appliedVol).abs() < 0.015) return;
     _appliedVol = v;
     _player.setVolume(v);
   }
@@ -1355,6 +1355,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   void _setSleepTimer(Duration? d) {
     _sleepTimer?.cancel();
     _sleepTick?.cancel();
+    _sleepFade = 1.0;
+    _applyVolume();
     if (d == null) {
       _sleepFade = 1.0;
       _applyVolume();

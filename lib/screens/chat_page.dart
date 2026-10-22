@@ -4139,7 +4139,8 @@ class _ChatPageState extends State<ChatPage>
     );
 
     // ── Spacing: tighter between grouped messages ──────────────────────────
-    final topPad = showAvatar ? 6.0 : 2.0; // gap before new group
+    // A clear breath where the sender changes; snug inside a run.
+    final topPad = showAvatar ? 10.0 : 2.0;
 
     // In a GROUP, received bubbles carry the sender's own name + avatar (so you
     // can tell who said what). For DMs these are unused (the friend is implied).
@@ -4255,7 +4256,12 @@ class _ChatPageState extends State<ChatPage>
                   )
                 else
                 // ── Normal bubble ─────────────────────────────────────
+                // Capped so a long message on a wide screen stays a
+                // readable column (like any chat app), not a full-width bar.
                 Flexible(
+                  child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                      maxWidth: isMedia ? double.infinity : 520),
                   child: Container(
                     decoration: ShapeDecoration(
                       color: bubbleColor,
@@ -4527,8 +4533,12 @@ class _ChatPageState extends State<ChatPage>
                             mainText.trim().isNotEmpty)
                           Padding(
                             padding: EdgeInsets.only(top: isMedia ? 6 : 0),
-                            child: _bubbleTextOnly(
-                                mainText, textColor, linkColor),
+                            // A Glow card shared from the Glow feed renders
+                            // as a little card, not a plain paragraph.
+                            child: _glowCardBubble(mainText, textColor,
+                                    isMe ? quoteBarColor : scheme.primary) ??
+                                _bubbleTextOnly(
+                                    mainText, textColor, linkColor),
                           ),
 
                         // ── Time + delivery status ────────────────────
@@ -4571,6 +4581,7 @@ class _ChatPageState extends State<ChatPage>
                           ),
                       ],
                     ),
+                  ),
                   ),
                 ),
                 if (!isMe && _canHarmony && _isQuickKeepBubble(msg)) ...[

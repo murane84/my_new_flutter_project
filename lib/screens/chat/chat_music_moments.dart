@@ -168,6 +168,86 @@ extension _ChatMusicMoments on _ChatPageState {
     unawaited(attempt());
   }
 
+  /// A card shared from Glow ("✨ “quote”\n— source", "✨ Title\nbody",
+  /// "💞 try-together") → rendered as a small Glow card inside the bubble.
+  /// Returns null for any other text (normal rendering).
+  Widget? _glowCardBubble(String text, Color ink, Color accent) {
+    final t = text.trim();
+    String? kind, title, body, source;
+    if (t.startsWith('✨ “')) {
+      final cut = t.lastIndexOf('\n— ');
+      if (cut < 0) return null;
+      kind = 'QUOTE';
+      body = t.substring(2, cut).trim();
+      source = t.substring(cut + 3).trim();
+    } else if (t.startsWith('✨ ') && t.contains('\n')) {
+      final nl = t.indexOf('\n');
+      kind = 'GLOW';
+      title = t.substring(2, nl).trim();
+      body = t.substring(nl + 1).trim();
+      if (title.isEmpty || title.length > 60 || body.isEmpty) return null;
+    } else if (t.startsWith('💞 ') && !t.contains('\n') && t.length > 12) {
+      kind = 'TRY TOGETHER';
+      body = t.substring(2).trim();
+    } else {
+      return null;
+    }
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 360),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(
+                  kind == 'TRY TOGETHER'
+                      ? Icons.favorite_rounded
+                      : Icons.auto_awesome_rounded,
+                  size: 11,
+                  color: accent),
+              const SizedBox(width: 4),
+              Text(kind == 'QUOTE' ? 'GLOW · QUOTE' : 'GLOW · $kind',
+                  style: TextStyle(
+                      fontSize: 9.5,
+                      letterSpacing: 1.0,
+                      fontWeight: FontWeight.w800,
+                      color: accent)),
+            ]),
+          ),
+          const SizedBox(height: 6),
+          if (title != null) ...[
+            Text(title,
+                style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w800,
+                    height: 1.3,
+                    color: ink)),
+            const SizedBox(height: 3),
+          ],
+          Text(body,
+              style: TextStyle(
+                  fontSize: kind == 'QUOTE' ? 15 : 14,
+                  height: 1.42,
+                  fontStyle:
+                      kind == 'QUOTE' ? FontStyle.italic : FontStyle.normal,
+                  color: ink)),
+          if (source != null && source.isNotEmpty) ...[
+            const SizedBox(height: 5),
+            Text('— $source',
+                style: TextStyle(
+                    fontSize: 11.5, color: ink.withValues(alpha: 0.65))),
+          ],
+        ],
+      ),
+    );
+  }
+
   /// Caption for a voice note recorded over music ('' when none).
   String _voiceMusicCaption() {
     final t = _recordSong;

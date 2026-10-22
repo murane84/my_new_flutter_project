@@ -437,7 +437,12 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
             const SizedBox(height: 12),
 
             // ── Transport: shuffle · prev · −10 · play · +10 · next · repeat
-            FittedBox(
+            // Sunk into a soft groove in the glass; the play button rises
+            // out of it, so the buttons look fused into the surface.
+            _controlsGroove(
+              scheme,
+              accent,
+              FittedBox(
               fit: BoxFit.scaleDown,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -544,8 +549,11 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                 ],
               ),
             ),
+            ),
 
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
+            _lightSeam(accent),
+            const SizedBox(height: 12),
 
             // ── Tools: one compact row (no scrolling) ─────────────────
             // Playlist · Sleep · Equalizer · Lyrics · Identify — icon tiles
@@ -1089,51 +1097,100 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
     });
   }
 
-  /// The glass the player controls sit in: a sheen from the top, a lit rim, a faint accent wash and a shadow underneath, so the waveform,
-  /// transport and tools read as one instrument instead of floating loose.
+  /// The glass the player controls sit in. It has no hard top edge: the
+  /// surface condenses out of the panel (clear at the top, deepening
+  /// downward) and its rim is lit along the top and fades away down the
+  /// sides, so the card melts into the page instead of sitting on it.
   Widget _controlsGlass(ColorScheme scheme, Color accent, Widget child,
       {EdgeInsets padding = const EdgeInsets.fromLTRB(10, 14, 10, 14)}) {
     final dark = scheme.brightness == Brightness.dark;
+    return CustomPaint(
+      painter: _MeltRimPainter(accent: accent, dark: dark),
+      child: Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(26),
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: dark
+                ? [
+                    Colors.white.withAlpha(4),
+                    Color.alphaBlend(
+                        Colors.white.withAlpha(10), accent.withAlpha(16)),
+                    Color.alphaBlend(
+                        Colors.black.withAlpha(46), accent.withAlpha(22)),
+                  ]
+                : [
+                    Colors.white.withAlpha(30),
+                    Color.alphaBlend(accent.withAlpha(10), Colors.white),
+                    Color.alphaBlend(accent.withAlpha(24), scheme.surface),
+                  ],
+            stops: const [0.0, 0.32, 1.0],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(dark ? 80 : 22),
+              blurRadius: 26,
+              offset: const Offset(0, 14),
+              spreadRadius: -8,
+            ),
+            BoxShadow(
+              color: accent.withAlpha(dark ? 26 : 16),
+              blurRadius: 34,
+              spreadRadius: -10,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: child,
+      ),
+    );
+  }
+
+  /// A recessed channel in the glass: shaded at the top, catching light at
+  /// the bottom lip, the way a groove pressed into a surface would.
+  Widget _controlsGroove(ColorScheme scheme, Color accent, Widget child) {
+    final dark = scheme.brightness == Brightness.dark;
     return Container(
-      padding: padding,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(40),
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: dark
-              ? [
-                  Color.alphaBlend(
-                      Colors.white.withAlpha(16), accent.withAlpha(26)),
-                  Colors.white.withAlpha(8),
-                  Colors.black.withAlpha(40),
-                ]
-              : [
-                  Colors.white.withAlpha(235),
-                  Color.alphaBlend(accent.withAlpha(14), Colors.white),
-                  Color.alphaBlend(accent.withAlpha(26), scheme.surface),
-                ],
-          stops: const [0.0, 0.45, 1.0],
+              ? [Colors.black.withAlpha(70), Colors.white.withAlpha(8)]
+              : [accent.withAlpha(22), Colors.white.withAlpha(150)],
         ),
-        border: Border.all(
-          color: dark ? Colors.white.withAlpha(24) : accent.withAlpha(46),
+        border: Border(
+          bottom: BorderSide(
+              color: Colors.white.withAlpha(dark ? 26 : 160), width: 1),
+          top: BorderSide(
+              color: Colors.black.withAlpha(dark ? 60 : 16), width: 1),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(dark ? 90 : 26),
-            blurRadius: 22,
-            offset: const Offset(0, 10),
-          ),
-          BoxShadow(
-            color: accent.withAlpha(dark ? 22 : 14),
-            blurRadius: 30,
-            spreadRadius: -6,
-          ),
-        ],
       ),
       child: child,
     );
   }
+
+  /// A thin seam of light between the transport and the tools.
+  Widget _lightSeam(Color accent) => Container(
+        height: 1,
+        margin: const EdgeInsets.symmetric(horizontal: 28),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: [
+            accent.withAlpha(0),
+            accent.withAlpha(110),
+            Colors.white.withAlpha(90),
+            accent.withAlpha(110),
+            accent.withAlpha(0),
+          ]),
+          boxShadow: [
+            BoxShadow(color: accent.withAlpha(70), blurRadius: 6),
+          ],
+        ),
+      );
 
   /// A labelled utility tile — icon in a soft rounded chip with a caption
   /// underneath, and an optional corner badge (playlist count / sleep time).
@@ -1262,4 +1319,39 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
     )),
     );
   }
+}
+
+/// The controls glass's rim: brightest along the top curve, dissolving down
+/// the sides and picking up a faint accent at the bottom — no closed outline.
+class _MeltRimPainter extends CustomPainter {
+  _MeltRimPainter({required this.accent, required this.dark});
+  final Color accent;
+  final bool dark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rrect = RRect.fromRectAndRadius(
+        (Offset.zero & size).deflate(0.5), const Radius.circular(26));
+    final rect = Offset.zero & size;
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.1
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.white.withAlpha(dark ? 60 : 200),
+            Colors.white.withAlpha(0),
+            Colors.white.withAlpha(0),
+            accent.withAlpha(dark ? 50 : 70),
+          ],
+          stops: const [0.0, 0.3, 0.7, 1.0],
+        ).createShader(rect),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_MeltRimPainter o) => o.accent != accent || o.dark != dark;
 }

@@ -26,9 +26,24 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
         _milestoneBanner(scheme),
       ];
 
-      final Widget list;
+      // Each dashboard card by its key, so the order can be the couple's own.
+      Widget card(String k) => switch (k) {
+            'listen' => isPair ? _presenceHero(scheme) : const SizedBox.shrink(),
+            'question' =>
+              isPair ? _dailyQuestionCard(scheme) : const SizedBox.shrink(),
+            'streak' => isPair ? _streakCard(scheme) : const SizedBox.shrink(),
+            'recap' => isPair ? _recapCard(scheme) : const SizedBox.shrink(),
+            'plan' => _upcomingPlanBanner(scheme),
+            _ => const SizedBox.shrink(),
+          };
+
+      final Widget scroller;
       if (twoCol) {
-        list = ListView(
+        // Desktop: balanced columns, each in the couple's saved order.
+        const leftKeys = {'listen', 'question', 'recap'};
+        final left = _cardOrder.where(leftKeys.contains).toList();
+        final right = _cardOrder.where((k) => !leftKeys.contains(k)).toList();
+        scroller = ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.fromLTRB(pad, 10, pad, 24),
           children: [
@@ -40,11 +55,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
                   flex: 58,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _presenceHero(scheme),
-                      _dailyQuestionCard(scheme),
-                      _recapCard(scheme),
-                    ],
+                    children: [for (final k in left) card(k)],
                   ),
                 ),
                 const SizedBox(width: 18),
@@ -53,8 +64,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _streakCard(scheme),
-                      _upcomingPlanBanner(scheme),
+                      for (final k in right) card(k),
                       _tilesSection(scheme, moments),
                     ],
                   ),
@@ -64,21 +74,61 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
           ],
         );
       } else {
-        list = ListView(
+        // Phone: hold a card, then drag it to where you want it.
+        scroller = ReorderableListView.builder(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(pad, 10, pad, 20),
-          children: [
-            ...banners,
-            if (isPair) _presenceHero(scheme),
-            if (isPair) _dailyQuestionCard(scheme),
-            if (isPair) _streakCard(scheme),
-            if (isPair) _recapCard(scheme),
-            _upcomingPlanBanner(scheme),
-            const SizedBox(height: 4),
-            _tilesSection(scheme, moments),
-          ],
+          padding: EdgeInsets.fromLTRB(pad, 10, pad, isPair ? 84 : 20),
+          buildDefaultDragHandles: false,
+          header: Column(mainAxisSize: MainAxisSize.min, children: banners),
+          footer: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: _tilesSection(scheme, moments),
+          ),
+          proxyDecorator: (child, _, anim) => AnimatedBuilder(
+            animation: anim,
+            builder: (_, c) => Transform.scale(
+              scale: 1 + 0.03 * Curves.easeOut.transform(anim.value),
+              child: Material(
+                color: Colors.transparent,
+                elevation: 8 * anim.value,
+                shadowColor: _accent.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(18),
+                child: c,
+              ),
+            ),
+            child: child,
+          ),
+          itemCount: _cardOrder.length,
+          onReorder: (from, to) {
+            final next = List.of(_cardOrder);
+            if (to > from) to -= 1;
+            next.insert(to, next.removeAt(from));
+            _saveCardOrder(next);
+          },
+          itemBuilder: (_, i) {
+            final k = _cardOrder[i];
+            return ReorderableDelayedDragStartListener(
+              key: ValueKey('card-$k'),
+              index: i,
+              child: card(k),
+            );
+          },
         );
       }
+
+      // One ＋ for everything you can add, floating over the cards.
+      final Widget list = !isPair
+          ? scroller
+          : Stack(
+              children: [
+                Positioned.fill(child: scroller),
+                Positioned(
+                  right: pad + 2,
+                  bottom: 16,
+                  child: _quickAddButton(),
+                ),
+              ],
+            );
 
       final page = Column(
         children: [
@@ -125,6 +175,73 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
       return c.maxWidth < 720 ? _withNavDrawer(scheme, page, c.maxWidth) : page;
     });
   }
+
+  /// The floating ＋: pin a moment, write in the diary, seal a capsule or add
+  /// a song — from one place, without opening each section first.
+  Widget _quickAddButton() => Builder(
+        builder: (bctx) => Tooltip(
+          message: 'Add something',
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color.lerp(_accent, Colors.white, 0.28)!,
+                  _accent,
+                  Color.lerp(_accent, Colors.black, 0.16)!,
+                ],
+              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.4)),
+              boxShadow: [
+                BoxShadow(
+                  color: _accent.withValues(alpha: 0.45),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () {
+                  final box = bctx.findRenderObject() as RenderBox?;
+                  if (box == null) return;
+                  showGenieMenu(
+                    bctx,
+                    anchor: box.localToGlobal(Offset.zero) & box.size,
+                    width: 236,
+                    entries: [
+                      GenieMenuEntry(
+                          icon: Icons.favorite_border_rounded,
+                          label: 'Pin a moment',
+                          onTap: _sendMoment),
+                      GenieMenuEntry(
+                          icon: Icons.edit_rounded,
+                          label: 'Write in our diary',
+                          onTap: () => _addDiaryEntry()),
+                      GenieMenuEntry(
+                          icon: Icons.schedule_send_rounded,
+                          label: 'Seal a capsule',
+                          onTap: _composeCapsule),
+                      GenieMenuEntry(
+                          icon: Icons.playlist_add_rounded,
+                          label: 'Add a song',
+                          onTap: _addToPlaylist),
+                    ],
+                  );
+                },
+                child: const Padding(
+                  padding: EdgeInsets.all(15),
+                  child: Icon(Icons.add_rounded, color: Colors.white, size: 26),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
 
   /// The compact hero. [roomy]: one row — avatars · name + days · pulse chips
   /// · Thinking of you. Narrow: avatars + name with a round Thinking-of-you

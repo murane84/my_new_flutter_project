@@ -26,7 +26,11 @@ class _EditSpaceSheet extends StatefulWidget {
     this.onSpaceUpdated,
     this.inTuneUnlocked = false,
     this.onDone,
+    this.onPreviewTheme,
   });
+
+  /// Live preview: called as you tap a theme, so the whole page can wear it.
+  final ValueChanged<String?>? onPreviewTheme;
 
   /// Embedded mode (inside Our Space, under the pinned hero): no page chrome,
   /// a responsive layout, and the result ('saved' / 'unpin' / null) comes
@@ -368,7 +372,10 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
   Widget _swatch(MapEntry<String, Color> entry, {double size = 38}) {
     final sel = _theme == entry.key;
     return GestureDetector(
-      onTap: () => setState(() => _theme = entry.key),
+      onTap: () {
+        setState(() => _theme = entry.key);
+        widget.onPreviewTheme?.call(entry.key);
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
         curve: Curves.easeOut,

@@ -154,6 +154,13 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
             ),
           ),
         );
+    // The ☰ carries a dot when any section has something new.
+    Widget dotted(Widget child, bool on) => !on
+        ? child
+        : Stack(clipBehavior: Clip.none, children: [
+            child,
+            const Positioned(right: 6, top: 6, child: _NewDot()),
+          ]);
     Widget divider() => Container(
         width: 1, height: 22, color: _accent.withValues(alpha: 0.22));
     return DecoratedBox(
@@ -183,8 +190,10 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
             // Phones: settings live in the drawer, so the header offers the
             // drawer itself; wider screens keep the settings key here.
             if (MediaQuery.sizeOf(context).width < 720)
-              seg(Icons.menu_rounded, 'Menu', _openNavDrawer,
-                  active: _navDrawerOpen)
+              dotted(
+                  seg(Icons.menu_rounded, 'Menu', _openNavDrawer,
+                      active: _navDrawerOpen),
+                  !_navDrawerOpen && _anyNew)
             else
               seg(Icons.tune_rounded,
                   _settingsOpen ? 'Close settings' : 'Space settings',

@@ -481,11 +481,113 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   final Set<String> _wideWallpaperIds = {};
 
   int get _id => (_space['id'] as num).toInt();
-  Color get _accent => spaceThemeColor(_space['theme'] as String?);
+  // Settings preview a theme live on the whole page until Save / Back.
+  String? _previewTheme;
+  Color get _accent =>
+      spaceThemeColor(_previewTheme ?? _space['theme'] as String?);
 
   bool _nudging = false;
   // Settings open in place, right under the pinned hero.
   bool _settingsOpen = false;
+  // Today's question folds to a chip once you've both answered.
+  bool _qExpanded = false;
+  // Drawer: sections with nothing in them yet sit behind "More…".
+  bool _drawerMore = false;
+
+  // ── "New" dots: what each section held when you last looked (per Space,
+  // on this device). A section whose count grew since then shows a dot.
+  Map<String, int> _seenCounts = {};
+  bool _seenLoaded = false;
+  String get _seenKey => 'space_seen_v1_$_id';
+
+  // ── Card order on the phone dashboard (long-press to drag), per Space.
+  static const List<String> kDefaultCardOrder = [
+    'listen', 'question', 'streak', 'recap', 'plan'
+  ];
+  List<String> _cardOrder = List.of(kDefaultCardOrder);
+  String get _orderKey => 'space_order_v1_$_id';
+
+  Future<void> _loadLocalPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_seenKey);
+      final order = prefs.getStringList(_orderKey);
+      if (!mounted) return;
+      setState(() {
+        if (raw != null) {
+          _seenCounts = (jsonDecode(raw) as Map)
+              .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+        }
+        _seenLoaded = true;
+        if (order != null) {
+          // Keep known cards only, and add any new ones at the end.
+          _cardOrder = [
+            ...order.where(kDefaultCardOrder.contains),
+            ...kDefaultCardOrder.where((k) => !order.contains(k)),
+          ];
+        }
+      });
+    } catch (_) {
+      if (mounted) setState(() => _seenLoaded = true);
+    }
+  }
+
+  /// Everything a section holds (not just what's waiting), for "new" dots.
+  int? _totalCount(String key) {
+    switch (key) {
+      case 'capsule':
+        return ((_space['capsules'] as List?) ?? const []).length;
+      case 'moments':
+        return ((_space['moment_count'] as num?)?.toInt() ??
+                ((_space['moments'] as List?) ?? const []).length) +
+            ((_space['dedications'] as List?) ?? const []).length;
+      default:
+        return _sectionCount(key);
+    }
+  }
+
+  bool _hasNew(String key) {
+    if (!_seenLoaded) return false;
+    final now = _totalCount(key);
+    if (now == null) return false;
+    final seen = _seenCounts[key];
+    if (seen == null) {
+      // First look on this device: this is the baseline, not "new".
+      _seenCounts[key] = now;
+      _saveSeenSoon();
+      return false;
+    }
+    return now > seen;
+  }
+
+  void _markSeen(String? key) {
+    if (key == null) return;
+    final now = _totalCount(key);
+    if (now == null || _seenCounts[key] == now) return;
+    _seenCounts[key] = now;
+    _saveSeenSoon();
+  }
+
+  Timer? _seenSave;
+  void _saveSeenSoon() {
+    _seenSave?.cancel();
+    _seenSave = Timer(const Duration(milliseconds: 400), () async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_seenKey, jsonEncode(_seenCounts));
+      } catch (_) {}
+    });
+  }
+
+  bool get _anyNew => _visibleSections().any((s) => _hasNew(s.$1));
+
+  Future<void> _saveCardOrder(List<String> order) async {
+    setState(() => _cardOrder = order);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_orderKey, order);
+    } catch (_) {}
+  }
   // Today's "Us" question: inline text answer + submit guard.
   final TextEditingController _qAnswerCtrl = TextEditingController();
   bool _qSubmitting = false;
@@ -522,6 +624,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   void initState() {
     super.initState();
     _load();
+    _loadLocalPrefs();
     // Repaint when the partner starts/stops/changes what they're playing, so the
     // "tune in together" card appears and clears live.
     NowPlayingPresence.instance.addListener(_onPresence);
@@ -551,6 +654,15 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     spaceEventBus.removeListener(_onSpaceEvent);
     _diaryPageCtrl.dispose();
     _qAnswerCtrl.dispose();
+    // Flush the "seen" counts now rather than losing a pending save.
+    if (_seenSave?.isActive ?? false) {
+      _seenSave!.cancel();
+      final snapshot = jsonEncode(_seenCounts);
+      final key = _seenKey;
+      SharedPreferences.getInstance()
+          .then((p) => p.setString(key, snapshot))
+          .catchError((_) => false);
+    }
     super.dispose();
   }
 
@@ -984,6 +1096,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   /// Back to the dashboard cards.
   void _goOverview() => setState(() {
+        _markSeen(_section);
         _settingsOpen = false;
         _section = null;
         _navDrawerOpen = false;
@@ -991,6 +1104,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       });
 
   void _openNavDrawer() => setState(() => _navDrawerOpen = true);
+
+  void _toggleDrawerMore() => setState(() => _drawerMore = !_drawerMore);
 
   /// The phone drawer over [content] (the same rail as wide screens): slides
   /// in from the left over a scrim; tap out, its hide button or a swipe left
@@ -1000,6 +1115,20 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     return Stack(
       children: [
         Positioned.fill(child: content),
+        // Swipe in from the left edge to open (as swiping left closes it).
+        if (!_navDrawerOpen)
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 18,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragUpdate: (d) {
+                if (d.delta.dx > 4) _openNavDrawer();
+              },
+            ),
+          ),
         Positioned.fill(
           child: IgnorePointer(
             ignoring: !_navDrawerOpen,
@@ -1054,13 +1183,21 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           if (mounted) setState(() => _space = {..._space, ...m});
         },
         onDone: _onSettingsDone,
+        onPreviewTheme: (k) => setState(() => _previewTheme = k),
       );
 
   // The settings return 'saved' (name/theme/hero changed), 'unpin' (the user
   // chose Unpin from inside settings), or null (back).
   Future<void> _onSettingsDone(String? result) async {
     if (!mounted) return;
-    setState(() => _settingsOpen = false);
+    setState(() {
+      _settingsOpen = false;
+      // Saved: the server copy now carries it. Back: the old colour returns.
+      if (result == 'saved' && _previewTheme != null) {
+        _space = {..._space, 'theme': _previewTheme};
+      }
+      _previewTheme = null;
+    });
     if (result == 'saved') {
       await _load(keepCurrent: true);
       widget.onChanged?.call();
@@ -1162,7 +1299,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         } else if (_section != null) {
           // Return to the Our Space dashboard instead of closing the page — the
           // section genies back into the tile it came from.
-          setState(() => _section = null);
+          setState(() {
+            _markSeen(_section);
+            _section = null;
+          });
         }
       },
       child: shell,
@@ -1208,6 +1348,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   void _goSection(String key) =>
       setState(() {
+        _markSeen(_section);
+        _markSeen(key);
         _section = key;
         _navDrawerOpen = false;
         _guideOpen = false;
@@ -1785,6 +1927,54 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final partnerName = (q['partner_name'] ?? 'your partner').toString();
     final myAns = (q['my_answer'] as Map?)?.cast<String, dynamic>();
     final partnerAns = (q['partner_answer'] as Map?)?.cast<String, dynamic>();
+    // Both answered (and no mood to mend): fold to a small chip so the
+    // dashboard gets its room back; tap to read the answers.
+    final foldMismatch = kind == 'mood' &&
+        (myAns?['mood'] ?? '').toString().trim().isNotEmpty &&
+        (partnerAns?['mood'] ?? '').toString().trim().isNotEmpty &&
+        (myAns?['mood'] ?? '').toString().trim() !=
+            (partnerAns?['mood'] ?? '').toString().trim();
+    if (revealed && !_qExpanded && !foldMismatch) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Material(
+          color: Color.alphaBlend(
+              _accent.withValues(alpha: 0.08), scheme.surface),
+          shape: StadiumBorder(
+              side: BorderSide(color: _accent.withValues(alpha: 0.25))),
+          child: InkWell(
+            customBorder: const StadiumBorder(),
+            onTap: () => setState(() => _qExpanded = true),
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle_rounded, size: 18, color: _accent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                        'You both answered today\'s question',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface)),
+                  ),
+                  Text('See answers',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: _accent)),
+                  Icon(Icons.expand_more_rounded, size: 18, color: _accent),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     Widget content;
     if (revealed) {

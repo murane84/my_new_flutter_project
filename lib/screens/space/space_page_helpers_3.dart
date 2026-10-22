@@ -1189,6 +1189,21 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                         fontSize: 11.5, color: scheme.onSurfaceVariant)),
             ],
           ),
+          // Not going today: one easy thing to do together, right here.
+          if (!on || !alive) ...[
+            const SizedBox(height: 10),
+            FilledButton.tonalIcon(
+              style: FilledButton.styleFrom(
+                backgroundColor: _accent.withValues(alpha: 0.16),
+                foregroundColor: _accent,
+                visualDensity: VisualDensity.compact,
+              ),
+              onPressed: _listenTogether,
+              icon: const Icon(Icons.headphones_rounded, size: 17),
+              label: Text(on ? 'Keep it alive — listen together'
+                  : 'Listen to a song together'),
+            ),
+          ],
         ],
       ),
     );

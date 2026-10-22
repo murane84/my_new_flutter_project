@@ -736,7 +736,42 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
               // you home; Settings closes the list as an option like the rest.
               _sidebarItem(scheme,
                   ('overview', Icons.space_dashboard_rounded, 'Overview')),
-              for (final s in _visibleSections()) _sidebarItem(scheme, s),
+              // Sections with nothing in them yet (a new couple's capsule,
+              // an empty diary) wait behind "More…" so the list grows with
+              // the relationship. The open one always shows.
+              ...() {
+                const core = {'playlist', 'moments'};
+                bool empty((String, IconData, String) s) =>
+                    !core.contains(s.$1) &&
+                    _section != s.$1 &&
+                    _totalCount(s.$1) == 0;
+                final all = _visibleSections();
+                final shown = all.where((s) => !empty(s)).toList();
+                final hidden = all.where(empty).toList();
+                return [
+                  for (final s in shown) _sidebarItem(scheme, s),
+                  if (hidden.isNotEmpty) ...[
+                    if (_drawerMore)
+                      for (final s in hidden) _sidebarItem(scheme, s),
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                          foregroundColor: scheme.onSurfaceVariant,
+                          alignment: Alignment.centerLeft,
+                          padding: const EdgeInsets.fromLTRB(19, 8, 10, 8)),
+                      onPressed: _toggleDrawerMore,
+                      icon: Icon(
+                          _drawerMore
+                              ? Icons.expand_less_rounded
+                              : Icons.expand_more_rounded,
+                          size: 18),
+                      label: Text(
+                          _drawerMore ? 'Less' : 'More (${hidden.length})',
+                          style: const TextStyle(
+                              fontSize: 12.5, fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ];
+              }(),
               const SizedBox(height: 2),
               Divider(
                   height: 1,
@@ -908,7 +943,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
                     size: 18,
                     color: active ? _accent : scheme.onSurfaceVariant),
                 const SizedBox(width: 10),
-                Expanded(
+                Flexible(
                   child: Text(s.$3,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -918,6 +953,12 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
                               active ? FontWeight.w800 : FontWeight.w600,
                           color: active ? _accent : scheme.onSurface)),
                 ),
+                // New since your last visit: a small pulsing accent dot.
+                if (!active && _hasNew(s.$1)) ...[
+                  const SizedBox(width: 6),
+                  const _NewDot(),
+                ],
+                const Spacer(),
                 if (count != null && count > 0) ...[
                   const SizedBox(width: 8),
                   _sidebarCountBadge(count, active),
@@ -1107,6 +1148,52 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
         ),
         if (footer != null) _footerBar(footer),
       ],
+    );
+  }
+}
+
+/// A small accent dot that softly pulses — "something new here".
+class _NewDot extends StatefulWidget {
+  const _NewDot();
+  @override
+  State<_NewDot> createState() => _NewDotState();
+}
+
+class _NewDotState extends State<_NewDot> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1400))
+    ..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final a = Theme.of(context).colorScheme.primary;
+    return Tooltip(
+      message: 'New since your last visit',
+      child: RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: _c,
+          builder: (_, _) => Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: a,
+              boxShadow: [
+                BoxShadow(
+                    color: a.withValues(alpha: 0.25 + 0.35 * _c.value),
+                    blurRadius: 4 + 4 * _c.value,
+                    spreadRadius: 1 * _c.value),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -181,7 +181,11 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
     }
   }
 
-  TabBar _tabBar(ColorScheme scheme, {bool inline = false}) => TabBar(
+  // Phones cap big counts so the four tabs always fit.
+  static String _n(int n, bool fit) => fit && n > 99 ? '99+' : '$n';
+
+  TabBar _tabBar(ColorScheme scheme, {bool inline = false, bool fit = false}) =>
+      TabBar(
         controller: _tabs,
         labelColor: scheme.primary,
         unselectedLabelColor: scheme.onSurfaceVariant,
@@ -190,18 +194,20 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
         dividerColor: inline
             ? Colors.transparent
             : scheme.outlineVariant.withValues(alpha: 0.4),
-        labelPadding:
-            inline ? const EdgeInsets.symmetric(horizontal: 12) : null,
-        isScrollable: true,
-        tabAlignment: TabAlignment.start,
-        labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-        unselectedLabelStyle:
-            const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+        labelPadding: fit
+            ? const EdgeInsets.symmetric(horizontal: 2)
+            : (inline ? const EdgeInsets.symmetric(horizontal: 12) : null),
+        isScrollable: !fit,
+        tabAlignment: fit ? TabAlignment.fill : TabAlignment.start,
+        labelStyle: TextStyle(
+            fontWeight: FontWeight.w700, fontSize: fit ? 12.5 : 13),
+        unselectedLabelStyle: TextStyle(
+            fontWeight: FontWeight.w500, fontSize: fit ? 12.5 : 13),
         tabs: [
-          Tab(text: 'Songs (${widget.songs.length})'),
-          Tab(text: 'Media (${widget.media.length})'),
-          Tab(text: 'Links (${widget.links.length})'),
-          Tab(text: 'Docs (${widget.docs.length})'),
+          Tab(text: 'Songs (${_n(widget.songs.length, fit)})'),
+          Tab(text: 'Media (${_n(widget.media.length, fit)})'),
+          Tab(text: 'Links (${_n(widget.links.length, fit)})'),
+          Tab(text: 'Docs (${_n(widget.docs.length, fit)})'),
         ],
       );
 
@@ -237,7 +243,13 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
                       bottom: BorderSide(
                           color: scheme.outlineVariant.withValues(alpha: 0.4))),
                 ),
-                child: Row(
+                child: LayoutBuilder(builder: (context, c) {
+                  // Phones: the four tabs share the row evenly (no
+                  // scrolling, no hidden first tab) and the total stays out
+                  // so it can't read as a fifth tab. Wider panels add the
+                  // total as a small tinted chip.
+                  final narrow = c.maxWidth < 560;
+                  return Row(
                   children: [
                     IconButton(
                       tooltip: 'Back to chat',
@@ -250,21 +262,38 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
                         message: total == 0
                             ? 'Nothing shared yet'
                             : '$total shared · tap one to find it in the chat',
-                        child: _tabBar(scheme, inline: true),
+                        child: _tabBar(scheme, inline: true, fit: narrow),
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 6, right: 6),
-                      child: Text(
-                        total == 0 ? 'Shared' : 'Shared · $total',
-                        style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                            color: scheme.onSurfaceVariant),
+                    if (!narrow)
+                      Container(
+                        margin: const EdgeInsets.only(left: 8, right: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: scheme.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.favorite_rounded,
+                                size: 11,
+                                color: scheme.primary.withValues(alpha: 0.8)),
+                            const SizedBox(width: 4),
+                            Text(
+                              total == 0 ? 'nothing shared' : '$total shared',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: scheme.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
                   ],
-                ),
+                );
+                }),
               ),
               Expanded(
                 // Pulling left past the last tab = swipe to dismiss.

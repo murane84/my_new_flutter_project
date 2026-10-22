@@ -864,9 +864,12 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
       return Column(
         children: [
           Expanded(
-            child: SingleChildScrollView(
-              padding:
-                  EdgeInsets.fromLTRB(16, 14, 16, isNarrow ? 6 : 10),
+            child: CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                      16, 14, 16, tall ? 0 : (isNarrow ? 6 : 10)),
+                  sliver: SliverToBoxAdapter(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1071,6 +1074,16 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
             ],
                 ],
               ),
+                  ),
+                ),
+                // The space between the song card and the controls glass is
+                // a soft neck of the same glass, so the two flow into one.
+                if (tall)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _fusionBridge(scheme, accent),
+                  ),
+              ],
             ),
           ),
           if (tall)
@@ -1173,6 +1186,15 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
       child: child,
     );
   }
+
+  /// The liquid neck joining the song card to the controls glass.
+  Widget _fusionBridge(ColorScheme scheme, Color accent) => IgnorePointer(
+        child: CustomPaint(
+          painter: _FusionPainter(
+              accent: accent, dark: scheme.brightness == Brightness.dark),
+          size: Size.infinite,
+        ),
+      );
 
   /// A thin seam of light between the transport and the tools.
   Widget _lightSeam(Color accent) => Container(
@@ -1354,4 +1376,103 @@ class _MeltRimPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_MeltRimPainter o) => o.accent != accent || o.dark != dark;
+}
+
+/// Two glass bodies melting into each other: the shape leaves the bottom of
+/// the song card at its full width, pinches to a soft waist and swells back
+/// out into the top of the controls glass, like a drop about to merge.
+class _FusionPainter extends CustomPainter {
+  _FusionPainter({required this.accent, required this.dark});
+  final Color accent;
+  final bool dark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final h = size.height;
+    if (h < 6) return;
+    final w = size.width;
+    final cx = w / 2;
+    // Overlap a little into both cards so there is no seam.
+    const over = 12.0;
+    final top = -over, bot = h + over;
+    final topHalf = (w - 32) / 2 - 18;
+    final botHalf = (w - 24) / 2 - 14;
+    // The waist narrows more when the gap is long, stays plump when short.
+    final waist = (topHalf * (0.72 - (h / 900).clamp(0.0, 0.34)));
+    final midY = h * 0.55;
+    final path = Path()
+      ..moveTo(cx - topHalf, top)
+      ..cubicTo(cx - topHalf, midY * 0.5, cx - waist, midY * 0.7, cx - waist,
+          midY)
+      ..cubicTo(cx - waist, midY + (h - midY) * 0.35, cx - botHalf,
+          h - (h - midY) * 0.4, cx - botHalf, bot)
+      ..lineTo(cx + botHalf, bot)
+      ..cubicTo(cx + botHalf, h - (h - midY) * 0.4, cx + waist,
+          midY + (h - midY) * 0.35, cx + waist, midY)
+      ..cubicTo(cx + waist, midY * 0.7, cx + topHalf, midY * 0.5, cx + topHalf,
+          top)
+      ..close();
+    final rect = Rect.fromLTRB(0, top, w, bot);
+    // Body: a faint accent glass, brightest where the two meet.
+    canvas.drawPath(
+      path,
+      Paint()
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10)
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: dark
+              ? [
+                  accent.withAlpha(30),
+                  Colors.white.withAlpha(8),
+                  accent.withAlpha(26),
+                ]
+              : [
+                  accent.withAlpha(22),
+                  Colors.white.withAlpha(120),
+                  accent.withAlpha(20),
+                ],
+        ).createShader(rect),
+    );
+    // A glowing core running down the neck — the "current" between them.
+    canvas.drawPath(
+      Path()
+        ..moveTo(cx, top + over)
+        ..lineTo(cx, bot - over),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4)
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            accent.withAlpha(0),
+            accent.withAlpha(dark ? 90 : 60),
+            accent.withAlpha(0),
+          ],
+        ).createShader(rect),
+    );
+    // A few motes of light caught inside the glass.
+    final r = Random(3);
+    for (var i = 0; i < 7; i++) {
+      final y = h * (0.15 + 0.7 * r.nextDouble());
+      final t = (y / h);
+      final half = t < 0.55
+          ? topHalf + (waist - topHalf) * (t / 0.55)
+          : waist + (botHalf - waist) * ((t - 0.55) / 0.45);
+      final x = cx + (r.nextDouble() * 2 - 1) * half * 0.7;
+      canvas.drawCircle(
+        Offset(x, y),
+        0.8 + r.nextDouble() * 1.6,
+        Paint()
+          ..color = (i.isEven ? Colors.white : accent)
+              .withAlpha(dark ? 70 : 110)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_FusionPainter o) => o.accent != accent || o.dark != dark;
 }

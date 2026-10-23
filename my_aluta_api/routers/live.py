@@ -120,6 +120,7 @@ def create_session(
         send_push_to_user(body.receiver_id, {
             "type": "live_invite",
             "host_username": current_user.username or "Someone",
+            "host_id": str(current_user.id),
             "session_id": session_id,
         })
     except Exception:

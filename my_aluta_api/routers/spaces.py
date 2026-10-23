@@ -338,11 +338,16 @@ def _request_dict(db: Session, req: BondRequest) -> dict:
     }
 
 
-def _push(uid: int, title: str, body: str, kind: str) -> None:
+def _push(uid: int, title: str, body: str, kind: str,
+          actor_id: int | None = None) -> None:
     if send_push_to_user is None:
         return
+    data = {"type": kind, "title": title, "body": body}
+    if actor_id is not None:
+        # Who did it → the phone shows its phone-book name for them.
+        data["from_id"] = str(actor_id)
     try:
-        send_push_to_user(uid, {"type": kind, "title": title, "body": body})
+        send_push_to_user(uid, data)
     except Exception:
         pass
 
@@ -362,7 +367,8 @@ def _notify_bond_request(db: Session, req: BondRequest, from_user: User) -> None
         })
     except Exception:
         pass
-    _push(req.to_user_id, "Our Space 💞", line, "bond_request")
+    _push(req.to_user_id, "Our Space 💞", line, "bond_request",
+          actor_id=from_user.id)
 
 
 def _notify_bond_accepted(db: Session, req: BondRequest, accepter: User) -> None:
@@ -380,7 +386,8 @@ def _notify_bond_accepted(db: Session, req: BondRequest, accepter: User) -> None
         })
     except Exception:
         pass
-    _push(req.from_user_id, "Our Space 🎉", line, "bond_request_accepted")
+    _push(req.from_user_id, "Our Space 🎉", line, "bond_request_accepted",
+          actor_id=accepter.id)
 
 
 def _notify_bond_resolved(req: BondRequest, kind: str, target_id: int) -> None:
@@ -506,6 +513,7 @@ def _notify_partner_moment(db: Session, space: RelationshipSpace,
                 "type": "space_moment",
                 "title": "Our Space 💛",
                 "body": line,
+                "from_id": str(current_user.id),  # → phone-book name on the phone
             })
         except Exception:
             pass
@@ -588,6 +596,7 @@ def _notify_partner_playlist(db: Session, space: RelationshipSpace,
                 "type": "space_playlist_add",
                 "title": "Our Playlist 🎶",
                 "body": line,
+                "from_id": str(current_user.id),  # → phone-book name on the phone
             })
         except Exception:
             pass
@@ -768,6 +777,7 @@ def _notify_partner_diary(db: Session, space: RelationshipSpace,
                 "type": "space_diary",
                 "title": "Our Diary 📖",
                 "body": line,
+                "from_id": str(current_user.id),  # → phone-book name on the phone
             })
         except Exception:
             pass
@@ -1294,6 +1304,7 @@ def _notify_moment_comment(db: Session, moment: PinnedMoment,
                     "type": "space_moment_comment",
                     "title": "Our Space 💬",
                     "body": line,
+                    "from_id": str(current_user.id),  # → phone-book name on the phone
                 })
             except Exception:
                 pass
@@ -1423,6 +1434,7 @@ def nudge_partner(
                 "type": "space_nudge",
                 "title": "Our Space 💭",
                 "body": line,
+                "from_id": str(current_user.id),  # → phone-book name on the phone
             })
         except Exception:
             pass
@@ -1669,7 +1681,7 @@ def _notify_prompt(space: RelationshipSpace, from_user: User,
         except Exception:
             pass
     try:
-        _push(partner_id, title, body, event)
+        _push(partner_id, title, body, event, actor_id=from_user.id)
     except Exception:
         pass
     if reveal:
@@ -2301,6 +2313,7 @@ def _notify_capsule(space: RelationshipSpace, from_user: User,
                 "type": "space_capsule",
                 "title": "A love capsule 💌",
                 "body": line,
+                "from_id": str(from_user.id),  # → phone-book name on the phone
             })
         except Exception:
             pass
@@ -2363,7 +2376,8 @@ def _notify_dedication(space: RelationshipSpace, from_user: User,
     except Exception:
         pass
     try:
-        _push(partner_id, "A dedication 💝", line, "dedication_received")
+        _push(partner_id, "A dedication 💝", line, "dedication_received",
+              actor_id=from_user.id)
     except Exception:
         pass
 
@@ -2880,6 +2894,7 @@ def add_diary_comment(
                     "type": "space_diary_comment",
                     "title": "Our Diary 💬",
                     "body": line,
+                    "from_id": str(current_user.id),  # → phone-book name on the phone
                 })
             except Exception:
                 pass

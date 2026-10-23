@@ -124,6 +124,47 @@ def _delete_token(token: str) -> None:
         db.close()
 
 
+# Keys a push may use to say WHO did the thing it announces.
+_ACTOR_KEYS = ("sender_id", "from_id", "caller_id", "host_id", "by_id")
+
+
+def _with_sender_identity(data):
+    """Add the actor's phone + registered name to a push (sender_phone /
+    actor_name), so the phone can show ITS OWN phone-book name for them ("My
+    wife") instead of their registered one — in the title, the body, and any
+    line the server already wrote with the registered name in it. Best-effort:
+    any failure just returns the push unchanged."""
+    try:
+        if not isinstance(data, dict) or data.get("sender_phone"):
+            return data
+        actor = None
+        for k in _ACTOR_KEYS:
+            v = data.get(k)
+            if v in (None, ""):
+                continue
+            try:
+                actor = int(v)
+                break
+            except (TypeError, ValueError):
+                continue
+        if actor is None:
+            return data
+        from models import User
+        db = SessionLocal()
+        try:
+            u = db.query(User).filter(User.id == actor).first()
+            if u is None:
+                return data
+            out = dict(data)
+            out["sender_phone"] = u.phone or ""
+            out.setdefault("actor_name", u.username or "")
+            return out
+        finally:
+            db.close()
+    except Exception:
+        return data
+
+
 def send_push_to_user(
     user_id: int,
     data: dict,
@@ -137,6 +178,7 @@ def send_push_to_user(
     traceable in the Railway deploy logs after a single test call.
     """
     kind = (data or {}).get("type", "push")
+    data = _with_sender_identity(data)
     try:
         if not push_available():
             print(

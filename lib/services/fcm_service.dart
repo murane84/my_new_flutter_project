@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
+import 'contact_names.dart';
 import 'notif_service.dart';
 import '../screens/api_service.dart';
 
@@ -55,6 +56,30 @@ class ActiveChat {
   }
 }
 
+/// The sender the way *I* know them: my phone-book name for their number
+/// (`sender_phone`, which the server adds to every push), else [registered] —
+/// their Aluta profile name. Works in the background isolate too: the saved
+/// names are read from the snapshot ContactNames keeps on the device.
+Future<String> _knownAs(Map<String, dynamic> data, String registered) async {
+  final phone = (data['sender_phone'] ?? '').toString().trim();
+  if (phone.isEmpty) return registered;
+  try {
+    await ContactNames.instance
+        .ensureLoaded()
+        .timeout(const Duration(seconds: 2));
+  } catch (_) {}
+  if (!ContactNames.instance.hasRealName(phone)) return registered;
+  final saved = ContactNames.instance.nameFor(phone)?.trim();
+  return (saved == null || saved.isEmpty) ? registered : saved;
+}
+
+/// A line the server wrote with the registered name in it ("Belina shared a
+/// moment") → the same line with my saved name ("My wife shared a moment").
+String _swapName(String text, String registered, String knownAs) =>
+    (registered.isEmpty || knownAs == registered)
+        ? text
+        : text.replaceAll(registered, knownAs);
+
 /// Turn an FCM data payload into a local notification. Shared by the foreground
 /// listener (below) and the background isolate handler (in main.dart), so a
 /// message/call is shown the same way whether the app is open, backgrounded, or
@@ -64,15 +89,26 @@ Future<void> handleFcmData(Map<String, dynamic> data,
     {bool foreground = false}) async {
   try {
     final type = (data['type'] ?? '').toString();
+    // Their registered name as the server wrote it (and may have put inside
+    // the title/body), and how *I* know them — used by every branch below.
+    final registered = (data['actor_name'] ??
+            data['sender_name'] ??
+            data['caller_name'] ??
+            data['host_username'] ??
+            data['from_name'] ??
+            '')
+        .toString();
+    final known = await _knownAs(data, registered);
+    String mine(String text) => _swapName(text, registered, known);
     if (type == 'call_offer') {
-      final caller = (data['caller_name'] ?? 'Someone').toString();
+      final caller = mine((data['caller_name'] ?? 'Someone').toString());
       final callerId = (data['caller_id'] ?? '').toString();
       await showCallNotification(
         caller: caller,
         callerId: callerId.isEmpty ? null : callerId,
       );
     } else if (type == 'group_call') {
-      final caller = (data['caller_name'] ?? 'Someone').toString();
+      final caller = mine((data['caller_name'] ?? 'Someone').toString());
       final title = (data['title'] ?? 'Group').toString();
       final room = int.tryParse((data['room'] ?? '').toString());
       await showCallNotification(
@@ -84,7 +120,7 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       // "Listen together" invite while the app was closed/backgrounded. Show a
       // heads-up so the user opens the app; on open, the notification socket
       // reconnects and the server re-delivers the invite → the prompt appears.
-      final host = (data['host_username'] ?? 'Someone').toString();
+      final host = mine((data['host_username'] ?? 'Someone').toString());
       await showMessageNotification(
         title: '$host · Listen together',
         body: 'wants to listen to music with you',
@@ -95,17 +131,17 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       if (foreground) return;
       final from = (data['from_id'] ?? '').toString();
       await showMessageNotification(
-        title: (data['title'] ?? '💓').toString(),
-        body: (data['body'] ?? 'is thinking of you').toString(),
+        title: mine((data['title'] ?? '💓').toString()),
+        body: mine((data['body'] ?? 'is thinking of you').toString()),
         // Its own slot (never replaces another alert); tap opens their chat.
         id: 7300 + (int.tryParse(from) ?? 0) % 1000,
         senderId: from.isEmpty ? null : from,
-        senderName: (data['from_name'] ?? '').toString(),
+        senderName: mine((data['from_name'] ?? '').toString()),
       );
     } else if (type == 'heart_opened' || type == 'heart_ready') {
       // Secret hearts (server hearts.py): the tender receipt to the sender, or
       // a timed heart that just became openable. Never carries the note.
-      final who = (data['sender_name'] ?? 'Someone').toString();
+      final who = mine((data['sender_name'] ?? 'Someone').toString());
       final convId = (data['conversation_id'] ?? '').toString();
       final senderId = (data['sender_id'] ?? '').toString();
       final messageId = (data['message_id'] ?? '').toString();
@@ -131,8 +167,16 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       // The caller hung up / the call ended: stop the ringing notification on a
       // killed callee's phone so it doesn't keep ringing.
       await cancelCallNotification();
+    } else if (data['sender_name'] == null && data['title'] != null) {
+      // Our Space / capsule / dedication pushes: the server writes the whole
+      // title + line (with the registered name inside) — show THOSE, in my
+      // names, instead of a generic "New message".
+      await showMessageNotification(
+        title: mine(data['title'].toString()),
+        body: mine((data['body'] ?? '').toString()),
+      );
     } else {
-      final sender = (data['sender_name'] ?? 'New message').toString();
+      final sender = mine((data['sender_name'] ?? 'New message').toString());
       final body = (data['body'] ?? '').toString();
       final senderId = (data['sender_id'] ?? '').toString();
       final convId = (data['conversation_id'] ?? '').toString();

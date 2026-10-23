@@ -87,7 +87,8 @@ async def _group_start(room_id: int, uid: int, caller_name: str):
             asyncio.create_task(asyncio.to_thread(
                 send_push_to_user, m,
                 {"type": "group_call", "room": str(room_id),
-                 "caller_name": caller_name, "title": title}))
+                 "caller_name": caller_name, "title": title,
+                 "caller_id": str(uid)}))
         except Exception:
             pass
 

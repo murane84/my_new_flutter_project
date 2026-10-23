@@ -85,6 +85,7 @@ def _fire_due_once() -> int:
                             "type": "capsule_unlocked",
                             "title": "Love capsule \U0001F48C",
                             "body": line,
+                            "from_id": str(c.created_by),
                         })
                     except Exception:
                         pass

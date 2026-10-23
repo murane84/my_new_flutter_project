@@ -115,6 +115,19 @@ bool mentionsMe(String text) {
   return false;
 }
 
+/// [text] with each "@username" shown the way *I* know that member — my
+/// phone-book name, else their profile name (same rule as rendered bubbles).
+/// For plain-text surfaces (the heart letter) that don't use the span renderer.
+String displayMentions(String text) {
+  if (!text.contains('@')) return text;
+  return text.replaceAllMapped(_mentionRe, (m) {
+    final tok = m.group(0)!;
+    final key = tok.substring(1).replaceAll('\u00A0', ' ').toLowerCase();
+    final shown = key == 'all' ? null : MentionSelf.names[key];
+    return shown == null ? tok : '@$shown';
+  });
+}
+
 bool _isSelfMention(String token) {
   final t = token.substring(1).replaceAll('\u00A0', ' ').toLowerCase();
   if (t == 'all') return true;

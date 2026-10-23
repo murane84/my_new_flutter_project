@@ -4154,11 +4154,24 @@ class _ChatPageState extends State<ChatPage>
                     _showMessageMenu(context, msg, anchor: d.globalPosition),
                 child: HeartBubble(
                   key: ValueKey('heart-$msgId'),
-                  text: text,
+                  // @mentions read as I know each member (phone-book name,
+                  // else profile name), like every other bubble.
+                  text: displayMentions(text),
                   isMe: isMe,
-                  senderName: rxName.trim().isEmpty
-                      ? null
-                      : rxName.trim().split(' ').first,
+                  // "from …" on the letter: my phone-book name for them, else
+                  // their profile name.
+                  senderName: () {
+                    final phone = _isGroup
+                        ? (senderMap['phone'] ?? '').toString()
+                        : _friendPhone;
+                    final saved = phone.isNotEmpty
+                        ? ContactNames.instance.nameFor(phone)
+                        : null;
+                    final n = (saved != null && saved.trim().isNotEmpty)
+                        ? saved.trim()
+                        : rxName.trim();
+                    return n.isEmpty ? null : n.split(' ').first;
+                  }(),
                   accent: accent,
                   bonded: _canHarmony,
                   heartKeySeed: msgId,

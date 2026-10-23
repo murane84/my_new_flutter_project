@@ -809,6 +809,20 @@ class _ChatPageState extends State<ChatPage>
         _groupMembers = []; // reloaded by _initChat for the new group
         _closeMentionPicker();
         _resetRituals();
+        // Nothing from the previous chat may follow into this one: its pill,
+        // a pending jump / rings, or a half-written heart (its photo, its
+        // "for <member>" target, its save choice).
+        _pillTimer?.cancel();
+        _pill = null;
+        _highlightedId = null;
+        _flashSeq++;
+        _heartMode = false;
+        _heartMood = 'love';
+        _heartUnlockAt = null;
+        _heartAttach = null;
+        _heartFor = null;
+        _heartForName = null;
+        _heartSave = false;
       });
       _initChat(); // _initChat runs _maybeInitialJump after the load
       _loadRitualFlags();
@@ -3635,9 +3649,9 @@ class _ChatPageState extends State<ChatPage>
           type: ToastType.info);
       return;
     }
-    _jumpToMessage(target['id'].toString()).then((_) {
+    _jumpToMessage(target['id'].toString()).then((landed) {
       // A way back to the reply I tapped, for a few seconds.
-      if (!mounted || fromId == null) return;
+      if (!mounted || fromId == null || !landed) return;
       _showPill('Back to reply', Icons.reply_rounded, () {
         _jumpToMessage(fromId);
       });
@@ -3848,7 +3862,8 @@ class _ChatPageState extends State<ChatPage>
   /// context): step the list toward it a screen at a time until it is, then
   /// centre it. The flash only starts once the scroll has settled — two soft
   /// pulses of the accent band + a little lift of the bubble, then a fade.
-  Future<void> _jumpToMessage(String id, {bool flash = true}) async {
+  /// Returns true once the message is centred (and ringing, if [flash]).
+  Future<bool> _jumpToMessage(String id, {bool flash = true}) async {
     final seq = ++_flashSeq;
     var ctx = _msgKeys[id]?.currentContext;
     if (ctx == null && _scrollCtrl.hasClients) {
@@ -3860,7 +3875,7 @@ class _ChatPageState extends State<ChatPage>
           showToast(context, "That message isn't available anymore",
               type: ToastType.info);
         }
-        return;
+        return false;
       }
       // reverse:true list → older messages (larger index) sit at LARGER
       // offsets. Pick the direction from what's built right now: the target
@@ -3882,19 +3897,19 @@ class _ChatPageState extends State<ChatPage>
             .clamp(pos.minScrollExtent, pos.maxScrollExtent);
         _scrollCtrl.jumpTo(next);
         await WidgetsBinding.instance.endOfFrame;
-        if (!mounted || seq != _flashSeq) return;
+        if (!mounted || seq != _flashSeq) return false;
         ctx = _msgKeys[id]?.currentContext;
       }
     }
-    if (ctx == null || !ctx.mounted) return;
+    if (ctx == null || !ctx.mounted) return false;
     await Scrollable.ensureVisible(
       ctx,
       duration: const Duration(milliseconds: 380),
       alignment: 0.4,
       curve: Curves.easeOutCubic,
     );
-    if (!mounted || seq != _flashSeq) return;
-    if (!flash) return;
+    if (!mounted || seq != _flashSeq) return false;
+    if (!flash) return true;
     // "Here it is": the bubble sends out rings in its own outline + colour
     // (JumpRings), then everything settles — no colour band, no jump in size.
     // One light tick as each of the three rings leaves the bubble.
@@ -3911,6 +3926,7 @@ class _ChatPageState extends State<ChatPage>
     if (mounted && seq == _flashSeq) {
       setState(() => _highlightedId = null);
     }
+    return true;
   }
 
   // Open the per-conversation Media / Links / Docs browser. Pulls a window of
@@ -4772,9 +4788,18 @@ class _ChatPageState extends State<ChatPage>
 
                 // ── Emoji-only: no bubble, just big emoji ─────────────
                 if (emojiOnly)
-                  Text(
-                    emojiMain,
-                    style: const TextStyle(fontSize: 40, height: 1.2),
+                  // No bubble to take a colour from → the theme accent, in a
+                  // soft rounded outline around the emoji.
+                  JumpRings(
+                    trigger: ringFor,
+                    color: scheme.primary,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Text(
+                        emojiMain,
+                        style: const TextStyle(fontSize: 40, height: 1.2),
+                      ),
+                    ),
                   )
                 else
                 // ── Normal bubble ─────────────────────────────────────

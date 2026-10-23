@@ -26,6 +26,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'api_service.dart';
 import 'chat/song_cache.dart';
+import '../widgets/jump_rings.dart';
 import '../services/song_library.dart';
 import 'token_helper.dart';
 import 'websocket_manager.dart';
@@ -417,9 +418,10 @@ class _ChatPageState extends State<ChatPage>
   // Per-message keys + highlight id, used to scroll to a quoted original.
   final Map<String, GlobalKey> _msgKeys = {};
   String? _highlightedId;
-  // Jump-to-message flash: pulse phase + a sequence id so a newer jump
-  // cancels an older one mid-flash.
-  bool _flashOn = false;
+  // Jump-to-message: bumped on every jump → the found bubble emits outward
+  // rings in its own shape and colour; the sequence id lets a newer jump
+  // cancel an older one.
+  int _ringPulse = 0;
   int _flashSeq = 0;
 
   // Styles *bold* _italic_ etc. live in the composer as you type.
@@ -3767,21 +3769,15 @@ class _ChatPageState extends State<ChatPage>
     if (!mounted || seq != _flashSeq) return;
     if (!flash) return;
     HapticFeedback.selectionClick();
-    // Pulse: on · off · on · then fade out.
-    const steps = <(bool, int)>[(true, 300), (false, 220), (true, 900)];
-    for (final st in steps) {
-      if (!mounted || seq != _flashSeq) return;
-      setState(() {
-        _highlightedId = id;
-        _flashOn = st.$1;
-      });
-      await Future.delayed(Duration(milliseconds: st.$2));
-    }
+    // "Here it is": the bubble sends out rings in its own outline + colour
+    // (JumpRings), then everything settles — no colour band, no jump in size.
+    setState(() {
+      _highlightedId = id;
+      _ringPulse++;
+    });
+    await Future.delayed(const Duration(milliseconds: 1600));
     if (mounted && seq == _flashSeq) {
-      setState(() {
-        _highlightedId = null;
-        _flashOn = false;
-      });
+      setState(() => _highlightedId = null);
     }
   }
 
@@ -4099,14 +4095,10 @@ class _ChatPageState extends State<ChatPage>
     // Registered like any bubble so a reply quote / pin / notification can
     // jump here and flash it.
     final key = _msgKeys.putIfAbsent(msgId, () => GlobalKey());
-    final flashing = _highlightedId == msgId && _flashOn;
-    return AnimatedContainer(
+    // Jumped to → the heart ripples rings in its own shape + mood colour.
+    final ringFor = _highlightedId == msgId ? _ringPulse : 0;
+    return Container(
       key: key,
-      duration: Duration(milliseconds: flashing ? 180 : 520),
-      curve: Curves.easeOut,
-      color: flashing
-          ? scheme.primary.withValues(alpha: isDark ? 0.30 : 0.20)
-          : Colors.transparent,
       padding: EdgeInsets.only(
           top: showAvatar ? 6 : 2, left: isMe ? 56 : 6, right: isMe ? 6 : 56),
       child: Column(
@@ -4159,6 +4151,7 @@ class _ChatPageState extends State<ChatPage>
                     _showMessageMenu(context, msg, anchor: d.globalPosition),
                 child: HeartBubble(
                   key: ValueKey('heart-$msgId'),
+                  jumpPulse: ringFor,
                   // @mentions read as I know each member (phone-book name,
                   // else profile name), like every other bubble.
                   text: displayMentions(text),
@@ -4571,28 +4564,16 @@ class _ChatPageState extends State<ChatPage>
 
     final msgId = msg['id'].toString();
     final key = _msgKeys.putIfAbsent(msgId, () => GlobalKey());
-    final flashing = _highlightedId == msgId && _flashOn;
-    return AnimatedContainer(
+    // Jumped to → the bubble ripples rings in its own outline + colour.
+    final ringFor = _highlightedId == msgId ? _ringPulse : 0;
+    return Container(
       key: key,
-      duration: Duration(milliseconds: flashing ? 180 : 520),
-      curve: Curves.easeOut,
-      // A full-width accent band behind the jumped-to message, like a marker
-      // swipe — strong enough to catch the eye, gone in about a second.
-      color: flashing
-          ? scheme.primary.withValues(alpha: isDark ? 0.30 : 0.20)
-          : Colors.transparent,
       padding: EdgeInsets.only(
         top: topPad,
         left: isMe ? 56 : 6,
         right: isMe ? 6 : 56,
       ),
-      child: AnimatedScale(
-        // …and the bubble itself lifts a touch while it flashes.
-        scale: flashing ? 1.025 : 1.0,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutBack,
-        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-        child: Column(
+      child: Column(
         crossAxisAlignment:
             isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
@@ -4671,7 +4652,15 @@ class _ChatPageState extends State<ChatPage>
                   child: ConstrainedBox(
                   constraints: BoxConstraints(
                       maxWidth: isMedia ? double.infinity : 520),
-                  child: Container(
+                  child: JumpRings(
+                    trigger: ringFor,
+                    shape: bubbleShape,
+                    // The bubble's own colour; a near-white bubble is
+                    // deepened a touch so its rings still show on light walls.
+                    color: bubbleColor.computeLuminance() > 0.8
+                        ? Color.lerp(bubbleColor, Colors.black, 0.28)!
+                        : bubbleColor,
+                    child: Container(
                     decoration: ShapeDecoration(
                       color: bubbleColor,
                       shape: bubbleShape,
@@ -5015,6 +5004,7 @@ class _ChatPageState extends State<ChatPage>
                       ],
                     ),
                   ),
+                  ), // JumpRings
                   ),
                 ),
                 if (!isMe && _canHarmony && _isQuickKeepBubble(msg)) ...[
@@ -5064,7 +5054,6 @@ class _ChatPageState extends State<ChatPage>
               ),
             ),
         ],
-      ),
       ),
     );
   }

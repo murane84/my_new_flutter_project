@@ -11,6 +11,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'dart:async';
 import '../../services/heart_lock.dart';
 import '../../widgets/glossy_heart.dart';
+import '../../widgets/jump_rings.dart';
 import '../../utils/readable.dart';
 
 // ─── Secret hearts — the signature love note ────────────────────────────────
@@ -250,7 +251,12 @@ class HeartBubble extends StatefulWidget {
     this.locked = false,
     this.onLocked,
     this.mediaMs,
+    this.jumpPulse = 0,
   });
+
+  /// Bumped when the chat jumps to this heart → rings ripple out in the
+  /// heart's own shape and mood colour.
+  final int jumpPulse;
 
   /// How long the sealed clip runs (ms). The opened letter stays open that
   /// much longer before it reseals, so a whole clip can be heard in one go.
@@ -1126,7 +1132,12 @@ class _HeartBubbleState extends State<HeartBubble>
     // The heart keeps its mood's own colour; its words take the matching
     // ink (white on deep moods, graphite / black on bright ones).
     final ink = readableOn(base);
-    return SizedBox(
+    return JumpRings(
+      trigger: widget.jumpPulse,
+      // The mood's own colour (never the app theme), the heart's own shape.
+      color: _accent,
+      pathFor: _HeartPainter.heartPath,
+      child: SizedBox(
       key: _heartKey,
       width: 160,
       height: 142,
@@ -1169,6 +1180,7 @@ class _HeartBubbleState extends State<HeartBubble>
           ),
         ),
       ),
+      ), // JumpRings
     );
   }
 

@@ -998,7 +998,12 @@ Column(
       // ── Android tall hero: the song card grows to fill the space under
       // the header with a big spinning disc, the title, the live lyric line
       // and what's up next, so there is no empty band above the controls.
-      Widget heroCard() {
+      // [h] = the height the song card gets. The optional rows (Dedicate,
+      // Up next) are kept only when they fit — decided by the space, never by
+      // the song, so nothing jumps between tracks.
+      Widget heroCard(double h) {
+        final showUpNextSlot = h >= 300;
+        final showDedicateSlot = h >= 350;
         // Same prediction the skip uses (shuffle's pick is made ahead of
         // time), so Up next is always the song that really comes next.
         final nextIdx = (!live && hasTrack && _effRepeatMode != 'one')
@@ -1083,7 +1088,7 @@ Column(
                   final side = (cc.maxWidth * 0.66 < cc.maxHeight - 26
                           ? cc.maxWidth * 0.66
                           : cc.maxHeight - 26)
-                      .clamp(80.0, 260.0)
+                      .clamp(40.0, 260.0)
                       .toDouble();
                   // While a song (or the app) is busy, a glowing ring sweeps
                   // around the record instead of a loader over the title.
@@ -1161,14 +1166,15 @@ Column(
                       child: _syncedLyricLine(scheme, accent, false)),
                   // Dedicate this song ❤ — the people I chat with most. Its
                   // line is always reserved so it never nudges the record.
-                  SizedBox(
-                    height: 44,
-                    child: (live || !hasTrack || _dedicateTo.isEmpty)
-                        ? null
-                        : _dedicateRow(scheme, accent),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
+                  if (showDedicateSlot)
+                    SizedBox(
+                      height: 44,
+                      child: (live || !hasTrack || _dedicateTo.isEmpty)
+                          ? null
+                          : _dedicateRow(scheme, accent),
+                    ),
+                  if (showUpNextSlot) const SizedBox(height: 10),
+                  if (showUpNextSlot) SizedBox(
                     height: 34,
                     child: !upNextOn ? null :
                     // Up next — tap to jump to it.
@@ -1387,8 +1393,11 @@ Column(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: LayoutBuilder(
-                    builder: (c, cc) => cc.maxHeight >= 300
-                        ? heroCard()
+                    // The song card adapts its rows to the room it gets, so
+                    // it shows on any phone (it used to need 300 dp and fell
+                    // back to the small desktop card, leaving a blank band).
+                    builder: (c, cc) => cc.maxHeight >= 260
+                        ? heroCard(cc.maxHeight)
                         : Align(
                             alignment: Alignment.bottomCenter,
                             child: SingleChildScrollView(child: topBlock),

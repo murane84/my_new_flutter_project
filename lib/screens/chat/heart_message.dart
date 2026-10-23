@@ -238,6 +238,7 @@ class HeartBubble extends StatefulWidget {
     this.justSent = false,
     this.onFirstOpen,
     this.onUnsealDue,
+    this.onSealedPeek,
     this.onMenu,
     this.showStatus = true,
     this.onReply,
@@ -314,6 +315,10 @@ class HeartBubble extends StatefulWidget {
   /// A timed heart's moment just passed but its note hasn't arrived yet →
   /// ask the server to unseal it.
   final VoidCallback? onUnsealDue;
+
+  /// Sender only: fetch my own timed heart's sealed contents so I can read it
+  /// before its moment. Resolves true when the bubble now has them.
+  final Future<bool> Function()? onSealedPeek;
 
   /// Open the message menu (long-press). Not offered on a covered heart —
   /// there, holding is the opening ritual; open it first, then long-press.
@@ -853,6 +858,25 @@ class _HeartBubbleState extends State<HeartBubble>
         !_awaitingNote &&
         !_opening) {
       unawaited(_peekOwn());
+      return;
+    }
+    // My own timed heart: I wrote it, so I may read it before its moment
+    // (only the recipient waits).
+    if (widget.isMe &&
+        _sealedByTime &&
+        widget.onSealedPeek != null &&
+        !_opening) {
+      _opening = true;
+      HapticFeedback.selectionClick();
+      unawaited(widget.onSealedPeek!().then((ok) {
+        _opening = false;
+        if (!ok || !mounted) return;
+        // The parent rebuilt me with the contents (no longer time-sealed) —
+        // open it on the next frame.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && !_sealedByTime) unawaited(_peekOwn());
+        });
+      }));
       return;
     }
     if (_sealedByTime || _awaitingNote) {

@@ -610,9 +610,22 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
               ),
             ),
             const SizedBox(height: 8),
-            Text('Sealed until then — the song & message stay a surprise 💌',
+            Text(
+                mine
+                    ? 'Sealed until then — your partner can’t see it yet 💌'
+                    : 'Sealed until then — the song & message stay a surprise 💌',
                 style: TextStyle(
                     fontSize: 11.5, color: scheme.onSurfaceVariant)),
+            // I sealed it, so I may read it any time (the server sends the
+            // contents to me only).
+            if (mine && c['preview'] == true)
+              _CapsulePeek(
+                title: title,
+                artist: artist,
+                message: message,
+                accent: _accent,
+                until: unlockAt,
+              ),
           ] else if (!opened) ...[
             Row(
               children: [
@@ -1206,6 +1219,117 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
           ],
         ],
       ),
+    );
+  }
+}
+
+
+/// "Peek at it" on a capsule I sealed: shows me the song + message, with a
+/// reminder that only I can see them until it opens.
+class _CapsulePeek extends StatefulWidget {
+  const _CapsulePeek({
+    required this.title,
+    required this.artist,
+    required this.message,
+    required this.accent,
+    required this.until,
+  });
+
+  final String title;
+  final String artist;
+  final String message;
+  final Color accent;
+  final DateTime? until;
+
+  @override
+  State<_CapsulePeek> createState() => _CapsulePeekState();
+}
+
+class _CapsulePeekState extends State<_CapsulePeek> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final a = widget.accent;
+    final until = widget.until;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 6),
+        TextButton.icon(
+          style: TextButton.styleFrom(
+              foregroundColor: a,
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 6)),
+          onPressed: () => setState(() => _open = !_open),
+          icon: Icon(
+              _open
+                  ? Icons.visibility_off_rounded
+                  : Icons.visibility_rounded,
+              size: 16),
+          label: Text(_open ? 'Hide it again' : 'Peek at it'),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          child: !_open
+              ? const SizedBox(width: double.infinity)
+              : Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: a.withValues(alpha: 0.07),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: a.withValues(alpha: 0.25)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                          until == null
+                              ? 'Only you can see this until it opens'
+                              : 'Only you can see this until '
+                                  '${DateFormat('EEE, MMM d · h:mm a').format(until)}',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: a)),
+                      if (widget.title.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(Icons.music_note_rounded, size: 15, color: a),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                  widget.artist.isEmpty
+                                      ? widget.title
+                                      : '${widget.title} — ${widget.artist}',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12.5,
+                                      color: scheme.onSurface)),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (widget.message.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(widget.message,
+                            style: TextStyle(
+                                fontSize: 13.5,
+                                height: 1.4,
+                                color: scheme.onSurface)),
+                      ],
+                    ],
+                  ),
+                ),
+        ),
+      ],
     );
   }
 }

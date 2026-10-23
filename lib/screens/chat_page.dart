@@ -459,6 +459,9 @@ class _ChatPageState extends State<ChatPage>
   bool _heartSave = false;
   // Server ids of hearts I just sent → their bubble plays the seal stamp once.
   final Set<String> _freshHearts = {};
+  // My own timed hearts I've peeked at before their moment: id → the sealed
+  // note + media fields from the server (this device, this session only).
+  final Map<String, Map<String, dynamic>> _sealedPeek = {};
   // Reply-author memory: quote first-line → {id, u(sername), p(hone)} of the
   // quoted message's author, per conversation (see chat_page_helpers_3).
   final Map<String, Map<String, String>> _quoteAuthors = {};
@@ -3400,8 +3403,16 @@ class _ChatPageState extends State<ChatPage>
             Navigator.pop(ctx);
             _deleteMessage(msg['id'], false);
           }, short: 'Delete'),
-          _MenuAction('delall', Icons.delete_forever_rounded,
-              'Delete for everyone', () {
+          _MenuAction(
+              'delall',
+              Icons.delete_forever_rounded,
+              // My timed heart that hasn't opened yet: take it back.
+              (msg['message_type'] == 'heart' &&
+                      (msg['unlock_at'] ?? '').toString().isNotEmpty &&
+                      DateTime.now().isBefore(
+                          parseServerTime(msg['unlock_at'].toString())))
+                  ? 'Cancel before it opens'
+                  : 'Delete for everyone', () {
             Navigator.pop(ctx);
             _deleteMessage(msg['id'], true);
           }, color: scheme.error),
@@ -4422,10 +4433,48 @@ class _ChatPageState extends State<ChatPage>
 
   // A secret-heart message (message_type 'heart'): the covered, pulsing heart
   // that reveals the note on tap (short → in-heart, long → genie card).
+  /// Fetch my own timed heart's sealed contents so I can read it now.
+  Future<bool> _peekSealedHeart(Map<String, dynamic> msg) async {
+    final id = int.tryParse(msg['id'].toString());
+    if (id == null) return false;
+    final res = await ApiService().heartSealedPreview(id);
+    if (!mounted) return false;
+    if (res == null) {
+      showToast(context, 'Couldn’t open it — check your connection',
+          type: ToastType.error);
+      return false;
+    }
+    final ua = (msg['unlock_at'] ?? '').toString();
+    final when = ua.isEmpty ? null : parseServerTime(ua);
+    setState(() => _sealedPeek[msg['id'].toString()] = {
+          'content': (res['content'] ?? '').toString(),
+          for (final c in const [
+            'media_url',
+            'media_name',
+            'media_mime',
+            'media_size',
+            'media_duration'
+          ])
+            c: res[c],
+        });
+    showToast(
+        context,
+        when == null
+            ? 'Only you can see this until it opens'
+            : 'Only you can see this until ${heartOpensLabel(when, prefix: '')}',
+        type: ToastType.info);
+    return true;
+  }
+
   Widget _buildHeartBubble(Map<String, dynamic> msg, bool isMe, bool isDark,
       bool showAvatar, bool isFirst) {
     final scheme = Theme.of(context).colorScheme;
-    final text = (msg['content'] as String?) ?? '';
+    // My own timed heart I've peeked at: the HEART draws its sealed contents
+    // with no countdown (hv). Everything else — reply, menu, the "Opens …"
+    // pill — keeps using the real message, so nothing leaks into a quote.
+    final peek = isMe ? _sealedPeek[msg['id'].toString()] : null;
+    final hv = peek == null ? msg : {...msg, ...peek, 'unlock_at': null};
+    final text = (hv['content'] as String?) ?? '';
     final accent = scheme.primary;
     final msgId = msg['id'].toString();
     final Map senderMap = (msg['sender'] as Map?) ?? const {};
@@ -4519,9 +4568,9 @@ class _ChatPageState extends State<ChatPage>
                   sentAt: (msg['timestamp'] ?? '').toString().isEmpty
                       ? null
                       : parseServerTime(msg['timestamp'].toString()),
-                  unlockAt: (msg['unlock_at'] ?? '').toString().isEmpty
+                  unlockAt: (hv['unlock_at'] ?? '').toString().isEmpty
                       ? null
-                      : parseServerTime(msg['unlock_at'].toString()),
+                      : parseServerTime(hv['unlock_at'].toString()),
                   // Sender: has anyone opened it. Receiver: have *I* (in a
                   // group someone else opening it mustn't silence my heart).
                   openedAt: isMe
@@ -4545,22 +4594,23 @@ class _ChatPageState extends State<ChatPage>
                   onSendBack: () => _startHeartBack(msg),
                   onFirstOpen: () => _reportHeartOpened(msg),
                   onUnsealDue: () => _unsealHeart(msg),
+                  onSealedPeek: isMe ? () => _peekSealedHeart(msg) : null,
                   // Bonded-space gesture: double-tap to love back (❤ reaction).
                   onLoveBack:
                       _canHarmony ? () => _addReaction(msg, '❤️') : null,
                   // Photo / clip / voice sealed inside, and group hearts
                   // meant for one member (locked for everyone else).
-                  media: _heartMediaBuilder(msg),
-                  mediaKind: _heartMediaKind(msg),
+                  media: _heartMediaBuilder(hv),
+                  mediaKind: _heartMediaKind(hv),
                   // Cover: "for Neema" / "for you", or "for everyone" on a
                   // heart sent to the whole group.
                   forName: _heartForLabel(msg) ?? (_isGroup ? 'everyone' : null),
                   locked: _heartLockedForMe(msg),
                   // Clip length → the letter stays open long enough for it
                   // (a clip without a known length gets a full 30 s).
-                  mediaMs: switch (_heartMediaKind(msg)) {
+                  mediaMs: switch (_heartMediaKind(hv)) {
                     'video' || 'voice' || 'song' =>
-                      (msg['media_duration'] as num?)?.toInt() ?? 30000,
+                      (hv['media_duration'] as num?)?.toInt() ?? 30000,
                     _ => null,
                   },
                   onLocked: () => showToast(context,

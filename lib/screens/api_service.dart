@@ -1170,6 +1170,24 @@ class ApiService {
   }
 
   // FETCH MESSAGES
+  /// The sender's peek at their own timed heart before it opens: the sealed
+  /// note + media fields (server: GET /messages/<id>/heart/sealed). Null on
+  /// failure.
+  Future<Map<String, dynamic>?> heartSealedPreview(int messageId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final res = await http.get(
+          Uri.parse('${await _baseUrl}/messages/$messageId/heart/sealed'),
+          headers: _authHeaders(token));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final body = jsonDecode(res.body);
+        if (body is Map<String, dynamic>) return body;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   /// Pin a message for [hours] hours. Returns the updated message map (with
   /// its new `pinned_until`) on success, or null on failure.
   Future<Map<String, dynamic>?> pinMessage(int messageId, int hours) async {

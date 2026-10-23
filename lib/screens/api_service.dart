@@ -1279,6 +1279,7 @@ class ApiService {
     bool? mentionAll, // true when "@all" was used (group only)
     String? heartMood, // secret heart: love|miss|sorry|thanks|proud
     DateTime? unlockAt, // secret heart: sealed until this moment
+    int? heartFor, // group heart meant for ONE member (only they can open)
     String? poll, // group poll spec JSON {q, options, multi}
   }) async {
     try {
@@ -1302,6 +1303,7 @@ class ApiService {
         'mention_all': ?mentionAll,
         'heart_mood': ?heartMood,
         if (unlockAt != null) 'unlock_at': unlockAt.toUtc().toIso8601String(),
+        'heart_for': ?heartFor,
         'poll': ?poll,
       };
       if (conversationId == null) payload['receiver_id'] = receiverId;

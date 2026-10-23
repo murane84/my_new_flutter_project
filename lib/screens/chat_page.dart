@@ -201,6 +201,9 @@ class ChatPage extends StatefulWidget {
   // When set (opened from a message notification), scroll to + highlight this
   // message once the thread has loaded.
   final String? initialJumpMessageId;
+  // "Reply privately" from a group: opens this DM with that group message
+  // already in the reply bar (it's quoted when the reply is sent).
+  final Map<String, dynamic>? initialReplyTo;
 
   const ChatPage({
     super.key,
@@ -218,6 +221,7 @@ class ChatPage extends StatefulWidget {
     this.initialSharePaths,
     this.onShareConsumed,
     this.initialJumpMessageId,
+    this.initialReplyTo,
   });
 
   @override
@@ -438,6 +442,11 @@ class _ChatPageState extends State<ChatPage>
   // with and, for a timed heart, the moment it opens. Reset after each send.
   String _heartMood = 'love';
   DateTime? _heartUnlockAt;
+  // What's sealed inside the heart (photo / video clip / voice clip) and, in
+  // a group, the one member it's for (null = the whole group).
+  _HeartAttach? _heartAttach;
+  int? _heartFor;
+  String? _heartForName;
   // Server ids of hearts I just sent → their bubble plays the seal stamp once.
   final Set<String> _freshHearts = {};
   // Reply-author memory: quote first-line → {id, u(sername), p(hone)} of the
@@ -569,6 +578,7 @@ class _ChatPageState extends State<ChatPage>
     // the friend list / header) so the per-message bubble avatars show the DP
     // immediately; the /status poll may later refresh it.
     _friendAvatar = widget.friendAvatar;
+    _replyTo = widget.initialReplyTo;
     WidgetsBinding.instance.addObserver(this);
     _viewerDismissCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 220));
@@ -1179,6 +1189,11 @@ class _ChatPageState extends State<ChatPage>
           setState(() {
             _messages[idx]['content'] = data!['content'];
             _messages[idx]['unlock_at'] = data['unlock_at'];
+            // A photo / clip sealed with it arrives now too.
+            for (final k in const ['media_url', 'media_name', 'media_mime',
+                'media_size', 'media_duration']) {
+              if (data[k] != null) _messages[idx][k] = data[k];
+            }
           });
         }
       }
@@ -1553,7 +1568,8 @@ class _ChatPageState extends State<ChatPage>
 
   Future<void> _sendMessage() async {
     final text = _ctrl.text.trim();
-    if (text.isEmpty) return;
+    final attach = _heartMode ? _heartAttach : null;
+    if (text.isEmpty && attach == null) return;
 
     // @-mentions for this send (group only). Derived from the final text, so a tag deleted before sending is never
     // sent (and a restored draft's tags still count).
@@ -1574,6 +1590,8 @@ class _ChatPageState extends State<ChatPage>
     final heart = _heartMode;
     final heartMood = heart ? _heartMood : null;
     final unlockAt = heart ? _heartUnlockAt : null;
+    final heartFor = (heart && _isGroup) ? _heartFor : null;
+    final heartForName = heartFor == null ? null : _heartForName;
     _markActivity();
     _ctrl.clear();
     setState(() {
@@ -1581,6 +1599,9 @@ class _ChatPageState extends State<ChatPage>
       _heartMode = false;
       _heartMood = 'love';
       _heartUnlockAt = null;
+      _heartAttach = null;
+      _heartFor = null;
+      _heartForName = null;
     });
     _saveDraft(); // text now empty → clears the stored draft
     if (_isGroup) setState(_closeMentionPicker);
@@ -1590,6 +1611,15 @@ class _ChatPageState extends State<ChatPage>
         _optimisticMsg(tempId, heart ? 'heart' : 'text', content);
     if (heart) {
       optimistic['heart_mood'] = heartMood;
+      if (heartFor != null) {
+        optimistic['heart_for'] = heartFor;
+        optimistic['heart_for_name'] = heartForName;
+      }
+      if (attach != null) {
+        optimistic['media_mime'] = attach.mime;
+        optimistic['media_name'] = attach.name;
+        optimistic['media_duration'] = attach.durationMs;
+      }
       if (unlockAt != null) {
         // Sealed for me too until it opens — mirror what the server returns.
         optimistic['unlock_at'] = unlockAt.toUtc().toIso8601String();
@@ -1598,8 +1628,22 @@ class _ChatPageState extends State<ChatPage>
     }
     _insertOptimistic(optimistic);
 
+    // The sealed photo / clip uploads once; a retry reuses it.
+    Map<String, dynamic>? up;
     Future<void> attempt() async {
       try {
+        if (attach != null && up == null) {
+          up = await appBusy.run(() => ApiService().uploadMedia(
+              bytes: attach.bytes, filename: attach.name, mime: attach.mime));
+          if (up == null || up!['url'] == null) {
+            up = null;
+            _replaceOptimistic(tempId, null);
+            if (mounted) {
+              _showErrorSnack('Upload failed — tap the ! to retry.');
+            }
+            return;
+          }
+        }
         final sent = await appBusy.run(() => ApiService().sendMessage(
             widget.friendId, content,
             messageType: heart ? 'heart' : 'text',
@@ -1607,12 +1651,19 @@ class _ChatPageState extends State<ChatPage>
             mentions: outMentions,
             mentionAll: outMentionAll,
             heartMood: heartMood,
-            unlockAt: unlockAt));
+            unlockAt: unlockAt,
+            heartFor: heartFor,
+            mediaUrl: up?['url'] as String?,
+            mediaName: up == null ? null : (up!['name'] ?? attach?.name) as String?,
+            mediaMime: up == null ? null : (up!['mime'] ?? attach?.mime) as String?,
+            mediaSize: (up?['size'] as num?)?.toInt(),
+            mediaDuration: attach?.durationMs));
         if (heart && sent != null) {
           // A server that doesn't (yet) store heart fields echoes the message
           // without them — keep what I chose so my bubble doesn't snap back to
           // red "with love" / lose its seal.
           sent['heart_mood'] ??= heartMood;
+          if (heartForName != null) sent['heart_for_name'] = heartForName;
           if (unlockAt != null) {
             sent['unlock_at'] ??= unlockAt.toUtc().toIso8601String();
           }
@@ -2299,6 +2350,10 @@ class _ChatPageState extends State<ChatPage>
         if (!mounted) return;
         _recordMs += 200;
         _recordMsVN.value = _recordMs;
+        // A heart's voice clip is short: it seals itself at one minute.
+        if (_heartMode && _recordMs >= _kHeartVoiceMaxMs) {
+          _stopAndSendRecording();
+        }
       });
     } catch (_) {
       if (mounted) showToast(context, 'Could not start recording', type: ToastType.error);
@@ -2338,6 +2393,20 @@ class _ChatPageState extends State<ChatPage>
       } catch (_) {}
       if (bytes.isEmpty || durationMs < 700) {
         if (mounted) showToast(context, 'Hold longer to record');
+        return;
+      }
+      // Writing a heart → the recording goes INSIDE it, not out as a note.
+      if (_heartMode) {
+        rebuildWith(() => _heartAttach = _HeartAttach(
+            bytes: bytes,
+            name: 'heart_voice_$durationMs.m4a',
+            mime: 'audio/mp4',
+            kind: 'voice',
+            durationMs: durationMs));
+        if (mounted) {
+          showToast(context, 'Voice clip sealed in your heart 🎤💌');
+        }
+        _recordSong = null;
         return;
       }
       await _uploadAndSend(
@@ -3053,6 +3122,29 @@ class _ChatPageState extends State<ChatPage>
 
   // ── Message actions ───────────────────────────────────────────────────────
 
+  /// Group → DM: open my chat with the sender, their group message waiting
+  /// in the reply bar so the answer lands quoted and private.
+  void _replyPrivately(Map<String, dynamic> msg) {
+    final sm = (msg['sender'] as Map?) ?? const {};
+    final sid = int.tryParse(msg['sender_id']?.toString() ?? '');
+    if (sid == null) return;
+    final phone = (sm['phone'] ?? '').toString();
+    final saved =
+        phone.isNotEmpty ? ContactNames.instance.nameFor(phone) : null;
+    final name = (saved != null && saved.isNotEmpty)
+        ? saved
+        : (sm['username'] ?? 'Friend').toString();
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => ChatPage(
+        friendId: sid,
+        friendName: name,
+        friendAvatar: (sm['avatar_url'] ?? '').toString(),
+        textColor: Theme.of(context).colorScheme.onSurface,
+        initialReplyTo: Map<String, dynamic>.from(msg),
+      ),
+    ));
+  }
+
   void _showMessageMenu(BuildContext context, Map<String, dynamic> msg,
       {Offset? anchor}) {
     final isMe = msg['sender_id'].toString() == _myId;
@@ -3172,6 +3264,13 @@ class _ChatPageState extends State<ChatPage>
           setState(() => _replyTo = msg);
           FocusScope.of(context).requestFocus(FocusNode());
         }),
+        // Group: answer just this person, in your DM with them.
+        if (_isGroup && !isMe && !deleted && !isHeart)
+          _MenuAction('replyPrivately', Icons.forum_outlined, 'Reply privately',
+              () {
+            Navigator.pop(ctx);
+            _replyPrivately(msg);
+          }, short: 'Private'),
         if (!deleted)
           _MenuAction(
               'pin',
@@ -4084,6 +4183,14 @@ class _ChatPageState extends State<ChatPage>
                   // Bonded-space gesture: double-tap to love back (❤ reaction).
                   onLoveBack:
                       _canHarmony ? () => _addReaction(msg, '❤️') : null,
+                  // Photo / clip / voice sealed inside, and group hearts
+                  // meant for one member (locked for everyone else).
+                  media: _heartMediaBuilder(msg),
+                  mediaKind: _heartMediaKind(msg),
+                  forName: _heartForLabel(msg),
+                  locked: _heartLockedForMe(msg),
+                  onLocked: () => showToast(context,
+                      'This heart is for ${_heartForLabel(msg) ?? 'someone else'} 💌'),
                 ),
               ),
             ],
@@ -4135,9 +4242,12 @@ class _ChatPageState extends State<ChatPage>
                   : parseServerTime(msg['opened_at'].toString()),
               isGroup: _isGroup,
               openCount: _heartOpens(msg).length,
-              openTotal: _groupMembers.length > 1
-                  ? _groupMembers.length - 1
-                  : null,
+              // A heart for one member has exactly one possible opener.
+              openTotal: (msg['heart_for']?.toString() ?? '').isNotEmpty
+                  ? 1
+                  : (_groupMembers.length > 1
+                      ? _groupMembers.length - 1
+                      : null),
             );
             final showTime = showAvatar || isFirst;
             if (st == null && !showTime) return const SizedBox.shrink();
@@ -5098,7 +5208,9 @@ class _ChatPageState extends State<ChatPage>
         child: _buildFileCaptionBar(scheme),
       );
     }
-    final hasText = _ctrl.text.trim().isNotEmpty;
+    // A heart carrying a photo / clip can go without words.
+    final hasText = _ctrl.text.trim().isNotEmpty ||
+        (_heartMode && _heartAttach != null);
 
     return SafeArea(
       top: false,

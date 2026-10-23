@@ -198,7 +198,30 @@ class HeartBubble extends StatefulWidget {
     this.onKeep,
     this.onSendBack,
     this.senderName,
+    this.media,
+    this.mediaKind,
+    this.forName,
+    this.locked = false,
+    this.onLocked,
   });
+
+  /// The photo / video clip / voice clip sealed inside, drawn on the opened
+  /// letter at the given width. Null = words only. A heart with media always
+  /// opens as the letter card.
+  final Widget Function(double width)? media;
+
+  /// 'photo' | 'video' | 'voice' — hinted on the cover ("a photo is inside")
+  /// even while locked, without revealing it.
+  final String? mediaKind;
+
+  /// Group heart meant for one member: their name ("you" for them). Shown on
+  /// the cover for everyone.
+  final String? forName;
+
+  /// This heart is for someone else: it can't be opened here (the server sent
+  /// it without its note and file). Tapping calls [onLocked].
+  final bool locked;
+  final VoidCallback? onLocked;
 
   /// Who sent it (first name) — shown on the opened letter.
   final String? senderName;
@@ -424,9 +447,13 @@ class _HeartBubbleState extends State<HeartBubble>
 
   /// Due but the note hasn't come down yet (server unseal pending).
   bool get _awaitingNote =>
-      widget.unlockAt != null && !_sealedByTime && widget.text.trim().isEmpty;
+      widget.unlockAt != null &&
+      !_sealedByTime &&
+      widget.text.trim().isEmpty &&
+      widget.media == null;
 
   bool get _isLong =>
+      widget.media != null ||
       widget.text.trim().length > HeartBubble.longThreshold ||
       widget.text.contains('\n');
 
@@ -634,6 +661,7 @@ class _HeartBubbleState extends State<HeartBubble>
   // opens the message menu (Message info, delete…) like any bubble, and a
   // tap peeks at what I wrote.
   bool get _canHold =>
+      !widget.locked &&
       !widget.isMe &&
       !_revealedInHeart &&
       !_sealedByTime &&
@@ -643,6 +671,7 @@ class _HeartBubbleState extends State<HeartBubble>
   void _pointerDown(PointerDownEvent e) {
     _swallowTap = false;
     _wake();
+    if (widget.locked) return; // tapping explains it (see _onTap)
     if (!_canHold) return;
     _downAt = e.position;
     _hapticStep = 0;
@@ -726,6 +755,7 @@ class _HeartBubbleState extends State<HeartBubble>
           mood: _mood,
           from: widget.isMe ? 'you' : widget.senderName,
           sentAt: widget.sentAt,
+          media: widget.media,
           onReply: widget.onReply,
           onReact: widget.onReact,
           onKeep: widget.onKeep,
@@ -741,6 +771,11 @@ class _HeartBubbleState extends State<HeartBubble>
   void _onTap() {
     if (_swallowTap) {
       _swallowTap = false;
+      return;
+    }
+    if (widget.locked) {
+      HapticFeedback.lightImpact();
+      widget.onLocked?.call();
       return;
     }
     // A tap on an already-open in-heart note re-seals it (manual lock).
@@ -1085,6 +1120,39 @@ class _HeartBubbleState extends State<HeartBubble>
     final white = ink.withValues(alpha: 0.95);
     final String line;
     final IconData icon;
+    final kindIcon = switch (widget.mediaKind) {
+      'photo' => Icons.photo_rounded,
+      'video' => Icons.videocam_rounded,
+      'voice' => Icons.mic_rounded,
+      _ => null,
+    };
+    final forLine = widget.forName == null ? null : 'for ${widget.forName}';
+    if (widget.locked) {
+      return Column(
+        key: const ValueKey('cover-locked'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.lock_rounded, color: ink, size: 18),
+            if (kindIcon != null) ...[
+              const SizedBox(width: 3),
+              Icon(kindIcon, color: ink.withValues(alpha: 0.85), size: 13),
+            ],
+          ]),
+          const SizedBox(height: 4),
+          Text(forLine ?? 'sealed',
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.fade,
+              style: TextStyle(
+                  color: white,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3)),
+        ],
+      );
+    }
     if (sealed) {
       icon = Icons.hourglass_top_rounded;
       line = _hint
@@ -1101,7 +1169,26 @@ class _HeartBubbleState extends State<HeartBubble>
       key: ValueKey('cover-$sealed-$_hint-$_awaitingNote'),
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: ink, size: 20),
+        if (forLine != null) ...[
+          Text(forLine,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.fade,
+              style: TextStyle(
+                  color: ink.withValues(alpha: 0.85),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.4)),
+          const SizedBox(height: 2),
+        ],
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: ink, size: 20),
+          if (kindIcon != null) ...[
+            const SizedBox(width: 3),
+            // "Something is inside" — the kind only, never the thing.
+            Icon(kindIcon, color: ink.withValues(alpha: 0.85), size: 13),
+          ],
+        ]),
         const SizedBox(height: 4),
         Text(
           line,
@@ -1432,6 +1519,7 @@ void showHeartGenie(
   HeartMood mood = HeartMood.love,
   String? from,
   DateTime? sentAt,
+  Widget Function(double width)? media,
   VoidCallback? onReply,
   ValueChanged<String>? onReact,
   VoidCallback? onKeep,
@@ -1452,6 +1540,7 @@ void showHeartGenie(
       mood: mood,
       from: from,
       sentAt: sentAt,
+      media: media,
       onReply: onReply,
       onReact: onReact,
       onKeep: onKeep,
@@ -1472,11 +1561,13 @@ class _HeartGenie extends StatefulWidget {
     required this.onClosed,
     this.from,
     this.sentAt,
+    this.media,
     this.onReply,
     this.onReact,
     this.onKeep,
     this.onSendBack,
   });
+  final Widget Function(double width)? media;
   final Rect originRect;
   final String text;
   final Color accent;
@@ -1950,6 +2041,16 @@ class _HeartGenieState extends State<_HeartGenie>
                           child: SingleChildScrollView(
                             child: Column(
                               children: [
+                                // What was sealed inside: photo, video clip
+                                // or voice clip, above the words.
+                                if (widget.media != null) ...[
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: widget.media!(width - 48),
+                                  ),
+                                  if (title != null || body.isNotEmpty)
+                                    const SizedBox(height: 14),
+                                ],
                                 if (title != null) ...[
                                   Text(
                                     title,
@@ -1963,6 +2064,7 @@ class _HeartGenieState extends State<_HeartGenie>
                                   ),
                                   const SizedBox(height: 8),
                                 ],
+                                if (body.isNotEmpty)
                                 SizedBox(
                                   width: double.infinity,
                                   child: Text(

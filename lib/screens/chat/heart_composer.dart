@@ -347,18 +347,16 @@ extension _ChatHeartComposer on _ChatPageState {
 
   Future<void> _heartSongFromFiles() async {
     try {
-      final res = await FilePicker.pickFiles(
-          type: FileType.audio, withData: kIsWeb);
+      final res = await FilePicker.pickFiles(type: FileType.audio);
       final f = res?.files.single;
       if (f == null || !mounted) return;
       final dot = f.name.lastIndexOf('.');
       final base = dot > 0 ? f.name.substring(0, dot) : f.name;
-      if (f.bytes != null) {
-        await _heartUseSongBytes(
-            bytes: f.bytes!, fileName: f.name, title: base);
-      } else if (f.path != null) {
-        await _heartUseSong(path: f.path!, title: base);
-      }
+      // readAsBytes works on every platform (web included) with this
+      // file_picker version — no withData / .bytes needed.
+      final bytes = await f.readAsBytes();
+      if (bytes.isEmpty || !mounted) return;
+      await _heartUseSongBytes(bytes: bytes, fileName: f.name, title: base);
     } catch (_) {
       if (mounted) {
         showToast(context, 'Could not add that song', type: ToastType.error);

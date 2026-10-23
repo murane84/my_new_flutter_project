@@ -7,7 +7,7 @@ from sqlalchemy import func
 from models import Message, User, Friend, MuteStatus, BlockStatus
 from schemas import MessageCreate, FriendWithUnread
 import crud_conversations
-from hearts import heart_kwargs
+from hearts import heart_kwargs, seal_media as hearts_seal_media
 
 
 # Presence window: a user is shown "online" only if the server heard from them
@@ -63,6 +63,8 @@ def create_message(db: Session, sender_id: int, message: MessageCreate) -> Messa
         visible_to_sender=True,
         visible_to_receiver=True
     )
+    # A timed heart's photo/clip stays sealed with its note (hearts.py).
+    hearts_seal_media(db_message)
     db.add(db_message)
     db.commit()
     db.refresh(db_message)

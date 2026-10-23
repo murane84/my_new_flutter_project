@@ -137,6 +137,12 @@ class Message(Base):
     # Every opener: JSON {"<user id>": "<iso time>"} — a DM has one entry, a
     # group one per member who opened it (the "2 of 3 opened" count + info).
     heart_opens = Column(Text, nullable=True)
+    # Group heart meant for ONE member: only they (and the sender) receive its
+    # note + photo/clip; everyone else gets a locked heart (hearts.redact).
+    heart_for = Column(Integer, nullable=True)
+    # Timed heart with a photo/clip: the media fields are held here (JSON) while
+    # sealed and restored on unseal, exactly like sealed_content for the note.
+    sealed_media = Column(Text, nullable=True)
     # ── Polls (message_type 'poll', groups) — see polls.py ───────────────────
     # JSON {"q": str, "options": [str], "multi": bool, "votes": {uid: [idx]}}
     poll = Column(Text, nullable=True)

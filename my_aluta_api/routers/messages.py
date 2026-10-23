@@ -87,9 +87,13 @@ def _access_ids(db, msg) -> list:
 def _fanout_others(db, msg, me: int, event: dict):
     """Notify everyone who can see the message except the actor (works for both
     DMs — the other party — and groups — every other member)."""
+    data = event.get("data")
     for uid in _access_ids(db, msg):
         if uid != me:
-            safe_notify_user(int(uid), event)
+            # A group heart meant for someone else goes out locked.
+            ev = ({**event, "data": hearts.redact(data, uid)}
+                  if isinstance(data, dict) else event)
+            safe_notify_user(int(uid), ev)
 
 # 1️⃣ SEND MESSAGE
 @router.post("/", response_model=schemas.MessageWithSender)
@@ -493,6 +497,8 @@ def heart_opened(
     no-op."""
     import json
     m = _heart_or_404(db, message_id, current_user.id)
+    if not hearts.can_open(m, current_user.id):
+        raise HTTPException(status_code=403, detail="This heart is for someone else")
     if int(m.sender_id) == int(current_user.id) or hearts.is_sealed(m):
         return schemas.MessageWithSender.model_validate(m)
     try:
@@ -514,7 +520,7 @@ def heart_opened(
     validated = schemas.MessageWithSender.model_validate(m)
     is_group = m.receiver_id is None
     total = 1
-    if is_group and m.conversation_id:
+    if is_group and m.conversation_id and not getattr(m, "heart_for", None):
         total = max(0, len(crud_conversations.member_ids(db, m.conversation_id)) - 1)
     safe_notify_user(int(m.sender_id), {
         "type": "heart_opened",

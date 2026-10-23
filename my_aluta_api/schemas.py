@@ -93,6 +93,8 @@ class Message(BaseModel):
     unlock_at: Optional[datetime] = None
     opened_at: Optional[datetime] = None
     heart_opens: Optional[str] = None   # JSON {uid: iso} — who opened it
+    heart_for: Optional[int] = None     # group heart meant for one member
+    heart_locked: Optional[bool] = None # True: this copy was withheld from you
     poll: Optional[str] = None          # JSON poll state (polls.py)
 
     model_config = ConfigDict(from_attributes=True)
@@ -123,6 +125,8 @@ class MessageWithSender(BaseModel):
     unlock_at: Optional[datetime] = None
     opened_at: Optional[datetime] = None
     heart_opens: Optional[str] = None   # JSON {uid: iso} — who opened it
+    heart_for: Optional[int] = None     # group heart meant for one member
+    heart_locked: Optional[bool] = None # True: this copy was withheld from you
     poll: Optional[str] = None          # JSON poll state (polls.py)
 
     model_config = ConfigDict(from_attributes=True)
@@ -175,6 +179,8 @@ class GroupMessageCreate(BaseModel):
     # Secret hearts: optional mood + timed unsealing (hearts.py).
     heart_mood: Optional[str] = None
     unlock_at: Optional[datetime] = None
+    # Group hearts: the ONE member who may open it (None = whole group).
+    heart_for: Optional[int] = None
     # Polls (message_type 'poll'): JSON {"q", "options": [..], "multi"}.
     poll: Optional[str] = None
 

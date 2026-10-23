@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from hearts import heart_kwargs
+from hearts import heart_kwargs, clean_target
 
 from models import Conversation, ConversationMember, Message, User
 
@@ -151,6 +151,10 @@ def add_message(db: Session, conversation_id: int, sender_id: int, payload) -> M
         visible_to_sender=True,
         visible_to_receiver=True,
     )
+    # A heart meant for ONE member of the group (hearts.redact hides it from
+    # everyone else).
+    msg.heart_for = clean_target(payload, sender_id,
+                                 member_ids(db, conversation_id))
     db.add(msg)
     # The sender has trivially "read" their own message.
     sender_member = get_member(db, conversation_id, sender_id)

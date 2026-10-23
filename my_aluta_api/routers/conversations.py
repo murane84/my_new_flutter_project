@@ -18,6 +18,7 @@ from models import User, Conversation, ConversationMember, Message
 from .users import get_current_user
 from websocket_manager import safe_notify_user, safe_broadcast_users
 from push import send_push_to_user
+import hearts
 
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
 
@@ -196,7 +197,8 @@ def get_messages(
             },
             exclude=current_user.id,
         )
-    return [schemas.MessageWithSender.model_validate(m) for m in msgs]
+    # A heart meant for another member arrives locked (no note, no file).
+    return [hearts.redact(_serialize(m), current_user.id) for m in msgs]
 
 
 @router.post("/{cid}/messages", response_model=schemas.MessageWithSender)
@@ -221,9 +223,19 @@ def send_message(
     validated = schemas.MessageWithSender.model_validate(msg)
     serialized = _serialize(msg)
     members = cc.member_ids(db, cid)
-    safe_broadcast_users(
-        members, {"type": "new_message", "data": serialized}, exclude=current_user.id
-    )
+    if getattr(msg, "heart_for", None):
+        # A heart for one member: each copy is cut to what that member may see.
+        for uid in members:
+            if int(uid) != int(current_user.id):
+                safe_notify_user(int(uid), {
+                    "type": "new_message",
+                    "data": hearts.redact(serialized, uid),
+                })
+    else:
+        safe_broadcast_users(
+            members, {"type": "new_message", "data": serialized},
+            exclude=current_user.id,
+        )
     safe_notify_user(current_user.id, {"type": "message_sent", "data": serialized})
     # Best-effort push to the other members.
     preview = crud.list_preview(msg)

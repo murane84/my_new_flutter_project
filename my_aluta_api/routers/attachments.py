@@ -197,7 +197,8 @@ def _can_access(
     # (they route by conversation_id), so the sender/receiver check above never
     # covers them — this does, for every member.
     conv_row = (
-        db.query(Message.conversation_id)
+        db.query(Message.conversation_id, Message.message_type,
+                 Message.heart_for, Message.sender_id)
         .filter(
             Message.media_url.contains(fragment, autoescape=True),
             Message.conversation_id.isnot(None),
@@ -205,6 +206,11 @@ def _can_access(
         .order_by(Message.id.asc())
         .first()
     )
+    # A group heart meant for one member: its photo/clip is for that member
+    # (and the sender, who is the owner above) — not the rest of the group.
+    if (conv_row and (conv_row[1] or "") == "heart" and conv_row[2] is not None
+            and int(user_id) not in (int(conv_row[2]), int(conv_row[3] or 0))):
+        conv_row = None
     if conv_row and conv_row[0]:
         is_member = (
             db.query(ConversationMember.user_id)

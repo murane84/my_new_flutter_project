@@ -1171,7 +1171,7 @@ class ApiService {
 
   // FETCH MESSAGES
   /// The sender's peek at their own timed heart before it opens: the sealed
-  /// note + media fields (server: GET /messages/<id>/heart/sealed). Null on
+  /// note + media fields (server: `GET /messages/{id}/heart/sealed`). Null on
   /// failure.
   Future<Map<String, dynamic>?> heartSealedPreview(int messageId) async {
     try {

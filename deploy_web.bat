@@ -32,7 +32,10 @@ xcopy build\web my_aluta_api\webapp /E /I /Y || goto :err
 echo == committing + pushing (Railway auto-deploys) ==
 git add -A my_aluta_api\webapp
 git commit -m "Deploy latest web build"
-git push origin main || goto :err
+REM Push whatever branch is checked out to main (Railway deploys main), and
+REM keep that branch itself in sync on GitHub too.
+git push origin HEAD:main || goto :err
+for /f %%b in ('git rev-parse --abbrev-ref HEAD') do if not "%%b"=="main" git push origin %%b
 
 echo.
 echo ============================================================

@@ -1183,12 +1183,20 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
         if (pIdx >= 0) {
           prevTitle = titles[pIdx];
           prevBy = pIdx < by.length ? by[pIdx] : null;
-          goPrev = _transportPrev;
+          // Exact index (not "prev"): with repeat-all at the top, "prev"
+          // would only restart the song, not go to the record shown.
+          final to = pIdx;
+          goPrev = () => host
+              ? c.playIndex(to)
+              : c.requestControl('play_index', index: to);
         }
         if (nIdx >= 0) {
           nextTitle = titles[nIdx];
           nextBy = nIdx < by.length ? by[nIdx] : null;
-          goNext = _transportNext;
+          final to = nIdx;
+          goNext = () => host
+              ? c.playIndex(to)
+              : c.requestControl('play_index', index: to);
         }
       }
     } else if (_currentIndex >= 0 && _currentIndex < _playlist.length) {

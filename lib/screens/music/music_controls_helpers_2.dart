@@ -990,16 +990,13 @@ Column(
       // the header with a big spinning disc, the title, the live lyric line
       // and what's up next, so there is no empty band above the controls.
       Widget heroCard() {
-        final upNextOn = !live &&
-            hasTrack &&
-            _playlist.length > 1 &&
-            !_effShuffle &&
-            _effRepeatMode != 'one' &&
-            !(_effRepeatMode == 'off' &&
-                _currentIndex >= _playlist.length - 1);
-        final nextPath = upNextOn
-            ? _playlist[(_currentIndex + 1) % _playlist.length]
+        // Same prediction the skip uses (shuffle's pick is made ahead of
+        // time), so Up next is always the song that really comes next.
+        final nextIdx = (!live && hasTrack && _effRepeatMode != 'one')
+            ? _peekNextIndex()
             : null;
+        final upNextOn = nextIdx != null;
+        final nextPath = nextIdx == null ? null : _playlist[nextIdx];
         final nextTitle = nextPath == null
             ? ''
             : metadataStore.title(nextPath, _nameFromPath(nextPath));

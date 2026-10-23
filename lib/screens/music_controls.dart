@@ -334,6 +334,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // True while the hero record is on screen and shows app-busy as its ring
   // (the centred loader then stays away from the title).
   bool _hostingBusy = false;
+  // Shuffle's NEXT song, picked ahead of time so the peeking record, Up next
+  // and the actual skip always agree. Cleared whenever a song starts.
+  int? _shuffleNext;
   final Random _rng = Random();
 
   Timer? _sleepTimer;
@@ -962,6 +965,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       _currentIndex = index;
       _abA = null; // A-B points belong to the previous song
       _abB = null;
+      _shuffleNext = null; // pick a fresh shuffle "next" for this song
       _trackName = initTitle;
       _artistName = initArtist;
       _currentArtId = null; // resolved by _fetchMetadata once the song is found
@@ -1059,7 +1063,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     final scope = _scopeIndices();
     if (scope.isEmpty) return;
     if (_shuffle) {
-      _play(scope[_rng.nextInt(scope.length)]);
+      _play(_peekNextIndex() ?? scope.first);
       return;
     }
     final pos = scope.indexOf(_currentIndex);
@@ -1098,7 +1102,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     final scope = _scopeIndices();
     if (scope.isEmpty) return;
     if (_shuffle) {
-      _play(scope[_rng.nextInt(scope.length)]);
+      _play(_peekNextIndex() ?? scope.first);
       return;
     }
     final pos = scope.indexOf(_currentIndex);
@@ -1109,6 +1113,40 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     } else {
       _snack('End of playlist');
     }
+  }
+
+  /// The song a skip forward will play (null = none: end of the list with
+  /// repeat off). Under shuffle it is picked once, ahead of time, and kept.
+  int? _peekNextIndex() {
+    if (_playlist.isEmpty || _currentIndex < 0) return null;
+    final scope = _scopeIndices();
+    if (scope.isEmpty) return null;
+    if (_shuffle) {
+      if (scope.length < 2) return null;
+      final s = _shuffleNext;
+      if (s == null || s == _currentIndex || !scope.contains(s)) {
+        var pick = scope[_rng.nextInt(scope.length)];
+        if (pick == _currentIndex) {
+          pick = scope[(scope.indexOf(pick) + 1) % scope.length];
+        }
+        _shuffleNext = pick;
+      }
+      return _shuffleNext;
+    }
+    final pos = scope.indexOf(_currentIndex);
+    if (pos >= 0 && pos + 1 < scope.length) return scope[pos + 1];
+    if (_repeatAll && scope.length > 1) return scope.first;
+    return null;
+  }
+
+  /// The song before this one in the list (null at the start, repeat off).
+  int? _peekPrevIndex() {
+    if (_playlist.isEmpty || _currentIndex < 0) return null;
+    final scope = _scopeIndices();
+    final pos = scope.indexOf(_currentIndex);
+    if (pos > 0) return scope[pos - 1];
+    if (_repeatAll && scope.length > 1) return scope.last;
+    return null;
   }
 
   void _previous() {

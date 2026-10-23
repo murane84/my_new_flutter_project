@@ -366,13 +366,19 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                         flex: 5,
                         child: Center(
                           child: LayoutBuilder(builder: (c, cc) {
-                            final side = (cc.maxWidth < cc.maxHeight
-                                    ? cc.maxWidth
-                                    : cc.maxHeight)
-                                .clamp(
-                                    0.0, 360.0 - 210.0 * openT.clamp(0.0, 1.0))
-                                .toDouble();
-                            return AnimatedBuilder(
+                            // Wide split: leave room either side for the
+                            // peeking records and a line for their names.
+                            final side = split
+                                ? min(cc.maxWidth * 0.52, cc.maxHeight - 64)
+                                    .clamp(0.0, 360.0)
+                                    .toDouble()
+                                : (cc.maxWidth < cc.maxHeight
+                                        ? cc.maxWidth
+                                        : cc.maxHeight)
+                                    .clamp(0.0,
+                                        360.0 - 210.0 * openT.clamp(0.0, 1.0))
+                                    .toDouble();
+                            final discW = AnimatedBuilder(
                               animation: PlayerStyleController.instance,
                               builder: (context, _) {
                                 final dStyle =
@@ -410,6 +416,10 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                                 );
                               },
                             );
+                            return split
+                                ? _peekStage(discW, side, cc.maxWidth, accent,
+                                    scheme, setFull)
+                                : discW;
                           }),
                         ),
                       ),
@@ -1142,6 +1152,206 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
 
   // Wrap the spinning full-screen disc with swipe/double-tap gestures and an
   // elapsed-progress ring hugging its edge. Same widget drives mobile + desktop.
+  /// Wide Now Playing: the previous and next records peek in from the edges
+  /// (click to skip; ← / → too), with their names, and the place in the list
+  /// underneath. Works for Listening Together too (the session's queue).
+  Widget _peekStage(Widget disc, double side, double width, Color accent,
+      ColorScheme scheme, StateSetter setFull) {
+    String? prevTitle, nextTitle, prevBy, nextBy;
+    VoidCallback? goPrev, goNext;
+    int place = 0, total = 0;
+    final live = _liveActive;
+    if (live) {
+      final c = _live!;
+      final host = _isLiveHost;
+      final titles = host
+          ? [for (final t in c.queue) t.title]
+          : List<String>.from(c.remoteQueueTitles);
+      final by = host
+          ? [for (final t in c.queue) t.contributor]
+          : List<String?>.from(c.remoteQueueBy);
+      final idx = host ? c.currentIndex : c.remoteIndex;
+      total = titles.length;
+      if (idx >= 0 && idx < total) {
+        place = idx + 1;
+        final all = c.repeatMode == 'all' && total > 1;
+        final pIdx = idx > 0 ? idx - 1 : (all ? total - 1 : -1);
+        // Shuffle is picked by the host at skip time → no honest "next".
+        final nIdx = c.shuffle
+            ? -1
+            : (idx + 1 < total ? idx + 1 : (all ? 0 : -1));
+        if (pIdx >= 0) {
+          prevTitle = titles[pIdx];
+          prevBy = pIdx < by.length ? by[pIdx] : null;
+          goPrev = _transportPrev;
+        }
+        if (nIdx >= 0) {
+          nextTitle = titles[nIdx];
+          nextBy = nIdx < by.length ? by[nIdx] : null;
+          goNext = _transportNext;
+        }
+      }
+    } else if (_currentIndex >= 0 && _currentIndex < _playlist.length) {
+      final scope = _scopeIndices();
+      total = scope.length;
+      place = scope.indexOf(_currentIndex) + 1;
+      final pIdx = _peekPrevIndex();
+      final nIdx = _peekNextIndex();
+      if (pIdx != null) {
+        final path = _playlist[pIdx];
+        prevTitle = metadataStore.title(path, _nameFromPath(path));
+        goPrev = () => _play(pIdx);
+      }
+      if (nIdx != null) {
+        final path = _playlist[nIdx];
+        nextTitle = metadataStore.title(path, _nameFromPath(path));
+        goNext = () => _play(nIdx);
+      }
+    }
+    final p = side * 0.5; // peek size
+    final h = side + 64;
+    Widget peek(String? title, VoidCallback? go, bool left) {
+      return Positioned(
+        left: left ? -p * 0.3 : null,
+        right: left ? null : -p * 0.3,
+        top: (side - p) / 2,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 320),
+          transitionBuilder: (child, anim) => FadeTransition(
+            opacity: anim,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                      begin: Offset(left ? -0.25 : 0.25, 0), end: Offset.zero)
+                  .animate(anim),
+              child: child,
+            ),
+          ),
+          child: title == null
+              ? SizedBox(key: const ValueKey('none'), width: p, height: p)
+              : _PeekRecord(
+                  key: ValueKey('$left$title'),
+                  size: p,
+                  accent: accent,
+                  scheme: scheme,
+                  tooltip: left ? 'Previous · $title' : 'Next · $title',
+                  onTap: go,
+                ),
+        ),
+      );
+    }
+
+    Widget name(String? title, String? by, bool left) => Expanded(
+          child: AnimatedOpacity(
+            opacity: title == null ? 0 : 1,
+            duration: const Duration(milliseconds: 220),
+            child: Column(
+              crossAxisAlignment:
+                  left ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title == null
+                      ? ''
+                      : (left ? '‹  $title' : '$title  ›'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: left ? TextAlign.left : TextAlign.right,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurface.withAlpha(150)),
+                ),
+                if (by != null && by.isNotEmpty)
+                  Text('added by $by',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 10.5, color: accent)),
+              ],
+            ),
+          ),
+        );
+
+    // A window of up to five dots around the current song + "12 / 240".
+    Widget dots() {
+      if (total < 2) return const SizedBox.shrink();
+      final n = total < 5 ? total : 5;
+      var first = place - 1 - n ~/ 2;
+      first = first.clamp(0, total - n).toInt();
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = first; i < first + n; i++)
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: i == place - 1 ? 16 : 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: i == place - 1 ? accent : accent.withAlpha(60),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text('$place / $total',
+              style: TextStyle(
+                  fontSize: 10.5,
+                  color: scheme.onSurface.withAlpha(120),
+                  fontFeatures: const [FontFeature.tabularFigures()])),
+        ],
+      );
+    }
+
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.arrowLeft): () => goPrev?.call(),
+        const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
+            goNext?.call(),
+      },
+      child: Focus(
+        autofocus: true,
+        child: SizedBox(
+          width: width,
+          height: h,
+          child: Column(
+            children: [
+              SizedBox(
+                height: side,
+                child: Stack(
+                  clipBehavior: Clip.hardEdge,
+                  alignment: Alignment.center,
+                  children: [
+                    peek(prevTitle, goPrev, true),
+                    peek(nextTitle, goNext, false),
+                    disc,
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    name(prevTitle, prevBy, true),
+                    const SizedBox(width: 12),
+                    dots(),
+                    const SizedBox(width: 12),
+                    name(nextTitle, nextBy, false),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _wrapDisc(double side, Color accent, bool isDark, StateSetter setFull,
       {required Widget child, bool roundRing = true, VoidCallback? onTap}) {
     return GestureDetector(

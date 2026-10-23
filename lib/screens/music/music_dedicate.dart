@@ -338,3 +338,86 @@ class _DedicateSheetState extends State<_DedicateSheet> {
     );
   }
 }
+
+/// A smaller, faded record peeking in at the edge of the wide Now Playing
+/// stage. Hover lifts it; click skips to it.
+class _PeekRecord extends StatefulWidget {
+  const _PeekRecord({
+    super.key,
+    required this.size,
+    required this.accent,
+    required this.scheme,
+    required this.tooltip,
+    this.onTap,
+  });
+
+  final double size;
+  final Color accent;
+  final ColorScheme scheme;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  @override
+  State<_PeekRecord> createState() => _PeekRecordState();
+}
+
+class _PeekRecordState extends State<_PeekRecord> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final a = widget.accent;
+    final dark = widget.scheme.brightness == Brightness.dark;
+    final s = widget.size;
+    return Tooltip(
+      message: widget.tooltip,
+      child: MouseRegion(
+        cursor: widget.onTap == null
+            ? SystemMouseCursors.basic
+            : SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedScale(
+            scale: _hover ? 1.06 : 1.0,
+            duration: const Duration(milliseconds: 180),
+            child: AnimatedOpacity(
+              opacity: _hover ? 0.9 : 0.5,
+              duration: const Duration(milliseconds: 180),
+              child: Container(
+                width: s,
+                height: s,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    center: const Alignment(-0.3, -0.35),
+                    colors: [
+                      Color.lerp(a, Colors.white, dark ? 0.15 : 0.35)!,
+                      a,
+                      Color.lerp(a, Colors.black, 0.25)!,
+                    ],
+                    stops: const [0.0, 0.6, 1.0],
+                  ),
+                  border: Border.all(
+                      color: Colors.white.withValues(alpha: dark ? 0.15 : 0.7),
+                      width: s * 0.035),
+                  boxShadow: [
+                    BoxShadow(
+                      color: a.withValues(alpha: _hover ? 0.35 : 0.18),
+                      blurRadius: _hover ? 20 : 12,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+                child: Icon(Icons.music_note_rounded,
+                    color: Colors.white.withValues(alpha: 0.9),
+                    size: s * 0.38),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

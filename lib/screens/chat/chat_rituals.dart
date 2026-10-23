@@ -274,7 +274,7 @@ extension _ChatRituals on _ChatPageState {
         scheme: scheme,
         isDark: isDark,
         icon: Icons.nightlight_round,
-        label: 'Send ${widget.friendName.split(' ').first} a good night 🌙',
+        label: 'Send ${widget.friendName.split(' ').first} a good night',
         onTap: _startGoodNight,
         onClose: _dismissGoodNight,
       ));
@@ -284,7 +284,7 @@ extension _ChatRituals on _ChatPageState {
         scheme: scheme,
         isDark: isDark,
         icon: Icons.favorite_rounded,
-        label: 'Happy anniversary 💞 — send a heart?',
+        label: 'Happy anniversary — send a heart?',
         onTap: () {
           rebuildWith(() {
             _annivToday = false;
@@ -323,8 +323,8 @@ extension _ChatRituals on _ChatPageState {
         isDark: isDark,
         icon: Icons.auto_awesome_rounded,
         label: years == 1
-            ? 'On this day, 1 year ago ✨'
-            : 'On this day, $years years ago ✨',
+            ? 'On this day, 1 year ago'
+            : 'On this day, $years years ago',
         onTap: () {
           rebuildWith(() => _memoryDoneToday = true);
           _markRitual('otd_done_$_activeConvKey');

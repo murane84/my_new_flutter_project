@@ -120,18 +120,26 @@ class ContactNames {
         _loading = null; // not granted yet — retry later
         return;
       }
+      // Build the map fresh, then swap it in — so a DELETED contact (or a
+      // number now saved under someone else) stops showing its old name.
+      final fresh = <String, String>{};
       for (final c in contacts) {
         final name = c.displayName.trim();
         if (name.isEmpty) continue;
         for (final p in c.phones) {
           final d = _digits(p.number);
           if (d.length < 6) continue;
-          _byKey[d] = name;
+          fresh[d] = name;
           if (d.length >= 9) {
-            _byKey[d.substring(d.length - 9)] = name;
+            fresh[d.substring(d.length - 9)] = name;
           }
         }
       }
+      _byKey
+        ..clear()
+        ..addAll(fresh);
+      // A number that wasn't known may be now — let it be checked again.
+      _missed.clear();
       _sig = _signatureOf(contacts);
       _loaded = true;
       _persist();
@@ -269,8 +277,38 @@ class ContactNames {
     if (d.length < 6) return null;
     final hit = _byKey[d];
     if (hit != null) return hit;
-    if (d.length >= 9) return _byKey[d.substring(d.length - 9)];
-    return null;
+    final tail = d.length >= 9 ? _byKey[d.substring(d.length - 9)] : null;
+    if (tail == null && d.length >= 9) _onMiss(d);
+    return tail;
+  }
+
+  // ── On-demand look-up for numbers we don't know yet ─────────────────────
+  // The launch check only runs once. If a screen asks about a number that
+  // isn't in the snapshot (a contact saved while the app is open, a new
+  // person writing in), do ONE light "did the phone book change?" check in
+  // the background — throttled, never a full read unless something changed.
+  final Set<String> _missed = {};
+  DateTime? _lastMissCheck;
+  bool _missCheckQueued = false;
+  static const Duration _missEvery = Duration(minutes: 10);
+
+  void _onMiss(String digits) {
+    if (!_mobile || !_loaded) return;
+    // Each unknown number triggers at most one check per session.
+    if (!_missed.add(digits)) return;
+    if (_missCheckQueued) return;
+    final last = _lastMissCheck;
+    if (last != null && DateTime.now().difference(last) < _missEvery) return;
+    _missCheckQueued = true;
+    // Off the build: a short beat so a list asking about many numbers at
+    // once coalesces into a single check.
+    Future.delayed(const Duration(seconds: 2), () async {
+      _lastMissCheck = DateTime.now();
+      try {
+        await _refreshIfChanged(); // light id+name signature; full read only on change
+      } catch (_) {}
+      _missCheckQueued = false;
+    });
   }
 
   /// True only when this number is saved under a REAL phone-book name — not

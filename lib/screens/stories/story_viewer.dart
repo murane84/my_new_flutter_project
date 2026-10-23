@@ -59,6 +59,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   bool _paused = false;
   bool _deleting = false;
   bool _videoError = false; // clip couldn't play here (e.g. desktop)
+  // The timer waits for the content: while a status's photo / video / art is
+  // still downloading, a spinner shows and the bar holds at zero. Stale loads
+  // (the user already tapped on) are dropped by the generation counter.
+  bool _loading = false;
+  int _gen = 0;
+  File? _photoFile;
 
   // Reply to someone else's status — it lands in your DM with them, quoting
   // the status. Typing pauses the story; leaving the field resumes it.
@@ -426,6 +432,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     _disposeVideo();
     _paused = false;
     _videoError = false;
+    final gen = ++_gen;
+    _photoFile = null;
+    _loading = false;
 
     // Mark seen (not for my own stories — the backend ignores self-views).
     final item = _story;
@@ -470,27 +479,90 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           ? VideoPlayerController.file(cachedVid)
           : VideoPlayerController.networkUrl(uri, httpHeaders: hdrs);
       _video = ctrl;
+      if (mounted) setState(() => _loading = true);
       try {
-        await ctrl.initialize();
-        if (!mounted || _video != ctrl) return;
+        await ctrl.initialize().timeout(const Duration(seconds: 25));
+        if (!mounted || _video != ctrl || gen != _gen) return;
+        _loading = false;
         _barTick = ctrl;
         ctrl.addListener(_onVideoTick);
-        await ctrl.play();
-        setState(() {});
+        if (!_paused) await ctrl.play();
+        if (mounted) setState(() {});
       } catch (_) {
         // Video couldn't play here (e.g. Windows desktop has no video_player
         // backend) — show a fallback card on a timed advance so we don't stall.
-        if (!mounted) return;
+        if (!mounted || gen != _gen) return;
+        _loading = false;
         _videoError = true;
         _barTick = _progress;
-        _progress.forward(from: 0);
+        if (!_paused) _progress.forward(from: 0);
         setState(() {});
       }
     } else {
+      // Photo / music / sticker: fetch and decode what it shows FIRST, so
+      // the 5s timer only starts once the status is actually on screen.
+      final needsLoad = (item.mediaUrl != null && !item.isText) ||
+          ((item.musicArtUrl ?? '').isNotEmpty);
+      if (needsLoad) {
+        setState(() => _loading = true);
+        await _prepareStill(item);
+        if (!mounted || gen != _gen) return;
+        _loading = false;
+      }
       _barTick = _progress;
-      _progress.forward(from: 0);
+      if (!_paused) _progress.forward(from: 0);
       setState(() {});
     }
+    _prefetchNext();
+  }
+
+  /// While this status plays, quietly download the next one's photo so the
+  /// following tap usually opens instantly (videos stream; text needs none).
+  void _prefetchNext() {
+    if (kIsWeb) return;
+    StoryItem? next;
+    if (_s < _group.stories.length - 1) {
+      next = _group.stories[_s + 1];
+    } else if (_g < widget.groups.length - 1) {
+      final g = widget.groups[_g + 1];
+      if (g.stories.isNotEmpty) next = g.stories[_firstUnseen(g)];
+    }
+    if (next == null || !next.isPhoto || next.mediaUrl == null) return;
+    final url = _absUrl(next.mediaUrl!);
+    MediaStore.instance.getFile(url, mediaAuthHeaders(url)).ignore();
+  }
+
+  /// Downloads (cache-first) and decodes the image a still status shows.
+  /// Never throws; gives up after a timeout so a dead link can't stall the
+  /// viewer (the content then falls back to its normal loading/error view).
+  Future<void> _prepareStill(StoryItem item) async {
+    try {
+      if (item.mediaUrl != null && !item.isMusic && !item.isSticker) {
+        final url = _absUrl(item.mediaUrl!);
+        final headers = mediaAuthHeaders(url);
+        if (!kIsWeb) {
+          final f = await MediaStore.instance
+              .getFile(url, headers)
+              .timeout(const Duration(seconds: 20));
+          if (f != null) {
+            if (!mounted) return;
+            await precacheImage(FileImage(f), context);
+            _photoFile = f;
+            return;
+          }
+        }
+        if (!mounted) return;
+        await precacheImage(authNetworkImageProvider(url, headers), context)
+            .timeout(const Duration(seconds: 20));
+        return;
+      }
+      final art = item.musicArtUrl;
+      if (art != null && art.isNotEmpty) {
+        if (!mounted) return;
+        await precacheImage(NetworkImage(art), context)
+            .timeout(const Duration(seconds: 10));
+      }
+    } catch (_) {}
   }
 
   void _onVideoTick() {
@@ -550,6 +622,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   void _resume() {
     if (!_paused) return;
     _paused = false;
+    // Still loading: the load itself starts the timer when it's ready.
+    if (_loading) return;
     if (_video != null) {
       _video!.play();
     } else {
@@ -640,6 +714,15 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           fit: StackFit.expand,
           children: [
             _content(item),
+            if (_loading)
+              const Center(
+                child: SizedBox(
+                  width: 34,
+                  height: 34,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2.6),
+                ),
+              ),
             // Dark gradient top + bottom for legible chrome.
             const DecoratedBox(
               decoration: BoxDecoration(
@@ -724,6 +807,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           ),
         );
       }
+      if (_loading) return const SizedBox.shrink(); // the spinner covers it
       return const Center(
         child: CircularProgressIndicator(color: Colors.white),
       );
@@ -733,6 +817,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     if (item.mediaUrl != null) {
       final url = _absUrl(item.mediaUrl!);
       final headers = mediaAuthHeaders(url);
+      if (_loading) return const SizedBox.shrink(); // the spinner covers it
+      final ready = _photoFile;
+      if (ready != null) {
+        return Center(child: Image.file(ready, fit: BoxFit.contain));
+      }
       if (kIsWeb) {
         return Center(
           child:

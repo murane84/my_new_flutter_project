@@ -282,7 +282,7 @@ class DownloadManager with WidgetsBindingObserver {
       }
       try {
         final status = await _streamOnce(job, part, headers, expectedTotal);
-        if (job.cancelled) return cancelledResult();
+        if (job.cancelled) return await cancelledResult();
         if (status == 200) {
           try {
             if (await job.dest.exists()) await job.dest.delete();
@@ -307,7 +307,7 @@ class DownloadManager with WidgetsBindingObserver {
         // Other HTTP errors: retry.
       } catch (_) {
         // Network drop: keep the .part and resume on the next attempt.
-        if (job.cancelled) return cancelledResult();
+        if (job.cancelled) return await cancelledResult();
       }
     }
     return const DownloadResult(DownloadOutcome.failed);

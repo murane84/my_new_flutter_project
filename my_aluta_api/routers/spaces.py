@@ -2281,7 +2281,11 @@ def _capsule_dict(db: Session, c: LoveCapsule, current_user_id: int) -> dict:
         "opened": c.opened_at is not None,
         "opened_at": c.opened_at.isoformat() if c.opened_at else None,
     }
-    if not locked:
+    # The creator may always see what they sealed (a peek before the moment);
+    # the partner stays fully locked until unlock_at.
+    if locked and c.created_by == current_user_id:
+        out["preview"] = True
+    if not locked or c.created_by == current_user_id:
         out.update({
             "track_title": c.track_title,
             "track_artist": c.track_artist,

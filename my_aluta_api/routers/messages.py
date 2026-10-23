@@ -555,6 +555,41 @@ def heart_opened(
     return validated
 
 
+@router.get("/{message_id}/heart/sealed")
+def heart_sealed_preview(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The SENDER peeks at their own timed heart before its moment (they wrote
+    it — hiding it from them protects nothing). Everyone else: 403. Returns
+    the note + media fields, or the live ones once it has unsealed."""
+    import json
+    m = _heart_or_404(db, message_id, current_user.id)
+    if int(m.sender_id) != int(current_user.id):
+        raise HTTPException(status_code=403, detail="Only the sender can peek")
+    if not hearts.is_sealed(m):
+        return {
+            "sealed": False, "content": m.content or "",
+            "media_url": m.media_url, "media_name": m.media_name,
+            "media_mime": m.media_mime, "media_size": m.media_size,
+            "media_duration": m.media_duration,
+        }
+    media = {}
+    if getattr(m, "sealed_media", None):
+        try:
+            media = json.loads(m.sealed_media) or {}
+        except Exception:
+            media = {}
+    return {
+        "sealed": True,
+        "content": m.sealed_content or "",
+        "unlock_at": m.unlock_at.isoformat() if m.unlock_at else None,
+        **{c: media.get(c) for c in ("media_url", "media_name", "media_mime",
+                                     "media_size", "media_duration")},
+    }
+
+
 @router.post("/{message_id}/heart/unseal", response_model=schemas.MessageWithSender)
 def heart_unseal(
     message_id: int,

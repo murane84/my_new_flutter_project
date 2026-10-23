@@ -63,6 +63,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   // still downloading, a spinner shows and the bar holds at zero. Stale loads
   // (the user already tapped on) are dropped by the generation counter.
   bool _loading = false;
+  // A sticker / song art that didn't finish within its wait: the timer then
+  // starts the moment the image's first frame is actually painted.
+  bool _awaitArt = false;
   int _gen = 0;
   File? _photoFile;
 
@@ -435,6 +438,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     final gen = ++_gen;
     _photoFile = null;
     _loading = false;
+    _awaitArt = false;
 
     // Mark seen (not for my own stories — the backend ignores self-views).
     final item = _story;
@@ -505,8 +509,19 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           ((item.musicArtUrl ?? '').isNotEmpty);
       if (needsLoad) {
         setState(() => _loading = true);
-        await _prepareStill(item);
+        final ready = await _prepareStill(item);
         if (!mounted || gen != _gen) return;
+        final hasArt = (item.musicArtUrl ?? '').startsWith('http');
+        if (!ready && hasArt && (item.isSticker || item.isMusic)) {
+          // Slow GIF: keep the spinner and the bar at zero; the image's first
+          // painted frame starts the timer (see _artImage). Hard cap so a
+          // dead link can't hold the viewer forever.
+          _awaitArt = true;
+          setState(() {});
+          Future.delayed(const Duration(seconds: 20), () => _artReady(gen));
+          _prefetchNext();
+          return;
+        }
         _loading = false;
       }
       _barTick = _progress;
@@ -516,10 +531,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     _prefetchNext();
   }
 
-  /// While this status plays, quietly download the next one's photo so the
-  /// following tap usually opens instantly (videos stream; text needs none).
+  /// While this status plays, quietly download the next one's photo and warm
+  /// upcoming stickers / song art, so the following taps usually open
+  /// instantly (videos stream; text needs none).
   void _prefetchNext() {
-    if (kIsWeb) return;
     StoryItem? next;
     if (_s < _group.stories.length - 1) {
       next = _group.stories[_s + 1];
@@ -527,7 +542,23 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       final g = widget.groups[_g + 1];
       if (g.stories.isNotEmpty) next = g.stories[_firstUnseen(g)];
     }
-    if (next == null || !next.isPhoto || next.mediaUrl == null) return;
+    // Stickers and song art: warm every one left in this person's statuses
+    // plus the next one, so GIFs are usually decoded before they're reached
+    // (the image cache drops duplicates).
+    final warm = <StoryItem>[
+      for (var i = _s + 1; i < _group.stories.length; i++) _group.stories[i],
+      ?next,
+    ];
+    for (final it in warm) {
+      final art = it.musicArtUrl;
+      if (art != null && art.startsWith('http') && mounted) {
+        precacheImage(NetworkImage(art), context).ignore();
+      }
+    }
+    // Photos go through the on-device cache (native only).
+    if (kIsWeb || next == null || !next.isPhoto || next.mediaUrl == null) {
+      return;
+    }
     final url = _absUrl(next.mediaUrl!);
     MediaStore.instance.getFile(url, mediaAuthHeaders(url)).ignore();
   }
@@ -535,7 +566,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   /// Downloads (cache-first) and decodes the image a still status shows.
   /// Never throws; gives up after a timeout so a dead link can't stall the
   /// viewer (the content then falls back to its normal loading/error view).
-  Future<void> _prepareStill(StoryItem item) async {
+  Future<bool> _prepareStill(StoryItem item) async {
     try {
       if (item.mediaUrl != null && !item.isMusic && !item.isSticker) {
         final url = _absUrl(item.mediaUrl!);
@@ -548,22 +579,51 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
             if (!mounted) return;
             await precacheImage(FileImage(f), context);
             _photoFile = f;
-            return;
+            return true;
           }
         }
-        if (!mounted) return;
+        if (!mounted) return false;
         await precacheImage(authNetworkImageProvider(url, headers), context)
             .timeout(const Duration(seconds: 20));
-        return;
+        return true;
       }
       final art = item.musicArtUrl;
       if (art != null && art.isNotEmpty) {
-        if (!mounted) return;
+        if (!mounted) return false;
+        // Stickers are often multi-MB GIFs — allow them as long as a video.
         await precacheImage(NetworkImage(art), context)
-            .timeout(const Duration(seconds: 10));
+            .timeout(const Duration(seconds: 25));
       }
-    } catch (_) {}
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
+
+  /// Starts the timer for a status that was waiting on its sticker / art.
+  void _artReady(int gen) {
+    if (!mounted || gen != _gen || !_awaitArt) return;
+    _awaitArt = false;
+    _loading = false;
+    _barTick = _progress;
+    if (!_paused) _progress.forward(from: 0);
+    setState(() {});
+  }
+
+  /// Sticker / song art that reports its first painted frame, so a status
+  /// still waiting on it ([_awaitArt]) starts its timer exactly then.
+  Widget _artImage(String art) => Image.network(
+        art,
+        fit: BoxFit.contain,
+        frameBuilder: (ctx, child, frame, sync) {
+          if (frame != null && _awaitArt) {
+            final g = _gen;
+            WidgetsBinding.instance
+                .addPostFrameCallback((_) => _artReady(g));
+          }
+          return child;
+        },
+      );
 
   void _onVideoTick() {
     final v = _video;
@@ -951,7 +1011,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                 width: 260,
                 height: 260,
                 child: hasArt
-                    ? Image.network(art, fit: BoxFit.contain)
+                    ? _artImage(art)
                     : Icon(Icons.gif_box_rounded, color: ink, size: 96),
               ),
               if ((item.caption ?? '').isNotEmpty) ...[
@@ -996,7 +1056,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                 width: 180,
                 height: 180,
                 child: hasArt
-                    ? Image.network(art, fit: BoxFit.contain)
+                    ? _artImage(art)
                     : Container(
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(20),

@@ -576,7 +576,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
               .getFile(url, headers)
               .timeout(const Duration(seconds: 20));
           if (f != null) {
-            if (!mounted) return;
+            if (!mounted) return false;
             await precacheImage(FileImage(f), context);
             _photoFile = f;
             return true;

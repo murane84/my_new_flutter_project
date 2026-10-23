@@ -3,7 +3,7 @@ from sqlalchemy import (
     UniqueConstraint, LargeBinary, Date
 )
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, deferred
 from sqlalchemy.sql import func
 from datetime import datetime, timezone
 
@@ -297,7 +297,11 @@ class MediaAsset(Base):
     # the server once the recipient has cached them locally (or after the TTL),
     # leaving this row as a lightweight reference. Non-ephemeral assets keep
     # their bytes for the life of the row.
-    data = Column(LargeBinary, nullable=True)           # raw bytes (None once purged)
+    # DEFERRED: the bytes load only when code actually reads `.data` (serving
+    # the file). Every other lookup — permission checks, purge sweeps, acks —
+    # used to pull the whole blob (a 90 MB APK per row, dozens per chat open),
+    # which ran Postgres out of memory and crash-looped it ("in recovery mode").
+    data = deferred(Column(LargeBinary, nullable=True))  # raw bytes (None once purged)
     mime = Column(String, nullable=True)
     name = Column(String, nullable=True)
     size = Column(Integer, nullable=True)

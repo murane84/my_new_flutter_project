@@ -26,6 +26,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'api_service.dart';
 import 'chat/song_cache.dart';
+import '../services/song_library.dart';
 import 'token_helper.dart';
 import 'websocket_manager.dart';
 import '../utils/toast_helper.dart';
@@ -447,6 +448,8 @@ class _ChatPageState extends State<ChatPage>
   _HeartAttach? _heartAttach;
   int? _heartFor;
   String? _heartForName;
+  // "Let them save it" — off = the receiver can only view the media.
+  bool _heartSave = false;
   // Server ids of hearts I just sent → their bubble plays the seal stamp once.
   final Set<String> _freshHearts = {};
   // Reply-author memory: quote first-line → {id, u(sername), p(hone)} of the
@@ -1594,6 +1597,7 @@ class _ChatPageState extends State<ChatPage>
     final unlockAt = heart ? _heartUnlockAt : null;
     final heartFor = (heart && _isGroup) ? _heartFor : null;
     final heartForName = heartFor == null ? null : _heartForName;
+    final heartSave = (heart && attach != null && _heartSave) ? true : null;
     _markActivity();
     _ctrl.clear();
     setState(() {
@@ -1604,6 +1608,7 @@ class _ChatPageState extends State<ChatPage>
       _heartAttach = null;
       _heartFor = null;
       _heartForName = null;
+      _heartSave = false;
     });
     _saveDraft(); // text now empty → clears the stored draft
     if (_isGroup) setState(_closeMentionPicker);
@@ -1618,6 +1623,7 @@ class _ChatPageState extends State<ChatPage>
         optimistic['heart_for_name'] = heartForName;
       }
       if (attach != null) {
+        optimistic['heart_save'] = heartSave == true;
         optimistic['media_mime'] = attach.mime;
         optimistic['media_name'] = attach.name;
         optimistic['media_duration'] = attach.durationMs;
@@ -1655,6 +1661,7 @@ class _ChatPageState extends State<ChatPage>
             heartMood: heartMood,
             unlockAt: unlockAt,
             heartFor: heartFor,
+            heartSave: heartSave,
             mediaUrl: up?['url'] as String?,
             mediaName: up == null ? null : (up!['name'] ?? attach?.name) as String?,
             mediaMime: up == null ? null : (up!['mime'] ?? attach?.mime) as String?,
@@ -4196,7 +4203,7 @@ class _ChatPageState extends State<ChatPage>
                   // Clip length → the letter stays open long enough for it
                   // (a clip without a known length gets a full 30 s).
                   mediaMs: switch (_heartMediaKind(msg)) {
-                    'video' || 'voice' =>
+                    'video' || 'voice' || 'song' =>
                       (msg['media_duration'] as num?)?.toInt() ?? 30000,
                     _ => null,
                   },
@@ -5449,7 +5456,9 @@ class _ChatPageState extends State<ChatPage>
                                       // clutters the compact field, so there
                                       // we show a plain "Message" placeholder.
                                       hintText: _heartMode
-                                          ? 'Secret message…'
+                                          ? (_heartAttach != null
+                                              ? 'Add a caption…'
+                                              : 'Secret message…')
                                           : 'Message',
                                       hintMaxLines: 1,
                                       hintStyle: TextStyle(

@@ -353,12 +353,15 @@ class _VoiceNotePlayer extends StatefulWidget {
     required this.durationMs,
     required this.accent,
     required this.onColor,
+    this.onPlaying,
   });
 
   final String url;
   final int durationMs;
   final Color accent;
   final Color onColor;
+  // Playing / stopped — lets an opened heart letter hold its reseal countdown.
+  final ValueChanged<bool>? onPlaying;
 
   @override
   State<_VoiceNotePlayer> createState() => _VoiceNotePlayerState();
@@ -417,12 +420,15 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
         _player.pause();
         _player.seek(Duration.zero);
       }
+      widget.onPlaying?.call(s.playing &&
+          s.processingState != ja.ProcessingState.completed);
       setState(() {});
     });
   }
 
   @override
   void dispose() {
+    widget.onPlaying?.call(false); // a letter mid-countdown resumes
     _speedN.removeListener(_onSpeed);
     if (identical(_active, this)) _active = null;
     _posSub?.cancel();
@@ -700,7 +706,8 @@ class _SongBubble extends StatefulWidget {
     required this.isMe,
     required this.accent,
     required this.onColor,
-    required this.onDownload,
+    this.onDownload,
+    this.onPlaying,
   });
 
   final String? assetId;
@@ -713,7 +720,10 @@ class _SongBubble extends StatefulWidget {
   final Color onColor;
   // Save the song out to the device's own storage (Files / Music) — handled by
   // the chat page, which reads from the local cache (server copy may be purged).
-  final VoidCallback onDownload;
+  // Null = saving isn't offered (a heart whose sender kept it view-only).
+  final VoidCallback? onDownload;
+  // Playing / stopped — lets an opened heart letter hold its reseal countdown.
+  final ValueChanged<bool>? onPlaying;
 
   @override
   State<_SongBubble> createState() => _SongBubbleState();
@@ -750,6 +760,8 @@ class _SongBubbleState extends State<_SongBubble> {
         _player.pause();
         _player.seek(Duration.zero);
       }
+      widget.onPlaying?.call(s.playing &&
+          s.processingState != ja.ProcessingState.completed);
       setState(() {});
     });
     _prime();
@@ -781,6 +793,7 @@ class _SongBubbleState extends State<_SongBubble> {
 
   @override
   void dispose() {
+    widget.onPlaying?.call(false); // a letter mid-countdown resumes
     _posSub?.cancel();
     _durSub?.cancel();
     _stateSub?.cancel();
@@ -958,6 +971,7 @@ class _SongBubbleState extends State<_SongBubble> {
                 ),
               ),
               // Save the song to the device's own storage.
+              if (widget.onDownload != null)
               Tooltip(
                 message: 'Save to device',
                 child: IconButton(

@@ -1280,6 +1280,7 @@ class ApiService {
     String? heartMood, // secret heart: love|miss|sorry|thanks|proud
     DateTime? unlockAt, // secret heart: sealed until this moment
     int? heartFor, // group heart meant for ONE member (only they can open)
+    bool? heartSave, // sender lets the receiver save the heart's media
     String? poll, // group poll spec JSON {q, options, multi}
   }) async {
     try {
@@ -1304,6 +1305,7 @@ class ApiService {
         'heart_mood': ?heartMood,
         if (unlockAt != null) 'unlock_at': unlockAt.toUtc().toIso8601String(),
         'heart_for': ?heartFor,
+        'heart_save': ?heartSave,
         'poll': ?poll,
       };
       if (conversationId == null) payload['receiver_id'] = receiverId;

@@ -196,6 +196,21 @@ String heartOpensLabel(DateTime when, {String prefix = 'Opens '}) {
   return (icon: Icons.favorite_border_rounded, text: 'Not opened', warm: false);
 }
 
+/// How many heart clips / songs are playing right now. An opened letter holds
+/// its reseal countdown while this is above zero.
+final ValueNotifier<int> heartLetterPlaying = ValueNotifier<int>(0);
+final Map<String, bool> _heartPlayingNow = {};
+
+/// A player's "playing / stopped" callback for heart media [key] (one per
+/// heart). Repeated reports of the same state count once.
+ValueChanged<bool> heartPlaybackReporter(String key) => (playing) {
+      final was = _heartPlayingNow[key] ?? false;
+      if (was == playing) return;
+      _heartPlayingNow[key] = playing;
+      final n = heartLetterPlaying.value + (playing ? 1 : -1);
+      heartLetterPlaying.value = n < 0 ? 0 : n;
+    };
+
 /// Compact countdown: "2d 4h", "3h 12m", "12m", "45s".
 String _countdown(Duration d) {
   if (d.isNegative) return '0s';
@@ -1681,14 +1696,33 @@ class _HeartGenieState extends State<_HeartGenie>
     super.initState();
     _drain.duration = _window;
     _armIdle();
+    heartLetterPlaying.addListener(_onMediaPlaying);
     HeartLock.instance.relockEpoch.addListener(_closeNow);
     HeartLock.instance.noteOpened(); // screenshot-proof while the letter is up
   }
 
   void _armIdle() {
     _idle?.cancel();
+    if (heartLetterPlaying.value > 0) {
+      // Something inside is playing — the countdown waits for it.
+      _drain.value = 0;
+      _drain.stop();
+      return;
+    }
     _idle = Timer(_window, _idleExpired);
     _drain.forward(from: 0);
+  }
+
+  /// A voice clip or song inside is playing: hold the countdown (it can run
+  /// longer than any window); when it stops, the full window starts again.
+  void _onMediaPlaying() {
+    if (_closing) return;
+    if (heartLetterPlaying.value > 0) {
+      _idle?.cancel();
+      _drain.stop();
+    } else {
+      _armIdle();
+    }
   }
 
   /// The countdown ran out. If the photo / clip is open full-screen on top of
@@ -1724,6 +1758,7 @@ class _HeartGenieState extends State<_HeartGenie>
   void dispose() {
     HeartLock.instance.noteClosed();
     HeartLock.instance.relockEpoch.removeListener(_closeNow);
+    heartLetterPlaying.removeListener(_onMediaPlaying);
     _idle?.cancel();
     _drain.dispose();
     _beat.dispose();

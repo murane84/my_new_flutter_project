@@ -15,4 +15,10 @@ class SessionEvents {
   }
 
   void reset() => expired.value = false;
+
+  /// Bumped when the server refuses a keepsake because this couple's Our Space
+  /// storage is full (HTTP 413). The app shows one friendly toast for it.
+  final ValueNotifier<int> spaceFull = ValueNotifier<int>(0);
+
+  void markSpaceFull() => spaceFull.value++;
 }

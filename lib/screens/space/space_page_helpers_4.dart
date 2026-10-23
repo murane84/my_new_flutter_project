@@ -765,9 +765,9 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
             // opaque surface. Taller cap so portrait media still reads.
             constraints: const BoxConstraints(
                 maxHeight: 300, minWidth: double.infinity),
-            child: authNetworkImage(
+            // Saved to the phone the first time it's seen (KeepsakePhoto).
+            child: KeepsakePhoto(
               url: url,
-              headers: mediaAuthHeaders(url),
               fit: BoxFit.contain,
               cacheWidth: 1200,
             ),
@@ -789,11 +789,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
               child: InteractiveViewer(
                 minScale: 0.8,
                 maxScale: 4,
-                child: authNetworkImage(
-                  url: url,
-                  headers: mediaAuthHeaders(url),
-                  fit: BoxFit.contain,
-                ),
+                child: KeepsakePhoto(url: url, fit: BoxFit.contain),
               ),
             ),
             Positioned(

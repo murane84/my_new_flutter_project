@@ -36,6 +36,7 @@ import 'services/fcm_service.dart';
 import 'services/metadata_overrides.dart';
 import 'services/live_session_service.dart' show liveHostNotify;
 import 'utils/toast_helper.dart';
+import 'utils/session_events.dart';
 import 'utils/popup_shell.dart' show GlobalTapOrigin;
 import 'screens/token_helper.dart' show warmMediaAuth;
 import 'state/playback_state.dart' show providerContainer;
@@ -43,6 +44,7 @@ import 'services/web_update_checker.dart';
 import 'utils/readable.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+bool _spaceFullHooked = false;
 final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
 
@@ -748,6 +750,19 @@ class SplashScreenState extends State<SplashScreen>
     // Route host-facing live-session notifications (e.g. "X left the session")
     // through the app's global overlay, so they show even when the Listen
     // Together popup is minimised. Set once; survives this screen's disposal.
+    // Our Space storage full (server said 413 on a keepsake): one clear toast.
+    // Hooked once per app run (the splash can be shown again after sign-out).
+    if (!_spaceFullHooked) {
+      _spaceFullHooked = true;
+      SessionEvents.instance.spaceFull.addListener(() {
+        final ctx = navigatorKey.currentContext;
+        if (ctx != null) {
+          showToast(ctx,
+              'Our Space is full — remove a few moments to keep new ones',
+              type: ToastType.error, duration: const Duration(seconds: 4));
+        }
+      });
+    }
     liveHostNotify = (message) {
       final ctx = navigatorKey.currentContext;
       if (ctx != null) showToast(ctx, message, type: ToastType.info);

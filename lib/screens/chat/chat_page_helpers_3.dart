@@ -345,7 +345,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
             showToast(
                 context,
                 res.outcome == DownloadOutcome.gone
-                    ? 'File is no longer available'
+                    ? 'This file has left the server (24 h) — ask to resend'
                     : 'Download paused — it continues from where it stopped',
                 type: ToastType.error);
             // Gone from the server → whoever has it can send it again.
@@ -575,8 +575,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
         if (mounted) {
           showToast(context,
               type == 'song'
-                  ? 'Song is no longer available'
-                  : 'File is no longer available',
+                  ? 'This song has left the server (24 h) — ask to resend'
+                  : 'This file has left the server (24 h) — ask to resend',
               type: ToastType.error);
           _offerResendPill(msg);
         }

@@ -43,6 +43,7 @@ import '../theme/aluta_palette.dart';
 import '../utils/readable.dart';
 import '../utils/marquee_text.dart';
 import '../services/contact_names.dart';
+import '../widgets/keepsake_photo.dart';
 
 part 'space/space_moment_composer.dart'; // moment composer + add-to-playlist sheet
 part 'space/space_edit_sheet.dart'; // edit-space sheet + wallpaper picker

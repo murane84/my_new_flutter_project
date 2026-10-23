@@ -1794,6 +1794,7 @@ class ApiService {
           'caption': caption,
         }),
       );
+      if (resp.statusCode == 413) SessionEvents.instance.markSpaceFull();
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final data = jsonDecode(resp.body);
         if (data is Map<String, dynamic>) return data;
@@ -1823,6 +1824,7 @@ class ApiService {
           'caption': ?caption,
         }),
       );
+      if (resp.statusCode == 413) SessionEvents.instance.markSpaceFull();
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final data = jsonDecode(resp.body);
         if (data is Map<String, dynamic>) return data;
@@ -2221,6 +2223,7 @@ class ApiService {
           'voice_note_url': ?voiceNoteUrl,
         }),
       );
+      if (resp.statusCode == 413) SessionEvents.instance.markSpaceFull();
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final d = jsonDecode(resp.body);
         if (d is Map<String, dynamic>) return d;
@@ -2283,6 +2286,7 @@ class ApiService {
           'mode': mode,
         }),
       );
+      if (resp.statusCode == 413) SessionEvents.instance.markSpaceFull();
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final d = jsonDecode(resp.body);
         if (d is Map<String, dynamic>) return d;

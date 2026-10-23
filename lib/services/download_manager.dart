@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../screens/token_helper.dart' show mediaAuthHeaders;
+import '../screens/api_service.dart' show ApiService;
 import 'notif_service.dart'
     show showDownloadProgress, finishDownloadNotif, cancelDownloadNotif;
 
@@ -173,6 +174,14 @@ class DownloadManager with WidgetsBindingObserver {
         await _forget(url);
         await cancelDownloadNotif(url);
         return r;
+      }
+      // Saved on this phone → tell the server, which can then let the file go
+      // (it frees space; a group copy stays for the others until its 24 h).
+      if (r.ok) {
+        final id = RegExp(r'/attachments/([0-9a-fA-F]{32})')
+            .firstMatch(url)
+            ?.group(1);
+        if (id != null) unawaited(ApiService().ackAttachmentCached(id));
       }
       if (notify) {
         if (r.outcome != DownloadOutcome.failed) await _forget(url);

@@ -8,6 +8,7 @@ from fastapi import (
     APIRouter, UploadFile, File, Depends, HTTPException, Response, Request,
 )
 from fastapi.responses import FileResponse
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -29,10 +30,18 @@ VIDEO_MAX_BYTES = 200 * 1024 * 1024  # 200 MB (video — large; client sends big
 # the TTL) — the server stays a relay, not a warehouse.
 FILE_MAX_BYTES = 200 * 1024 * 1024  # 200 MB
 
-# Ephemeral shared songs are purged from the server this long after upload even
-# if the recipient never fetched them (the normal case purges on cache-ack, far
-# sooner). This is the "leave a reference, don't hoard the bytes" TTL.
-EPHEMERAL_TTL = timedelta(days=7)
+# Ephemeral uploads (shared songs, big videos, files like APK/PDF/zip) leave the
+# server this long after upload even if nobody fetched them — the server is a
+# relay, not a warehouse. After that the bubble offers "Ask to resend".
+EPHEMERAL_TTL = timedelta(hours=24)
+# Songs added to Our Playlist ride ephemeral too, but the partner gets longer to
+# open the Space and cache them on their phone.
+PLAYLIST_TTL = timedelta(days=7)
+# After a recipient says "I have it" (POST /attachments/<id>/cached), keep the
+# bytes a little longer so a second device / a failed save can still fetch.
+ACKED_GRACE = timedelta(hours=1)
+# Log a warning when live media bytes pass this (≈60% of a 5 GB volume).
+MEDIA_ALARM_BYTES = int(os.environ.get("MEDIA_ALARM_MB", "3000")) * 1024 * 1024
 
 # Root of on-disk media (legacy /media/audio/* voice notes). Resolved absolute
 # so we can reject path-traversal attempts.
@@ -92,27 +101,43 @@ def _generate_thumb(asset_id: str, data: bytes) -> str | None:
 
 
 def purge_expired_ephemeral(db: Session) -> int:
-    """Null out the bytes of ephemeral assets older than EPHEMERAL_TTL whose
-    data hasn't already been purged. Cheap set-based UPDATE, run opportunistically
-    on write activity (uploads / cache-acks). Best-effort: never raises into the
-    caller. Returns the number of rows purged."""
+    """Null out the bytes of ephemeral assets that are past their life:
+      • acked by the recipient more than ACKED_GRACE ago, or
+      • older than EPHEMERAL_TTL (24 h) — except Our Playlist songs, which get
+        PLAYLIST_TTL (7 days) so the partner has time to open the Space.
+    Set-based SQL (never loads the bytes). Run hourly by the housekeeping loop
+    and opportunistically on uploads / acks. Best-effort: never raises."""
     try:
-        cutoff = datetime.now(timezone.utc) - EPHEMERAL_TTL
         now = datetime.now(timezone.utc)
-        n = (
-            db.query(MediaAsset)
-            .filter(
-                MediaAsset.ephemeral.is_(True),
-                MediaAsset.data.isnot(None),
-                MediaAsset.created_at < cutoff,
-            )
-            .update(
-                {MediaAsset.data: None, MediaAsset.purged_at: now},
-                synchronize_session=False,
-            )
+        res = db.execute(
+            text(
+                """
+                UPDATE media_assets m
+                   SET data = NULL, purged_at = :now
+                 WHERE m.ephemeral
+                   AND m.data IS NOT NULL
+                   -- kept in Our Space → the keepsake owns it (capped there)
+                   AND NOT EXISTS (
+                        SELECT 1 FROM pinned_moments p
+                         WHERE p.ref LIKE '%' || m.id)
+                   AND (
+                        (m.cached_at IS NOT NULL AND m.cached_at < :acked)
+                     OR m.created_at < :playlist
+                     OR (m.created_at < :ttl AND NOT EXISTS (
+                            SELECT 1 FROM playlist_tracks t
+                             WHERE t.audio_url LIKE '%' || m.id))
+                   )
+                """
+            ),
+            {
+                "now": now,
+                "acked": now - ACKED_GRACE,
+                "ttl": now - EPHEMERAL_TTL,
+                "playlist": now - PLAYLIST_TTL,
+            },
         )
         db.commit()
-        return n or 0
+        return res.rowcount or 0
     except Exception as e:  # noqa: BLE001
         print(f"⚠️ purge_expired_ephemeral failed: {e}")
         try:
@@ -120,6 +145,28 @@ def purge_expired_ephemeral(db: Session) -> int:
         except Exception:  # noqa: BLE001
             pass
         return 0
+
+
+def media_housekeeping_once() -> None:
+    """One pass of the hourly media housekeeping (own DB session): purge expired
+    ephemeral bytes, then warn in the logs if live media is getting big."""
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        n = purge_expired_ephemeral(db)
+        live = db.execute(
+            text("SELECT COALESCE(SUM(size), 0) FROM media_assets "
+                 "WHERE data IS NOT NULL")
+        ).scalar() or 0
+        if n:
+            print(f"🧹 media housekeeping: cleared {n} expired file(s)")
+        if live > MEDIA_ALARM_BYTES:
+            print(f"🚨 media storage high: {live // (1024 * 1024)} MB live "
+                  f"(alarm at {MEDIA_ALARM_BYTES // (1024 * 1024)} MB)")
+    except Exception as e:  # noqa: BLE001
+        print(f"⚠️ media housekeeping failed: {e}")
+    finally:
+        db.close()
 
 
 def _owner_of(db: Session, fragment: str, uploader_id):
@@ -519,7 +566,25 @@ def ack_cached(
         is not None
     )
     if not is_recipient:
-        raise HTTPException(status_code=403, detail="Not a recipient of this song")
+        # A GROUP member who downloaded it: fine, but one member's copy must not
+        # delete it for the rest — the 24 h TTL handles group files.
+        in_group = (
+            db.query(Message.id)
+            .join(
+                ConversationMember,
+                ConversationMember.conversation_id == Message.conversation_id,
+            )
+            .filter(
+                Message.media_url.contains(asset_id, autoescape=True),
+                Message.receiver_id.is_(None),
+                ConversationMember.user_id == current_user.id,
+            )
+            .first()
+            is not None
+        )
+        if in_group:
+            return {"ok": True, "purged": False}
+        raise HTTPException(status_code=403, detail="Not a recipient of this file")
 
     # Opportunistic TTL sweep while we're here (recipient activity).
     purge_expired_ephemeral(db)
@@ -527,11 +592,16 @@ def ack_cached(
     now = datetime.now(timezone.utc)
     if asset.cached_at is None:
         asset.cached_at = now
-    if asset.data is not None:
+    # Songs are cached by the player and tiny → purge now (as before). Other
+    # files/videos keep ACKED_GRACE so a second device can still fetch; the
+    # housekeeping loop clears them after that.
+    if asset.data is not None and (asset.mime or "").startswith("audio/"):
         asset.data = None
         asset.purged_at = now
+        db.commit()
+        return {"ok": True, "purged": True}
     db.commit()
-    return {"ok": True, "purged": True}
+    return {"ok": True, "purged": False}
 
 
 @router.get("/media/{file_path:path}")

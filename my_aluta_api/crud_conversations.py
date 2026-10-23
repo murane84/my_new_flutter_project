@@ -250,7 +250,7 @@ def mark_cached_up_to(db: Session, conversation_id: int, user_id: int, up_to: in
 
 # How long a delivered attachment stays downloadable before the store-and-forward
 # purge may sweep its bytes (see purge_cached_conversation).
-MEDIA_PURGE_GRACE = timedelta(days=7)
+MEDIA_PURGE_GRACE = timedelta(hours=24)
 
 
 def purge_cached_conversation(db: Session, conversation_id: int) -> int:
@@ -280,6 +280,9 @@ def purge_cached_conversation(db: Session, conversation_id: int) -> int:
                 # can always (re)download the picture, even long after both
                 # sides have cached it locally.
                 Message.message_type != "image",
+                # Hearts are keepsakes (and a timed heart's media must survive
+                # until it unseals) — never swept here.
+                Message.message_type != "heart",
                 # Text (and call/live/location/contact logs) is never purged
                 # either. The cached pointer is per USER, not per device, so
                 # once one device acked, a user's other devices (phone + web +
@@ -318,6 +321,16 @@ def purge_cached_conversation(db: Session, conversation_id: int) -> int:
                 # "file is no longer available" bug). Leave the whole message
                 # intact and let that lifecycle handle it.
                 if asset is not None and asset.ephemeral:
+                    continue
+                # Kept in Our Space (a keep whose durable copy fell back to the
+                # chat's own file): the keepsake owns it now — leave it.
+                from models import PinnedMoment
+                if (
+                    db.query(PinnedMoment.id)
+                    .filter(PinnedMoment.ref.contains(frag, autoescape=True))
+                    .first()
+                    is not None
+                ):
                     continue
                 if asset is not None:
                     asset.data = None

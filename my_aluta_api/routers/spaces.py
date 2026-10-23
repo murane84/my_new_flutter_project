@@ -32,6 +32,7 @@ from datetime import date as _date
 import crud
 import schemas
 import bonding
+import space_quota
 from auth import get_current_user
 from websocket_manager import safe_notify_user
 try:
@@ -1180,6 +1181,19 @@ def delete_space(
     return {"ok": True}
 
 
+@router.get("/{space_id}/storage")
+def space_storage(
+    space_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """How much of this bond's Our Space storage is used (bytes) and the cap."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    return space_quota.usage(
+        db, _bond_space_ids(db, space, current_user.id),
+        _bond_pair_key(space, current_user.id)[0])
+
+
 @router.post("/{space_id}/moments")
 def add_moment(
     space_id: int,
@@ -1191,6 +1205,10 @@ def add_moment(
     kind = (payload.kind or "").strip().lower()
     if kind not in _VALID_MOMENT_KINDS:
         raise HTTPException(status_code=400, detail="Unknown moment kind")
+    space_quota.check_room(
+        db, _bond_space_ids(db, space, current_user.id),
+        _bond_pair_key(space, current_user.id)[0], current_user.id,
+        payload.ref)
     moment = PinnedMoment(
         space_id=space.id,
         author_id=current_user.id,
@@ -2415,6 +2433,9 @@ def create_dedication(
     if not title:
         raise HTTPException(
             status_code=400, detail="A dedication needs a song")
+    space_quota.check_room(
+        db, _bond_space_ids(db, space, current_user.id), pk,
+        current_user.id, payload.voice_note_url)
     artist = (payload.track_artist or "").strip() or None
     d = Dedication(
         pair_key=pk,
@@ -2507,6 +2528,9 @@ def create_capsule(
     if not title and not message:
         raise HTTPException(
             status_code=400, detail="A capsule needs a song or a message")
+    space_quota.check_room(
+        db, _bond_space_ids(db, space, current_user.id), pk,
+        current_user.id, payload.media_url)
     c = LoveCapsule(
         pair_key=pk,
         created_by=current_user.id,
@@ -3021,6 +3045,10 @@ def add_moment_with(
     kind = (payload.kind or "").strip().lower()
     if kind not in _VALID_MOMENT_KINDS:
         raise HTTPException(status_code=400, detail="Unknown moment kind")
+    space_quota.check_room(
+        db, _bond_space_ids(db, space, current_user.id),
+        _bond_pair_key(space, current_user.id)[0], current_user.id,
+        payload.ref)
     moment = PinnedMoment(
         space_id=space.id,
         author_id=current_user.id,

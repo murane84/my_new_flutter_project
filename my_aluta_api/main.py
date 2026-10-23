@@ -54,11 +54,27 @@ async def lifespan(app: FastAPI):
                 pass
             await asyncio.sleep(20)
     _heart_task = asyncio.create_task(_heart_loop())
+    # Hourly media housekeeping: expired chat files / videos / songs leave the
+    # server (24 h rule), and a log alarm fires if storage gets high. Before
+    # this, the sweep only ran when someone uploaded, so quiet weeks hoarded.
+    async def _media_loop():
+        from routers.attachments import media_housekeeping_once
+        await asyncio.sleep(60)  # let startup settle first
+        while True:
+            try:
+                await asyncio.to_thread(media_housekeeping_once)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
+            await asyncio.sleep(3600)
+    _media_task = asyncio.create_task(_media_loop())
     try:
         yield
     finally:
         _capsule_task.cancel()
         _heart_task.cancel()
+        _media_task.cancel()
 
 
 # ✅ Create FastAPI app ONCE

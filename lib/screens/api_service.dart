@@ -2786,6 +2786,10 @@ class ApiService {
     int cid, {
     int skip = 0,
     int limit = 60,
+    // Throw instead of returning [] when the server refuses, so the chat can
+    // say "couldn't refresh" instead of silently showing only this device's
+    // copy (which looked like messages never arrived).
+    bool throwOnError = false,
   }) async {
     try {
       final token = await _getToken();
@@ -2800,9 +2804,13 @@ class ApiService {
         final body = jsonDecode(resp.body);
         if (body is List) return body.whereType<Map<String, dynamic>>().toList();
       }
+      _logger.w('fetchConversationMessages($cid) HTTP ${resp.statusCode}: '
+          '${resp.body.length > 300 ? resp.body.substring(0, 300) : resp.body}');
+      if (throwOnError) throw Exception('HTTP ${resp.statusCode}');
       return [];
     } catch (e) {
       _logger.e('fetchConversationMessages exception: $e');
+      if (throwOnError) rethrow;
       return [];
     }
   }

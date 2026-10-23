@@ -909,11 +909,13 @@ class _ChatPageState extends State<ChatPage>
 
     try {
       final msgs = await appBusy.run(() => _isGroup
-          ? ApiService().fetchConversationMessages(_cid, skip: 0, limit: 60)
+          ? ApiService().fetchConversationMessages(_cid,
+              skip: 0, limit: 60, throwOnError: true)
           : ApiService().fetchMessagesBetween(
               uid, widget.friendId,
               skip: 0, limit: 60,
             ));
+      _syncFailShown = false;
 
       final unread = _isGroup
           ? msgs.any((m) => m['sender_id'].toString() != _myId)
@@ -940,6 +942,7 @@ class _ChatPageState extends State<ChatPage>
       // app-wide heartbeat is the authority for connection status.
       if (mounted) {
         setState(() => _isLoading = false);
+        _noteSyncFailed();
       }
     }
   }
@@ -948,6 +951,20 @@ class _ChatPageState extends State<ChatPage>
   String? _chatBgUrl;
   Future<File?>? _chatBgFuture;
 
+
+  // ── "Couldn't refresh" (the server refused this chat's history) ─────────
+  bool _syncFailShown = false;
+
+  /// Once per failing spell: say so, with a retry, instead of silently
+  /// showing only what this device holds (that looked like the other
+  /// members' messages never arrived).
+  void _noteSyncFailed() {
+    if (_syncFailShown || !mounted) return;
+    _syncFailShown = true;
+    _showPill('Couldn’t refresh this chat — tap to retry',
+        Icons.refresh_rounded, _loadMessages,
+        hold: const Duration(seconds: 12));
+  }
 
   // ── Message cache (offline persistence) ──────────────────────────────────
 
@@ -1029,8 +1046,8 @@ class _ChatPageState extends State<ChatPage>
     List<Map<String, dynamic>> fetched;
     try {
       fetched = _isGroup
-          ? await ApiService()
-              .fetchConversationMessages(_cid, skip: 0, limit: 60)
+          ? await ApiService().fetchConversationMessages(_cid,
+              skip: 0, limit: 60, throwOnError: true)
           : await ApiService().fetchMessagesBetween(
               uid, widget.friendId,
               skip: 0, limit: 60,
@@ -1038,8 +1055,10 @@ class _ChatPageState extends State<ChatPage>
     } catch (_) {
       // A single poll failure is not proof the whole server is down — leave the
       // connection status to the app-wide heartbeat so indicators stay in sync.
+      if (_isGroup) _noteSyncFailed();
       return;
     }
+    _syncFailShown = false;
     if (fetched.isEmpty) return;
 
     final merged = _merge(_messages, fetched, markRead: _isAtBottom);

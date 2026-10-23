@@ -1092,7 +1092,7 @@ Column(
                             discWidget(side),
                             ValueListenableBuilder<int>(
                               valueListenable: appBusy.major,
-                              builder: (_, major, __) => _DiscLoadRing(
+                              builder: (_, major, _) => _DiscLoadRing(
                                 active: buffering || major > 0,
                                 side: side + 18,
                                 accent: accent,

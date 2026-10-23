@@ -79,7 +79,7 @@ class _DiscLoadRingState extends State<_DiscLoadRing>
           height: widget.side,
           child: AnimatedBuilder(
             animation: _spin,
-            builder: (_, __) => CustomPaint(
+            builder: (_, _) => CustomPaint(
               painter: _LoadRingPainter(
                   turn: still ? 0.12 : _spin.value, accent: widget.accent),
             ),

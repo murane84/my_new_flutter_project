@@ -522,7 +522,7 @@ def heart_opened(
     total = 1
     if is_group and m.conversation_id and not getattr(m, "heart_for", None):
         total = max(0, len(crud_conversations.member_ids(db, m.conversation_id)) - 1)
-    safe_notify_user(int(m.sender_id), {
+    opened_event = {
         "type": "heart_opened",
         "data": {
             "message_id": m.id,
@@ -535,7 +535,14 @@ def heart_opened(
             "by_name": current_user.username or "",
             "by_phone": getattr(current_user, "phone", None) or "",
         },
-    })
+    }
+    safe_notify_user(int(m.sender_id), opened_event)
+    # A heart meant for ONE member: the whole group watches for that moment
+    # ("Neema opened it"), so tell every other member too (no content in it).
+    if is_group and getattr(m, "heart_for", None) and m.conversation_id:
+        for uid in crud_conversations.member_ids(db, m.conversation_id):
+            if int(uid) not in (int(m.sender_id), int(current_user.id)):
+                safe_notify_user(int(uid), opened_event)
     background.add_task(send_push_to_user, int(m.sender_id), {
         "type": "heart_opened",
         "sender_id": str(current_user.id),

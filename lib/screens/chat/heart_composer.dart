@@ -514,7 +514,9 @@ extension _ChatHeartComposer on _ChatPageState {
                   _heartUnlockAt == null
                       ? (_heartForName != null
                           ? 'Secret heart · only $_heartForName can open it'
-                          : 'Secret heart · they hold it to open')
+                          : (_isGroup
+                              ? 'Secret heart · for everyone here 💞'
+                              : 'Secret heart · they hold it to open'))
                       : 'Sealed · ${heartOpensLabel(_heartUnlockAt!).toLowerCase()}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

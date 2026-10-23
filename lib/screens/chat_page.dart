@@ -1204,13 +1204,15 @@ class _ChatPageState extends State<ChatPage>
       if (mid != null) {
         final idx = _messages.indexWhere((m) => m['id'].toString() == mid);
         if (idx != -1) {
+          final mine = _messages[idx]['sender_id']?.toString() == _myId;
           setState(() {
             _messages[idx]['opened_at'] = data!['opened_at'];
             if (data['heart_opens'] != null) {
               _messages[idx]['heart_opens'] = data['heart_opens'];
             }
           });
-          HapticFeedback.lightImpact();
+          // The group sees "Neema opened it" live; only the sender feels it.
+          if (mine) HapticFeedback.lightImpact();
         }
       }
     } else if (type == 'message_unpinned') {
@@ -4187,8 +4189,17 @@ class _ChatPageState extends State<ChatPage>
                   // meant for one member (locked for everyone else).
                   media: _heartMediaBuilder(msg),
                   mediaKind: _heartMediaKind(msg),
-                  forName: _heartForLabel(msg),
+                  // Cover: "for Neema" / "for you", or "for everyone" on a
+                  // heart sent to the whole group.
+                  forName: _heartForLabel(msg) ?? (_isGroup ? 'everyone' : null),
                   locked: _heartLockedForMe(msg),
+                  // Clip length → the letter stays open long enough for it
+                  // (a clip without a known length gets a full 30 s).
+                  mediaMs: switch (_heartMediaKind(msg)) {
+                    'video' || 'voice' =>
+                      (msg['media_duration'] as num?)?.toInt() ?? 30000,
+                    _ => null,
+                  },
                   onLocked: () => showToast(context,
                       'This heart is for ${_heartForLabel(msg) ?? 'someone else'} 💌'),
                 ),
@@ -4241,6 +4252,13 @@ class _ChatPageState extends State<ChatPage>
                   ? null
                   : parseServerTime(msg['opened_at'].toString()),
               isGroup: _isGroup,
+              // Group heart for one member → "Only Neema can open it" /
+              // "Neema opened it"; for everyone → "For everyone · 2 of 5".
+              forName: _heartForLabel(msg),
+              forMe: (msg['heart_for']?.toString() ?? '') == (_myId ?? '-'),
+              targetOpened: _heartOpens(msg)
+                  .containsKey(msg['heart_for']?.toString() ?? '-'),
+              iOpened: _myHeartOpen(msg) != null,
               openCount: _heartOpens(msg).length,
               // A heart for one member has exactly one possible opener.
               openTotal: (msg['heart_for']?.toString() ?? '').isNotEmpty

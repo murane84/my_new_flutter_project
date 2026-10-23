@@ -127,6 +127,10 @@ String heartOpensLabel(DateTime when, {String prefix = 'Opens '}) {
   bool isGroup = false,
   int openCount = 0,
   int? openTotal,
+  String? forName,
+  bool forMe = false,
+  bool targetOpened = false,
+  bool iOpened = false,
 }) {
   if (unlockAt != null && DateTime.now().isBefore(unlockAt)) {
     return (
@@ -135,12 +139,39 @@ String heartOpensLabel(DateTime when, {String prefix = 'Opens '}) {
       warm: false,
     );
   }
+  // A group heart for ONE member: the whole group follows that one moment.
+  if (isGroup && forName != null) {
+    if (forMe) {
+      return targetOpened
+          ? (icon: Icons.favorite_rounded, text: 'You opened it', warm: true)
+          : (
+              icon: Icons.favorite_border_rounded,
+              text: 'For you · hold to open',
+              warm: true,
+            );
+    }
+    return targetOpened
+        ? (icon: Icons.favorite_rounded, text: '$forName opened it', warm: true)
+        : (
+            icon: Icons.lock_rounded,
+            text: 'Only $forName can open it',
+            warm: false,
+          );
+  }
+  // A heart for the whole group: receivers see it's for everyone.
+  if (isGroup && !isMe) {
+    return iOpened
+        ? null
+        : (icon: Icons.groups_rounded, text: 'For everyone', warm: false);
+  }
   if (!isMe) return null;
   if (isGroup) {
     if (openCount <= 0) {
       return (
         icon: Icons.favorite_border_rounded,
-        text: openTotal == null ? 'Not opened' : '0 of $openTotal opened',
+        text: openTotal == null
+            ? 'For everyone · not opened'
+            : 'For everyone · 0 of $openTotal opened',
         warm: false,
       );
     }
@@ -150,8 +181,8 @@ String heartOpensLabel(DateTime when, {String prefix = 'Opens '}) {
     return (
       icon: Icons.favorite_rounded,
       text: openTotal == null
-          ? '$openCount opened'
-          : '$openCount of $openTotal opened',
+          ? 'For everyone · $openCount opened'
+          : 'For everyone · $openCount of $openTotal opened',
       warm: true,
     );
   }
@@ -203,7 +234,12 @@ class HeartBubble extends StatefulWidget {
     this.forName,
     this.locked = false,
     this.onLocked,
+    this.mediaMs,
   });
+
+  /// How long the sealed clip runs (ms). The opened letter stays open that
+  /// much longer before it reseals, so a whole clip can be heard in one go.
+  final int? mediaMs;
 
   /// The photo / video clip / voice clip sealed inside, drawn on the opened
   /// letter at the given width. Null = words only. A heart with media always
@@ -756,6 +792,7 @@ class _HeartBubbleState extends State<HeartBubble>
           from: widget.isMe ? 'you' : widget.senderName,
           sentAt: widget.sentAt,
           media: widget.media,
+          mediaMs: widget.mediaMs,
           onReply: widget.onReply,
           onReact: widget.onReact,
           onKeep: widget.onKeep,
@@ -1520,6 +1557,7 @@ void showHeartGenie(
   String? from,
   DateTime? sentAt,
   Widget Function(double width)? media,
+  int? mediaMs,
   VoidCallback? onReply,
   ValueChanged<String>? onReact,
   VoidCallback? onKeep,
@@ -1528,7 +1566,8 @@ void showHeartGenie(
   // A see-through route (not a bare overlay) so the system Back button
   // reaches the card's PopScope and folds it back into the heart.
   final nav = Navigator.of(context);
-  nav.push(PageRouteBuilder<void>(
+  late final PageRouteBuilder<void> route;
+  route = PageRouteBuilder<void>(
     opaque: false,
     barrierDismissible: false,
     transitionDuration: Duration.zero,
@@ -1541,15 +1580,24 @@ void showHeartGenie(
       from: from,
       sentAt: sentAt,
       media: media,
+      mediaMs: mediaMs,
       onReply: onReply,
       onReact: onReact,
       onKeep: onKeep,
       onSendBack: onSendBack,
       onClosed: () {
-        if (nav.mounted && nav.canPop()) nav.pop();
+        if (!nav.mounted) return;
+        // Remove THIS letter — never whatever is on top of it (the photo
+        // viewer or clip player opened from the letter).
+        if (route.isCurrent) {
+          nav.pop();
+        } else if (route.isActive) {
+          nav.removeRoute(route);
+        }
       },
     ),
-  ));
+  );
+  nav.push(route);
 }
 
 class _HeartGenie extends StatefulWidget {
@@ -1562,12 +1610,14 @@ class _HeartGenie extends StatefulWidget {
     this.from,
     this.sentAt,
     this.media,
+    this.mediaMs,
     this.onReply,
     this.onReact,
     this.onKeep,
     this.onSendBack,
   });
   final Widget Function(double width)? media;
+  final int? mediaMs;
   final Rect originRect;
   final String text;
   final Color accent;
@@ -1618,9 +1668,18 @@ class _HeartGenieState extends State<_HeartGenie>
   Timer? _idle;
   bool _closing = false;
 
+  /// How long the letter stays open untouched: the usual reseal, plus the
+  /// clip's own length and a little breathing room when one is inside.
+  Duration get _window {
+    final ms = widget.mediaMs ?? 0;
+    if (ms <= 0) return HeartLock.idleRelock;
+    return HeartLock.idleRelock + Duration(milliseconds: ms + 5000);
+  }
+
   @override
   void initState() {
     super.initState();
+    _drain.duration = _window;
     _armIdle();
     HeartLock.instance.relockEpoch.addListener(_closeNow);
     HeartLock.instance.noteOpened(); // screenshot-proof while the letter is up
@@ -1628,8 +1687,19 @@ class _HeartGenieState extends State<_HeartGenie>
 
   void _armIdle() {
     _idle?.cancel();
-    _idle = Timer(HeartLock.idleRelock, _close);
+    _idle = Timer(_window, _idleExpired);
     _drain.forward(from: 0);
+  }
+
+  /// The countdown ran out. If the photo / clip is open full-screen on top of
+  /// the letter, wait — closing now would also shut the player being watched.
+  void _idleExpired() {
+    if (!mounted) return;
+    if (ModalRoute.of(context)?.isCurrent == false) {
+      _armIdle();
+      return;
+    }
+    _close();
   }
 
   /// App backgrounded: no frames are drawn while paused, so an animated
@@ -2101,7 +2171,7 @@ class _HeartGenieState extends State<_HeartGenie>
                     AnimatedBuilder(
                       animation: _drain,
                       builder: (context, _) {
-                        final left = HeartLock.idleRelock.inSeconds *
+                        final left = _window.inSeconds *
                             (1 - _drain.value);
                         final secs = left.ceil();
                         final label =

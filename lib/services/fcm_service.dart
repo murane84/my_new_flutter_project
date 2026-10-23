@@ -138,6 +138,9 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         senderId: from.isEmpty ? null : from,
         senderName: mine((data['from_name'] ?? '').toString()),
       );
+    } else if (type == 'heart_opened' && foreground) {
+      // App open: the in-app heart pill already shows it — no second banner.
+      return;
     } else if (type == 'heart_opened' || type == 'heart_ready') {
       // Secret hearts (server hearts.py): the tender receipt to the sender, or
       // a timed heart that just became openable. Never carries the note.

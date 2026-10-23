@@ -55,6 +55,7 @@ import '../services/fcm_service.dart';
 import '../services/download_manager.dart';
 import '../services/share_inbox.dart';
 import '../services/contact_names.dart';
+import '../widgets/heart_toast.dart';
 import '../services/metadata_overrides.dart';
 import '../services/track_title.dart' show splitTitleArtist;
 import 'listening_audience_sheet.dart' show PresenceShareButton;
@@ -1939,7 +1940,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
       return;
     }
     if (type == 'heart_opened') {
-      if (fcmSupported || !_appForeground || !mounted) return;
+      // In the app (any platform): the in-app heart pill. In the background
+      // the push (phones) / nothing (desktop) handles it.
+      if (!_appForeground || !mounted) return;
       final d = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
       final byId = d['by_id']?.toString();
       if (byId != null && byId == _activeFriendId?.toString()) return;
@@ -1949,17 +1952,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final who = (saved != null && saved.isNotEmpty)
           ? saved
           : (d['by_name'] ?? 'Someone').toString();
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 4),
-          content: Row(children: [
-            const Icon(Icons.favorite_rounded, size: 18, color: Colors.white),
-            const SizedBox(width: 8),
-            Expanded(child: Text('$who opened your secret heart')),
-          ]),
-        ));
+      showHeartOpenedToast(context, who);
       return;
     }
     // Someone @-mentioned me in a group (server: routers/conversations.py).

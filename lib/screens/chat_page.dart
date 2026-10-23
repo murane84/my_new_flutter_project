@@ -5056,19 +5056,16 @@ class _ChatPageState extends State<ChatPage>
                   child: JumpRings(
                     trigger: ringFor,
                     shape: bubbleShape,
-                    // The bubble's own colour (it already follows dark /
-                    // light mode + the bubble theme). At the extremes the
-                    // ring is nudged so it never vanishes into its
-                    // background: a near-white bubble deepens a touch, a
-                    // near-black one (dark mode) lightens a touch.
+                    // A colourful bubble rings in its own colour (a tinted
+                    // bubble theme). A plain one — white / grey in light
+                    // mode, near-black in dark — has no colour to give, so
+                    // it rings in the theme accent instead (grey rings were
+                    // hard to see).
                     color: () {
+                      final hsl = HSLColor.fromColor(bubbleColor);
                       final l = bubbleColor.computeLuminance();
-                      if (l > 0.8) {
-                        return Color.lerp(bubbleColor, Colors.black, 0.28)!;
-                      }
-                      if (l < 0.06) {
-                        return Color.lerp(bubbleColor, Colors.white, 0.35)!;
-                      }
+                      final plain = hsl.saturation < 0.25 || l > 0.8 || l < 0.06;
+                      if (plain) return scheme.primary;
                       return bubbleColor;
                     }(),
                     child: Container(

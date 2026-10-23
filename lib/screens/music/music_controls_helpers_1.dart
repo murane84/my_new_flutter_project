@@ -1161,7 +1161,10 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
     VoidCallback? goPrev, goNext;
     int place = 0, total = 0;
     final live = _liveActive;
-    if (live) {
+    // Shuffle has no order to show: the peeks, names and dots step aside
+    // (the stage keeps its size, so the record doesn't move when toggled).
+    final shuffled = _effShuffle;
+    if (live && !shuffled) {
       final c = _live!;
       final host = _isLiveHost;
       final titles = host
@@ -1176,10 +1179,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
         place = idx + 1;
         final all = c.repeatMode == 'all' && total > 1;
         final pIdx = idx > 0 ? idx - 1 : (all ? total - 1 : -1);
-        // Shuffle is picked by the host at skip time → no honest "next".
-        final nIdx = c.shuffle
-            ? -1
-            : (idx + 1 < total ? idx + 1 : (all ? 0 : -1));
+        final nIdx = idx + 1 < total ? idx + 1 : (all ? 0 : -1);
         if (pIdx >= 0) {
           prevTitle = titles[pIdx];
           prevBy = pIdx < by.length ? by[pIdx] : null;
@@ -1199,7 +1199,10 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
               : c.requestControl('play_index', index: to);
         }
       }
-    } else if (_currentIndex >= 0 && _currentIndex < _playlist.length) {
+    } else if (!live &&
+        !shuffled &&
+        _currentIndex >= 0 &&
+        _currentIndex < _playlist.length) {
       final scope = _scopeIndices();
       total = scope.length;
       place = scope.indexOf(_currentIndex) + 1;
@@ -1281,7 +1284,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
 
     // A window of up to five dots around the current song + "12 / 240".
     Widget dots() {
-      if (total < 2) return const SizedBox.shrink();
+      if (total < 2 || _effShuffle) return const SizedBox.shrink();
       final n = total < 5 ? total : 5;
       var first = place - 1 - n ~/ 2;
       first = first.clamp(0, total - n).toInt();

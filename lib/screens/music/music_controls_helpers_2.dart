@@ -669,7 +669,12 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
             padding: tall
                 ? const EdgeInsets.fromLTRB(0, 2, 0, 12)
                 : EdgeInsets.fromLTRB(16, 2, 16, isNarrow ? 8 : 14),
-            child: Row(
+            // Two rows: Volume · A-B · Speed on top (nothing gets pushed off
+            // the edge any more), the Now Playing pill centred beneath.
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+            Row(
               children: [
                 CompositedTransformTarget(
                   link: _volumeLink,
@@ -742,83 +747,6 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                     ),
                   ),
                 ),
-                const Spacer(),
-              Tooltip(
-                message: 'Open Now Playing',
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: (hasTrack || live) ? _openFullPlayer : null,
-                    borderRadius: BorderRadius.circular(16),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      padding: EdgeInsets.symmetric(
-                          horizontal: isNarrow ? 14 : 20, vertical: 5),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: isDark
-                              ? [
-                                  Color.alphaBlend(
-                                      accent.withValues(alpha: 0.12),
-                                      scheme.surfaceContainerHighest),
-                                  Color.alphaBlend(
-                                      accent.withValues(alpha: 0.05),
-                                      scheme.surfaceContainerHigh),
-                                ]
-                              : [
-                                  Color.alphaBlend(
-                                      accent.withValues(alpha: 0.05),
-                                      Colors.white),
-                                  Color.alphaBlend(
-                                      accent.withValues(alpha: 0.10),
-                                      scheme.surface),
-                                ],
-                        ),
-                        border: Border.all(
-                            color: accent.withValues(
-                                alpha: isDark ? 0.22 : 0.16)),
-                        boxShadow: [
-                          // Accent lift — glows a touch brighter while playing.
-                          BoxShadow(
-                            color: accent.withValues(
-                                alpha: isPlaying
-                                    ? (isDark ? 0.20 : 0.22)
-                                    : (isDark ? 0.10 : 0.14)),
-                            blurRadius: isPlaying ? 16 : 10,
-                            offset: const Offset(0, 5),
-                          ),
-                          BoxShadow(
-                            color: Colors.white
-                                .withValues(alpha: isDark ? 0.10 : 0.9),
-                            blurRadius: 3,
-                            offset: const Offset(-1.2, -1.8),
-                          ),
-                          // Tight contact shadow grounds the raised pill.
-                          BoxShadow(
-                            color: Colors.black
-                                .withValues(alpha: isDark ? 0.30 : 0.06),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _MiniEqualizer(active: isPlaying, color: accent),
-                          const SizedBox(width: 8),
-                          Icon(Icons.keyboard_arrow_up_rounded,
-                              size: 16,
-                              color: accent.withValues(alpha: 0.65)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
                 const Spacer(),
                 if (!live) ...[
                   _abChip(scheme, accent),
@@ -906,6 +834,87 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                     ),
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Center(
+              child: Tooltip(
+                message: 'Open Now Playing',
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: (hasTrack || live) ? _openFullPlayer : null,
+                    borderRadius: BorderRadius.circular(16),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: EdgeInsets.symmetric(
+                          horizontal: isNarrow ? 14 : 20, vertical: 5),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: isDark
+                              ? [
+                                  Color.alphaBlend(
+                                      accent.withValues(alpha: 0.12),
+                                      scheme.surfaceContainerHighest),
+                                  Color.alphaBlend(
+                                      accent.withValues(alpha: 0.05),
+                                      scheme.surfaceContainerHigh),
+                                ]
+                              : [
+                                  Color.alphaBlend(
+                                      accent.withValues(alpha: 0.05),
+                                      Colors.white),
+                                  Color.alphaBlend(
+                                      accent.withValues(alpha: 0.10),
+                                      scheme.surface),
+                                ],
+                        ),
+                        border: Border.all(
+                            color: accent.withValues(
+                                alpha: isDark ? 0.22 : 0.16)),
+                        boxShadow: [
+                          // Accent lift — glows a touch brighter while playing.
+                          BoxShadow(
+                            color: accent.withValues(
+                                alpha: isPlaying
+                                    ? (isDark ? 0.20 : 0.22)
+                                    : (isDark ? 0.10 : 0.14)),
+                            blurRadius: isPlaying ? 16 : 10,
+                            offset: const Offset(0, 5),
+                          ),
+                          BoxShadow(
+                            color: Colors.white
+                                .withValues(alpha: isDark ? 0.10 : 0.9),
+                            blurRadius: 3,
+                            offset: const Offset(-1.2, -1.8),
+                          ),
+                          // Tight contact shadow grounds the raised pill.
+                          BoxShadow(
+                            color: Colors.black
+                                .withValues(alpha: isDark ? 0.30 : 0.06),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _MiniEqualizer(active: isPlaying, color: accent),
+                          const SizedBox(width: 8),
+                          Icon(Icons.keyboard_arrow_up_rounded,
+                              size: 16,
+                              color: accent.withValues(alpha: 0.65)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
               ],
             ),
           );
@@ -1109,9 +1118,11 @@ Column(
               // title / artist / lyric line / Up next can appear, change or
               // vanish inside it without ever resizing the disc (that resize
               // was the shake on Android).
-              SizedBox(
-                height: 220,
-                child: Column(
+              // Every slot keeps a fixed height and the column hugs them (no
+              // stretchy filler), so nothing jumps AND no empty band opens up
+              // between Dedicate and the feel strip.
+              Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                   SizedBox(
                     height: 24,
@@ -1145,7 +1156,9 @@ Column(
                         ),
                       ),
                     ),
-                  _syncedLyricLine(scheme, accent, false),
+                  SizedBox(
+                      height: 26,
+                      child: _syncedLyricLine(scheme, accent, false)),
                   // Dedicate this song ❤ — the people I chat with most. Its
                   // line is always reserved so it never nudges the record.
                   SizedBox(
@@ -1154,8 +1167,10 @@ Column(
                         ? null
                         : _dedicateRow(scheme, accent),
                   ),
-                  if (upNextOn) ...[
-                    const SizedBox(height: 10),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 34,
+                    child: !upNextOn ? null :
                     // Up next — tap to jump to it.
                     BounceTap(
                       onTap: _transportNext,
@@ -1196,8 +1211,7 @@ Column(
                         ),
                       ),
                     ),
-                  ],
-                  const Spacer(),
+                  ),
                   if (!live && hasTrack)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
@@ -1209,7 +1223,6 @@ Column(
                     ),
                   ],
                 ),
-              ),
             ],
           ),
         );

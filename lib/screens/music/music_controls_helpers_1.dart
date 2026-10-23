@@ -369,7 +369,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                             // Wide split: leave room either side for the
                             // peeking records and a line for their names.
                             final side = split
-                                ? min(cc.maxWidth * 0.52, cc.maxHeight - 64)
+                                ? min(cc.maxWidth * 0.8, cc.maxHeight - 64)
                                     .clamp(0.0, 360.0)
                                     .toDouble()
                                 : (cc.maxWidth < cc.maxHeight
@@ -468,6 +468,15 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                               )
                             : null,
                       ),
+                      // Dedicate this song ❤ — phones and desktop (web plays
+                      // in-memory files, nothing to send). Slot always held.
+                      if (!kIsWeb && !live && hasTrack)
+                        SizedBox(
+                          height: 44,
+                          child: _dedicateTo.isEmpty
+                              ? null
+                              : _dedicateRow(scheme, accent),
+                        ),
                   ];
                   final rest = <Widget>[
                       // Synced-lyric ticker — shows only when the song has LRC
@@ -1219,40 +1228,14 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
         goNext = () => _play(nIdx);
       }
     }
-    final p = side * 0.5; // peek size
     final h = side + 64;
-    Widget peek(String? title, VoidCallback? go, bool left) {
-      return Positioned(
-        left: left ? -p * 0.3 : null,
-        right: left ? null : -p * 0.3,
-        top: (side - p) / 2,
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 320),
-          transitionBuilder: (child, anim) => FadeTransition(
-            opacity: anim,
-            child: SlideTransition(
-              position: Tween<Offset>(
-                      begin: Offset(left ? -0.25 : 0.25, 0), end: Offset.zero)
-                  .animate(anim),
-              child: child,
-            ),
-          ),
-          child: title == null
-              ? SizedBox(key: const ValueKey('none'), width: p, height: p)
-              : _PeekRecord(
-                  key: ValueKey('$left$title'),
-                  size: p,
-                  accent: accent,
-                  scheme: scheme,
-                  tooltip: left ? 'Previous · $title' : 'Next · $title',
-                  onTap: go,
-                ),
-        ),
-      );
-    }
-
-    Widget name(String? title, String? by, bool left) => Expanded(
-          child: AnimatedOpacity(
+    Widget name(String? title, String? by, VoidCallback? go, bool left) =>
+        Expanded(
+          child: _PeekName(
+            onTap: title == null ? null : go,
+            alignEnd: !left,
+            accent: accent,
+            child: AnimatedOpacity(
             opacity: title == null ? 0 : 1,
             duration: const Duration(milliseconds: 220),
             child: Column(
@@ -1279,6 +1262,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                       style: TextStyle(fontSize: 10.5, color: accent)),
               ],
             ),
+          ),
           ),
         );
 
@@ -1330,29 +1314,18 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
           height: h,
           child: Column(
             children: [
-              SizedBox(
-                height: side,
-                child: Stack(
-                  clipBehavior: Clip.hardEdge,
-                  alignment: Alignment.center,
-                  children: [
-                    peek(prevTitle, goPrev, true),
-                    peek(nextTitle, goNext, false),
-                    disc,
-                  ],
-                ),
-              ),
+              SizedBox(height: side, child: Center(child: disc)),
               const SizedBox(height: 14),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    name(prevTitle, prevBy, true),
+                    name(prevTitle, prevBy, goPrev, true),
                     const SizedBox(width: 12),
                     dots(),
                     const SizedBox(width: 12),
-                    name(nextTitle, nextBy, false),
+                    name(nextTitle, nextBy, goNext, false),
                   ],
                 ),
               ),

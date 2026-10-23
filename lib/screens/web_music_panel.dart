@@ -22,6 +22,7 @@ import '../services/track_title.dart'
 import 'listening_audience_sheet.dart' show PresenceShareButton;
 import '../widgets/genie_menu.dart';
 import '../utils/readable.dart';
+import '../widgets/controls_glass.dart';
 
 /// Web-only replacement for the native [MusicControls] panel.
 ///
@@ -67,6 +68,11 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   Timer? _sleepTimer;
   int _sleepMinutes = 0; // 0 = off
   StreamSubscription<PlayerState>? _psSub;
+  // A-B repeat (same as the native player): loop one stretch of the song.
+  Duration? _abA;
+  Duration? _abB;
+  DateTime _abLoopAt = DateTime.fromMillisecondsSinceEpoch(0);
+  StreamSubscription<Duration>? _abSub;
   // The bytes + title of the track currently loaded, exposed on playbackBus so
   // "Start a room" / Listen Together can host it (web has no file paths).
   Uint8List? _currentBytes;
@@ -88,6 +94,16 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   void initState() {
     super.initState();
     _psSub = _player.playerStateStream.listen(_onPlayerState);
+    _abSub = _player.positionStream.listen((pos) {
+      final a = _abA, b = _abB;
+      if (a != null &&
+          b != null &&
+          pos >= b &&
+          DateTime.now().difference(_abLoopAt).inMilliseconds > 400) {
+        _abLoopAt = DateTime.now();
+        _player.seek(a);
+      }
+    });
     // Let the room/listen-together flow read what the web player is playing.
     playbackBus.currentBytes = () => _currentBytes ?? Uint8List(0);
     playbackBus.currentTitle = () => _currentTitle ?? '';
@@ -171,6 +187,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     playbackBus.webAddSongs = null;
     playbackBus.webRemoveAt = null;
     _queueRev.dispose();
+    _abSub?.cancel();
     _player.dispose();
     super.dispose();
   }
@@ -252,6 +269,8 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   Future<void> _playAt(int i) async {
     if (i < 0 || i >= _queue.length) return;
     _index = i;
+    _abA = null; // A-B points belong to the previous song
+    _abB = null;
     if (mounted) setState(() {});
     final t = _queue[i];
     try {
@@ -477,13 +496,24 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                     accent: theme.colorScheme.primary,
                   ),
                 ),
-              const SizedBox(height: 8),
-              _seekBar(theme),
-              _transport(theme),
-              const SizedBox(height: 8),
-              _fitNarrow(_featureRow(theme), 340),
-              const SizedBox(height: 12),
-              _fitNarrow(_bottomRow(theme), 300),
+              const SizedBox(height: 10),
+              // Waveform, transport and tools share one glassy card (same as
+              // the phone / desktop player) instead of floating.
+              ControlsGlass(
+                accent: theme.colorScheme.primary,
+                padding: const EdgeInsets.fromLTRB(8, 16, 8, 10),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _seekBar(theme),
+                    _transport(theme),
+                    const SizedBox(height: 8),
+                    _fitNarrow(_featureRow(theme), 340),
+                    const SizedBox(height: 12),
+                    _fitNarrow(_bottomRow(theme), 300),
+                  ],
+                ),
+              ),
               const SizedBox(height: 8),
               if (!_queueCollapsed) _fitNarrow(_queueHeader(theme), 370),
             ],
@@ -790,6 +820,12 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                     _player.seek(Duration(milliseconds: (f * durMs).round())),
                 labelFor: (f) =>
                     _fmt(Duration(milliseconds: (f * durMs).round())),
+                markA: (_abA == null || durMs <= 0)
+                    ? null
+                    : (_abA!.inMilliseconds / durMs).clamp(0.0, 1.0),
+                markB: (_abB == null || durMs <= 0)
+                    ? null
+                    : (_abB!.inMilliseconds / durMs).clamp(0.0, 1.0),
               ),
             ),
             Padding(
@@ -962,6 +998,83 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   }
 
   // A small raised pill matching the disc buttons, showing playback speed.
+  /// A-B key: off → mark A → mark B (loop starts) → off. Hold clears.
+  void _cycleAB() {
+    if (_index < 0) return;
+    final pos = _player.position;
+    final a = _abA;
+    if (a == null) {
+      setState(() => _abA = pos);
+      showToast(context, 'A set at ${_fmt(pos)} — tap again where the part ends');
+    } else if (_abB == null) {
+      if (pos <= a + const Duration(seconds: 1)) {
+        showToast(context, 'Let it play a little past A, then tap for B');
+        return;
+      }
+      setState(() => _abB = pos);
+      _abLoopAt = DateTime.now();
+      _player.seek(a);
+      showToast(context, 'Repeating ${_fmt(a)} – ${_fmt(pos)} · tap again to stop');
+    } else {
+      _clearAB();
+    }
+  }
+
+  void _clearAB() {
+    if (_abA == null && _abB == null) return;
+    setState(() {
+      _abA = null;
+      _abB = null;
+    });
+    showToast(context, 'A-B repeat off');
+  }
+
+  Widget _abPill(ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final accent = scheme.primary;
+    final a = _abA, b = _abB;
+    final on = a != null;
+    final label = a == null
+        ? 'A-B'
+        : (b == null ? 'A ${_fmt(a)} · B?' : '${_fmt(a)}–${_fmt(b)}');
+    final fg = on ? accent : scheme.onSurface;
+    return Tactile(
+      child: Tooltip(
+        message: 'Repeat a part (A-B) · hold to clear',
+        child: GestureDetector(
+          onTap: _cycleAB,
+          onLongPress: _clearAB,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              color: on
+                  ? accent.withValues(alpha: b != null ? 0.14 : 0.08)
+                  : scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+              border: Border.all(
+                  color: accent.withValues(alpha: on ? 0.6 : 0.22)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(b != null ? Icons.repeat_on_rounded : Icons.repeat_rounded,
+                    size: 13, color: fg),
+                const SizedBox(width: 4),
+                Text(label,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: fg,
+                        fontFeatures: const [FontFeature.tabularFigures()])),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _speedPill(ThemeData theme, String label) {
     final scheme = theme.colorScheme;
     final isDark = scheme.brightness == Brightness.dark;
@@ -1279,7 +1392,14 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                   active: _showVolume || _volume <= 0,
                 ),
               ),
-              _speedPill(theme, speedLabel),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _abPill(theme),
+                  const SizedBox(width: 8),
+                  _speedPill(theme, speedLabel),
+                ],
+              ),
             ],
           ),
           // Floating volume slider — glows over the row, fades back to the icon.
@@ -1676,6 +1796,8 @@ class _WebWaveformSeekBar extends StatefulWidget {
   final int seed; // stable bar pattern per track
   final ValueChanged<double> onSeek;
   final String Function(double fraction) labelFor;
+  final double? markA; // A-B repeat points (fractions), null = unset
+  final double? markB;
 
   const _WebWaveformSeekBar({
     required this.fraction,
@@ -1685,6 +1807,8 @@ class _WebWaveformSeekBar extends StatefulWidget {
     required this.seed,
     required this.onSeek,
     required this.labelFor,
+    this.markA,
+    this.markB,
   });
 
   @override
@@ -1763,6 +1887,43 @@ class _WebWaveformSeekBarState extends State<_WebWaveformSeekBar> {
                     ),
                   ),
                 ),
+                if (widget.markA != null && widget.markB != null)
+                  Positioned(
+                    left: widget.markA!.clamp(0.0, 1.0) * w,
+                    width: (widget.markB! - widget.markA!).clamp(0.0, 1.0) * w,
+                    top: -3,
+                    bottom: -3,
+                    child: IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: widget.accent.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                              color: widget.accent.withValues(alpha: 0.35)),
+                        ),
+                      ),
+                    ),
+                  ),
+                for (final m in [
+                  if (widget.markA != null) (widget.markA!, 'A'),
+                  if (widget.markB != null) (widget.markB!, 'B'),
+                ])
+                  Positioned(
+                    left: (m.$1.clamp(0.0, 1.0) * w - 6)
+                        .clamp(0.0, (w - 12).clamp(0.0, w)),
+                    top: -14,
+                    child: IgnorePointer(
+                      child: SizedBox(
+                        width: 12,
+                        child: Text(m.$2,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                color: widget.accent,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w900)),
+                      ),
+                    ),
+                  ),
                 if (_dragFrac != null)
                   Positioned(
                     left: (frac * w - 24).clamp(0.0, (w - 48).clamp(0.0, w)),

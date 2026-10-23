@@ -53,7 +53,7 @@ part 'music/music_lyrics_view.dart'; // _LyricsView (synced/plain lyrics sheet)
 part 'music/music_share_sheet.dart'; // _ShareSheet (send song file / recommend)
 part 'music/music_controls_helpers_1.dart'; // _MusicControlsState helpers (22 methods)
 part 'music/music_controls_helpers_2.dart'; // _MusicControlsState helpers (19 methods)
-part 'music/music_dedicate.dart'; // _DedicateSheet + _DiscLoadRing
+part 'music/music_dedicate.dart'; // _DedicateSheet, _DiscLoadRing, _PeekName
 
 bool get _isMobile => Platform.isAndroid || Platform.isIOS;
 

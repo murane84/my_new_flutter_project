@@ -339,82 +339,50 @@ class _DedicateSheetState extends State<_DedicateSheet> {
   }
 }
 
-/// A smaller, faded record peeking in at the edge of the wide Now Playing
-/// stage. Hover lifts it; click skips to it.
-class _PeekRecord extends StatefulWidget {
-  const _PeekRecord({
-    super.key,
-    required this.size,
+/// A previous / next song name under the wide Now Playing record: hover
+/// lifts it into the accent, click skips to that song.
+class _PeekName extends StatefulWidget {
+  const _PeekName({
+    required this.child,
+    required this.onTap,
+    required this.alignEnd,
     required this.accent,
-    required this.scheme,
-    required this.tooltip,
-    this.onTap,
   });
 
-  final double size;
-  final Color accent;
-  final ColorScheme scheme;
-  final String tooltip;
+  final Widget child;
   final VoidCallback? onTap;
+  final bool alignEnd;
+  final Color accent;
 
   @override
-  State<_PeekRecord> createState() => _PeekRecordState();
+  State<_PeekName> createState() => _PeekNameState();
 }
 
-class _PeekRecordState extends State<_PeekRecord> {
+class _PeekNameState extends State<_PeekName> {
   bool _hover = false;
 
   @override
   Widget build(BuildContext context) {
-    final a = widget.accent;
-    final dark = widget.scheme.brightness == Brightness.dark;
-    final s = widget.size;
-    return Tooltip(
-      message: widget.tooltip,
+    final on = widget.onTap != null;
+    return Align(
+      alignment: widget.alignEnd ? Alignment.topRight : Alignment.topLeft,
       child: MouseRegion(
-        cursor: widget.onTap == null
-            ? SystemMouseCursors.basic
-            : SystemMouseCursors.click,
+        cursor: on ? SystemMouseCursors.click : SystemMouseCursors.basic,
         onEnter: (_) => setState(() => _hover = true),
         onExit: (_) => setState(() => _hover = false),
         child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: widget.onTap,
-          child: AnimatedScale(
-            scale: _hover ? 1.06 : 1.0,
-            duration: const Duration(milliseconds: 180),
-            child: AnimatedOpacity(
-              opacity: _hover ? 0.9 : 0.5,
-              duration: const Duration(milliseconds: 180),
-              child: Container(
-                width: s,
-                height: s,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    center: const Alignment(-0.3, -0.35),
-                    colors: [
-                      Color.lerp(a, Colors.white, dark ? 0.15 : 0.35)!,
-                      a,
-                      Color.lerp(a, Colors.black, 0.25)!,
-                    ],
-                    stops: const [0.0, 0.6, 1.0],
-                  ),
-                  border: Border.all(
-                      color: Colors.white.withValues(alpha: dark ? 0.15 : 0.7),
-                      width: s * 0.035),
-                  boxShadow: [
-                    BoxShadow(
-                      color: a.withValues(alpha: _hover ? 0.35 : 0.18),
-                      blurRadius: _hover ? 20 : 12,
-                      spreadRadius: 1,
-                    ),
-                  ],
-                ),
-                child: Icon(Icons.music_note_rounded,
-                    color: Colors.white.withValues(alpha: 0.9),
-                    size: s * 0.38),
-              ),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: on && _hover
+                  ? widget.accent.withValues(alpha: 0.10)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
             ),
+            child: widget.child,
           ),
         ),
       ),

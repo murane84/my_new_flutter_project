@@ -4655,11 +4655,21 @@ class _ChatPageState extends State<ChatPage>
                   child: JumpRings(
                     trigger: ringFor,
                     shape: bubbleShape,
-                    // The bubble's own colour; a near-white bubble is
-                    // deepened a touch so its rings still show on light walls.
-                    color: bubbleColor.computeLuminance() > 0.8
-                        ? Color.lerp(bubbleColor, Colors.black, 0.28)!
-                        : bubbleColor,
+                    // The bubble's own colour (it already follows dark /
+                    // light mode + the bubble theme). At the extremes the
+                    // ring is nudged so it never vanishes into its
+                    // background: a near-white bubble deepens a touch, a
+                    // near-black one (dark mode) lightens a touch.
+                    color: () {
+                      final l = bubbleColor.computeLuminance();
+                      if (l > 0.8) {
+                        return Color.lerp(bubbleColor, Colors.black, 0.28)!;
+                      }
+                      if (l < 0.06) {
+                        return Color.lerp(bubbleColor, Colors.white, 0.35)!;
+                      }
+                      return bubbleColor;
+                    }(),
                     child: Container(
                     decoration: ShapeDecoration(
                       color: bubbleColor,

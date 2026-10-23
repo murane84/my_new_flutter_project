@@ -756,7 +756,10 @@ extension _ChatHeartComposer on _ChatPageState {
             (g) => g['user_id']?.toString() == sid.toString());
         _heartForName = match.isNotEmpty
             ? _memberName(match.first).split(' ').first
-            : (sm['username'] ?? 'them').toString().split(' ').first;
+            : ContactNames.instance.displayName(
+                    of: sm, registered: (sm['username'] ?? 'them').toString())
+                .split(' ')
+                .first;
       } else {
         _heartFor = null;
         _heartForName = null;

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/now_playing_presence.dart';
 import 'api_service.dart';
 import '../utils/bounce_tap.dart';
+import '../services/contact_names.dart';
 
 /// The music-player toggle for broadcasting "listening now" to friends.
 /// Tap flips sharing on/off; long-press opens the audience sheet (who can see).
@@ -213,7 +214,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
 
   Widget _friendRow(ColorScheme scheme, Map<String, dynamic> f) {
     final id = (f['id'] as num?)?.toInt() ?? -1;
-    final name = (f['username'] ?? '').toString();
+    final name = ContactNames.instance.displayName(of: f, registered: (f['username'] ?? '').toString());
     final checked = _selected.contains(id);
     return CheckboxListTile(
       contentPadding: EdgeInsets.zero,

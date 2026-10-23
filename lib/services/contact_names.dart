@@ -220,6 +220,49 @@ class ContactNames {
 
   /// The name this number is saved under in the user's phone book, or null if
   /// it isn't saved (or contacts aren't available).
+  // user id → phone, learned from the friends list and group members, so a
+  // screen that only has someone's id (Our Space partner, a live room host…)
+  // can still show my saved name for them.
+  final Map<int, String> _phoneById = {};
+
+  /// Remember a person's number by their user id (friends / members feeds).
+  void rememberPhone(Object? userId, Object? phone) {
+    final id = int.tryParse('${userId ?? ''}');
+    final ph = '${phone ?? ''}'.trim();
+    if (id == null || ph.isEmpty) return;
+    _phoneById[id] = ph;
+  }
+
+  /// Remember every person in a list of user maps ('id' or 'user_id' +
+  /// 'phone').
+  void rememberAll(Iterable<dynamic>? people) {
+    if (people == null) return;
+    for (final p in people) {
+      if (p is Map) rememberPhone(p['id'] ?? p['user_id'], p['phone']);
+    }
+  }
+
+  /// THE app-wide rule for showing another person: the name *I* saved for
+  /// their number in my phone book, else [registered] — their Aluta profile
+  /// name. [of] is any user map from the server ('phone', 'id' / 'user_id');
+  /// [phone] / [userId] can be given directly instead.
+  String displayName({
+    Map? of,
+    String? phone,
+    Object? userId,
+    required String registered,
+  }) {
+    var ph = (phone ?? (of == null ? '' : '${of['phone'] ?? ''}')).trim();
+    if (ph.isEmpty) {
+      final id = int.tryParse(
+          '${userId ?? (of == null ? '' : (of['id'] ?? of['user_id'] ?? ''))}');
+      if (id != null) ph = _phoneById[id] ?? '';
+    }
+    if (ph.isEmpty || !hasRealName(ph)) return registered;
+    final saved = nameFor(ph)?.trim();
+    return (saved == null || saved.isEmpty) ? registered : saved;
+  }
+
   String? nameFor(String phone) {
     if (_byKey.isEmpty) return null;
     final d = _digits(phone);

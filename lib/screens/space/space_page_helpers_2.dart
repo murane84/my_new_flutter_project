@@ -238,8 +238,9 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
     final commentCount = (e['comment_count'] as num?)?.toInt() ?? 0;
     // Who signs the entry — real username, or the reader's own name for a memory
     // they wrote before the author record hydrates.
-    final signName = ((author?['username'] ?? '').toString().trim().isNotEmpty)
-        ? (author!['username']).toString().trim()
+    final signName = (ContactNames.instance.displayName(of: author, registered: (author?['username'] ?? '').toString()).trim().isNotEmpty)
+        ? ContactNames.instance.displayName(
+                of: author, registered: (author!['username']).toString().trim())
         : (mine ? (widget.myName ?? '').trim() : '');
     // If this memory grew from a kept Pinned Moment, show it at the top of the
     // page, tappable to glide back to the moment on the wall.
@@ -286,7 +287,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
                 child: Row(
                   children: [
                     diaryAuthorBadge(
-                      name: (author?['username'] ?? '?').toString(),
+                      name: ContactNames.instance.displayName(of: author, registered: (author?['username'] ?? '?').toString()),
                       imageUrl: _full(author?['avatar_url']),
                       radius: 15,
                     ),

@@ -498,7 +498,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
     final rightUrl =
         others.isNotEmpty ? _full(others.first['avatar_url']) : null;
     final rightName =
-        others.isNotEmpty ? (others.first['username'] ?? '').toString() : '';
+        others.isNotEmpty ? ContactNames.instance.displayName(of: others.first, registered: (others.first['username'] ?? '').toString()) : '';
     final me = _ringed(
       child: InitialsAvatar(
         name: (widget.myName ?? 'You').isEmpty ? 'You' : widget.myName!,

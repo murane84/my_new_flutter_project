@@ -1456,7 +1456,9 @@ class _ChatPageState extends State<ChatPage>
       );
       if (!mounted) return;
       if (sent != null) {
-        showToast(context, 'Forwarded to ${friend['username'] ?? 'contact'}',
+        showToast(
+            context,
+            'Forwarded to ${ContactNames.instance.displayName(of: friend, registered: (friend['username'] ?? 'contact').toString())}',
             type: ToastType.success);
         // If forwarding into the currently-open thread, show it immediately.
         if (fidInt == widget.friendId) {
@@ -3878,7 +3880,10 @@ class _ChatPageState extends State<ChatPage>
         final sender = mine
             ? 'You'
             : _isGroup
-                ? ((m['sender'] as Map?)?['username'] ?? 'Someone').toString()
+                ? ContactNames.instance.displayName(
+                    of: m['sender'] as Map?,
+                    registered: ((m['sender'] as Map?)?['username'] ?? 'Someone')
+                        .toString())
                 : widget.friendName.split(' ').first;
         final t = content.trim().isNotEmpty
             ? content.trim()

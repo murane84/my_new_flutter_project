@@ -19,12 +19,18 @@ extension _ChatPageHelpers1 on _ChatPageState {
   String _spaceTitle(Map<String, dynamic> s) {
     final name = (s['name'] ?? '').toString().trim();
     if (name.isNotEmpty) return name;
-    final who = (_otherMember(s)?['username'] ?? '').toString().trim();
+    final who = ContactNames.instance.displayName(
+            of: _otherMember(s),
+            registered: (_otherMember(s)?['username'] ?? '').toString())
+        .trim();
     return who.isNotEmpty ? 'You & $who' : 'Our Space';
   }
 
   String _spacePartnerName(Map<String, dynamic> s) {
-    final who = (_otherMember(s)?['username'] ?? '').toString().trim();
+    final who = ContactNames.instance.displayName(
+            of: _otherMember(s),
+            registered: (_otherMember(s)?['username'] ?? '').toString())
+        .trim();
     return who.isNotEmpty ? who : 'your partner';
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'api_service.dart';
 import '../utils/readable.dart';
+import '../services/contact_names.dart';
 
 /// Manual "Add friend" — the discovery path for desktop/web users with no
 /// phone-book to scan (and a quick add on mobile too). You look someone up by
@@ -75,7 +76,7 @@ class _AddFriendSheetState extends State<_AddFriendSheet> {
     if (ok) {
       // Snack first (attaches to the app-level messenger so it survives the
       // sheet closing), then refresh the list and close.
-      _snack('${u['username'] ?? 'Friend'} added to your circle');
+      _snack('${ContactNames.instance.displayName(of: u, registered: (u['username'] ?? 'Friend').toString())} added to your circle');
       widget.onAdded();
       Navigator.pop(context);
     } else {
@@ -170,7 +171,7 @@ class _AddFriendSheetState extends State<_AddFriendSheet> {
         ),
       );
     }
-    final name = (u['username'] ?? 'Aluta user').toString();
+    final name = ContactNames.instance.displayName(of: u, registered: (u['username'] ?? 'Aluta user').toString());
     final phone = (u['phone'] ?? '').toString();
     return Container(
       padding: const EdgeInsets.all(12),

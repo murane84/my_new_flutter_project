@@ -41,6 +41,7 @@ import 'music/song_identifier.dart' show showSongIdentifier;
 import '../widgets/genie_menu.dart';
 import '../widgets/song_feel_strip.dart';
 import '../utils/readable.dart';
+import '../services/contact_names.dart';
 
 part 'music/music_control_widgets.dart'; // _CtrlBtn, _CtrlChip, _SpeedPanel
 part 'music/music_playlist_overlay.dart'; // _PlaylistOverlay + state

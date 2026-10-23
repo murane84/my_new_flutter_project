@@ -492,7 +492,7 @@ extension _HomePageHelpers1 on HomePageState {
       if (id == null || id == myId) continue;
       members.add(GroupParticipant(
         id,
-        (m['username'] ?? '').toString(),
+        ContactNames.instance.displayName(of: m, registered: (m['username'] ?? '').toString()),
         m['avatar_url'] as String?,
         phone: m['phone'] as String?,
       ));
@@ -535,7 +535,7 @@ extension _HomePageHelpers1 on HomePageState {
       if (id == null || id == myId) continue;
       members.add(GroupParticipant(
         id,
-        (m['username'] ?? '').toString(),
+        ContactNames.instance.displayName(of: m, registered: (m['username'] ?? '').toString()),
         m['avatar_url'] as String?,
         phone: m['phone'] as String?,
       ));

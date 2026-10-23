@@ -51,7 +51,7 @@ class _ShareSheetState extends State<_ShareSheet> {
     if (_sending) return;
     final id = (friend['id'] as num?)?.toInt();
     if (id == null) return;
-    final name = (friend['username'] ?? 'friend').toString();
+    final name = ContactNames.instance.displayName(of: friend, registered: (friend['username'] ?? 'friend').toString());
     setState(() {
       _sending = true;
       _sendingTo = id;
@@ -249,7 +249,7 @@ class _ShareSheetState extends State<_ShareSheet> {
                     itemCount: friends.length,
                     itemBuilder: (_, i) {
                       final f = friends[i];
-                      final uname = (f['username'] ?? 'Friend').toString();
+                      final uname = ContactNames.instance.displayName(of: f, registered: (f['username'] ?? 'Friend').toString());
                       final fid = (f['id'] as num?)?.toInt();
                       final busy = _sendingTo != null && _sendingTo == fid;
                       return ListTile(

@@ -124,6 +124,8 @@ def _member_dicts(db: Session, space: RelationshipSpace) -> list:
             "username": u.username,
             "avatar_url": u.avatar_url,
             "is_online": bool(u.is_online),
+            # So each phone shows ITS saved name for the partner.
+            "phone": u.phone,
         })
     return out
 
@@ -322,7 +324,9 @@ def _user_brief(db: Session, uid: int) -> Optional[dict]:
     u = db.query(User).filter(User.id == uid).first()
     if not u:
         return None
-    return {"id": u.id, "username": u.username, "avatar_url": u.avatar_url}
+    # phone: so the partner's phone can show its saved name for them.
+    return {"id": u.id, "username": u.username, "avatar_url": u.avatar_url,
+            "phone": u.phone}
 
 
 def _request_dict(db: Session, req: BondRequest) -> dict:

@@ -12,7 +12,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
       return const SizedBox.shrink();
     }
     final name =
-        _others.isNotEmpty ? (_others.first['username'] ?? 'them').toString() : 'them';
+        _others.isNotEmpty ? ContactNames.instance.displayName(of: _others.first, registered: (_others.first['username'] ?? 'them').toString()) : 'them';
     return Padding(
       padding: const EdgeInsets.only(top: 14),
       child: Container(
@@ -307,7 +307,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
     if (active) return _tuneInCard(scheme);
     // Nobody's playing — a calm invite rather than an empty space.
     final name = _others.isNotEmpty
-        ? (_others.first['username'] ?? 'them').toString()
+        ? ContactNames.instance.displayName(of: _others.first, registered: (_others.first['username'] ?? 'them').toString())
         : 'them';
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -385,7 +385,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
     if (t.isEmpty) return const SizedBox.shrink();
     final line = a.isNotEmpty ? '$t — $a' : t;
     final name = _others.isNotEmpty
-        ? (_others.first['username'] ?? 'They').toString()
+        ? ContactNames.instance.displayName(of: _others.first, registered: (_others.first['username'] ?? 'They').toString())
         : 'They';
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -501,7 +501,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
     final mode = (c['mode'] ?? 'message').toString();
     final creator = (c['creator'] as Map?)?.cast<String, dynamic>();
     final who =
-        mine ? 'You' : ((creator?['username'] ?? 'Your partner').toString());
+        mine ? 'You' : (ContactNames.instance.displayName(of: creator, registered: (creator?['username'] ?? 'Your partner').toString()));
     final unlockAt =
         DateTime.tryParse((c['unlock_at'] ?? '').toString())?.toLocal();
     final title = (c['track_title'] ?? '').toString();

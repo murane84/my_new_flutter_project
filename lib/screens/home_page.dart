@@ -1215,6 +1215,16 @@ class HomePageState extends rp.ConsumerState<HomePage>
     );
   }
 
+  /// A line the server wrote with the actor's REGISTERED name in it ("Belina
+  /// pinned a moment for you") → the same line with the name I saved for them.
+  String _inMyNames(Map data, String line) {
+    final reg = (data['from_username'] ?? data['from_name'] ?? '').toString();
+    if (reg.isEmpty) return line;
+    final mine = ContactNames.instance
+        .displayName(userId: data['from_id'], registered: reg);
+    return mine == reg ? line : line.replaceAll(reg, mine);
+  }
+
   /// The flame next to a bonded partner's name (fetched lazily, cached).
   int? _streakFor(int friendId) {
     final space = _spaceWithFriend(friendId);
@@ -1787,7 +1797,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final line = (data['line'] ??
               '${data['from_username'] ?? 'Someone'} pinned a moment for you 💛')
           .toString();
-      if (mounted) showToast(context, line, type: ToastType.info);
+      if (mounted) showToast(context, _inMyNames(data, line), type: ToastType.info);
       _loadSpaces();
       spaceEventBus.value++; // live-reload an open Our Space page
       return;
@@ -1795,7 +1805,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Your partner reacted to a moment you pinned.
     if (type == 'space_moment_react') {
       final data = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
-      final who = (data['from_username'] ?? 'Your partner').toString();
+      final who = ContactNames.instance.displayName(
+          userId: data['from_id'],
+          registered: (data['from_username'] ?? 'Your partner').toString());
       final emoji = (data['emoji'] ?? '❤️').toString();
       if (mounted) {
         showToast(context, '$who reacted $emoji to your moment',
@@ -1811,7 +1823,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
               '${data['from_username'] ?? 'Someone'} added a song to your '
                   'playlist 🎶')
           .toString();
-      if (mounted) showToast(context, line, type: ToastType.info);
+      if (mounted) showToast(context, _inMyNames(data, line), type: ToastType.info);
       _loadSpaces();
       spaceEventBus.value++;
       return;
@@ -1829,7 +1841,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final line = (data['line'] ??
               '${data['from_username'] ?? 'Someone'} sent you a dedication 💝')
           .toString();
-      if (mounted) showToast(context, line, type: ToastType.info);
+      if (mounted) showToast(context, _inMyNames(data, line), type: ToastType.info);
       _loadSpaces();
       spaceEventBus.value++;
       return;
@@ -1863,7 +1875,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final data = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
       final line = (data['line'] ?? '').toString();
       if (type != 'space_diary_react' && line.isNotEmpty && mounted) {
-        showToast(context, line, type: ToastType.info);
+        showToast(context, _inMyNames(data, line), type: ToastType.info);
       }
       _loadSpaces();
       spaceEventBus.value++; // live-reload an open Our Space page + memory
@@ -1875,7 +1887,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final line = (data['line'] ??
               '${data['from_username'] ?? 'Someone'} is thinking of you 💭')
           .toString();
-      if (mounted) showToast(context, line, type: ToastType.info);
+      if (mounted) showToast(context, _inMyNames(data, line), type: ToastType.info);
       return;
     }
     // Someone wants to pin a bond with you → show the approval banner + toast.
@@ -1884,7 +1896,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final line = (data['line'] ??
               '${data['from_username'] ?? 'Someone'} wants to pin a bond 💞')
           .toString();
-      if (mounted) showToast(context, line, type: ToastType.info);
+      if (mounted) showToast(context, _inMyNames(data, line), type: ToastType.info);
       _loadBondRequests();
       return;
     }
@@ -1895,7 +1907,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
               '${data['from_username'] ?? 'Someone'} accepted — your Space is '
                   'live 🎉')
           .toString();
-      if (mounted) showToast(context, line, type: ToastType.success);
+      if (mounted) showToast(context, _inMyNames(data, line), type: ToastType.success);
       _loadBondRequests();
       _loadSpaces();
       return;
@@ -2160,6 +2172,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
       await _hydratePreviewsFromCache(list, group: false);
       if (!mounted) return;
+      // Every friend's number by id → my saved names anywhere in the app.
+      ContactNames.instance.rememberAll(list);
       setState(() {
         _allFriends = list;
         _filteredFriends = list;
@@ -2199,6 +2213,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       await _hydratePreviewsFromCache(friends, group: false);
       // Save fresh data to cache
       await _saveFriendsCache(friends);
+      ContactNames.instance.rememberAll(friends);
       setState(() {
         _allFriends = friends;
         // Respect an active search query — mirrors _fetchGroups so a background
@@ -3487,6 +3502,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     if (spaces.isEmpty && !ConnectionStatus.instance.isOnline) {
       await _loadCachedSpaces();
       return;
+    }
+    for (final s in spaces) {
+      ContactNames.instance.rememberAll(s['members'] as List?);
     }
     setState(() => _spaces = spaces);
     try {

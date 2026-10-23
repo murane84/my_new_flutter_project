@@ -13,7 +13,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
     if (mine) return 'Me';
     if (_isGroup) {
       final sm = (m['sender'] as Map?) ?? const {};
-      return (sm['username'] ?? 'Member').toString();
+      return ContactNames.instance.displayName(
+          of: sm, registered: (sm['username'] ?? 'Member').toString());
     }
     return widget.friendName;
   }

@@ -27,6 +27,7 @@ import '../widgets/animated_reaction.dart';
 import '../widgets/aluta_composer_field.dart';
 import '../services/track_title.dart' show displayTitleForPath;
 import '../utils/readable.dart';
+import '../services/contact_names.dart';
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
 /// Presented with `showDialog(...)` so it floats over the chat instead of
@@ -652,7 +653,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       if (p is! Map) continue;
       list.add(_Participant(
         id: (p['id'] as num?)?.toInt() ?? 0,
-        name: (p['username'] ?? 'Someone').toString(),
+        // As I saved them in my phone book, else their registered name.
+        name: ContactNames.instance.displayName(
+            of: p, registered: (p['username'] ?? 'Someone').toString()),
         avatar: (p['avatar_url'] as String?),
         isHost: p['is_host'] == true,
       ));

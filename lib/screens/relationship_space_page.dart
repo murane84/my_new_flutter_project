@@ -42,6 +42,7 @@ import '../widgets/genie_menu.dart';
 import '../theme/aluta_palette.dart';
 import '../utils/readable.dart';
 import '../utils/marquee_text.dart';
+import '../services/contact_names.dart';
 
 part 'space/space_moment_composer.dart'; // moment composer + add-to-playlist sheet
 part 'space/space_edit_sheet.dart'; // edit-space sheet + wallpaper picker
@@ -434,7 +435,7 @@ String deriveSpaceName(Map<String, dynamic> space, int? myUserId) {
   final others = members
       .whereType<Map>()
       .where((m) => (m['id'] as num?)?.toInt() != myUserId)
-      .map((m) => (m['username'] ?? '').toString().trim())
+      .map((m) => ContactNames.instance.displayName(of: m, registered: (m['username'] ?? '').toString()).trim())
       .where((s) => s.isNotEmpty)
       .toList();
   if (others.isEmpty) return 'Our Space';

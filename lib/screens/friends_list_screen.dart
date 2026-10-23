@@ -10,6 +10,7 @@ import 'token_helper.dart';
 import 'home_page.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/snackbar_helper.dart';
+import '../services/contact_names.dart';
 
 class FriendsListScreen extends StatefulWidget {
   static const routeName = '/friends';
@@ -173,7 +174,7 @@ class FriendsListScreenState extends State<FriendsListScreen> {
         child: Row(
           children: [
             InitialsAvatar(
-              name: user.username,
+              name: _shown(user),
               radius: 26,
               isOnline: user.isOnline,
             ),
@@ -195,7 +196,7 @@ class FriendsListScreenState extends State<FriendsListScreen> {
                         ),
                       Expanded(
                         child: Text(
-                          user.username,
+                          _shown(user),
                           style: TextStyle(
                             color: textColor,
                             fontWeight: hasUnread
@@ -341,7 +342,7 @@ class FriendOptionsSheet extends StatelessWidget {
                   if (context.mounted) {
                     showInfoSnackBar(
                       context,
-                      muted ? '${user.username} muted' : '${user.username} unmuted',
+                      muted ? '${_shown(user)} muted' : '${_shown(user)} unmuted',
                     );
                   }
                 } catch (_) {
@@ -364,7 +365,7 @@ class FriendOptionsSheet extends StatelessWidget {
                   builder: (_) => AlertDialog(
                     title: const Text('Delete Chat'),
                     content: Text(
-                      'Delete your chat with ${user.username}? This cannot be undone.',
+                      'Delete your chat with ${_shown(user)}? This cannot be undone.',
                     ),
                     actions: [
                       TextButton(
@@ -408,8 +409,8 @@ class FriendOptionsSheet extends StatelessWidget {
                     showInfoSnackBar(
                       context,
                       blocked
-                          ? '${user.username} blocked'
-                          : '${user.username} unblocked',
+                          ? '${_shown(user)} blocked'
+                          : '${_shown(user)} unblocked',
                     );
                   }
                 } catch (_) {
@@ -425,3 +426,7 @@ class FriendOptionsSheet extends StatelessWidget {
     );
   }
 }
+
+/// How I know [u]: my saved phone-book name for them, else their username.
+String _shown(User u) =>
+    ContactNames.instance.displayName(userId: u.id, registered: u.username);

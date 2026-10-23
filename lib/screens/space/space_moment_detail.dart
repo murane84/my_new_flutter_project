@@ -144,7 +144,7 @@ class _MomentCommentsSheetState extends State<_MomentCommentsSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           diaryAuthorBadge(
-            name: (author?['username'] ?? '?').toString(),
+            name: ContactNames.instance.displayName(of: author, registered: (author?['username'] ?? '?').toString()),
             imageUrl: resolveAvatarUrl(
                 author?['avatar_url']?.toString(), widget.apiBase),
             radius: 13,
@@ -169,7 +169,7 @@ class _MomentCommentsSheetState extends State<_MomentCommentsSheet> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      mine ? 'You' : (author?['username'] ?? '').toString(),
+                      mine ? 'You' : ContactNames.instance.displayName(of: author, registered: (author?['username'] ?? '').toString()),
                       style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w700,
@@ -740,7 +740,7 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
                   Row(
                     children: [
                       diaryAuthorBadge(
-                        name: (author?['username'] ?? '?').toString(),
+                        name: ContactNames.instance.displayName(of: author, registered: (author?['username'] ?? '?').toString()),
                         imageUrl: resolveAvatarUrl(
                             author?['avatar_url']?.toString(), widget.apiBase),
                         radius: 15,
@@ -956,7 +956,7 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
     // grouped bubbles stay in the same column.
     final Widget avatar = showAvatar
         ? diaryAuthorBadge(
-            name: (author?['username'] ?? '?').toString(),
+            name: ContactNames.instance.displayName(of: author, registered: (author?['username'] ?? '?').toString()),
             imageUrl: resolveAvatarUrl(
                 author?['avatar_url']?.toString(), widget.apiBase),
             radius: 12,

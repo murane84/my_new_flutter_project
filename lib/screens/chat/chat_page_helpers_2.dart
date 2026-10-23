@@ -141,7 +141,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
                   itemCount: friends.length,
                   itemBuilder: (_, i) {
                     final f = friends[i];
-                    final name = (f['username'] ?? 'Friend').toString();
+                    final name = ContactNames.instance.displayName(of: f, registered: (f['username'] ?? 'Friend').toString());
                     final rawA = f['avatar_url'] as String?;
                     final avatarUrl =
                         (rawA != null && rawA.isNotEmpty) ? fullMediaUrl(rawA) : null;

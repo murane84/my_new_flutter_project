@@ -43,7 +43,8 @@ extension _HomeFriendListView on HomePageState {
     }
     String nameKey(Map<String, dynamic> m) => (m['is_group'] == true
             ? (m['title'] ?? '')
-            : (m['username'] ?? ''))
+            : ContactNames.instance.displayName(
+                of: m, registered: (m['username'] ?? '').toString()))
         .toString()
         .toLowerCase();
     combined.sort((a, b) {
@@ -570,7 +571,7 @@ extension _HomeFriendListView on HomePageState {
         .where((m) => (m['id'] as num?)?.toInt() != _myUserId)
         .toList();
     final otherName =
-        others.isNotEmpty ? (others.first['username'] ?? '').toString() : '';
+        others.isNotEmpty ? ContactNames.instance.displayName(of: others.first, registered: (others.first['username'] ?? '').toString()) : '';
     final otherAvatar =
         others.isNotEmpty ? _avatarFull(others.first['avatar_url']) : null;
     final together = _isTogether;
@@ -979,7 +980,7 @@ extension _HomeFriendListView on HomePageState {
         .where((m) => (m['id'] as num?)?.toInt() != _myUserId)
         .toList();
     final otherName =
-        others.isNotEmpty ? (others.first['username'] ?? '').toString() : '';
+        others.isNotEmpty ? ContactNames.instance.displayName(of: others.first, registered: (others.first['username'] ?? '').toString()) : '';
     final otherAvatar =
         others.isNotEmpty ? _avatarFull(others.first['avatar_url']) : null;
     final otherId =
@@ -1271,7 +1272,7 @@ extension _HomeFriendListView on HomePageState {
 
   Widget _bondRequestCard(ColorScheme scheme, Map<String, dynamic> req) {
     final from = (req['from_user'] as Map?)?.cast<String, dynamic>();
-    final name = (from?['username'] ?? 'Someone').toString();
+    final name = ContactNames.instance.displayName(of: from, registered: (from?['username'] ?? 'Someone').toString());
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1935,7 +1936,9 @@ extension _HomeFriendListView on HomePageState {
 
   Widget _liveRoomDropInBody(
       ColorScheme scheme, Map<String, dynamic> room, int count) {
-    final host = (room['host_username'] ?? 'A friend').toString();
+    final host = ContactNames.instance.displayName(
+        userId: room['host_id'],
+        registered: (room['host_username'] ?? 'A friend').toString());
     final track = room['track'] as Map?;
     final title = (track?['title'] ?? '').toString();
     return Column(
@@ -2196,7 +2199,9 @@ extension _HomeFriendListView on HomePageState {
     if (token == null || myUserId == null || !mounted) return;
     final sid = (room['session_id'] ?? '').toString();
     if (sid.isEmpty) return;
-    final host = (room['host_username'] ?? 'Your friend').toString();
+    final host = ContactNames.instance.displayName(
+        userId: room['host_id'],
+        registered: (room['host_username'] ?? 'Your friend').toString());
     final track =
         (room['track'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
     // Don't stack a second listener controller on top of an active session —
@@ -2267,7 +2272,9 @@ extension _HomeFriendListView on HomePageState {
               ]),
             ),
             ...rooms.map((r) {
-              final host = (r['host_username'] ?? 'Friend').toString();
+              final host = ContactNames.instance.displayName(
+                  userId: r['host_id'],
+                  registered: (r['host_username'] ?? 'Friend').toString());
               final tt = ((r['track'] as Map?)?['title'] ?? '').toString();
               return ListTile(
                 leading: Icon(Icons.headphones_rounded, color: scheme.primary),

@@ -399,7 +399,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
     final caption = (m['caption'] ?? '').toString();
     final mine = m['mine'] == true;
     final author = (m['author'] as Map?)?.cast<String, dynamic>();
-    final authorName = mine ? 'You' : (author?['username'] ?? '').toString();
+    final authorName = mine ? 'You' : ContactNames.instance.displayName(of: author, registered: (author?['username'] ?? '').toString());
     final created = DateTime.tryParse((m['created_at'] ?? '').toString());
     final song = _songFromRef(m['ref']);
     final commentCount = (m['comment_count'] as num?)?.toInt() ??
@@ -1137,7 +1137,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
     final mine = e['mine'] == true;
     final pinned = e['pinned'] == true;
     final author = (e['author'] as Map?)?.cast<String, dynamic>();
-    final authorName = mine ? 'You' : (author?['username'] ?? '').toString();
+    final authorName = mine ? 'You' : ContactNames.instance.displayName(of: author, registered: (author?['username'] ?? '').toString());
     final d = DateTime.tryParse((e['plan_date'] ?? '').toString());
     final when = d != null
         ? '${DateFormat('EEE, MMM d').format(d)} · ${_relDay(DateTime(d.year, d.month, d.day))}'

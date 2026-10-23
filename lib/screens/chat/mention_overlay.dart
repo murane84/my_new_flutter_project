@@ -31,6 +31,7 @@ extension _ChatMentions on _ChatPageState {
           .whereType<Map>()
           .map((m) => Map<String, dynamic>.from(m))
           .toList();
+      ContactNames.instance.rememberAll(_groupMembers);
       _publishMentionNames();
       rebuildWith(() {});
     } catch (_) {}

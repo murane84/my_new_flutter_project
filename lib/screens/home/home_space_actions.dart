@@ -155,6 +155,7 @@ extension _HomeSpaceActions on HomePageState {
             'id': otherId,
             'username': (other['username'] ?? '').toString(),
             'avatar_url': other['avatar_url'],
+            'phone': other['phone'],
           });
   }
 

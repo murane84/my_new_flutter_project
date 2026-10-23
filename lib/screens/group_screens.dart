@@ -15,6 +15,7 @@ import '../utils/emoji_field.dart';
 import '../widgets/genie_menu.dart';
 import 'user_profile_sheet.dart';
 import '../utils/readable.dart';
+import '../services/contact_names.dart';
 
 // Groups are presented as CARD POPUPS (AppPopupShell) — not full-window routes —
 // so on desktop they never hide the music/chat panels. Selecting or creating a
@@ -228,7 +229,14 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
     final q = _search.text.trim().toLowerCase();
     if (q.isEmpty) return _friends;
     return _friends
-        .where((f) => (f['username'] ?? '').toString().toLowerCase().contains(q))
+        // Match how I saved them OR their registered name.
+        .where((f) =>
+            ContactNames.instance
+                .displayName(
+                    of: f, registered: (f['username'] ?? '').toString())
+                .toLowerCase()
+                .contains(q) ||
+            (f['username'] ?? '').toString().toLowerCase().contains(q))
         .toList();
   }
 
@@ -383,7 +391,7 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
       itemBuilder: (_, i) {
         final f = list[i];
         final id = (f['id'] as num).toInt();
-        final name = (f['username'] ?? 'Friend').toString();
+        final name = ContactNames.instance.displayName(of: f, registered: (f['username'] ?? 'Friend').toString());
         final checked = _selected.contains(id);
         return CheckboxListTile(
           value: checked,
@@ -818,7 +826,11 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
 
   Widget _memberTile(dynamic m, ColorScheme scheme) {
     final uid = (m['user_id'] as num).toInt();
+    // The profile card resolves the saved name itself (and shows the
+    // registered one under it), so it gets the registered name; the row
+    // shows how I saved them.
     final name = (m['username'] ?? 'User').toString();
+    final shown = ContactNames.instance.displayName(of: m, registered: name);
     final role = (m['role'] ?? 'member').toString();
     final phone = (m['phone'] ?? '').toString();
     final isSelf = uid == _myUid;
@@ -841,13 +853,13 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
             ? authNetworkImageProvider(avatar, mediaAuthHeaders(avatar))
             : null,
         child: avatar == null
-            ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+            ? Text(shown.isNotEmpty ? shown[0].toUpperCase() : '?',
                 style: TextStyle(color: scheme.onPrimaryContainer))
             : null,
       ),
       title: Row(children: [
         Flexible(
-            child: Text(isSelf ? '$name (You)' : name,
+            child: Text(isSelf ? '$name (You)' : shown,
                 overflow: TextOverflow.ellipsis)),
         if (role == 'admin') ...[
           const SizedBox(width: 6),
@@ -986,7 +998,7 @@ class _AddMembersPickerState extends State<_AddMembersPicker> {
           itemBuilder: (_, i) {
             final f = _friends[i];
             final id = (f['id'] as num).toInt();
-            final name = (f['username'] ?? 'Friend').toString();
+            final name = ContactNames.instance.displayName(of: f, registered: (f['username'] ?? 'Friend').toString());
             return CheckboxListTile(
               value: _selected.contains(id),
               onChanged: (v) => setState(() {

@@ -13,7 +13,7 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
         ? Future.value(const <Map<String, dynamic>>[])
         : ApiService().loveLetters(pid);
     final partner = _others.isNotEmpty
-        ? (_others.first['username'] ?? 'them').toString()
+        ? ContactNames.instance.displayName(of: _others.first, registered: (_others.first['username'] ?? 'them').toString())
         : 'them';
     return _sectionPanel(
       scheme,

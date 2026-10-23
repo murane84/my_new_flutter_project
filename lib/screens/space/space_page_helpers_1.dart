@@ -71,7 +71,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
     if (others.isEmpty) return;
     final partner = others.first;
     final partnerId = (partner['id'] as num?)?.toInt();
-    final partnerName = (partner['username'] ?? 'them').toString();
+    final partnerName = ContactNames.instance.displayName(of: partner, registered: (partner['username'] ?? 'them').toString());
     final myUserId = widget.myUserId;
     if (partnerId == null || myUserId == null) return;
 
@@ -843,7 +843,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
                     right: 0,
                     top: 1,
                     child: diaryAuthorBadge(
-                        name: (partner?['username'] ?? '?').toString(),
+                        name: ContactNames.instance.displayName(of: partner, registered: (partner?['username'] ?? '?').toString()),
                         imageUrl: _full(partner?['avatar_url']),
                         radius: 19)),
               ],

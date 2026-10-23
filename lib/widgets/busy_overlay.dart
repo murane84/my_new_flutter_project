@@ -39,7 +39,8 @@ class _BusyOverlayState extends State<BusyOverlay> {
 
   bool get _busy => appBusy.major.value > 0 &&
       splashOnScreen.value == 0 &&
-      menusOnScreen.value == 0;
+      menusOnScreen.value == 0 &&
+      discHostsBusy.value == 0;
 
   @override
   void initState() {
@@ -48,6 +49,7 @@ class _BusyOverlayState extends State<BusyOverlay> {
     appBusy.majorLabel.addListener(_onLabel);
     splashOnScreen.addListener(_onBusy);
     menusOnScreen.addListener(_onBusy);
+    discHostsBusy.addListener(_onBusy);
     _onBusy();
   }
 
@@ -135,6 +137,7 @@ class _BusyOverlayState extends State<BusyOverlay> {
     appBusy.majorLabel.removeListener(_onLabel);
     splashOnScreen.removeListener(_onBusy);
     menusOnScreen.removeListener(_onBusy);
+    discHostsBusy.removeListener(_onBusy);
     super.dispose();
   }
 

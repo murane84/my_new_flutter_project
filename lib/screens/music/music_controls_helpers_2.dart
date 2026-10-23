@@ -1073,12 +1073,39 @@ Column(
               // The disc takes whatever height is left, kept round.
               Expanded(
                 child: LayoutBuilder(builder: (c, cc) {
-                  final side = (cc.maxWidth * 0.66 < cc.maxHeight - 8
+                  // -26: room for the loading ring around the record.
+                  final side = (cc.maxWidth * 0.66 < cc.maxHeight - 26
                           ? cc.maxWidth * 0.66
-                          : cc.maxHeight - 8)
+                          : cc.maxHeight - 26)
                       .clamp(80.0, 260.0)
                       .toDouble();
-                  return Center(child: discWidget(side));
+                  // While a song (or the app) is busy, a glowing ring sweeps
+                  // around the record instead of a loader over the title.
+                  return Center(
+                    child: VisibilityDetector(
+                      key: const ValueKey('aluta-hero-disc'),
+                      onVisibilityChanged: (v) =>
+                          _setHostingBusy(v.visibleFraction > 0.5),
+                      child: SizedBox(
+                        width: side + 18,
+                        height: side + 18,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            discWidget(side),
+                            ValueListenableBuilder<int>(
+                              valueListenable: appBusy.major,
+                              builder: (_, major, __) => _DiscLoadRing(
+                                active: buffering || major > 0,
+                                side: side + 18,
+                                accent: accent,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
                 }),
               ),
               // Everything under the disc lives in a FIXED-height area: the
@@ -1086,7 +1113,7 @@ Column(
               // vanish inside it without ever resizing the disc (that resize
               // was the shake on Android).
               SizedBox(
-                height: 176,
+                height: 220,
                 child: Column(
                   children: [
                   SizedBox(
@@ -1122,6 +1149,14 @@ Column(
                       ),
                     ),
                   _syncedLyricLine(scheme, accent, false),
+                  // Dedicate this song ❤ — the people I chat with most. Its
+                  // line is always reserved so it never nudges the record.
+                  SizedBox(
+                    height: 44,
+                    child: (live || !hasTrack || _dedicateTo.isEmpty)
+                        ? null
+                        : _dedicateRow(scheme, accent),
+                  ),
                   if (upNextOn) ...[
                     const SizedBox(height: 10),
                     // Up next — tap to jump to it.
@@ -1417,6 +1452,47 @@ Column(
   /// surface condenses out of the panel (clear at the top, deepening
   /// downward) and its rim is lit along the top and fades away down the
   /// sides, so the card melts into the page instead of sitting on it.
+  Widget _dedicateRow(ColorScheme scheme, Color accent) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.favorite_rounded, size: 14, color: accent),
+          const SizedBox(width: 5),
+          Text('Dedicate',
+              style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: accent)),
+          const SizedBox(width: 8),
+          for (final f in _dedicateTo)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 3),
+              child: Tooltip(
+                message: 'Dedicate to ${_nameOf(f)}',
+                child: BounceTap(
+                  onTap: () => _openDedicate(f, accent),
+                  child: Container(
+                    padding: const EdgeInsets.all(1.5),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: accent.withAlpha(110)),
+                    ),
+                    child: InitialsAvatar(
+                      name: _nameOf(f),
+                      radius: 14,
+                      imageUrl: _avatarOf(f),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   double? _abFrac(Duration? d, double maxMs) =>
       (d == null || maxMs <= 0) ? null : (d.inMilliseconds / maxMs).clamp(0.0, 1.0);
 

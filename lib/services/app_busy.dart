@@ -80,5 +80,10 @@ final ValueNotifier<int> splashOnScreen = ValueNotifier<int>(0);
 /// the logo spinner never draws over a menu the user is reading.
 final ValueNotifier<int> menusOnScreen = ValueNotifier<int>(0);
 
+/// How many on-screen players show app-busy themselves (the music hero
+/// record's ring). The centred loader stays away while one is visible, so it
+/// never sits on top of the song title.
+final ValueNotifier<int> discHostsBusy = ValueNotifier<int>(0);
+
 /// App-wide singleton.
 final appBusy = AppBusy.instance;

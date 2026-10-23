@@ -42,6 +42,10 @@ import '../widgets/genie_menu.dart';
 import '../widgets/song_feel_strip.dart';
 import '../utils/readable.dart';
 import '../services/contact_names.dart';
+import '../services/app_busy.dart';
+import '../utils/app_config.dart';
+import '../utils/avatar_widget.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 part 'music/music_control_widgets.dart'; // _CtrlBtn, _CtrlChip, _SpeedPanel
 part 'music/music_playlist_overlay.dart'; // _PlaylistOverlay + state
@@ -49,6 +53,7 @@ part 'music/music_lyrics_view.dart'; // _LyricsView (synced/plain lyrics sheet)
 part 'music/music_share_sheet.dart'; // _ShareSheet (send song file / recommend)
 part 'music/music_controls_helpers_1.dart'; // _MusicControlsState helpers (22 methods)
 part 'music/music_controls_helpers_2.dart'; // _MusicControlsState helpers (19 methods)
+part 'music/music_dedicate.dart'; // _DedicateSheet + _DiscLoadRing
 
 bool get _isMobile => Platform.isAndroid || Platform.isIOS;
 
@@ -322,6 +327,13 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   Duration? _abA;
   Duration? _abB;
   DateTime _abLoopAt = DateTime.fromMillisecondsSinceEpoch(0);
+  // "Dedicate this song" row: the people I chat with most (by latest message).
+  List<Map<String, dynamic>> _dedicateTo = const [];
+  DateTime? _dedicateLoadedAt;
+  String _apiBase = '';
+  // True while the hero record is on screen and shows app-busy as its ring
+  // (the centred loader then stays away from the title).
+  bool _hostingBusy = false;
   final Random _rng = Random();
 
   Timer? _sleepTimer;
@@ -472,6 +484,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   @override
   void dispose() {
+    _setHostingBusy(false);
     // Only clear the bus if we're still the registered owner.
     if (playbackBus.onToggle == _transportPlayPause) {
       playbackBus.onToggle = null;
@@ -936,6 +949,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     if (index < 0 || index >= _playlist.length) return;
     final path = _playlist[index];
     _recordPlay(path); // stats for the smart lists
+    unawaited(_loadDedicateFriends());
 
     // Suppress auto-advance while swapping the source (see _switching).
     _switching = true;
@@ -1682,6 +1696,74 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         songTitle: _trackName,
       ),
     );
+  }
+
+  /// Refresh the "Dedicate" row (at most every 10 minutes).
+  Future<void> _loadDedicateFriends({bool force = false}) async {
+    final at = _dedicateLoadedAt;
+    if (!force && at != null && DateTime.now().difference(at).inMinutes < 10) {
+      return;
+    }
+    _dedicateLoadedAt = DateTime.now();
+    try {
+      final base = await AppConfig.baseUrl;
+      final all = await ApiService().getFriends();
+      final talked = all
+          .where((f) => (f['last_timestamp'] ?? '').toString().isNotEmpty)
+          .toList()
+        ..sort((a, b) => b['last_timestamp']
+            .toString()
+            .compareTo(a['last_timestamp'].toString()));
+      for (final f in talked) {
+        ContactNames.instance.rememberPhone(f['id'], f['phone']?.toString());
+      }
+      if (!mounted) return;
+      setState(() {
+        _apiBase = base;
+        _dedicateTo = talked.take(5).toList();
+      });
+    } catch (_) {
+      _dedicateLoadedAt = null; // try again next time
+    }
+  }
+
+  String? _avatarOf(Map<String, dynamic> f) {
+    final s = (f['avatar_url'] ?? '').toString();
+    if (s.isEmpty) return null;
+    return s.startsWith('http') ? s : '$_apiBase$s';
+  }
+
+  String _nameOf(Map<String, dynamic> f) => ContactNames.instance.displayName(
+      of: f, registered: (f['username'] ?? 'friend').toString());
+
+  void _openDedicate(Map<String, dynamic> friend, Color accent) {
+    if (_liveActive || _currentIndex < 0 || _currentIndex >= _playlist.length) {
+      return;
+    }
+    final path = _playlist[_currentIndex];
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _DedicateSheet(
+        friend: friend,
+        name: _nameOf(friend),
+        avatarUrl: _avatarOf(friend),
+        path: path,
+        title: _trackName,
+        artist: _artistName,
+        durationMs: _player.duration?.inMilliseconds,
+        accent: accent,
+      ),
+    );
+  }
+
+  /// The hero record on/off screen: while it is visible it hosts app-busy as
+  /// its ring, so the centred loader never covers the song title.
+  void _setHostingBusy(bool on) {
+    if (on == _hostingBusy) return;
+    _hostingBusy = on;
+    discHostsBusy.value += on ? 1 : -1;
   }
 
   /// A-B repeat key: off → mark A → mark B (loop starts) → off.

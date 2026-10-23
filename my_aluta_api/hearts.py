@@ -51,6 +51,7 @@ def heart_kwargs(payload, content: str, allow_timed: bool = True) -> dict:
     mood = (getattr(payload, "heart_mood", None) or "").strip().lower()
     if mood in MOODS:
         out["heart_mood"] = mood
+    out["heart_save"] = bool(getattr(payload, "heart_save", None))
     ua = _aware(getattr(payload, "unlock_at", None))
     now = datetime.now(timezone.utc)
     if allow_timed and ua is not None and now + MIN_DELAY <= ua <= now + MAX_DELAY:

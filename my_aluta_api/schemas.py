@@ -63,6 +63,7 @@ class MessageCreate(BaseModel):
     # Secret hearts: optional mood + timed unsealing (hearts.py).
     heart_mood: Optional[str] = None
     unlock_at: Optional[datetime] = None
+    heart_save: Optional[bool] = None   # let the receiver save its media
 
 
 class MessageEdit(BaseModel):
@@ -95,6 +96,7 @@ class Message(BaseModel):
     heart_opens: Optional[str] = None   # JSON {uid: iso} — who opened it
     heart_for: Optional[int] = None     # group heart meant for one member
     heart_locked: Optional[bool] = None # True: this copy was withheld from you
+    heart_save: Optional[bool] = False  # sender allows saving its media
     poll: Optional[str] = None          # JSON poll state (polls.py)
 
     model_config = ConfigDict(from_attributes=True)
@@ -127,6 +129,7 @@ class MessageWithSender(BaseModel):
     heart_opens: Optional[str] = None   # JSON {uid: iso} — who opened it
     heart_for: Optional[int] = None     # group heart meant for one member
     heart_locked: Optional[bool] = None # True: this copy was withheld from you
+    heart_save: Optional[bool] = False  # sender allows saving its media
     poll: Optional[str] = None          # JSON poll state (polls.py)
 
     model_config = ConfigDict(from_attributes=True)
@@ -179,6 +182,7 @@ class GroupMessageCreate(BaseModel):
     # Secret hearts: optional mood + timed unsealing (hearts.py).
     heart_mood: Optional[str] = None
     unlock_at: Optional[datetime] = None
+    heart_save: Optional[bool] = None   # let the receiver save its media
     # Group hearts: the ONE member who may open it (None = whole group).
     heart_for: Optional[int] = None
     # Polls (message_type 'poll'): JSON {"q", "options": [..], "multi"}.

@@ -143,6 +143,10 @@ class Message(Base):
     # Timed heart with a photo/clip: the media fields are held here (JSON) while
     # sealed and restored on unseal, exactly like sealed_content for the note.
     sealed_media = Column(Text, nullable=True)
+    # The sender let the receiver SAVE the photo / clip / song (off = view
+    # only; the client hides every save button for it).
+    heart_save = Column(Boolean, default=False, nullable=False,
+                        server_default="false")
     # ── Polls (message_type 'poll', groups) — see polls.py ───────────────────
     # JSON {"q": str, "options": [str], "multi": bool, "votes": {uid: [idx]}}
     poll = Column(Text, nullable=True)

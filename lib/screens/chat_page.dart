@@ -3256,7 +3256,8 @@ class _ChatPageState extends State<ChatPage>
         }
       }
       final rest = <_MenuAction>[
-        if (isHeart && !isMe && !deleted)
+        // A heart locked for me (meant for another member) isn't mine to answer.
+        if (isHeart && !isMe && !deleted && !_heartLockedForMe(msg))
           _MenuAction('heartback', Icons.favorite_rounded, 'Send a heart back',
               () {
             Navigator.pop(ctx);
@@ -3319,7 +3320,9 @@ class _ChatPageState extends State<ChatPage>
             Navigator.pop(ctx);
             _dedicateSongToMember(msg);
           }, short: 'Dedicate'),
-        if (!deleted && hasMedia)
+        // Hearts: never from here — a heart's photo / clip / song is saved only
+        // from its opened letter, and only when the sender allowed it.
+        if (!deleted && hasMedia && !isHeart)
           _MenuAction('save', Icons.download_rounded, 'Save to device', () {
             Navigator.pop(ctx);
             _saveMediaToDevice(msg);
@@ -4323,12 +4326,18 @@ class _ChatPageState extends State<ChatPage>
                                 size: 11.5,
                                 color: warm ? rose : inkSoft),
                             const SizedBox(width: 4),
-                            Text(st.text,
-                                style: TextStyle(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.2,
-                                    color: warm ? rose : ink)),
+                            // Long names ("Only … can open it") ellipsize
+                            // instead of pushing the pill off-screen.
+                            Flexible(
+                              child: Text(st.text,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.2,
+                                      color: warm ? rose : ink)),
+                            ),
                             if (showTime)
                               Container(
                                 width: 3,

@@ -133,7 +133,11 @@ extension _ChatHeartComposer on _ChatPageState {
         await _heartPickVisual(video: true);
       case 'voice':
         if (_heartAttach != null) rebuildWith(() => _heartAttach = null);
-        showToast(context, 'Hold 🎤 to record your voice clip — words can follow');
+        showToast(
+            context,
+            _ctrl.text.trim().isEmpty
+                ? 'Hold 🎤 to record your voice clip — words can follow'
+                : 'Record first: clear the words, hold 🎤, then write again');
       case 'song':
         await _pickHeartSong();
       case 'remove':
@@ -736,11 +740,27 @@ extension _ChatHeartComposer on _ChatPageState {
   void _startHeartBack(Map<String, dynamic> msg) {
     final m = (msg['heart_mood'] ?? 'love').toString();
     HapticFeedback.selectionClick();
+    final sid = int.tryParse(msg['sender_id']?.toString() ?? '');
+    final sm = (msg['sender'] as Map?) ?? const {};
     rebuildWith(() {
       _heartMode = true;
       _heartMood = (m == 'sorry') ? 'love' : (HeartMood.of(m).key);
       _heartUnlockAt = null;
       _replyTo = null;
+      _heartAttach = null;
+      _heartSave = false;
+      // In a group, a heart back goes to the one who sent it — not everyone.
+      if (_isGroup && sid != null) {
+        _heartFor = sid;
+        final match = _groupMembers.where(
+            (g) => g['user_id']?.toString() == sid.toString());
+        _heartForName = match.isNotEmpty
+            ? _memberName(match.first).split(' ').first
+            : (sm['username'] ?? 'them').toString().split(' ').first;
+      } else {
+        _heartFor = null;
+        _heartForName = null;
+      }
     });
     showToast(context, 'Write your heart back 💌');
   }

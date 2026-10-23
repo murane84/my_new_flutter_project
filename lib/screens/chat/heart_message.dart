@@ -261,7 +261,7 @@ class HeartBubble extends StatefulWidget {
   /// opens as the letter card.
   final Widget Function(double width)? media;
 
-  /// 'photo' | 'video' | 'voice' — hinted on the cover ("a photo is inside")
+  /// 'photo' | 'video' | 'voice' | 'song' — hinted on the cover ("a photo is inside")
   /// even while locked, without revealing it.
   final String? mediaKind;
 
@@ -1160,7 +1160,11 @@ class _HeartBubbleState extends State<HeartBubble>
                             fontWeight: FontWeight.w600),
                       ),
                     )
-                  : _cover(sealed, ink),
+                  // Scales down (never overflows) at large system font sizes.
+                  : FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: _cover(sealed, ink),
+                    ),
             ),
           ),
         ),
@@ -1176,9 +1180,14 @@ class _HeartBubbleState extends State<HeartBubble>
       'photo' => Icons.photo_rounded,
       'video' => Icons.videocam_rounded,
       'voice' => Icons.mic_rounded,
+      'song' => Icons.music_note_rounded,
       _ => null,
     };
-    final forLine = widget.forName == null ? null : 'for ${widget.forName}';
+    // Keep the cover's lines short so they always fit inside the heart.
+    final fn = widget.forName;
+    final forLine = fn == null
+        ? null
+        : 'for ${fn.length > 12 ? '${fn.substring(0, 11)}…' : fn}';
     if (widget.locked) {
       return Column(
         key: const ValueKey('cover-locked'),

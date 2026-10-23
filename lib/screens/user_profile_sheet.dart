@@ -6,6 +6,7 @@ import 'token_helper.dart' show mediaAuthHeaders;
 import 'package:flutter_contacts/flutter_contacts.dart';
 
 import '../services/contact_names.dart';
+import '../services/now_playing_presence.dart';
 import '../utils/net_image.dart';
 import '../utils/time_utils.dart';
 import '../utils/toast_helper.dart';
@@ -28,6 +29,15 @@ Future<void> showUserProfile(
   bool isOnline = false,
   String? statusLine, // e.g. "Online" / "Last seen …"
   VoidCallback? onCall,
+  // Bonded friend: the Our Space you share → the card shows your "In tune"
+  // streak and an Open-Our-Space button.
+  int? spaceId,
+  String? spaceName,
+  VoidCallback? onOpenSpace,
+  // They're playing music right now → "Tune in".
+  VoidCallback? onTuneIn,
+  // DM friends: count the secret hearts between you.
+  bool showHearts = false,
 }) {
   return showModalBottomSheet(
     context: context,
@@ -47,6 +57,11 @@ Future<void> showUserProfile(
       isOnline: isOnline,
       statusLine: statusLine,
       onCall: onCall,
+      spaceId: spaceId,
+      spaceName: spaceName,
+      onOpenSpace: onOpenSpace,
+      onTuneIn: onTuneIn,
+      showHearts: showHearts,
     ),
   );
 }
@@ -59,6 +74,11 @@ class _UserProfileSheet extends StatefulWidget {
   final bool isOnline;
   final String? statusLine;
   final VoidCallback? onCall;
+  final int? spaceId;
+  final String? spaceName;
+  final VoidCallback? onOpenSpace;
+  final VoidCallback? onTuneIn;
+  final bool showHearts;
 
   const _UserProfileSheet({
     required this.username,
@@ -68,6 +88,11 @@ class _UserProfileSheet extends StatefulWidget {
     this.isOnline = false,
     this.statusLine,
     this.onCall,
+    this.spaceId,
+    this.spaceName,
+    this.onOpenSpace,
+    this.onTuneIn,
+    this.showHearts = false,
   });
 
   @override
@@ -79,11 +104,194 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
   late bool _isOnline = widget.isOnline;
   late String? _statusLine = widget.statusLine;
   bool _fetching = false;
+  Map<String, dynamic>? _streak; // /spaces/{id}/streak
+  int? _hearts; // secret hearts exchanged
 
   @override
   void initState() {
     super.initState();
     _fetchLive();
+    _fetchBond();
+  }
+
+  /// The bond's details: the In-tune streak (bonded friends) and how many
+  /// secret hearts have passed between you.
+  Future<void> _fetchBond() async {
+    final sid = widget.spaceId;
+    if (sid != null) {
+      try {
+        final st = await ApiService().getStreak(sid);
+        if (mounted && st != null) setState(() => _streak = st);
+      } catch (_) {}
+    }
+    final uid = widget.userId;
+    if (widget.showHearts && uid != null) {
+      try {
+        final list = await ApiService().loveLetters(uid);
+        if (mounted) setState(() => _hearts = list.length);
+      } catch (_) {}
+    }
+  }
+
+  // ── In tune ────────────────────────────────────────────────────────────────
+
+  Widget _inTuneCard(ColorScheme scheme) {
+    final st = _streak!;
+    final days = (st['current_days'] as num?)?.toInt() ?? 0;
+    final best = (st['longest_days'] as num?)?.toInt() ?? days;
+    final stage = (st['stage'] ?? 'New').toString();
+    final next = (st['next_milestone'] as num?)?.toInt();
+    final toNext = (st['days_to_next'] as num?)?.toInt();
+    final alive = st['alive'] == true;
+    final unlocks = ((st['unlocks'] as List?) ?? const []).length;
+    final last = DateTime.tryParse((st['last_active_date'] ?? '').toString());
+    final now = DateTime.now();
+    final today = last != null &&
+        last.year == now.year &&
+        last.month == now.month &&
+        last.day == now.day;
+    // Progress toward the next milestone (from the previous one).
+    const marks = [0, 3, 7, 14, 30];
+    final prev = marks.lastWhere((m) => m <= days, orElse: () => 0);
+    final frac = next == null
+        ? 1.0
+        : ((days - prev) / (next - prev)).clamp(0.0, 1.0).toDouble();
+    const flame = Color(0xFFFF7A1A);
+    final todayLine = today
+        ? 'Tuned in today ✨'
+        : (alive
+            ? 'Share a moment today to keep it alive'
+            : 'Start a new streak today');
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            flame.withValues(alpha: 0.16),
+            scheme.primary.withValues(alpha: 0.08),
+          ],
+        ),
+        border: Border.all(color: flame.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('🔥', style: TextStyle(fontSize: 22)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                        days == 1 ? '1 day in tune' : '$days days in tune',
+                        style: TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w800,
+                            color: scheme.onSurface)),
+                    Text(todayLine,
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: today ? Colors.green : flame)),
+                  ],
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: flame.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(stage,
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: flame)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: frac,
+              minHeight: 6,
+              color: flame,
+              backgroundColor: flame.withValues(alpha: 0.15),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                    next == null
+                        ? 'Every milestone reached 🎉'
+                        : '${toNext ?? (next - days)} '
+                            '${(toNext ?? 0) == 1 ? 'day' : 'days'} to $next 🔥',
+                    style: TextStyle(
+                        fontSize: 11.5, color: scheme.onSurfaceVariant)),
+              ),
+              Text('Best: $best ${best == 1 ? 'day' : 'days'}',
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurfaceVariant)),
+            ],
+          ),
+          if (unlocks > 0) ...[
+            const SizedBox(height: 4),
+            Text('✨ $unlocks ${unlocks == 1 ? 'reward' : 'rewards'} unlocked together',
+                style: TextStyle(
+                    fontSize: 11.5, color: scheme.onSurfaceVariant)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// One soft tile row (icon · text · optional action).
+  Widget _infoTile(ColorScheme scheme,
+      {required IconData icon,
+      required String text,
+      Color? color,
+      String? action,
+      VoidCallback? onAction}) {
+    final c = color ?? scheme.primary;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withAlpha(120),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      padding: EdgeInsets.fromLTRB(14, 10, action == null ? 14 : 6, 10),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: c),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(text,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 13.5, fontWeight: FontWeight.w600)),
+          ),
+          if (action != null && onAction != null)
+            TextButton(
+              onPressed: () {
+                Navigator.maybePop(context);
+                onAction();
+              },
+              child: Text(action),
+            ),
+        ],
+      ),
+    );
   }
 
   /// Pull the user's live status (online, last-seen) + phone from the server so
@@ -160,9 +368,12 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: scheme.primary.withAlpha(120)),
       ),
+      constraints:
+          BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.88),
       child: SafeArea(
         top: false,
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
@@ -217,6 +428,49 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
                           : scheme.onSurfaceVariant)),
             ],
             const SizedBox(height: 18),
+            // Listening right now → tune in.
+            if (widget.userId != null)
+              ListenableBuilder(
+                listenable: NowPlayingPresence.instance,
+                builder: (context, _) {
+                  final np = NowPlayingPresence.instance.trackFor(widget.userId!);
+                  final t = (np?['title'] ?? '').toString().trim();
+                  if (np == null || t.isEmpty) return const SizedBox.shrink();
+                  final a = (np['artist'] ?? '').toString().trim();
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _infoTile(scheme,
+                        icon: Icons.headphones_rounded,
+                        text: 'Listening to $t${a.isEmpty ? '' : ' — $a'}',
+                        action: widget.onTuneIn == null ? null : 'Tune in',
+                        onAction: widget.onTuneIn),
+                  );
+                },
+              ),
+            // The bond: In tune streak.
+            if (_streak != null && _streak!['bonded'] == true) ...[
+              _inTuneCard(scheme),
+              const SizedBox(height: 10),
+            ],
+            if ((_hearts ?? 0) > 0) ...[
+              _infoTile(scheme,
+                  icon: Icons.favorite_rounded,
+                  color: const Color(0xFFFF073A),
+                  text: _hearts == 1
+                      ? '1 secret heart between you 💌'
+                      : '$_hearts secret hearts between you 💌'),
+              const SizedBox(height: 10),
+            ],
+            if (widget.onOpenSpace != null) ...[
+              _infoTile(scheme,
+                  icon: Icons.home_rounded,
+                  text: (widget.spaceName ?? '').trim().isEmpty
+                      ? 'Our Space'
+                      : widget.spaceName!.trim(),
+                  action: 'Open',
+                  onAction: widget.onOpenSpace),
+              const SizedBox(height: 10),
+            ],
             // Phone row
             if (ph.isNotEmpty)
               Container(
@@ -331,6 +585,7 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
               ],
             ),
           ],
+        ),
         ),
       ),
     );

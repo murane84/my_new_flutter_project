@@ -2580,13 +2580,24 @@ class HomePageState extends rp.ConsumerState<HomePage>
         : (_activeFriendLastSeen?.isNotEmpty == true
             ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
             : 'Offline');
+    final fid = int.tryParse(_activeFriendId ?? '');
+    final space = fid == null ? null : _spaceWithFriend(fid);
+    final name = _contactDisplayName(_activeFriendPhone, _activeFriendName ?? '');
     showUserProfile(
       context,
       username: _activeFriendName ?? '',
+      userId: fid,
       phone: _activeFriendPhone,
       avatarUrl: _avatarFull(_activeFriendAvatar),
       isOnline: _activeFriendOnline == true,
       statusLine: status,
+      // The bond: In-tune streak + Our Space, hearts between you, and
+      // "Tune in" when they're playing something right now.
+      spaceId: (space?['id'] as num?)?.toInt(),
+      spaceName: space?['name']?.toString(),
+      onOpenSpace: space == null ? null : () => _openSpace(space),
+      onTuneIn: fid == null ? null : () => _tuneInto(fid, name),
+      showHearts: true,
       onCall: () => _showCallChoice(
         friendId: int.tryParse(_activeFriendId ?? '') ?? -1,
         name: _activeFriendName ?? 'This user',

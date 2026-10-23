@@ -155,8 +155,14 @@ extension _ChatRituals on _ChatPageState {
     if (!_bondedDm || _streakNudged || !_streakAlive || _streakDays < 2) {
       return false;
     }
+    if (DateTime.now().hour < 18) return false;
+    final w = _wroteToday;
+    return !(w.mine && w.theirs);
+  }
+
+  /// Who has written in this chat today (messages are newest-first).
+  ({bool mine, bool theirs}) get _wroteToday {
     final now = DateTime.now();
-    if (now.hour < 18) return false;
     var mine = false, theirs = false;
     for (final m in _messages) {
       final d = _ts(m['timestamp']);
@@ -169,9 +175,19 @@ extension _ChatRituals on _ChatPageState {
       } else {
         theirs = true;
       }
-      if (mine && theirs) return false;
+      if (mine && theirs) break;
     }
-    return true;
+    return (mine: mine, theirs: theirs);
+  }
+
+  /// The streak chip's line, saying who still needs to show up today.
+  String get _streakNudgeLine {
+    final w = _wroteToday;
+    final first = _livePeerLabel.trim().split(RegExp(r'\s+')).first;
+    final days = '$_streakDays days in tune';
+    if (w.mine && !w.theirs) return '$days — nudge $first to keep it going';
+    if (w.theirs && !w.mine) return '$days — reply tonight to keep it going';
+    return '$days — say something tonight to keep it';
   }
 
   /// Oldest-first: the most meaningful (furthest back) same-day message.
@@ -289,7 +305,8 @@ extension _ChatRituals on _ChatPageState {
         scheme: scheme,
         isDark: isDark,
         icon: Icons.local_fire_department_rounded,
-        label: '🔥 $_streakDays days in tune — keep it going tonight',
+        // One flame: the chip's icon (no 🔥 emoji in the text as well).
+        label: _streakNudgeLine,
         onTap: () {
           rebuildWith(() => _streakNudged = true);
           _composerFocus.requestFocus();

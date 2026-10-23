@@ -348,6 +348,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
                     ? 'File is no longer available'
                     : 'Download paused — it continues from where it stopped',
                 type: ToastType.error);
+            // Gone from the server → whoever has it can send it again.
+            if (res.outcome == DownloadOutcome.gone) _offerResendPill(msg);
           }
           return;
         }
@@ -576,6 +578,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                   ? 'Song is no longer available'
                   : 'File is no longer available',
               type: ToastType.error);
+          _offerResendPill(msg);
         }
         return false;
       }

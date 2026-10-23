@@ -12,11 +12,64 @@ from models import User, Conversation, ConversationMember, Friend
 from websocket_manager import (
     connected_users, disconnect_user, notify_user,
     set_now_playing, clear_now_playing,
-    set_active_conv, clear_active_conv,
+    set_active_conv, clear_active_conv, is_viewing,
 )
 from push import send_push_to_user, _tokens_for
 
 router = APIRouter()
+
+
+# ── "Show to …" / "Ask to resend" helpers ─────────────────────────────────────
+def _msg_kind(m) -> str:
+    """What a message IS (never what it says) — for 'a photo from 12 Mar'."""
+    t = (m.message_type or "text").lower()
+    mime = (m.media_mime or "").lower()
+    if t == "heart":
+        return "secret heart"
+    if t == "poll":
+        return "poll"
+    if t == "song":
+        return "song"
+    if t == "audio":
+        return "voice note"
+    if t == "video" or mime.startswith("video/"):
+        return "video"
+    if t == "image":
+        return "GIF" if "gif" in mime else "photo"
+    if t == "file":
+        return "file"
+    return "message"
+
+
+def _chat_message(db, mid: int, me: int, to=None, cid=None):
+    """The message, only if it belongs to the chat between me and [to] (DM)
+    or to group [cid] that I'm a member of. Else None."""
+    from models import Message
+    import crud_conversations as cc
+    m = db.query(Message).filter(Message.id == int(mid)).first()
+    if m is None or getattr(m, "is_deleted", False):
+        return None
+    if cid is not None:
+        if m.conversation_id != int(cid):
+            return None
+        if int(me) not in [int(x) for x in cc.member_ids(db, int(cid))]:
+            return None
+        return m
+    if to is None:
+        return None
+    pair = {int(me), int(to)}
+    if {int(m.sender_id or 0), int(m.receiver_id or 0)} != pair:
+        return None
+    return m
+
+
+def _presence_in(uid: int, conv_key: str) -> str:
+    """'here' = that chat is open on their screen; 'away' = online elsewhere
+    in the app; 'offline' = not connected. No queueing — the caller just
+    tells the user to try again."""
+    if is_viewing(int(uid), conv_key):
+        return "here"
+    return "away" if connected_users.get(int(uid)) else "offline"
 
 # Aluta in-app voice-call signaling message types, relayed peer-to-peer.
 _CALL_SIGNALS = {
@@ -363,44 +416,69 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                             })
                     except Exception:
                         pass
-            elif etype == "msg_pulse":
-                # "Look at this one": make a message ring on the other side's
-                # open chat. DM → the friend; group → every OTHER member, only
-                # if the sender really is a member. Carries just the message
-                # id (no content) + who's pointing.
+            elif etype in ("msg_pulse", "resend_request"):
+                # msg_pulse: "look at this one" — the message rings on the
+                # other side's OPEN chat. resend_request: "I don't have this
+                # anymore, could you send it again?" to the one who has it.
+                # Both carry what the message IS + when, never its content,
+                # and only between people who are in that chat. Nobody there →
+                # the sender is told at once (no queueing).
                 try:
                     mid = int(data.get("message_id"))
                     to = data.get("to")
                     conv = data.get("conv")
+                    cid = int(conv) if conv is not None else None
                     from database import SessionLocal
                     import crud_conversations as cc
                     db = SessionLocal()
                     try:
+                        m = _chat_message(db, mid, int(user_id),
+                                          to=to, cid=cid)
                         sender = (db.query(User)
                                   .filter(User.id == int(user_id)).first())
                         phone = (sender.phone or "") if sender else ""
                         name = (sender.username or "") if sender else ""
                         targets = []
-                        cid = None
-                        if conv is not None:
-                            cid = int(conv)
-                            members = [int(m) for m in cc.member_ids(db, cid)]
-                            if int(user_id) in members:
-                                targets = [m for m in members
-                                           if m != int(user_id)]
-                        elif to is not None:
-                            targets = [int(to)]
+                        if m is not None:
+                            if etype == "resend_request":
+                                if to is not None:
+                                    targets = [int(to)]
+                            elif cid is not None:
+                                targets = [int(x) for x in cc.member_ids(db, cid)
+                                           if int(x) != int(user_id)]
+                            elif to is not None:
+                                targets = [int(to)]
+                        kind = _msg_kind(m) if m is not None else "message"
+                        sent_at = (m.timestamp.isoformat()
+                                   if m is not None and m.timestamp else None)
+                        owner = int(m.sender_id) if m is not None else None
                     finally:
                         db.close()
-                    for m in targets:
-                        await notify_user(m, {
-                            "type": "msg_pulse",
+                    counts = {"here": 0, "away": 0, "offline": 0}
+                    for t in targets:
+                        key = f"grp:{cid}" if cid is not None else f"dm:{int(user_id)}"
+                        state = _presence_in(t, key)
+                        counts[state] += 1
+                        if state != "here":
+                            continue
+                        await notify_user(t, {
+                            "type": etype,
                             "user_id": int(user_id),
                             "message_id": mid,
-                            **({"conversation_id": str(cid)} if cid else {}),
+                            **({"conversation_id": str(cid)} if cid is not None else {}),
+                            "kind": kind,
+                            "sent_at": sent_at,
+                            "owner_id": owner,
                             "phone": phone,
                             "name": name,
                         })
+                    await notify_user(int(user_id), {
+                        "type": ("msg_pulse_result" if etype == "msg_pulse"
+                                 else "resend_result"),
+                        "message_id": mid,
+                        "found": m is not None,
+                        **counts,
+                    })
                 except Exception:
                     pass
             elif etype == "active_conv":

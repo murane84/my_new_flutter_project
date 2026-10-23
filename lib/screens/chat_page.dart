@@ -1091,6 +1091,18 @@ class _ChatPageState extends State<ChatPage>
       _onPulseReceived(event);
       return;
     }
+    if (type == 'msg_pulse_result') {
+      _onPulseResult(event);
+      return;
+    }
+    if (type == 'resend_request') {
+      _onResendRequest(event);
+      return;
+    }
+    if (type == 'resend_result') {
+      _onResendResult(event);
+      return;
+    }
 
     if (type == 'new_message') {
       // Backend sends the payload under `data` (a MessageWithSender), like every
@@ -1452,11 +1464,14 @@ class _ChatPageState extends State<ChatPage>
     );
   }
 
-  Future<void> _forwardTo(
-      Map<String, dynamic> msg, Map<String, dynamic> friend) async {
+  /// Returns true when it was sent. [doneToast] replaces the usual
+  /// "Forwarded to …" (e.g. a resend says "Sent it again to …").
+  Future<bool> _forwardTo(
+      Map<String, dynamic> msg, Map<String, dynamic> friend,
+      {String? doneToast}) async {
     final fid = friend['id'];
     final fidInt = fid is int ? fid : int.tryParse(fid.toString());
-    if (fidInt == null) return;
+    if (fidInt == null) return false;
     final type = (msg['message_type'] as String?) ?? 'text';
     final content = _stripQuote((msg['content'] as String?) ?? '');
     // Forward media as a FRESH copy (cache-first, re-uploaded): the new
@@ -1467,7 +1482,7 @@ class _ChatPageState extends State<ChatPage>
     if (rel.isNotEmpty) {
       outUrl =
           await _durableMediaRef(rel, (msg['media_mime'] as String?) ?? '');
-      if (!mounted) return;
+      if (!mounted) return false;
     }
     try {
       final sent = await ApiService().sendMessage(
@@ -1480,11 +1495,12 @@ class _ChatPageState extends State<ChatPage>
         mediaSize: (msg['media_size'] as num?)?.toInt(),
         mediaDuration: (msg['media_duration'] as num?)?.toInt(),
       );
-      if (!mounted) return;
+      if (!mounted) return false;
       if (sent != null) {
         showToast(
             context,
-            'Forwarded to ${ContactNames.instance.displayName(of: friend, registered: (friend['username'] ?? 'contact').toString())}',
+            doneToast ??
+                'Forwarded to ${ContactNames.instance.displayName(of: friend, registered: (friend['username'] ?? 'contact').toString())}',
             type: ToastType.success);
         // If forwarding into the currently-open thread, show it immediately.
         if (fidInt == widget.friendId) {
@@ -1496,6 +1512,7 @@ class _ChatPageState extends State<ChatPage>
           _scrollToBottom();
           _saveMessagesCache();
         }
+        return true;
       } else {
         showToast(context, 'Could not forward', type: ToastType.error);
       }
@@ -1504,6 +1521,7 @@ class _ChatPageState extends State<ChatPage>
         showToast(context, 'Could not forward', type: ToastType.error);
       }
     }
+    return false;
   }
 
   // ── Scroll ────────────────────────────────────────────────────────────────
@@ -3679,7 +3697,8 @@ class _ChatPageState extends State<ChatPage>
   }
 
   /// "Show to …": make this bubble ring on the other side's screen too, if
-  /// they have this chat open — a wordless "look at this one".
+  /// they have this chat open — a wordless "look at this one". Whether it
+  /// reached anyone comes back as msg_pulse_result (see _onPulseResult).
   void _pulseToOthers(Map<String, dynamic> msg) {
     final now = DateTime.now();
     if (_lastPulseSent != null &&
@@ -3696,33 +3715,119 @@ class _ChatPageState extends State<ChatPage>
     } catch (_) {}
     // Feedback here too: the same rings, on my side.
     _jumpToMessage(id);
-    showToast(
-        context,
-        _isGroup
-            ? 'Showing it to the group 👀'
-            : 'Showing it to ${_livePeerLabel.split(' ').first} 👀');
+  }
+
+  String get _peerFirst => _livePeerLabel.split(' ').first;
+
+  /// Who was there for my "Show to …" — no queueing: if nobody had the chat
+  /// open, just say so and stop.
+  void _onPulseResult(Map<String, dynamic> e) {
+    final here = (e['here'] as num?)?.toInt() ?? 0;
+    final away = (e['away'] as num?)?.toInt() ?? 0;
+    final String line;
+    if (e['found'] == false) {
+      line = "That message can't be shown anymore";
+    } else if (here > 0) {
+      line = _isGroup
+          ? 'Showing it to $here ${here == 1 ? 'person' : 'people'} 👀'
+          : 'Showing it to $_peerFirst 👀';
+    } else if (away > 0) {
+      line = _isGroup
+          ? 'Nobody else has the group open right now — try again in a moment'
+          : "$_peerFirst isn't in your chat right now — try again in a moment";
+    } else {
+      line = _isGroup
+          ? 'Everyone else is offline — try again when they\'re back'
+          : "$_peerFirst is offline — try again when they're back";
+    }
+    showToast(context, line,
+        type: here > 0 ? ToastType.success : ToastType.info);
+  }
+
+  /// "a photo from 12 Mar" — what it is and when, never what it says.
+  String _kindWhen(Map<String, dynamic> e) {
+    final kind = (e['kind'] ?? 'message').toString();
+    final art = RegExp(r'^[aeiou]', caseSensitive: false).hasMatch(kind)
+        ? 'an'
+        : 'a';
+    final raw = (e['sent_at'] ?? '').toString();
+    if (raw.isEmpty) return '$art $kind';
+    final at = parseServerTime(raw);
+    final now = DateTime.now();
+    final d = DateTime(at.year, at.month, at.day);
+    final today = DateTime(now.year, now.month, now.day);
+    final diff = today.difference(d).inDays;
+    final when = diff == 0
+        ? 'today'
+        : diff == 1
+            ? 'yesterday'
+            : 'from ${DateFormat(at.year == now.year ? 'd MMM' : 'd MMM y').format(at)}';
+    return '$art $kind $when';
+  }
+
+  /// The person behind a pulse / request, as I know them.
+  String _eventWho(Map<String, dynamic> e) => _isGroup
+      ? ContactNames.instance
+          .displayName(
+              phone: (e['phone'] ?? '').toString(),
+              userId: e['user_id'],
+              registered: (e['name'] ?? 'Someone').toString())
+          .split(' ')
+          .first
+      : _peerFirst;
+
+  /// Is this event about THIS open chat?
+  bool _eventIsHere(Map<String, dynamic> e) {
+    final conv = e['conversation_id']?.toString();
+    final from = e['user_id']?.toString();
+    return _isGroup
+        ? (conv != null && conv == _cid.toString())
+        : (conv == null && from == widget.friendId.toString());
+  }
+
+  /// A message I actually hold (not a swept placeholder with nothing in it).
+  Map<String, dynamic>? _heldMessage(String id) {
+    final i = _messages.indexWhere((m) => m['id'].toString() == id);
+    if (i == -1) return null;
+    final m = _messages[i];
+    final empty = (m['content'] ?? '').toString().trim().isEmpty &&
+        (m['media_url'] ?? '').toString().isEmpty;
+    if (m['purged'] == true && empty) return null;
+    return m;
+  }
+
+  /// Not in my loaded thread → look deeper on the server (like search does)
+  /// before deciding it's gone.
+  Future<Map<String, dynamic>?> _findOrFetch(String id) async {
+    final have = _heldMessage(id);
+    if (have != null) return have;
+    try {
+      _searchDeepLoaded = false;
+      await _searchDeepLoad();
+    } catch (_) {}
+    if (!mounted) return null;
+    return _heldMessage(id);
   }
 
   /// Someone is pointing at a message in THIS chat: ring it if it's on
-  /// screen, otherwise offer to go there (never scroll them unasked).
-  void _onPulseReceived(Map<String, dynamic> event) {
-    final id = event['message_id']?.toString();
-    if (id == null) return;
-    final conv = event['conversation_id']?.toString();
-    final from = event['user_id']?.toString();
-    final here = _isGroup
-        ? (conv != null && conv == _cid.toString())
-        : (conv == null && from == widget.friendId.toString());
-    if (!here) return;
-    final who = _isGroup
-        ? ContactNames.instance
-            .displayName(
-                phone: (event['phone'] ?? '').toString(),
-                userId: from,
-                registered: (event['name'] ?? 'Someone').toString())
-            .split(' ')
-            .first
-        : _livePeerLabel.split(' ').first;
+  /// screen, otherwise offer to go there (never scroll them unasked). If it
+  /// isn't on my phone anymore, offer to ask them to send it again.
+  Future<void> _onPulseReceived(Map<String, dynamic> e) async {
+    final id = e['message_id']?.toString();
+    if (id == null || !_eventIsHere(e)) return;
+    final who = _eventWho(e);
+    final what = _kindWhen(e);
+    final have = await _findOrFetch(id);
+    if (!mounted) return;
+    if (have == null) {
+      _showPill(
+          '$who is showing you $what · not on your phone — Ask to resend',
+          Icons.history_rounded,
+          () => _askResend(int.tryParse(e['user_id']?.toString() ?? ''), id,
+              who: who),
+          hold: const Duration(seconds: 15));
+      return;
+    }
     final ctx = _msgKeys[id]?.currentContext;
     final box = ctx?.findRenderObject() as RenderBox?;
     var onScreen = false;
@@ -3744,10 +3849,99 @@ class _ChatPageState extends State<ChatPage>
       });
       showToast(context, '$who is showing you this 👀');
     } else {
-      _showPill('$who is showing you a message · See', Icons.visibility_rounded,
+      _showPill('$who is showing you $what · See', Icons.visibility_rounded,
           () => _jumpToMessage(id),
           hold: const Duration(seconds: 12));
     }
+  }
+
+  /// "I don't have this anymore — could you send it again?" to [holderId]
+  /// (who has it). Live only: if they aren't in the chat, I'm told to try
+  /// again (resend_result → _onResendResult).
+  void _askResend(int? holderId, String messageId, {String? who}) {
+    if (holderId == null) return;
+    _resendAskedOf = who;
+    try {
+      _ws.sendEvent({
+        'type': 'resend_request',
+        'to': holderId,
+        'message_id': messageId,
+        if (_isGroup) 'conv': _cid,
+      });
+    } catch (_) {}
+  }
+
+  String? _resendAskedOf;
+
+  void _onResendResult(Map<String, dynamic> e) {
+    final who = _resendAskedOf ?? _peerFirst;
+    final here = (e['here'] as num?)?.toInt() ?? 0;
+    final away = (e['away'] as num?)?.toInt() ?? 0;
+    final line = e['found'] == false
+        ? "That message can't be found anymore"
+        : here > 0
+            ? 'Asked $who to send it again 🙏'
+            : away > 0
+                ? "$who isn't in your chat right now — try again in a moment"
+                : "$who is offline — try again when they're back";
+    showToast(context, line,
+        type: here > 0 ? ToastType.success : ToastType.info);
+  }
+
+  /// They lost a message I have: ring my copy and offer a one-tap resend
+  /// (a FRESH copy from my phone, so the server's purge doesn't matter). In a
+  /// group it goes to them privately, not to everyone again.
+  void _onResendRequest(Map<String, dynamic> e) {
+    final id = e['message_id']?.toString();
+    if (id == null || !_eventIsHere(e)) return;
+    final who = _eventWho(e);
+    final kind = (e['kind'] ?? 'message').toString();
+    final requester = int.tryParse(e['user_id']?.toString() ?? '');
+    final msg = _heldMessage(id);
+    if (msg == null || requester == null) {
+      showToast(context,
+          '$who asked you to resend a $kind, but it isn\'t on your phone either',
+          type: ToastType.info);
+      return;
+    }
+    _jumpToMessage(id, flash: true);
+    _showPill("$who doesn't have this $kind anymore · Resend",
+        Icons.send_rounded, () async {
+      await _forwardTo(msg, {'id': _isGroup ? requester : widget.friendId},
+          doneToast: 'Sent it again to $who 💌');
+    }, hold: const Duration(seconds: 15));
+  }
+
+  /// A file / song that's gone from the server and not on this phone: offer
+  /// to ask whoever has it (not for my own sends — I'd be asking myself).
+  void _offerResendPill(Map<String, dynamic> msg) {
+    if (msg['sender_id']?.toString() == _myId && _isGroup) return;
+    _showPill('Not on your phone · Ask to resend', Icons.history_rounded,
+        () => _askResendFor(msg),
+        hold: const Duration(seconds: 10));
+  }
+
+  /// On a placeholder (swept before this phone saved it): ask whoever has it.
+  void _askResendFor(Map<String, dynamic> msg) {
+    final mine = msg['sender_id']?.toString() == _myId;
+    // Someone else's → they have it. Mine (lost here) → my DM friend has it.
+    final holder = mine
+        ? (_isGroup ? null : widget.friendId)
+        : int.tryParse(msg['sender_id']?.toString() ?? '');
+    if (holder == null) {
+      showToast(context, "It isn't on this phone anymore",
+          type: ToastType.info);
+      return;
+    }
+    final sm = (msg['sender'] as Map?) ?? const {};
+    final who = _isGroup && !mine
+        ? ContactNames.instance
+            .displayName(
+                of: sm, registered: (sm['username'] ?? 'them').toString())
+            .split(' ')
+            .first
+        : _peerFirst;
+    _askResend(holder, msg['id'].toString(), who: who);
   }
 
   Future<void> _deleteMessage(int id, bool forAll) async {
@@ -5019,6 +5213,15 @@ class _ChatPageState extends State<ChatPage>
                                     fontSize: 14,
                                   ),
                                 ),
+                              ),
+                              // Whoever has it can send it again.
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8)),
+                                onPressed: () => _askResendFor(msg),
+                                child: const Text('Ask to resend'),
                               ),
                             ],
                           ),

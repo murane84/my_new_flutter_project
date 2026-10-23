@@ -363,6 +363,46 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                             })
                     except Exception:
                         pass
+            elif etype == "msg_pulse":
+                # "Look at this one": make a message ring on the other side's
+                # open chat. DM → the friend; group → every OTHER member, only
+                # if the sender really is a member. Carries just the message
+                # id (no content) + who's pointing.
+                try:
+                    mid = int(data.get("message_id"))
+                    to = data.get("to")
+                    conv = data.get("conv")
+                    from database import SessionLocal
+                    import crud_conversations as cc
+                    db = SessionLocal()
+                    try:
+                        sender = (db.query(User)
+                                  .filter(User.id == int(user_id)).first())
+                        phone = (sender.phone or "") if sender else ""
+                        name = (sender.username or "") if sender else ""
+                        targets = []
+                        cid = None
+                        if conv is not None:
+                            cid = int(conv)
+                            members = [int(m) for m in cc.member_ids(db, cid)]
+                            if int(user_id) in members:
+                                targets = [m for m in members
+                                           if m != int(user_id)]
+                        elif to is not None:
+                            targets = [int(to)]
+                    finally:
+                        db.close()
+                    for m in targets:
+                        await notify_user(m, {
+                            "type": "msg_pulse",
+                            "user_id": int(user_id),
+                            "message_id": mid,
+                            **({"conversation_id": str(cid)} if cid else {}),
+                            "phone": phone,
+                            "name": name,
+                        })
+                except Exception:
+                    pass
             elif etype == "active_conv":
                 # The client reports which conversation it is actively viewing
                 # (e.g. "dm:42" / "grp:7"), or null when it leaves. We skip the

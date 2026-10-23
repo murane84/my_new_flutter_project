@@ -423,6 +423,11 @@ class _ChatPageState extends State<ChatPage>
   // cancel an older one.
   int _ringPulse = 0;
   int _flashSeq = 0;
+  // A small floating pill over the thread: "↩ Back to reply" after jumping
+  // to a quoted original, or "👀 Neema is showing you a message · See".
+  ({String label, IconData icon, VoidCallback onTap})? _pill;
+  Timer? _pillTimer;
+  DateTime? _lastPulseSent;
 
   // Styles *bold* _italic_ etc. live in the composer as you type.
   final _ctrl = FormattingTextController();
@@ -713,6 +718,7 @@ class _ChatPageState extends State<ChatPage>
 
   @override
   void dispose() {
+    _pillTimer?.cancel();
     if (_isAtBottom) _markSeenUpToNewest();
     chatSearchRequest.removeListener(_onSearchRequest);
     chatMediaRequest.removeListener(_onMediaRequest);
@@ -1067,6 +1073,10 @@ class _ChatPageState extends State<ChatPage>
     final type = event['type'];
     if (!mounted) return;
     if (_handleGroupMetaWs(type?.toString(), event)) return;
+    if (type == 'msg_pulse') {
+      _onPulseReceived(event);
+      return;
+    }
 
     if (type == 'new_message') {
       // Backend sends the payload under `data` (a MessageWithSender), like every
@@ -3278,6 +3288,17 @@ class _ChatPageState extends State<ChatPage>
           setState(() => _replyTo = msg);
           FocusScope.of(context).requestFocus(FocusNode());
         }),
+        // Make this bubble ring on their screen too ("look at this one").
+        if (!deleted && !(msg['id']?.toString() ?? 'tmp-').startsWith('tmp-'))
+          _MenuAction(
+              'pulse',
+              Icons.visibility_rounded,
+              _isGroup
+                  ? 'Show to the group'
+                  : 'Show to ${_livePeerLabel.split(' ').first}', () {
+            Navigator.pop(ctx);
+            _pulseToOthers(msg);
+          }, short: 'Show'),
         // Group: answer just this person, in your DM with them.
         if (_isGroup && !isMe && !deleted && !isHeart)
           _MenuAction('replyPrivately', Icons.forum_outlined, 'Reply privately',
@@ -3607,14 +3628,112 @@ class _ChatPageState extends State<ChatPage>
     );
   }
 
-  void _jumpToQuoted(String quoted) {
+  void _jumpToQuoted(String quoted, {String? fromId}) {
     final target = _findQuotedMessage(quoted);
     if (target == null) {
       showToast(context, 'That message isn\'t on this device anymore',
           type: ToastType.info);
       return;
     }
-    _jumpToMessage(target['id'].toString());
+    _jumpToMessage(target['id'].toString()).then((_) {
+      // A way back to the reply I tapped, for a few seconds.
+      if (!mounted || fromId == null) return;
+      _showPill('Back to reply', Icons.reply_rounded, () {
+        _jumpToMessage(fromId);
+      });
+    });
+  }
+
+  /// A floating pill over the thread; tapping it runs [onTap] and hides it.
+  void _showPill(String label, IconData icon, VoidCallback onTap,
+      {Duration hold = const Duration(seconds: 8)}) {
+    _pillTimer?.cancel();
+    setState(() => _pill = (
+          label: label,
+          icon: icon,
+          onTap: () {
+            _hidePill();
+            onTap();
+          },
+        ));
+    _pillTimer = Timer(hold, _hidePill);
+  }
+
+  void _hidePill() {
+    _pillTimer?.cancel();
+    if (mounted && _pill != null) setState(() => _pill = null);
+  }
+
+  /// "Show to …": make this bubble ring on the other side's screen too, if
+  /// they have this chat open — a wordless "look at this one".
+  void _pulseToOthers(Map<String, dynamic> msg) {
+    final now = DateTime.now();
+    if (_lastPulseSent != null &&
+        now.difference(_lastPulseSent!) < const Duration(seconds: 4)) {
+      return; // gentle: no spamming someone's screen
+    }
+    _lastPulseSent = now;
+    final id = msg['id']?.toString();
+    if (id == null || id.startsWith('tmp-')) return; // not sent yet
+    try {
+      _ws.sendEvent(_isGroup
+          ? {'type': 'msg_pulse', 'conv': _cid, 'message_id': id}
+          : {'type': 'msg_pulse', 'to': widget.friendId, 'message_id': id});
+    } catch (_) {}
+    // Feedback here too: the same rings, on my side.
+    _jumpToMessage(id);
+    showToast(
+        context,
+        _isGroup
+            ? 'Showing it to the group 👀'
+            : 'Showing it to ${_livePeerLabel.split(' ').first} 👀');
+  }
+
+  /// Someone is pointing at a message in THIS chat: ring it if it's on
+  /// screen, otherwise offer to go there (never scroll them unasked).
+  void _onPulseReceived(Map<String, dynamic> event) {
+    final id = event['message_id']?.toString();
+    if (id == null) return;
+    final conv = event['conversation_id']?.toString();
+    final from = event['user_id']?.toString();
+    final here = _isGroup
+        ? (conv != null && conv == _cid.toString())
+        : (conv == null && from == widget.friendId.toString());
+    if (!here) return;
+    final who = _isGroup
+        ? ContactNames.instance
+            .displayName(
+                phone: (event['phone'] ?? '').toString(),
+                userId: from,
+                registered: (event['name'] ?? 'Someone').toString())
+            .split(' ')
+            .first
+        : _livePeerLabel.split(' ').first;
+    final ctx = _msgKeys[id]?.currentContext;
+    final box = ctx?.findRenderObject() as RenderBox?;
+    var onScreen = false;
+    if (box != null && box.hasSize && box.attached) {
+      final top = box.localToGlobal(Offset.zero).dy;
+      final h = MediaQuery.of(context).size.height;
+      onScreen = top > 60 && top < h - 120;
+    }
+    if (onScreen) {
+      setState(() {
+        _highlightedId = id;
+        _ringPulse++;
+      });
+      HapticFeedback.selectionClick();
+      Future.delayed(const Duration(milliseconds: 1600), () {
+        if (mounted && _highlightedId == id) {
+          setState(() => _highlightedId = null);
+        }
+      });
+      showToast(context, '$who is showing you this 👀');
+    } else {
+      _showPill('$who is showing you a message · See', Icons.visibility_rounded,
+          () => _jumpToMessage(id),
+          hold: const Duration(seconds: 12));
+    }
   }
 
   Future<void> _deleteMessage(int id, bool forAll) async {
@@ -3734,7 +3853,15 @@ class _ChatPageState extends State<ChatPage>
     var ctx = _msgKeys[id]?.currentContext;
     if (ctx == null && _scrollCtrl.hasClients) {
       final idx = _messages.indexWhere((m) => m['id'].toString() == id);
-      if (idx == -1) return;
+      if (idx == -1) {
+        // Deleted, expired, or not on this device: say so instead of
+        // silently doing nothing.
+        if (flash && mounted) {
+          showToast(context, "That message isn't available anymore",
+              type: ToastType.info);
+        }
+        return;
+      }
       // reverse:true list → older messages (larger index) sit at LARGER
       // offsets. Pick the direction from what's built right now: the target
       // is newer than everything on screen → scroll down, else up.
@@ -3768,13 +3895,18 @@ class _ChatPageState extends State<ChatPage>
     );
     if (!mounted || seq != _flashSeq) return;
     if (!flash) return;
-    HapticFeedback.selectionClick();
     // "Here it is": the bubble sends out rings in its own outline + colour
     // (JumpRings), then everything settles — no colour band, no jump in size.
+    // One light tick as each of the three rings leaves the bubble.
     setState(() {
       _highlightedId = id;
       _ringPulse++;
     });
+    for (var i = 0; i < 3; i++) {
+      Future.delayed(Duration(milliseconds: 255 * i), () {
+        if (mounted && seq == _flashSeq) HapticFeedback.selectionClick();
+      });
+    }
     await Future.delayed(const Duration(milliseconds: 1600));
     if (mounted && seq == _flashSeq) {
       setState(() => _highlightedId = null);
@@ -4875,7 +5007,7 @@ class _ChatPageState extends State<ChatPage>
                                     _isStatusNudgeQuote(quotedText)
                                         ? isMe
                                         : !isMe)
-                                : _jumpToQuoted(quotedText),
+                                : _jumpToQuoted(quotedText, fromId: msgId),
                             child: ConstrainedBox(
                               constraints:
                                   BoxConstraints(maxWidth: quoteMaxWidth),
@@ -5947,6 +6079,59 @@ class _ChatPageState extends State<ChatPage>
                       Positioned.fill(
                         child: Center(
                           child: _emptyChatHello(scheme, isDark),
+                        ),
+                      ),
+                    // "↩ Back to reply" / "👀 … is showing you a message"
+                    if (_pill != null)
+                      Positioned(
+                        bottom: _hasNewMsg ? 52 : 8,
+                        left: 16,
+                        right: 16,
+                        child: Center(
+                          child: Material(
+                            color: scheme.surface,
+                            elevation: 4,
+                            shadowColor: scheme.primary.withAlpha(90),
+                            shape: StadiumBorder(
+                                side: BorderSide(
+                                    color: scheme.primary.withAlpha(110))),
+                            child: InkWell(
+                              customBorder: const StadiumBorder(),
+                              onTap: _pill!.onTap,
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                    12, 7, 6, 7),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(_pill!.icon,
+                                        size: 16, color: scheme.primary),
+                                    const SizedBox(width: 6),
+                                    Flexible(
+                                      child: Text(_pill!.label,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: scheme.onSurface)),
+                                    ),
+                                    const SizedBox(width: 2),
+                                    InkWell(
+                                      customBorder: const CircleBorder(),
+                                      onTap: _hidePill,
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(3),
+                                        child: Icon(Icons.close_rounded,
+                                            size: 15,
+                                            color: scheme.onSurfaceVariant),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     // New messages chip

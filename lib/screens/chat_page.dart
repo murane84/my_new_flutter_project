@@ -3672,7 +3672,7 @@ class _ChatPageState extends State<ChatPage>
   }
 
   void _jumpToQuoted(String quoted, {String? fromId}) {
-    final target = _findQuotedMessage(quoted);
+    final target = _findQuotedMessage(quoted, replyId: fromId);
     if (target == null) {
       showToast(context, 'That message isn\'t on this device anymore',
           type: ToastType.info);
@@ -5302,7 +5302,7 @@ class _ChatPageState extends State<ChatPage>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  _quotedAuthor(quotedText, isMe),
+                                  _quotedAuthor(quotedText, isMe, replyId: msgId),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(

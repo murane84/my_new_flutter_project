@@ -1441,22 +1441,49 @@ extension _ChatPageHelpers3 on _ChatPageState {
 
   // ── Jump to a quoted original ───────────────────────────────────────────────
 
-  Map<String, dynamic>? _findQuotedMessage(String quoted) {
+  Map<String, dynamic>? _findQuotedMessage(String quoted, {String? replyId}) {
     final q = quoted.trim();
     if (q.isEmpty) return null;
     final qFirst = _quoteKey(q);
-    Map<String, dynamic>? loose;
+    // A heart quote: an older reply quoted just "❤️ Secret heart" (no
+    // time), and a time written in another timezone won't match exactly —
+    // so any heart is a fallback candidate for it.
+    final heartQuote = q.startsWith('❤️ Secret heart');
+    final exact = <Map<String, dynamic>>[];
+    final loose = <Map<String, dynamic>>[];
     for (final m in _messages) {
       if (m['is_deleted'] == true) continue;
       // Match on the label a reply would have quoted (media → "📷 Photo",
-      // heart → "❤️ Secret heart", text → its text), not raw content only.
+      // heart → "❤️ Secret heart · 23 Oct, 9:12 PM", text → its text).
       final label = _replyQuoteText(m).trim();
       if (label.isEmpty) continue;
-      if (label == q) return m;
-      // Replies keep just the first line(s) of a long message.
-      if (loose == null && _quoteKey(label) == qFirst) loose = m;
+      if (label == q) {
+        exact.add(m);
+      } else if (_quoteKey(label) == qFirst ||
+          (heartQuote && (m['message_type'] ?? '').toString() == 'heart')) {
+        // Replies keep just the first line(s) of a long message.
+        loose.add(m);
+      }
     }
-    return loose;
+    final pool = exact.isNotEmpty ? exact : loose;
+    if (pool.isEmpty) return null;
+    if (pool.length == 1) return pool.first;
+    // Several look the same ("📷 Photo", old heart quotes…): the one I was
+    // replying to is the closest one sent BEFORE the reply.
+    final rid = int.tryParse(replyId ?? '');
+    if (rid != null) {
+      Map<String, dynamic>? best;
+      var bestId = -1;
+      for (final m in pool) {
+        final id = int.tryParse(m['id'].toString());
+        if (id != null && id < rid && id > bestId) {
+          bestId = id;
+          best = m;
+        }
+      }
+      if (best != null) return best;
+    }
+    return pool.first;
   }
 
   /// Normalised key for a quote: its first line, trimmed.
@@ -1538,7 +1565,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
       q.startsWith('👀 Caught you on my status') ||
       q.startsWith('👀 You viewed my status');
 
-  String _quotedAuthor(String quotedText, bool replyIsMe) {
+  String _quotedAuthor(String quotedText, bool replyIsMe, {String? replyId}) {
     if (_isStatusQuote(quotedText)) {
       // Whose status: a nudge comes from the status's owner; a reply goes
       // TO the owner.
@@ -1547,7 +1574,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
           _isStatusNudgeQuote(quotedText) ? replyIsMe : !replyIsMe;
       return ownerIsMe ? 'Your status' : '$first\'s status';
     }
-    final orig = _findQuotedMessage(quotedText);
+    final orig = _findQuotedMessage(quotedText, replyId: replyId);
     if (orig != null) {
       _rememberQuoteAuthor(quotedText, orig);
       if (orig['sender_id'].toString() == _myId) return 'You';
@@ -2202,7 +2229,14 @@ extension _ChatPageHelpers3 on _ChatPageState {
     final type = (msg['message_type'] as String?) ?? 'text';
     // A secret heart never shows its note outside the heart itself — not in a
     // reply quote, not in the pinned banner (both read this label).
-    if (type == 'heart') return '❤️ Secret heart';
+    // The heart's own time makes the quote point at THAT heart (several
+    // "❤️ Secret heart" quotes all looked alike → a tap found the newest).
+    if (type == 'heart') {
+      final ts = (msg['timestamp'] ?? '').toString();
+      if (ts.isEmpty) return '❤️ Secret heart';
+      return '❤️ Secret heart · '
+          '${DateFormat('d MMM, h:mm a').format(parseServerTime(ts))}';
+    }
     final caption = _stripQuote((msg['content'] as String?) ?? '').trim();
     final isMedia =
         type != 'text' && (msg['media_url'] as String? ?? '').isNotEmpty;

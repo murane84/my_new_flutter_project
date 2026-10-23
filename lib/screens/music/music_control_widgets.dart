@@ -397,6 +397,9 @@ class _WaveformSeekBar extends StatefulWidget {
   final int seed; // stable bar pattern per track
   final ValueChanged<double> onSeek;
   final String Function(double fraction) labelFor;
+  // A-B repeat points as fractions of the song (null = not set).
+  final double? markA;
+  final double? markB;
 
   const _WaveformSeekBar({
     required this.fraction,
@@ -406,6 +409,8 @@ class _WaveformSeekBar extends StatefulWidget {
     required this.seed,
     required this.onSeek,
     required this.labelFor,
+    this.markA,
+    this.markB,
   });
 
   @override
@@ -482,6 +487,44 @@ class _WaveformSeekBarState extends State<_WaveformSeekBar> {
                     ),
                   ),
                 ),
+                // A-B loop: a soft band over the repeating stretch, with a
+                // slim A / B tick at each end.
+                if (widget.markA != null && widget.markB != null)
+                  Positioned(
+                    left: widget.markA!.clamp(0.0, 1.0) * w,
+                    width: ((widget.markB! - widget.markA!).clamp(0.0, 1.0)) * w,
+                    top: -3,
+                    bottom: -3,
+                    child: IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: widget.accent.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                              color: widget.accent.withValues(alpha: 0.35)),
+                        ),
+                      ),
+                    ),
+                  ),
+                for (final m in [
+                  if (widget.markA != null) (widget.markA!, 'A'),
+                  if (widget.markB != null) (widget.markB!, 'B'),
+                ])
+                  Positioned(
+                    left: (m.$1.clamp(0.0, 1.0) * w - 6).clamp(0.0, (w - 12).clamp(0.0, w)),
+                    top: -14,
+                    child: IgnorePointer(
+                      child: SizedBox(
+                        width: 12,
+                        child: Text(m.$2,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                color: widget.accent,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w900)),
+                      ),
+                    ),
+                  ),
                 if (_dragFrac != null)
                   Positioned(
                     left: (frac * w - 24).clamp(0.0, (w - 48).clamp(0.0, w)),

@@ -434,6 +434,8 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                           Duration(milliseconds: (f * sliderMax).round())),
                       labelFor: (f) =>
                           _fmt(Duration(milliseconds: (f * sliderMax).round())),
+                      markA: _abFrac(_abA, sliderMax.toDouble()),
+                      markB: _abFrac(_abB, sliderMax.toDouble()),
                     ),
                   ),
                 ),
@@ -818,6 +820,10 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                 ),
               ),
                 const Spacer(),
+                if (!live) ...[
+                  _abChip(scheme, accent),
+                  const SizedBox(width: 8),
+                ],
                 // Speed button — anchored right so popup scales from here
                 GestureDetector(
                   onTap: _toggleSpeedPanel,
@@ -1075,90 +1081,103 @@ Column(
                   return Center(child: discWidget(side));
                 }),
               ),
+              // Everything under the disc lives in a FIXED-height area: the
+              // title / artist / lyric line / Up next can appear, change or
+              // vanish inside it without ever resizing the disc (that resize
+              // was the shake on Android).
               SizedBox(
-                height: 24,
-                child: Align(
-                  alignment: Alignment.center,
-                  child: MarqueeText(
-                    text: displayTitle,
+                height: 176,
+                child: Column(
+                  children: [
+                  SizedBox(
                     height: 24,
-                    style: TextStyle(
-                      color: onSurface,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ),
-              if (displayArtist.isNotEmpty)
-                SizedBox(
-                  height: 18,
-                  child: Align(
-                    alignment: Alignment.center,
-                    child: MarqueeText(
-                      text: displayArtist,
-                      height: 18,
-                      style: TextStyle(
-                        color: live ? accent : onSurface.withAlpha(160),
-                        fontWeight: live ? FontWeight.w600 : FontWeight.normal,
-                        fontSize: 12.5,
+                    child: Align(
+                      alignment: Alignment.center,
+                      child: MarqueeText(
+                        text: displayTitle,
+                        height: 24,
+                        style: TextStyle(
+                          color: onSurface,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              _syncedLyricLine(scheme, accent, false),
-              if (upNextOn) ...[
-                const SizedBox(height: 10),
-                // Up next — tap to jump to it.
-                BounceTap(
-                  onTap: _transportNext,
-                  child: Container(
-                    height: 34,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.white.withAlpha(10)
-                          : Colors.white.withAlpha(150),
-                      borderRadius: BorderRadius.circular(17),
-                      border: Border.all(color: accent.withAlpha(50)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.queue_music_rounded,
-                            size: 16, color: accent),
-                        const SizedBox(width: 6),
-                        Text('Up next',
-                            style: TextStyle(
-                                color: accent,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: MarqueeText(
-                            text: nextTitle,
-                            height: 16,
-                            style: TextStyle(
-                                color: onSurface.withAlpha(190),
-                                fontSize: 12),
+                  // Always holds its line (empty until the artist is known), so
+                  // the name arriving never nudges anything.
+                  SizedBox(
+                      height: 18,
+                      child: displayArtist.isEmpty ? null : Align(
+                        alignment: Alignment.center,
+                        child: MarqueeText(
+                          text: displayArtist,
+                          height: 18,
+                          style: TextStyle(
+                            color: live ? accent : onSurface.withAlpha(160),
+                            fontWeight: live ? FontWeight.w600 : FontWeight.normal,
+                            fontSize: 12.5,
                           ),
                         ),
-                        const SizedBox(width: 4),
-                        Icon(Icons.skip_next_rounded,
-                            size: 18, color: onSurface.withAlpha(150)),
-                      ],
+                      ),
                     ),
-                  ),
+                  _syncedLyricLine(scheme, accent, false),
+                  if (upNextOn) ...[
+                    const SizedBox(height: 10),
+                    // Up next — tap to jump to it.
+                    BounceTap(
+                      onTap: _transportNext,
+                      child: Container(
+                        height: 34,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.white.withAlpha(10)
+                              : Colors.white.withAlpha(150),
+                          borderRadius: BorderRadius.circular(17),
+                          border: Border.all(color: accent.withAlpha(50)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.queue_music_rounded,
+                                size: 16, color: accent),
+                            const SizedBox(width: 6),
+                            Text('Up next',
+                                style: TextStyle(
+                                    color: accent,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: MarqueeText(
+                                text: nextTitle,
+                                height: 16,
+                                style: TextStyle(
+                                    color: onSurface.withAlpha(190),
+                                    fontSize: 12),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(Icons.skip_next_rounded,
+                                size: 18, color: onSurface.withAlpha(150)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  const Spacer(),
+                  if (!live && hasTrack)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: SongFeelStrip(
+                          title: _trackName,
+                          artist: _artistName,
+                          accent: accent,
+                          framed: false),
+                    ),
+                  ],
                 ),
-              ],
-              if (!live && hasTrack)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: SongFeelStrip(
-                      title: _trackName,
-                      artist: _artistName,
-                      accent: accent,
-                      framed: false),
-                ),
+              ),
             ],
           ),
         );
@@ -1217,7 +1236,9 @@ Column(
                             height: 1.3,
                           ),
                         ),
-                        if (displayArtist.isNotEmpty) ...[
+                        // Always reserved (empty until known): no jump when the
+                        // artist name arrives.
+                        ...[
                           const SizedBox(height: 2),
                           // Marquee (not ellipsis) so a long live line like
                           // "Live · streaming to <name>" scrolls fully instead
@@ -1396,6 +1417,63 @@ Column(
   /// surface condenses out of the panel (clear at the top, deepening
   /// downward) and its rim is lit along the top and fades away down the
   /// sides, so the card melts into the page instead of sitting on it.
+  double? _abFrac(Duration? d, double maxMs) =>
+      (d == null || maxMs <= 0) ? null : (d.inMilliseconds / maxMs).clamp(0.0, 1.0);
+
+  /// The A-B repeat key: "A-B" (off) → "A ⋯ B?" (A marked) → "0:42–1:05"
+  /// (looping). Long-press clears it from any step.
+  Widget _abChip(ColorScheme scheme, Color accent, {VoidCallback? after}) {
+    final a = _abA, b = _abB;
+    final on = a != null;
+    final label = a == null
+        ? 'A-B'
+        : (b == null ? 'A ${_fmt(a)} · B?' : '${_fmt(a)}–${_fmt(b)}');
+    final fg = on ? accent : scheme.onSurface.withAlpha(175);
+    return Tooltip(
+      message: 'Repeat a part (A-B) · hold to clear',
+      child: Tactile(
+        child: GestureDetector(
+          onTap: () {
+            _cycleAB();
+            after?.call();
+          },
+          onLongPress: () {
+            _clearAB();
+            after?.call();
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: on
+                  ? accent.withAlpha(b != null ? 34 : 20)
+                  : scheme.surfaceContainerHighest.withAlpha(
+                      scheme.brightness == Brightness.dark ? 110 : 160),
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: _glassLift(scheme, accent, active: b != null),
+              border: Border.all(
+                  color: on ? accent.withAlpha(150) : accent.withAlpha(50)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(b != null ? Icons.repeat_on_rounded : Icons.repeat_rounded,
+                    size: 13, color: fg),
+                const SizedBox(width: 4),
+                Text(label,
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: fg,
+                        fontFeatures: const [FontFeature.tabularFigures()])),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _controlsGlass(ColorScheme scheme, Color accent, Widget child,
       {EdgeInsets padding = const EdgeInsets.fromLTRB(10, 14, 10, 14)}) {
     final dark = scheme.brightness == Brightness.dark;

@@ -498,198 +498,218 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                           ),
                         ),
                       SizedBox(height: 18 - 10 * openT.clamp(0.0, 1.0)),
-                      // Waveform + times (live via the position stream).
-                      StreamBuilder<Duration>(
-                        stream: _player.positionStream,
-                        builder: (ctx, snap) {
-                          final pos = live
-                              ? (_live?.player.position ?? Duration.zero)
-                              : (snap.data ?? _player.position);
-                          final dur = live
-                              ? (_live?.player.duration ?? Duration.zero)
-                              : (_player.duration ?? Duration.zero);
-                          final maxMs = dur.inMilliseconds > 0
-                              ? dur.inMilliseconds.toDouble()
-                              : 1.0;
-                          final frac =
-                              (pos.inMilliseconds / maxMs).clamp(0.0, 1.0);
-                          return Column(
-                            children: [
-                              _WaveformSeekBar(
-                                fraction: frac,
-                                accent: accent,
-                                inactive: accent.withAlpha(48),
-                                enabled: true,
-                                seed: _trackName.hashCode ^ _currentIndex,
-                                onSeek: (f) => _transportSeek(Duration(
-                                    milliseconds: (f * maxMs).round())),
-                                labelFor: (f) => _fmt(Duration(
-                                    milliseconds: (f * maxMs).round())),
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(_fmt(pos),
-                                      style: TextStyle(
-                                          color: scheme.onSurfaceVariant,
-                                          fontSize: 12)),
-                                  Text(_fmt(dur),
-                                      style: TextStyle(
-                                          color: scheme.onSurfaceVariant,
-                                          fontSize: 12)),
-                                ],
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                      SizedBox(height: 16 - 8 * openT.clamp(0.0, 1.0)),
-                      // Primary transport.
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _CtrlChip(
-                            icon: Icons.shuffle_rounded,
-                            active: _effShuffle,
-                            activeColor: Colors.green,
-                            onTap: () {
-                              _toggleShuffle();
-                              setFull(() {});
-                            },
-                            tooltip: 'Shuffle',
-                          ),
-                          _CtrlBtn(
-                            icon: Icons.skip_previous_rounded,
-                            size: 34,
-                            color: scheme.onSurface,
-                            onTap: _transportPrev,
-                            tooltip: 'Previous',
-                          ),
-                          StreamBuilder<PlayerState>(
-                            stream: _player.playerStateStream,
+                      // Waveform, transport and utilities share one glassy
+                      // card (same as the home player) instead of floating.
+                      _controlsGlass(
+                        scheme,
+                        accent,
+                        padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                          // Waveform + times (live via the position stream).
+                          StreamBuilder<Duration>(
+                            stream: _player.positionStream,
                             builder: (ctx, snap) {
-                              final playing = live
-                                  ? (_live?.player.playing ?? false)
-                                  : (snap.data?.playing ?? _player.playing);
-                              return Tactile(child: GestureDetector(
-                                onTap: _transportPlayPause,
-                                child: Container(
-                                  width: 76 - 14 * openT.clamp(0.0, 1.0),
-                                  height: 76 - 14 * openT.clamp(0.0, 1.0),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [
-                                        Color.lerp(
-                                            accent, Colors.white, 0.22)!,
-                                        accent,
-                                      ],
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color:
-                                            accent.withValues(alpha: 0.5),
-                                        blurRadius: 22,
-                                        spreadRadius: 2,
-                                      ),
+                              final pos = live
+                                  ? (_live?.player.position ?? Duration.zero)
+                                  : (snap.data ?? _player.position);
+                              final dur = live
+                                  ? (_live?.player.duration ?? Duration.zero)
+                                  : (_player.duration ?? Duration.zero);
+                              final maxMs = dur.inMilliseconds > 0
+                                  ? dur.inMilliseconds.toDouble()
+                                  : 1.0;
+                              final frac =
+                                  (pos.inMilliseconds / maxMs).clamp(0.0, 1.0);
+                              return Column(
+                                children: [
+                                  _WaveformSeekBar(
+                                    fraction: frac,
+                                    accent: accent,
+                                    inactive: accent.withAlpha(48),
+                                    enabled: true,
+                                    seed: _trackName.hashCode ^ _currentIndex,
+                                    onSeek: (f) => _transportSeek(Duration(
+                                        milliseconds: (f * maxMs).round())),
+                                    labelFor: (f) => _fmt(Duration(
+                                        milliseconds: (f * maxMs).round())),
+                                    markA: live ? null : _abFrac(_abA, maxMs),
+                                    markB: live ? null : _abFrac(_abB, maxMs),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(_fmt(pos),
+                                          style: TextStyle(
+                                              color: scheme.onSurfaceVariant,
+                                              fontSize: 12,
+                                              fontFeatures: const [
+                                                FontFeature.tabularFigures()
+                                              ])),
+                                      if (!live)
+                                        _abChip(scheme, accent,
+                                            after: () => setFull(() {})),
+                                      Text(_fmt(dur),
+                                          style: TextStyle(
+                                              color: scheme.onSurfaceVariant,
+                                              fontSize: 12)),
                                     ],
                                   ),
-                                  child: Icon(
-                                      playing
-                                          ? Icons.pause_rounded
-                                          : Icons.play_arrow_rounded,
-                                      size: 40 - 8 * openT.clamp(0.0, 1.0),
-                                      color: Colors.white),
+                                ],
+                              );
+                            },
+                          ),
+                          SizedBox(height: 16 - 8 * openT.clamp(0.0, 1.0)),
+                          // Primary transport.
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              _CtrlChip(
+                                icon: Icons.shuffle_rounded,
+                                active: _effShuffle,
+                                activeColor: Colors.green,
+                                onTap: () {
+                                  _toggleShuffle();
+                                  setFull(() {});
+                                },
+                                tooltip: 'Shuffle',
+                              ),
+                              _CtrlBtn(
+                                icon: Icons.skip_previous_rounded,
+                                size: 34,
+                                color: scheme.onSurface,
+                                onTap: _transportPrev,
+                                tooltip: 'Previous',
+                              ),
+                              StreamBuilder<PlayerState>(
+                                stream: _player.playerStateStream,
+                                builder: (ctx, snap) {
+                                  final playing = live
+                                      ? (_live?.player.playing ?? false)
+                                      : (snap.data?.playing ?? _player.playing);
+                                  return Tactile(child: GestureDetector(
+                                    onTap: _transportPlayPause,
+                                    child: Container(
+                                      width: 76 - 14 * openT.clamp(0.0, 1.0),
+                                      height: 76 - 14 * openT.clamp(0.0, 1.0),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: [
+                                            Color.lerp(
+                                                accent, Colors.white, 0.22)!,
+                                            accent,
+                                          ],
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color:
+                                                accent.withValues(alpha: 0.5),
+                                            blurRadius: 22,
+                                            spreadRadius: 2,
+                                          ),
+                                        ],
+                                      ),
+                                      child: Icon(
+                                          playing
+                                              ? Icons.pause_rounded
+                                              : Icons.play_arrow_rounded,
+                                          size: 40 - 8 * openT.clamp(0.0, 1.0),
+                                          color: Colors.white),
+                                    ),
+                                  ));
+                                },
+                              ),
+                              _CtrlBtn(
+                                icon: Icons.skip_next_rounded,
+                                size: 34,
+                                color: scheme.onSurface,
+                                onTap: _transportNext,
+                                tooltip: 'Next',
+                              ),
+                              _CtrlChip(
+                                icon: _effRepeatMode == 'one'
+                                    ? Icons.repeat_one_rounded
+                                    : Icons.repeat_rounded,
+                                active: _effRepeatMode != 'off',
+                                activeColor: accent,
+                                onTap: () {
+                                  _cycleRepeat();
+                                  setFull(() {});
+                                },
+                                tooltip: 'Repeat',
+                              ),
+                            ],
+                          ),
+                          // Secondary utilities collapse smoothly as the queue
+                          // opens, so the disc above resizes without a jump.
+                          ClipRect(
+                            child: Align(
+                              alignment: Alignment.topCenter,
+                              heightFactor:
+                                  (1.0 - openT.clamp(0.0, 1.0) * 1.8)
+                                      .clamp(0.0, 1.0),
+                              child: Opacity(
+                                opacity: (1.0 - openT.clamp(0.0, 1.0) * 1.8)
+                                    .clamp(0.0, 1.0),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const SizedBox(height: 14),
+                                    Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              _fsUtil(
+                                scheme,
+                                Icons.speed_rounded,
+                                _speedLabel(_speed),
+                                () async {
+                                  await _showSpeedSheet(context);
+                                  if (mounted) setFull(() {});
+                                },
+                                accent: accent,
+                                active: _speed != 1.0,
+                              ),
+                              _fsUtil(
+                                scheme,
+                                Icons.bedtime_rounded,
+                                _sleepRemaining != null
+                                    ? _fmtSleep(_sleepRemaining!)
+                                    : 'Sleep',
+                                () {
+                                  _showSleepTimerDialog();
+                                  setFull(() {});
+                                },
+                                accent: accent,
+                                active: _sleepRemaining != null,
+                              ),
+                              _fsUtil(scheme, Icons.lyrics_rounded, 'Lyrics',
+                                  _openLyrics,
+                                  accent: accent),
+                              _fsUtil(
+                                scheme,
+                                Icons.queue_music_rounded,
+                                'Queue',
+                                () => setQueue(!queueOpen),
+                                accent: accent,
+                                active: queueOpen,
+                              ),
+                              _fsUtil(scheme, Icons.graphic_eq_rounded, 'EQ',
+                                  _openEqualizer,
+                                  accent: accent),
+                            ],
+                          ),
+                                  ],
                                 ),
-                              ));
-                            },
-                          ),
-                          _CtrlBtn(
-                            icon: Icons.skip_next_rounded,
-                            size: 34,
-                            color: scheme.onSurface,
-                            onTap: _transportNext,
-                            tooltip: 'Next',
-                          ),
-                          _CtrlChip(
-                            icon: _effRepeatMode == 'one'
-                                ? Icons.repeat_one_rounded
-                                : Icons.repeat_rounded,
-                            active: _effRepeatMode != 'off',
-                            activeColor: accent,
-                            onTap: () {
-                              _cycleRepeat();
-                              setFull(() {});
-                            },
-                            tooltip: 'Repeat',
-                          ),
-                        ],
-                      ),
-                      // Secondary utilities collapse smoothly as the queue
-                      // opens, so the disc above resizes without a jump.
-                      ClipRect(
-                        child: Align(
-                          alignment: Alignment.topCenter,
-                          heightFactor:
-                              (1.0 - openT.clamp(0.0, 1.0) * 1.8)
-                                  .clamp(0.0, 1.0),
-                          child: Opacity(
-                            opacity: (1.0 - openT.clamp(0.0, 1.0) * 1.8)
-                                .clamp(0.0, 1.0),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const SizedBox(height: 14),
-                                Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _fsUtil(
-                            scheme,
-                            Icons.speed_rounded,
-                            _speedLabel(_speed),
-                            () async {
-                              await _showSpeedSheet(context);
-                              if (mounted) setFull(() {});
-                            },
-                            accent: accent,
-                            active: _speed != 1.0,
-                          ),
-                          _fsUtil(
-                            scheme,
-                            Icons.bedtime_rounded,
-                            _sleepRemaining != null
-                                ? _fmtSleep(_sleepRemaining!)
-                                : 'Sleep',
-                            () {
-                              _showSleepTimerDialog();
-                              setFull(() {});
-                            },
-                            accent: accent,
-                            active: _sleepRemaining != null,
-                          ),
-                          _fsUtil(scheme, Icons.lyrics_rounded, 'Lyrics',
-                              _openLyrics,
-                              accent: accent),
-                          _fsUtil(
-                            scheme,
-                            Icons.queue_music_rounded,
-                            'Queue',
-                            () => setQueue(!queueOpen),
-                            accent: accent,
-                            active: queueOpen,
-                          ),
-                          _fsUtil(scheme, Icons.graphic_eq_rounded, 'EQ',
-                              _openEqualizer,
-                              accent: accent),
-                        ],
-                      ),
-                              ],
+                              ),
                             ),
                           ),
+                          ],
                         ),
                       ),
                   ];
@@ -1203,9 +1223,12 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
             break;
           }
         }
-        if (text.isEmpty) return const SizedBox(height: 0);
-        return Padding(
-          padding: const EdgeInsets.only(top: 8),
+        // A song WITH lyrics keeps one fixed line for them, empty between
+        // lines — so the layout never jumps as lines come and go.
+        if (text.isEmpty) return const SizedBox(height: 26);
+        return Container(
+          height: 26,
+          alignment: Alignment.bottomCenter,
           child: GestureDetector(
             onTap: _openLyrics,
             child: AnimatedSwitcher(

@@ -317,6 +317,11 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     }
   }
   double _speed = 1.0;
+  // A-B repeat: loop one stretch of the current song (a favourite line or
+  // chorus). Cleared on every track change; off during live sessions.
+  Duration? _abA;
+  Duration? _abB;
+  DateTime _abLoopAt = DateTime.fromMillisecondsSinceEpoch(0);
   final Random _rng = Random();
 
   Timer? _sleepTimer;
@@ -788,6 +793,18 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     });
 
     _player.positionStream.listen((pos) {
+      // A-B repeat: past B → straight back to A. The short guard stops a
+      // stale position (reported before the seek lands) re-triggering it.
+      final abA = _abA, abB = _abB;
+      if (abA != null &&
+          abB != null &&
+          !_liveActive &&
+          !_switching &&
+          pos >= abB &&
+          DateTime.now().difference(_abLoopAt).inMilliseconds > 400) {
+        _abLoopAt = DateTime.now();
+        _player.seek(abA);
+      }
       _updateEdgeFade(pos);
       // Feed the ambient bar's slim progress indicator (0..1). This updates a
       // standalone ValueNotifier so only that widget rebuilds, not the chat.
@@ -929,6 +946,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     SongInsights.instance.recordPlay(initTitle, artist: initArtist);
     setState(() {
       _currentIndex = index;
+      _abA = null; // A-B points belong to the previous song
+      _abB = null;
       _trackName = initTitle;
       _artistName = initArtist;
       _currentArtId = null; // resolved by _fetchMetadata once the song is found
@@ -1663,6 +1682,48 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         songTitle: _trackName,
       ),
     );
+  }
+
+  /// A-B repeat key: off → mark A → mark B (loop starts) → off.
+  void _cycleAB() {
+    if (_liveActive) {
+      showToast(context, 'A-B repeat is off during a live session');
+      return;
+    }
+    if (_currentIndex < 0) return;
+    final pos = _player.position;
+    final a = _abA;
+    if (a == null) {
+      setState(() => _abA = pos);
+      showToast(context,
+          'A set at ${_fmt(pos)} — tap again where the part ends');
+    } else if (_abB == null) {
+      if (pos <= a + const Duration(seconds: 1)) {
+        showToast(context, 'Let it play a little past A, then tap for B');
+        return;
+      }
+      setState(() => _abB = pos);
+      _abLoopAt = DateTime.now();
+      _player.seek(a);
+      showToast(context,
+          'Repeating ${_fmt(a)} – ${_fmt(pos)} · tap again to stop');
+    } else {
+      setState(() {
+        _abA = null;
+        _abB = null;
+      });
+      showToast(context, 'A-B repeat off');
+    }
+  }
+
+  /// Long-press on the A-B key: clear straight away from any step.
+  void _clearAB() {
+    if (_abA == null && _abB == null) return;
+    setState(() {
+      _abA = null;
+      _abB = null;
+    });
+    showToast(context, 'A-B repeat off');
   }
 
   void _toggleSpeedPanel() {

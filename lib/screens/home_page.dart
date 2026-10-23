@@ -2068,11 +2068,16 @@ class HomePageState extends rp.ConsumerState<HomePage>
       // Backend payload is a MessageWithSender: sender is a nested user object
       // and the text lives in `content`.
       final senderObj = (data['sender'] as Map?)?.cast<String, dynamic>();
-      final sender = (senderObj?['username'] ??
+      final registeredName = (senderObj?['username'] ??
               data['sender_name'] ??
               data['username'] ??
               'New message')
           .toString();
+      // How *I* saved them (phonebook), same as the push path.
+      final sender = ContactNames.instance.displayName(
+          of: senderObj,
+          userId: senderObj?['id'] ?? data['sender_id'],
+          registered: registeredName);
       // A secret heart's note never goes into a notification.
       final text = (data['message_type'] ?? '').toString() == 'heart'
           ? '❤️ Sent you a secret heart'
@@ -2083,10 +2088,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final senderId = (senderObj?['id'] as num?)?.toInt() ??
           (data['sender_id'] as num?)?.toInt();
       if (!_appForeground) {
-        final convId = (data['conversation_id'] ?? '').toString();
+        // Every message now carries a conversation_id — DMs too — so only a
+        // message with no receiver is a GROUP one. Treating DMs as groups gave
+        // them a different notification slot than the push for the same
+        // message → two banners. Same slot now: the second just replaces the
+        // first.
+        final isGroup = data['receiver_id'] == null &&
+            (data['conversation_id'] ?? '').toString().isNotEmpty;
+        final convId =
+            isGroup ? (data['conversation_id'] ?? '').toString() : '';
         final gTitle = (data['group_title'] ?? '').toString();
         final msgId = (data['id'] ?? data['message_id'] ?? '').toString();
-        final isGroup = convId.isNotEmpty;
         showMessageNotification(
           title: isGroup && gTitle.isNotEmpty ? gTitle : sender,
           body: isGroup

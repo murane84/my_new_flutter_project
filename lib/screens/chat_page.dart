@@ -3437,11 +3437,17 @@ class _ChatPageState extends State<ChatPage>
           }, color: scheme.error),
         ],
       ];
+      // Unsent (tmp-) bubbles have no server id yet: nothing to show, pin,
+      // keep or forward.
+      final unsent = (msg['id']?.toString() ?? 'tmp-').startsWith('tmp-');
+      const needsId = {'pulse', 'forward', 'pin', 'keepsake'};
+      bool ok(_MenuAction a) => !(unsent && needsId.contains(a.id));
+      final h = harmony.where(ok).toList();
       return <_MenuAction>[
-        ...harmony,
-        if (harmony.isNotEmpty)
+        ...h,
+        if (h.isNotEmpty)
           _MenuAction('__div__', Icons.remove, '', () {}),
-        ...rest,
+        ...rest.where(ok),
       ];
     }
 
@@ -3453,13 +3459,43 @@ class _ChatPageState extends State<ChatPage>
         }
         return null;
       }
-      final quick = [
-        pick('reply'),
-        pick('pin'),
-        pick('keepsake') ?? pick('copy'),
-        pick('delme'),
-      ]
+      // The signature row. Reply is already a swipe on phones, so the row
+      // leads with the bonding actions; Delete lives in More.
+      final isHeart = (msg['message_type'] ?? 'text') == 'heart';
+      final desktop = kIsWeb ||
+          defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.macOS ||
+          defaultTargetPlatform == TargetPlatform.linux;
+      final List<_MenuAction?> slots;
+      if (isHeart) {
+        slots = [
+          pick('keepsake') ?? pick('heartback') ?? pick('takeback'),
+          pick('reply'),
+        ];
+      } else if (desktop) {
+        // No swipe on a mouse: Reply + Forward stay up front.
+        slots = [
+          pick('reply'),
+          pick('forward'),
+          pick('copy'),
+          pick('pulse'),
+          pick('keepsake'),
+        ];
+      } else {
+        slots = [
+          pick('pulse'),
+          pick('keepsake') ?? pick('pin'),
+          pick('edit') ?? pick('save') ?? pick('copy'),
+          pick('pin'),
+          pick('forward'),
+          pick('reply'),
+        ];
+      }
+      final seen = <String>{};
+      final quick = slots
           .whereType<_MenuAction>()
+          .where((a) => seen.add(a.id))
+          .take(desktop && !isHeart ? 5 : 4)
           .toList();
       return _MsgActionMenu(
         quick: quick,
@@ -6753,8 +6789,8 @@ class _MenuAction {
   final String? short; // compact label for the quick row
 }
 
-/// The message action menu: a compact quick-action row (Reply · Pin · Forward ·
-/// Delete · More) in the house style, which expands to the full dropdown of
+/// The message action menu: a compact quick-action row (Show · Keepsake ·
+/// Copy · Pin · More on phones) in the house style, which expands to the full dropdown of
 /// every action when "More" (⋮) is tapped. Keeps the pink frosted card look.
 class _MsgActionMenu extends StatefulWidget {
   const _MsgActionMenu({

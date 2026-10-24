@@ -866,6 +866,8 @@ extension _ChatPageHelpers2 on _ChatPageState {
           durationMs: (msg['media_duration'] as num?)?.toInt() ?? 0,
           accent: scheme.primary,
           onColor: textColor,
+          autoPlaySoft: _helloAutoId != null &&
+              msg['id']?.toString() == _helloAutoId,
         );
       case 'song':
         return _SongBubble(

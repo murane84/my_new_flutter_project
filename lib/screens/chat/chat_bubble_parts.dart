@@ -354,10 +354,13 @@ class _VoiceNotePlayer extends StatefulWidget {
     required this.accent,
     required this.onColor,
     this.onPlaying,
+    this.autoPlaySoft = false,
   });
 
   final String url;
   final int durationMs;
+  // A "voice hello": play once, softly, as soon as it's on screen.
+  final bool autoPlaySoft;
   final Color accent;
   final Color onColor;
   // Playing / stopped — lets an opened heart letter hold its reseal countdown.
@@ -424,6 +427,19 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
           s.processingState != ja.ProcessingState.completed);
       setState(() {});
     });
+    if (widget.autoPlaySoft) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted || !await _prepare() || !mounted) return;
+        final other = _active;
+        if (other != null && !identical(other, this) && other.mounted) {
+          other._player.pause();
+        }
+        _active = this;
+        await _player.setVolume(0.55);
+        // Never await play(): its future completes when the clip ENDS.
+        _player.play();
+      });
+    }
   }
 
   @override
@@ -476,6 +492,7 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
       }
       _active = this;
       if (_player.speed != _speed) await _player.setSpeed(_speed);
+      if (_player.volume != 1.0) await _player.setVolume(1.0); // after a soft hello
       await _player.play();
     }
   }

@@ -112,7 +112,8 @@ part 'chat/chat_search.dart';         // in-chat search pill + hit stepping
 part 'chat/chat_mentions_seen.dart';  // "@" stepper + DM seen avatar
 part 'chat/chat_polls_admin.dart';    // group admins + polls
 part 'chat/chat_rituals.dart';        // good night + on this day
-part 'chat/chat_morning.dart';        // deliver at their morning 🌅
+part 'chat/chat_morning.dart';
+part 'chat/chat_voice_hello.dart';    // 5-second voice hello 🎙️        // deliver at their morning 🌅
 part 'chat/chat_music_moments.dart';  // song reactions, dedications, voice-over-music
 
 // ─── Timestamp helpers ───────────────────────────────────────────────────────
@@ -437,6 +438,9 @@ class _ChatPageState extends State<ChatPage>
   String? _jumpOrigin;
   // DM lines held for the friend's morning (chat/chat_morning.dart).
   List<Map<String, dynamic>> _held = const [];
+  // Voice hello: recording one now / the received one to play softly once.
+  bool _helloMode = false;
+  String? _helloAutoId;
   String? _lastJumpTarget;
   DateTime? _lastJumpAt;
 
@@ -895,6 +899,7 @@ class _ChatPageState extends State<ChatPage>
     }
     _maybeInitialJump();          // opened from a notification → jump to it
     unawaited(_loadHeld());       // anything waiting for their morning
+    unawaited(_pickVoiceHello()); // their unheard voice hello plays softly
     _checkOnlineStatus();
     _startPolling();
     _startKeepAlive();
@@ -2450,6 +2455,10 @@ class _ChatPageState extends State<ChatPage>
         if (_heartMode && _recordMs >= _kHeartVoiceMaxMs) {
           _stopAndSendRecording();
         }
+        // A voice hello is a few seconds, by design.
+        if (_helloMode && _recordMs >= _kVoiceHelloMaxMs) {
+          _stopAndSendRecording();
+        }
       });
     } catch (_) {
       if (mounted) showToast(context, 'Could not start recording', type: ToastType.error);
@@ -2471,6 +2480,7 @@ class _ChatPageState extends State<ChatPage>
       setState(() {
         _isRecording = false;
         _recordMs = 0;
+        _helloMode = false;
       });
     }
   }
@@ -2479,7 +2489,11 @@ class _ChatPageState extends State<ChatPage>
     _recordTimer?.cancel();
     _recordPresenceTimer?.cancel();
     final durationMs = _recordMs;
-    setState(() => _isRecording = false);
+    final hello = _helloMode;
+    setState(() {
+      _isRecording = false;
+      _helloMode = false;
+    });
     try {
       final path = await _recorder.stop();
       if (path == null) return;
@@ -2511,7 +2525,7 @@ class _ChatPageState extends State<ChatPage>
         mime: 'audio/mp4',
         type: 'audio',
         durationMs: durationMs,
-        caption: _voiceMusicCaption(),
+        caption: hello ? _kVoiceHello : _voiceMusicCaption(),
       );
       _recordSong = null;
     } catch (_) {
@@ -6120,9 +6134,15 @@ class _ChatPageState extends State<ChatPage>
                                         : _sendMessage)
                                     : _startRecording,
                                 // Hold Send (DM) → "Deliver at their morning".
+                                // Hold Mic (DM, idle) → a 5-second voice hello.
                                 onLongPress: (hasText && _canHoldForMorning)
                                     ? _showSendOptions
-                                    : null,
+                                    : (!hasText &&
+                                            !_isGroup &&
+                                            !_heartMode &&
+                                            _editing == null)
+                                        ? _startVoiceHello
+                                        : null,
                                 // Same height + lift as the pill, so the two
                                 // read as one floating row. Idle mic: a SOLID
                                 // light disc (never see-through) with a soft

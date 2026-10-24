@@ -39,7 +39,9 @@ EPHEMERAL_TTL = timedelta(hours=24)
 PLAYLIST_TTL = timedelta(days=7)
 # After a recipient says "I have it" (POST /attachments/<id>/cached), keep the
 # bytes a little longer so a second device / a failed save can still fetch.
-ACKED_GRACE = timedelta(hours=1)
+# (Songs too: purging on the FIRST device's ack left the person's other
+# devices — phone + desktop — with "no longer on server".)
+ACKED_GRACE = timedelta(hours=6)
 # Log a warning when live media bytes pass this (≈60% of a 5 GB volume).
 MEDIA_ALARM_BYTES = int(os.environ.get("MEDIA_ALARM_MB", "3000")) * 1024 * 1024
 
@@ -592,14 +594,9 @@ def ack_cached(
     now = datetime.now(timezone.utc)
     if asset.cached_at is None:
         asset.cached_at = now
-    # Songs are cached by the player and tiny → purge now (as before). Other
-    # files/videos keep ACKED_GRACE so a second device can still fetch; the
-    # housekeeping loop clears them after that.
-    if asset.data is not None and (asset.mime or "").startswith("audio/"):
-        asset.data = None
-        asset.purged_at = now
-        db.commit()
-        return {"ok": True, "purged": True}
+    # Everything (songs included) keeps ACKED_GRACE after the ack so the
+    # user's other devices can still fetch it; the hourly housekeeping loop
+    # clears it after that.
     db.commit()
     return {"ok": True, "purged": False}
 

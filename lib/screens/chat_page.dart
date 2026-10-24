@@ -438,6 +438,38 @@ class _ChatPageState extends State<ChatPage>
   // (chained quote → quote jumps still lead back there), and the last jump
   // target + time so a double tap on the same quote doesn't re-jump.
   String? _jumpOrigin;
+  // Heart songs already being saved to this device (one fetch per heart).
+  final Set<String> _heartSongPrefetched = {};
+
+  /// A heart carrying a SONG is saved into this device's private song cache
+  /// as soon as the heart appears — before it's even opened — so it still
+  /// plays later on, even once the server has let the file go (and even when
+  /// the sender kept it view-only: this copy lives only inside Aluta, never
+  /// in the gallery / Files). A heart meant for someone else is skipped.
+  void _prefetchHeartSong(Map<String, dynamic> msg, bool isMe) {
+    if (kIsWeb) return;
+    final id = msg['id']?.toString() ?? '';
+    if (id.isEmpty || id.startsWith('tmp-')) return;
+    final rel = (msg['media_url'] as String?) ?? '';
+    final mime = (msg['media_mime'] as String?)?.toLowerCase() ?? '';
+    final name = (msg['media_name'] as String?) ?? '';
+    if (rel.isEmpty || !mime.startsWith('audio/')) return;
+    if (name.startsWith('heart_voice')) return; // a voice clip, not a song
+    if (!isMe && _heartLockedForMe(msg)) return;
+    if (!_heartSongPrefetched.add(id)) return;
+    final aid = SongCache.assetId(rel);
+    if (aid == null) return;
+    final url = fullMediaUrl(rel);
+    () async {
+      try {
+        final have = await SongCache.cachedPath(aid, filename: name, mime: mime);
+        if (have != null) return;
+        await SongCache.ensureCached(aid, url, mediaAuthHeaders(url),
+            filename: name, mime: mime);
+      } catch (_) {}
+    }();
+  }
+
   // DM lines held for the friend's morning (chat/chat_morning.dart).
   List<Map<String, dynamic>> _held = const [];
   // Voice hello: recording one now / the received one to play softly once.
@@ -1784,6 +1816,15 @@ class _ChatPageState extends State<ChatPage>
               _showErrorSnack('Upload failed — tap the ! to retry.');
             }
             return;
+          }
+          // A song sealed in the heart: keep my own copy on this device, so
+          // it plays from my bubble whatever the server later does.
+          if (attach.kind == 'song') {
+            final aid = SongCache.assetId(up!['url'].toString());
+            if (aid != null) {
+              unawaited(SongCache.putBytes(aid, attach.bytes,
+                  filename: attach.name, mime: attach.mime));
+            }
           }
         }
         final sent = await appBusy.run(() => ApiService().sendMessage(
@@ -4685,6 +4726,7 @@ class _ChatPageState extends State<ChatPage>
     // Registered like any bubble so a reply quote / pin / notification can
     // jump here and flash it.
     final key = _msgKeys.putIfAbsent(msgId, () => GlobalKey());
+    _prefetchHeartSong(msg, isMe);
     // Jumped to → the heart ripples rings in its own shape + mood colour.
     final ringFor = _highlightedId == msgId ? _ringPulse : 0;
     return Container(

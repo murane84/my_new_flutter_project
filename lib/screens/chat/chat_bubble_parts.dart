@@ -754,6 +754,9 @@ class _SongBubbleState extends State<_SongBubble> {
   bool _prepared = false;
   bool _loading = false;
   bool _unavailable = false;
+  // Unavailable because the server really let it go (410/404) — otherwise
+  // it was a network / player hiccup and a tap tries again.
+  bool _gone = false;
   bool _dragging = false;
   double _dragFrac = 0;
   String? _localPath;
@@ -859,10 +862,21 @@ class _SongBubbleState extends State<_SongBubble> {
       if (mounted) setState(() => _loading = false);
       return true;
     } catch (_) {
+      // Why? Ask the server for one byte: 410/404 = truly gone; anything
+      // else (offline, timeout, a player error) is worth a retry.
+      var gone = false;
+      try {
+        final r = await http.get(Uri.parse(widget.url), headers: {
+          ...mediaAuthHeaders(widget.url),
+          'Range': 'bytes=0-0',
+        }).timeout(const Duration(seconds: 8));
+        gone = r.statusCode == 410 || r.statusCode == 404;
+      } catch (_) {}
       if (mounted) {
         setState(() {
           _loading = false;
           _unavailable = true;
+          _gone = gone;
         });
       }
       return false;
@@ -870,6 +884,10 @@ class _SongBubbleState extends State<_SongBubble> {
   }
 
   Future<void> _toggle() async {
+    if (_unavailable && !_gone) {
+      // Not gone, just didn't load — tap again = try again.
+      setState(() => _unavailable = false);
+    }
     if (_unavailable) return;
     if (!await _ensureLoaded()) return;
     if (_player.playing) {
@@ -946,7 +964,9 @@ class _SongBubbleState extends State<_SongBubble> {
                         )
                       : Icon(
                           _unavailable
-                              ? Icons.music_off_rounded
+                              ? (_gone
+                                  ? Icons.music_off_rounded
+                                  : Icons.refresh_rounded)
                               : (playing
                                   ? Icons.pause_rounded
                                   : Icons.play_arrow_rounded),
@@ -1014,7 +1034,10 @@ class _SongBubbleState extends State<_SongBubble> {
                   Icon(Icons.cloud_off_rounded,
                       size: 12, color: widget.onColor.withAlpha(150)),
                   const SizedBox(width: 4),
-                  Text('No longer on server — cache expired',
+                  Text(
+                      _gone
+                          ? 'No longer on server — not saved on this device'
+                          : "Couldn't load — tap play to try again",
                       style: TextStyle(
                           fontSize: 10.5,
                           fontStyle: FontStyle.italic,

@@ -273,6 +273,9 @@ class SongInsights {
     return f;
   }
 
+  /// Whether this song is already in Our Playlist with my partner.
+  bool isOurs(String title) => _songs[_keyOf(title)]?['ours'] == true;
+
   SongFeel? feelOf(String title) =>
       SongFeel.of(_songs[_keyOf(title)]?['f'] as String?);
 
@@ -356,6 +359,10 @@ class SongBridge {
 
   /// First name of the bonded partner, or null.
   String? Function()? partnerName;
+
+  /// User id of the bonded partner, or null (the player's Dedicate row puts
+  /// them first for a song that feels like them).
+  int? Function()? partnerId;
 
   /// Open the partner's chat; [text] pre-fills it, [heart] seals it.
   void Function({String? text, bool heart, String? mood})? messagePartner;

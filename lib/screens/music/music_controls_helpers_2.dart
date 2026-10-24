@@ -1007,18 +1007,20 @@ Column(
       // Up next) are kept only when they fit — decided by the space, never by
       // the song, so nothing jumps between tracks.
       Widget heroCard(double h) {
-        final showUpNextSlot = h >= 300;
-        final showDedicateSlot = h >= 350;
+        final showSmartRow = h >= 290;
         // Same prediction the skip uses (shuffle's pick is made ahead of
         // time), so Up next is always the song that really comes next.
         final nextIdx = (!live && hasTrack && _effRepeatMode != 'one')
             ? _peekNextIndex()
             : null;
-        final upNextOn = nextIdx != null;
         final nextPath = nextIdx == null ? null : _playlist[nextIdx];
-        final nextTitle = nextPath == null
-            ? ''
-            : metadataStore.title(nextPath, _nameFromPath(nextPath));
+        // In Listen Together the session's queue decides what's next.
+        final liveNext = live ? _liveNextTitle() : null;
+        final upNextOn = nextIdx != null || liveNext != null;
+        final nextTitle = liveNext ??
+            (nextPath == null
+                ? ''
+                : metadataStore.title(nextPath, _nameFromPath(nextPath)));
         return Container(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
           decoration: BoxDecoration(
@@ -1169,20 +1171,20 @@ Column(
                   SizedBox(
                       height: 26,
                       child: _syncedLyricLine(scheme, accent, false)),
-                  // Dedicate this song ❤ — the people I chat with most. Its
-                  // line is always reserved so it never nudges the record.
-                  if (showDedicateSlot)
+                  // ONE smart row: Up next (used every song) — or, when there
+                  // is no next song (Repeat One / end of the list), Dedicate
+                  // this song ❤. Fixed height, soft crossfade, so the card
+                  // never jumps.
+                  if (showSmartRow) ...[
+                    const SizedBox(height: 10),
                     SizedBox(
-                      height: 44,
-                      child: (live || !hasTrack || _dedicateTo.isEmpty)
-                          ? null
-                          : _dedicateRow(scheme, accent),
-                    ),
-                  if (showUpNextSlot) const SizedBox(height: 10),
-                  if (showUpNextSlot) SizedBox(
-                    height: 34,
-                    child: !upNextOn ? null :
-                    // Up next — tap to jump to it.
+                      height: 38,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 260),
+                        child: upNextOn
+                            ? KeyedSubtree(
+                                key: const ValueKey('upnext'),
+                                child:
                     BounceTap(
                       onTap: _transportNext,
                       child: Container(
@@ -1222,7 +1224,18 @@ Column(
                         ),
                       ),
                     ),
-                  ),
+                              )
+                            : (!live && hasTrack && _dedicateTo.isNotEmpty)
+                                ? KeyedSubtree(
+                                    key: const ValueKey('dedicate'),
+                                    child: _dedicateRow(scheme, accent,
+                                        padTop: 0),
+                                  )
+                                : const SizedBox.shrink(
+                                    key: ValueKey('none')),
+                      ),
+                    ),
+                  ],
                   if (!live && hasTrack)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
@@ -1476,9 +1489,46 @@ Column(
   /// surface condenses out of the panel (clear at the top, deepening
   /// downward) and its rim is lit along the top and fades away down the
   /// sides, so the card melts into the page instead of sitting on it.
-  Widget _dedicateRow(ColorScheme scheme, Color accent) {
+  /// The next song in a Listen Together session's queue (null if none or
+  /// shuffle, which the host picks only at skip time).
+  String? _liveNextTitle() {
+    final c = _live;
+    if (c == null || c.shuffle) return null;
+    final host = _isLiveHost;
+    final titles = host
+        ? [for (final t in c.queue) t.title]
+        : List<String>.from(c.remoteQueueTitles);
+    final idx = host ? c.currentIndex : c.remoteIndex;
+    if (idx < 0 || idx >= titles.length) return null;
+    if (idx + 1 < titles.length) return titles[idx + 1];
+    if (c.repeatMode == 'all' && titles.length > 1) return titles.first;
+    return null;
+  }
+
+  /// Who this song seems to be for: a song I feel "in love" / "missing" on, or
+  /// one already in Our Playlist, points to my bonded partner.
+  int? _suggestedFor() {
+    if (_currentIndex < 0) return null;
+    final si = SongInsights.instance;
+    final f = si.feelOf(_trackName);
+    final forPartner = f == SongFeel.love ||
+        f == SongFeel.missing ||
+        si.isOurs(_trackName);
+    if (!forPartner) return null;
+    return SongBridge.instance.partnerId?.call();
+  }
+
+  Widget _dedicateRow(ColorScheme scheme, Color accent, {double padTop = 8}) {
+    // The person this song seems to be for leads, softly glowing.
+    final forId = _suggestedFor();
+    final people = [..._dedicateTo];
+    if (forId != null) {
+      final i = people.indexWhere(
+          (f) => (f['id'] as num?)?.toInt() == forId);
+      if (i > 0) people.insert(0, people.removeAt(i));
+    }
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: EdgeInsets.only(top: padTop),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -1490,18 +1540,33 @@ Column(
                   fontWeight: FontWeight.w700,
                   color: accent)),
           const SizedBox(width: 8),
-          for (final f in _dedicateTo)
+          for (final f in people)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 3),
               child: Tooltip(
-                message: 'Dedicate to ${_nameOf(f)}',
+                message: (f['id'] as num?)?.toInt() == forId
+                    ? 'For ${_nameOf(f).split(' ').first}?'
+                    : 'Dedicate to ${_nameOf(f)}',
                 child: BounceTap(
                   onTap: () => _openDedicate(f, accent),
                   child: Container(
                     padding: const EdgeInsets.all(1.5),
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: accent.withAlpha(110)),
+                      border: Border.all(
+                          color: (f['id'] as num?)?.toInt() == forId
+                              ? accent
+                              : accent.withAlpha(110),
+                          width: (f['id'] as num?)?.toInt() == forId ? 2 : 1),
+                      // A soft glow on the one this song seems to be for.
+                      boxShadow: (f['id'] as num?)?.toInt() == forId
+                          ? [
+                              BoxShadow(
+                                  color: accent.withAlpha(110),
+                                  blurRadius: 10,
+                                  spreadRadius: 1),
+                            ]
+                          : null,
                     ),
                     child: InitialsAvatar(
                       name: _nameOf(f),

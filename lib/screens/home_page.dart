@@ -525,6 +525,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     SongInsights.instance.pending.removeListener(_onSongNudge);
     final sb = SongBridge.instance;
     sb.partnerName = null;
+    sb.partnerId = null;
     sb.messagePartner = null;
     sb.listenTogether = null;
     sb.shareCurrent = null;
@@ -769,6 +770,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     });
     final b = SongBridge.instance;
     b.partnerName = () => _partnerInfo()?.name;
+    b.partnerId = () => _partnerInfo()?.id;
     b.messagePartner = ({String? text, bool heart = false, String? mood}) {
       final p = _partnerInfo();
       if (p == null) return;

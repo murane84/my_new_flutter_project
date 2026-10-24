@@ -1561,6 +1561,42 @@ class ApiService {
     }
   }
 
+  /// An account-backed setting blob ({rev, data}) — follows the user across a
+  /// reinstall / new device. Null on failure (keep the local copy).
+  Future<({int rev, Object? data})?> getSetting(String key) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/users/me/settings/$key'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
+      final d = jsonDecode(resp.body);
+      if (d is! Map) return null;
+      return (rev: (d['rev'] as num?)?.toInt() ?? 0, data: d['data']);
+    } catch (e) {
+      _logger.w('getSetting($key) failed: $e');
+      return null;
+    }
+  }
+
+  Future<bool> putSetting(String key, int rev, Object? data) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.put(
+        Uri.parse('${await _baseUrl}/users/me/settings/$key'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'rev': rev, 'data': data}),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.w('putSetting($key) failed: $e');
+      return false;
+    }
+  }
+
   /// Friend ids I'm still waiting to hear are online.
   Future<Set<int>> onlineWatches() async {
     try {

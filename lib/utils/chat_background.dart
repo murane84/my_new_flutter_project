@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../screens/api_service.dart';
 
 /// A chosen chat wallpaper.
 /// - mode 'default' → the built-in pattern wallpaper
@@ -65,6 +68,7 @@ Future<void> setWallpaperClarity(double v) async {
     final p = await SharedPreferences.getInstance();
     await p.setDouble(_kClarity, v);
   } catch (_) {}
+  _markChanged();
 }
 
 /// How concentrated the DEFAULT theme-colour backdrop (the "motif": the ambient
@@ -91,6 +95,7 @@ Future<void> setMotifStrength(double v) async {
     final p = await SharedPreferences.getInstance();
     await p.setDouble(_kMotif, v);
   } catch (_) {}
+  _markChanged();
 }
 
 /// Legacy single notifier, kept mirroring the all-chats default so any old
@@ -137,6 +142,7 @@ Future<void> setWallpaperApplyAllDefault(bool v) async {
     final p = await SharedPreferences.getInstance();
     await p.setBool(_kApplyAll, v);
   } catch (_) {}
+  _markChanged();
 }
 
 ChatBg _all = ChatBg.defaults;
@@ -228,6 +234,101 @@ Future<void> _persist() async {
       _kOverrides,
       jsonEncode(_overrides.map((k, v) => MapEntry(k, v.toJson()))),
     );
+  } catch (_) {}
+  _markChanged();
+}
+
+// ── Account backup ─────────────────────────────────────────────────────────
+// The wallpaper choices also live on the account (server `user_settings`,
+// key 'chat_wallpaper'), so a reinstall or a new phone gets them back.
+// Startup never waits on this: the local copy paints first, and
+// [syncChatBackgroundWithAccount] runs in the background after sign-in.
+// Newest change wins (by [_kRev], the local change time).
+const String _kRev = 'chat_bg_rev_v1';
+const String _kSettingKey = 'chat_wallpaper';
+Timer? _pushTimer;
+bool _applyingRemote = false;
+
+void _markChanged() {
+  if (_applyingRemote) return;
+  final rev = DateTime.now().millisecondsSinceEpoch;
+  SharedPreferences.getInstance()
+      .then((p) => p.setInt(_kRev, rev))
+      .catchError((_) => false);
+  _pushTimer?.cancel();
+  _pushTimer = Timer(const Duration(seconds: 3), () => _push(rev));
+}
+
+Map<String, dynamic> _snapshot() => {
+      'all': _all.toJson(),
+      'overrides': _overrides.map((k, v) => MapEntry(k, v.toJson())),
+      'all_chosen': _allChosen,
+      'apply_all': _applyAllPref,
+      'clarity': wallpaperClarity.value,
+      'motif': motifStrength.value,
+    };
+
+Future<void> _push(int rev) async {
+  try {
+    await ApiService().putSetting(_kSettingKey, rev, _snapshot());
+  } catch (_) {}
+}
+
+/// Reconcile with the account copy (call once after sign-in, unawaited):
+/// a newer server copy is applied (reinstall / other device); a newer local
+/// one is uploaded.
+Future<void> syncChatBackgroundWithAccount() async {
+  try {
+    await loadChatBackground();
+    final p = await SharedPreferences.getInstance();
+    final localRev = p.getInt(_kRev) ?? 0;
+    final remote = await ApiService().getSetting(_kSettingKey);
+    if (remote == null) return; // offline — try next launch
+    final data = remote.data;
+    if (remote.rev > localRev && data is Map) {
+      _applyingRemote = true;
+      try {
+        final d = Map<String, dynamic>.from(data);
+        if (d['all'] is Map) {
+          _all = ChatBg.fromJson(Map<String, dynamic>.from(d['all'] as Map));
+        }
+        _overrides = {};
+        final ov = d['overrides'];
+        if (ov is Map) {
+          ov.forEach((k, v) {
+            if (v is Map) {
+              _overrides[k.toString()] =
+                  ChatBg.fromJson(Map<String, dynamic>.from(v));
+            }
+          });
+        }
+        _allChosen = d['all_chosen'] == true;
+        _applyAllPref = d['apply_all'] != false;
+        final c = (d['clarity'] as num?)?.toDouble();
+        final m = (d['motif'] as num?)?.toDouble();
+        if (c != null) wallpaperClarity.value = c.clamp(0.0, 1.0).toDouble();
+        if (m != null) motifStrength.value = m.clamp(0.0, 1.0).toDouble();
+        await _persist();
+        await p.setBool(_kAllChosen, _allChosen);
+        await p.setBool(_kApplyAll, _applyAllPref);
+        await p.setDouble(_kClarity, wallpaperClarity.value);
+        await p.setDouble(_kMotif, motifStrength.value);
+        await p.setInt(_kRev, remote.rev);
+        chatBackground.value = _all;
+        chatBgRevision.value++;
+      } finally {
+        _applyingRemote = false;
+      }
+    } else if (localRev > remote.rev) {
+      await _push(localRev);
+    } else if (localRev == 0 &&
+        remote.rev == 0 &&
+        (_allChosen || _overrides.isNotEmpty)) {
+      // Chosen before account backup existed → back it up once now.
+      final rev = DateTime.now().millisecondsSinceEpoch;
+      await p.setInt(_kRev, rev);
+      await _push(rev);
+    }
   } catch (_) {}
 }
 

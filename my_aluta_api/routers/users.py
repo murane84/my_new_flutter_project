@@ -755,3 +755,50 @@ def friends_quick_statuses(db: Session = Depends(get_db),
         return {"statuses": []}
     rows = db.query(QuickStatus).filter(QuickStatus.user_id.in_(ids)).all()
     return {"statuses": [o for o in (_status_out(r) for r in rows) if o]}
+
+
+# ── Account-backed settings (wallpapers, …) ─────────────────────────────────
+_SETTING_KEYS = {"chat_wallpaper"}
+
+
+@router.get("/users/me/settings/{key}", tags=["Users"])
+def get_user_setting(key: str, db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_user)):
+    from models import UserSetting
+    if key not in _SETTING_KEYS:
+        raise HTTPException(status_code=404, detail="Unknown setting")
+    row = db.query(UserSetting).filter(
+        UserSetting.user_id == current_user.id, UserSetting.key == key).first()
+    if row is None:
+        return {"rev": 0, "data": None}
+    try:
+        data = json.loads(row.data or "null")
+    except Exception:
+        data = None
+    return {"rev": int(row.rev or 0), "data": data}
+
+
+@router.put("/users/me/settings/{key}", tags=["Users"])
+def put_user_setting(key: str, body: dict, db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_user)):
+    """{"rev": <client ms>, "data": {...}}. An older rev never overwrites a
+    newer one (two devices editing → the latest change wins)."""
+    from models import UserSetting
+    if key not in _SETTING_KEYS:
+        raise HTTPException(status_code=404, detail="Unknown setting")
+    rev = int((body or {}).get("rev") or 0)
+    raw = json.dumps((body or {}).get("data"))
+    if len(raw) > 64 * 1024:
+        raise HTTPException(status_code=413, detail="Too large")
+    row = db.query(UserSetting).filter(
+        UserSetting.user_id == current_user.id, UserSetting.key == key).first()
+    if row is None:
+        db.add(UserSetting(user_id=current_user.id, key=key, data=raw,
+                           rev=str(rev)))
+    elif rev >= int(row.rev or 0):
+        row.data = raw
+        row.rev = str(rev)
+    else:
+        return {"saved": False, "rev": int(row.rev or 0)}
+    db.commit()
+    return {"saved": True, "rev": rev}

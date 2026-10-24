@@ -436,6 +436,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _loadCachedSpaces();     // and the pinned Our Space hero(es), for offline
     _loadCachedStories();    // status & stories, for offline (24h-filtered)
     loadChatBackground();    // the chosen chat wallpaper (photo/motif/default)
+    // …and reconcile it with the account copy in the background (a reinstall
+    // or a new phone gets its wallpapers back; never blocks startup).
+    syncChatBackgroundWithAccount();
     loadBubbleTheme();       // the chosen message-bubble colour theme
     _fetchFriends();          // then refresh from network
     _loadSpaces();            // pinned "Our Space" hero(es) — one-shot, no poll

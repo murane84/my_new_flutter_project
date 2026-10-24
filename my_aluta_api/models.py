@@ -1091,3 +1091,20 @@ class HeldMessage(Base):
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)
     deliver_after = Column(DateTime(timezone=True), index=True, nullable=False)
+
+
+class UserSetting(Base):
+    """Small per-user settings blobs that should follow the account across a
+    reinstall / new device (e.g. key 'chat_wallpaper'). `data` is the client's
+    JSON as-is; `rev` is the client's change time (ms) — newest wins.
+    Auto-created by create_all; no ALTER."""
+    __tablename__ = "user_settings"
+    __table_args__ = (UniqueConstraint("user_id", "key", name="uq_user_setting"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=False)
+    key = Column(String, nullable=False)
+    data = Column(Text, nullable=False, default="{}")
+    rev = Column(String, nullable=False, default="0")
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -5051,11 +5051,12 @@ class _ChatPageState extends State<ChatPage>
 
                 // ── Emoji-only: no bubble, just big emoji ─────────────
                 if (emojiOnly)
-                  // No bubble to take a colour from → the theme accent, in a
-                  // soft rounded outline around the emoji.
+                  // Neon red, like every ordinary bubble, in a soft rounded
+                  // outline around the emoji.
                   JumpRings(
                     trigger: ringFor,
-                    color: scheme.primary,
+                    color: JumpRings.neonRed,
+                    neon: true,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: Text(
@@ -5075,18 +5076,11 @@ class _ChatPageState extends State<ChatPage>
                   child: JumpRings(
                     trigger: ringFor,
                     shape: bubbleShape,
-                    // A colourful bubble rings in its own colour (a tinted
-                    // bubble theme). A plain one — white / grey in light
-                    // mode, near-black in dark — has no colour to give, so
-                    // it rings in the theme accent instead (grey rings were
-                    // hard to see).
-                    color: () {
-                      final hsl = HSLColor.fromColor(bubbleColor);
-                      final l = bubbleColor.computeLuminance();
-                      final plain = hsl.saturation < 0.25 || l > 0.8 || l < 0.06;
-                      if (plain) return scheme.primary;
-                      return bubbleColor;
-                    }(),
+                    // Aluta's signature: every ordinary bubble ripples in
+                    // neon red, whatever the theme or bubble colour (hearts
+                    // keep their own mood colour).
+                    color: JumpRings.neonRed,
+                    neon: true,
                     child: Container(
                     decoration: ShapeDecoration(
                       color: bubbleColor,

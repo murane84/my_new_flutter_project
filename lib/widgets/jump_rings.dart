@@ -18,7 +18,15 @@ class JumpRings extends StatefulWidget {
     required this.child,
     this.shape,
     this.pathFor,
+    this.neon = false,
   });
+
+  /// Neon style: a soft glow around each ring plus a thin white inner halo,
+  /// so a bright colour still reads on any bubble / wallpaper.
+  final bool neon;
+
+  /// The house ripple colour for ordinary bubbles (hearts use their mood).
+  static const Color neonRed = Color(0xFFFF1744);
 
   final int trigger;
   final Color color;
@@ -68,6 +76,7 @@ class _JumpRingsState extends State<JumpRings>
                 shape: widget.shape,
                 pathFor: widget.pathFor,
                 still: still,
+                neon: widget.neon,
               )
             : null,
         child: child,
@@ -84,8 +93,10 @@ class _RingsPainter extends CustomPainter {
     this.shape,
     this.pathFor,
     this.still = false,
+    this.neon = false,
   });
 
+  final bool neon;
   final double t;
   final Color color;
   final ShapeBorder? shape;
@@ -135,12 +146,32 @@ class _RingsPainter extends CustomPainter {
       final e = Curves.easeOutCubic.transform(p);
       final grow = 1.5 + 24 * e;
       final fade = math.pow(1 - p, 1.4).toDouble();
+      final w = 2.8 * (1 - p) + 0.6;
+      if (neon) {
+        // The glow: a wide, blurred stroke behind the ring.
+        canvas.drawPath(
+          _outline(size, grow),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = w * 3.2
+            ..color = color.withValues(alpha: 0.38 * fade)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+        );
+        // The thin white halo just inside it (crisp on pink / red bubbles).
+        canvas.drawPath(
+          _outline(size, grow - w * 0.9),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.9
+            ..color = Colors.white.withValues(alpha: 0.55 * fade),
+        );
+      }
       canvas.drawPath(
         _outline(size, grow),
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.8 * (1 - p) + 0.6
-          ..color = color.withValues(alpha: 0.75 * fade)
+          ..strokeWidth = w
+          ..color = color.withValues(alpha: (neon ? 0.95 : 0.75) * fade)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.2),
       );
     }
@@ -148,5 +179,5 @@ class _RingsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RingsPainter o) =>
-      o.t != t || o.color != color || o.still != still;
+      o.t != t || o.color != color || o.still != still || o.neon != neon;
 }

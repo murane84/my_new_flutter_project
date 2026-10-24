@@ -975,7 +975,9 @@ class ApiService {
       Future<http.Response?> post(String? tok) async {
         if (tok == null) return null;
         return http.post(
-          Uri.parse('${await _baseUrl}/users/me/online?is_online=$isOnline'),
+          Uri.parse('${await _baseUrl}/users/me/online?is_online=$isOnline'
+              // My clock, so "deliver at their morning" knows my morning.
+              '&tz_offset=${DateTime.now().timeZoneOffset.inMinutes}'),
           headers: _authHeaders(tok),
         );
       }
@@ -1491,6 +1493,71 @@ class ApiService {
     } catch (e) {
       _logger.w('quickStatuses failed: $e');
       return [];
+    }
+  }
+
+  /// "Deliver at their morning": hold [content] for [friendId]'s next local
+  /// 05:00 (sent when they first open Aluta). Returns {id, content,
+  /// deliver_after} or null.
+  Future<Map<String, dynamic>?> holdForMorning(
+      int friendId, String content) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/messages/hold-morning'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'receiver_id': friendId, 'content': content}),
+      );
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
+      final data = jsonDecode(resp.body);
+      return data is Map ? Map<String, dynamic>.from(data) : null;
+    } catch (e) {
+      _logger.w('holdForMorning failed: $e');
+      return null;
+    }
+  }
+
+  /// My messages to [friendId] still waiting for their morning.
+  Future<List<Map<String, dynamic>>> heldFor(int friendId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return [];
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/messages/held/$friendId'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return [];
+      final data = jsonDecode(resp.body);
+      final list = data is Map ? data['held'] : null;
+      return list is List
+          ? list
+              .whereType<Map>()
+              .map((m) => Map<String, dynamic>.from(m))
+              .toList()
+          : [];
+    } catch (e) {
+      _logger.w('heldFor failed: $e');
+      return [];
+    }
+  }
+
+  /// Cancel a held message (before it goes out). Returns its text, or null
+  /// when it was already delivered / failed.
+  Future<String?> cancelHeld(int id) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.delete(
+        Uri.parse('${await _baseUrl}/messages/held/$id'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
+      final data = jsonDecode(resp.body);
+      return data is Map ? (data['content'] ?? '').toString() : '';
+    } catch (e) {
+      _logger.w('cancelHeld failed: $e');
+      return null;
     }
   }
 

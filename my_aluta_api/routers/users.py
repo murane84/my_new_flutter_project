@@ -282,7 +282,14 @@ def get_all_users_except_current(current_user: User = Depends(get_current_user),
     return users
 
 @router.post("/users/me/online", tags=["Users"])
-def set_user_online_status(is_online: bool, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def set_user_online_status(is_online: bool, tz_offset: int | None = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # Their clock (UTC offset, minutes) — "deliver at their morning" uses it.
+    if tz_offset is not None:
+        try:
+            from morning import save_offset
+            save_offset(db, current_user.id, int(tz_offset))
+        except Exception:
+            db.rollback()
     current_user.is_online = is_online
     if not is_online:
         current_user.last_seen = datetime.now(timezone.utc)

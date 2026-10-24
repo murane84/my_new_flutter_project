@@ -1065,3 +1065,29 @@ class QuickStatus(Base):
     user_id = Column(Integer, primary_key=True)
     status = Column(String, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class UserClock(Base):
+    """The user's UTC offset in minutes (sent with the presence heartbeat), so
+    'deliver at their morning' knows when their morning is. Auto-created."""
+    __tablename__ = "user_clocks"
+
+    user_id = Column(Integer, primary_key=True)
+    tz_offset_min = Column(Integer, nullable=False, default=180)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class HeldMessage(Base):
+    """A DM written at night and held for the friend's morning: released (as a
+    normal message) when they first open Aluta after `deliver_after` (their
+    local 05:00), or at the latest a few hours later. Auto-created."""
+    __tablename__ = "held_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sender_id = Column(Integer, index=True, nullable=False)
+    receiver_id = Column(Integer, index=True, nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+    deliver_after = Column(DateTime(timezone=True), index=True, nullable=False)

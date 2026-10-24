@@ -154,6 +154,62 @@ def send_message(message: schemas.MessageCreate, background: BackgroundTasks, db
     return validated_message
 
 
+# 🌅 DELIVER AT THEIR MORNING — hold a DM until the friend's local 05:00 and
+# release it when they first open Aluta (morning.py).
+@router.post("/hold-morning")
+def hold_for_morning(body: dict, db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_user)):
+    from models import HeldMessage
+    import morning
+    rid = int((body or {}).get("receiver_id") or 0)
+    content = ((body or {}).get("content") or "").strip()
+    if rid <= 0 or rid == current_user.id or not content:
+        raise HTTPException(status_code=400, detail="Nothing to hold")
+    if len(content) > 8000:
+        raise HTTPException(status_code=400, detail="Too long")
+    when = morning.next_morning_utc(morning.offset_for(db, rid))
+    row = HeldMessage(sender_id=current_user.id, receiver_id=rid,
+                      content=content, deliver_after=when)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "content": row.content,
+            "deliver_after": when.isoformat()}
+
+
+@router.get("/held/{friend_id}")
+def my_held_for(friend_id: int, db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)):
+    """What I've written to {friend_id} that waits for their morning."""
+    from models import HeldMessage
+    rows = db.query(HeldMessage).filter(
+        HeldMessage.sender_id == current_user.id,
+        HeldMessage.receiver_id == friend_id).order_by(HeldMessage.id).all()
+    out = []
+    for r in rows:
+        d = r.deliver_after
+        if d is not None and d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
+        out.append({"id": r.id, "content": r.content,
+                    "deliver_after": d.isoformat() if d else None})
+    return {"held": out}
+
+
+@router.delete("/held/{held_id}")
+def cancel_held(held_id: int, db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)):
+    from models import HeldMessage
+    row = db.query(HeldMessage).filter(
+        HeldMessage.id == held_id,
+        HeldMessage.sender_id == current_user.id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Already delivered")
+    content = row.content
+    db.delete(row)
+    db.commit()
+    return {"cancelled": True, "content": content}
+
+
 # 🔎 SEARCH MESSAGES (across the user's DMs + groups)
 @router.get("/search")
 def search_messages(

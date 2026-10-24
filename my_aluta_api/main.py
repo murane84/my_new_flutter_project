@@ -54,6 +54,19 @@ async def lifespan(app: FastAPI):
                 pass
             await asyncio.sleep(20)
     _heart_task = asyncio.create_task(_heart_loop())
+    # Messages held for a friend's morning: the overdue sweep (normally they
+    # go out the moment the friend opens Aluta — websocket_routes).
+    async def _morning_loop():
+        import morning
+        while True:
+            try:
+                await asyncio.to_thread(morning.release_overdue_once)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
+            await asyncio.sleep(300)
+    _morning_task = asyncio.create_task(_morning_loop())
     # Hourly media housekeeping: expired chat files / videos / songs leave the
     # server (24 h rule), and a log alarm fires if storage gets high. Before
     # this, the sweep only ran when someone uploaded, so quiet weeks hoarded.
@@ -74,6 +87,7 @@ async def lifespan(app: FastAPI):
     finally:
         _capsule_task.cancel()
         _heart_task.cancel()
+        _morning_task.cancel()
         _media_task.cancel()
 
 

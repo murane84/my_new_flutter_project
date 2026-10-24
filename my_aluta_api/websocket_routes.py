@@ -327,6 +327,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                 None, fire_online_watches, uid)
         except Exception:
             pass
+    # Messages held for this user's morning whose time has come.
+    try:
+        from morning import release_for
+        asyncio.get_running_loop().run_in_executor(None, release_for, uid)
+    except Exception:
+        pass
 
     # Re-deliver any "listen together" invite that arrived while this user was
     # offline. The invite is otherwise a fire-and-forget WS event, so a listener

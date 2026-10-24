@@ -112,6 +112,7 @@ part 'chat/chat_search.dart';         // in-chat search pill + hit stepping
 part 'chat/chat_mentions_seen.dart';  // "@" stepper + DM seen avatar
 part 'chat/chat_polls_admin.dart';    // group admins + polls
 part 'chat/chat_rituals.dart';        // good night + on this day
+part 'chat/chat_morning.dart';        // deliver at their morning 🌅
 part 'chat/chat_music_moments.dart';  // song reactions, dedications, voice-over-music
 
 // ─── Timestamp helpers ───────────────────────────────────────────────────────
@@ -434,6 +435,8 @@ class _ChatPageState extends State<ChatPage>
   // (chained quote → quote jumps still lead back there), and the last jump
   // target + time so a double tap on the same quote doesn't re-jump.
   String? _jumpOrigin;
+  // DM lines held for the friend's morning (chat/chat_morning.dart).
+  List<Map<String, dynamic>> _held = const [];
   String? _lastJumpTarget;
   DateTime? _lastJumpAt;
 
@@ -889,6 +892,7 @@ class _ChatPageState extends State<ChatPage>
       });
     }
     _maybeInitialJump();          // opened from a notification → jump to it
+    unawaited(_loadHeld());       // anything waiting for their morning
     _checkOnlineStatus();
     _startPolling();
     _startKeepAlive();
@@ -1123,6 +1127,11 @@ class _ChatPageState extends State<ChatPage>
     }
     if (type == 'msg_pulse_result') {
       _onPulseResult(event);
+      return;
+    }
+    if (type == 'held_released') {
+      // A morning message went out (its bubble arrives as message_sent).
+      _loadHeld();
       return;
     }
     if (type == 'resend_request') {
@@ -5915,6 +5924,8 @@ class _ChatPageState extends State<ChatPage>
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
+                              if (_held.isNotEmpty && !_isGroup)
+                                _buildHeldStrip(scheme),
                               if (_replyTo != null)
                                 _buildReplyPreview(_replyTo!),
                               Row(
@@ -6106,6 +6117,10 @@ class _ChatPageState extends State<ChatPage>
                                         ? _saveEdit
                                         : _sendMessage)
                                     : _startRecording,
+                                // Hold Send (DM) → "Deliver at their morning".
+                                onLongPress: (hasText && _canHoldForMorning)
+                                    ? _showSendOptions
+                                    : null,
                                 // Same height + lift as the pill, so the two
                                 // read as one floating row. Idle mic: a SOLID
                                 // light disc (never see-through) with a soft

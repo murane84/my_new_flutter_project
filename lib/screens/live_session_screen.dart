@@ -28,6 +28,7 @@ import '../widgets/aluta_composer_field.dart';
 import '../services/track_title.dart' show displayTitleForPath;
 import '../utils/readable.dart';
 import '../services/contact_names.dart';
+import '../widgets/concert_stage.dart';
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
 /// Presented with `showDialog(...)` so it floats over the chat instead of
@@ -323,7 +324,17 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     duration: const Duration(seconds: 10),
   );
 
+  // The concert backdrop follows the music (and cheers on reactions).
+  final ValueNotifier<bool> _stagePlaying = ValueNotifier<bool>(false);
+  final ValueNotifier<int> _stageCheer = ValueNotifier<int>(0);
+
   void _syncDiscSpin(bool playing) {
+    // Called from build → hand the change over after this frame.
+    if (_stagePlaying.value != playing) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _stagePlaying.value = playing;
+      });
+    }
     if (playing) {
       if (!_discSpin.isAnimating) _discSpin.repeat();
     } else {
@@ -644,6 +655,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       _floats.add(_FloatReaction(id, emoji, dx));
       _reactionCount++;
     });
+    _stageCheer.value++; // the crowd throws its hands up
     _logReaction(emoji, mine ? widget.myUserId : fromId, mine: mine);
   }
 
@@ -1054,6 +1066,8 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   @override
   void dispose() {
     _discSpin.dispose();
+    _stagePlaying.dispose();
+    _stageCheer.dispose();
     _commentCtrl.dispose();
     _commentFocus.dispose();
     // If we're just minimising, leave the session (controller, notifier,
@@ -1158,7 +1172,24 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   Widget _wideLayout(ThemeData theme, ColorScheme scheme) {
     final div = VerticalDivider(
         width: 1, color: scheme.outlineVariant.withAlpha(90));
-    return Column(
+    return Stack(
+      children: [
+        // The concert backdrop behind the centre stage: crowd at the bottom
+        // (the controls card stands in front of it), beams + lights above.
+        Positioned(
+          left: 301,
+          right: 341,
+          top: 0,
+          bottom: 0,
+          child: ConcertStage(
+            playing: _stagePlaying,
+            cheer: _stageCheer,
+            accent: scheme.primary,
+            isDark: theme.brightness == Brightness.dark,
+            groundInset: 70,
+          ),
+        ),
+        Column(
       children: [
         Expanded(
           child: Row(
@@ -1173,6 +1204,8 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
           ),
         ),
         _bottomControlsBar(scheme),
+      ],
+        ),
       ],
     );
   }
@@ -1321,7 +1354,20 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
 
   // The player on top (phone) — disc + waveform + controls + quick reactions.
   Widget _mobilePlayerTop(ThemeData theme, ColorScheme scheme) {
-    return Column(
+    return Stack(
+      children: [
+        // One shorter row of fans behind the reactions bar, lights above.
+        Positioned.fill(
+          child: ConcertStage(
+            playing: _stagePlaying,
+            cheer: _stageCheer,
+            accent: scheme.primary,
+            isDark: theme.brightness == Brightness.dark,
+            groundInset: 6,
+            compact: true,
+          ),
+        ),
+        Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1344,6 +1390,8 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
           _reactionBar(scheme),
           const SizedBox(height: 6),
         ],
+      ],
+        ),
       ],
     );
   }

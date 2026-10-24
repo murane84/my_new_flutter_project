@@ -4995,6 +4995,14 @@ class _ChatPageState extends State<ChatPage>
               setState(() => _replyTo = msg);
               FocusScope.of(context).requestFocus(FocusNode());
             },
+            // Swipe left → Forward (not for unsent, deleted or call/live logs).
+            onForward: (tomb ||
+                    isCall ||
+                    isLive ||
+                    msgId.startsWith('tmp-') ||
+                    pending)
+                ? null
+                : () => _showForwardPicker(msg),
             child: _HoverChevron(
               enabled: MediaQuery.of(context).size.width >= 640,
               isMe: isMe,

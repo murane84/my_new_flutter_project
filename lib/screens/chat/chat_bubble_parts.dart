@@ -1067,12 +1067,16 @@ class _SongBubbleState extends State<_SongBubble> {
 class _SwipeToReply extends StatefulWidget {
   final Widget child;
   final VoidCallback onReply;
+  // Swipe LEFT → forward. Null = left pull doesn't arm (unsent, heart,
+  // deleted, call/live logs).
+  final VoidCallback? onForward;
   final bool isMe;
 
   const _SwipeToReply({
     required this.child,
     required this.onReply,
     required this.isMe,
+    this.onForward,
   });
 
   @override
@@ -1084,8 +1088,10 @@ class _SwipeToReplyState extends State<_SwipeToReply>
   // Travel limit + where the reply arms. The finger's raw pull is mapped
   // through a rubber-band curve, so it starts 1:1 and gets heavier near the
   // limit instead of hitting a hard stop.
-  static const double _maxDrag = 84;
-  static const double _trigger = 56;
+  // WhatsApp-light: arms early, with a tick, so even a short thumb flick
+  // on a tiny emoji bubble is enough.
+  static const double _maxDrag = 76;
+  static const double _trigger = 46;
 
   // Unbounded so a spring can overshoot zero a hair on release (that tiny
   // settle is what makes it feel physical, not scripted).
@@ -1103,7 +1109,7 @@ class _SwipeToReplyState extends State<_SwipeToReply>
   }
 
   double _band(double raw) =>
-      _maxDrag * (1 - math.exp(-raw / (_maxDrag * 0.9)));
+      raw.sign * _maxDrag * (1 - math.exp(-raw.abs() / (_maxDrag * 0.9)));
 
   void _settle(double velocity) {
     _raw = 0;
@@ -1119,7 +1125,8 @@ class _SwipeToReplyState extends State<_SwipeToReply>
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final progress = (_dx / _trigger).clamp(0.0, 1.0);
+    final left = _dx < 0; // pulling toward forward
+    final progress = (_dx.abs() / _trigger).clamp(0.0, 1.0);
     final t = Curves.easeOut.transform(progress);
 
     // 3D: the bubble slides, tips back a little on its vertical axis (as if
@@ -1127,7 +1134,7 @@ class _SwipeToReplyState extends State<_SwipeToReply>
     final m = Matrix4.identity()
       ..setEntry(3, 2, 0.0013) // perspective
       ..translateByDouble(_dx, 0, 0, 1)
-      ..rotateY(-0.16 * t * (widget.isMe ? -1 : 1))
+      ..rotateY(-0.16 * t * (widget.isMe ? -1 : 1) * (left ? -1 : 1))
       ..scaleByDouble(1 - 0.03 * t, 1 - 0.03 * t, 1, 1);
 
     return GestureDetector(
@@ -1143,23 +1150,31 @@ class _SwipeToReplyState extends State<_SwipeToReply>
       },
       onHorizontalDragStart: (_) {
         _spring.stop();
-        _raw = _dx <= 0 ? 0 : _dx; // grab it mid-settle smoothly
+        _raw = _dx; // grab it mid-settle smoothly
       },
       onHorizontalDragUpdate: (d) {
-        // Reply is a rightward pull only.
-        _raw = (_raw + d.delta.dx).clamp(0.0, 400.0);
+        // Right = reply; left = forward (only when offered).
+        final minRaw = widget.onForward == null ? 0.0 : -400.0;
+        _raw = (_raw + d.delta.dx).clamp(minRaw, 400.0);
         final next = _band(_raw);
-        if (!_armed && next >= _trigger) {
+        if (!_armed && next.abs() >= _trigger) {
           _armed = true;
           HapticFeedback.mediumImpact();
-        } else if (_armed && next < _trigger - 6) {
+        } else if (_armed && next.abs() < _trigger - 6) {
           _armed = false; // a little hysteresis so it doesn't flicker
           HapticFeedback.selectionClick();
         }
         setState(() => _dx = next);
       },
       onHorizontalDragEnd: (d) {
-        if (_armed) widget.onReply();
+        if (_armed) {
+          if (_dx < 0) {
+            HapticFeedback.selectionClick();
+            widget.onForward?.call();
+          } else {
+            widget.onReply();
+          }
+        }
         _armed = false;
         _settle(d.primaryVelocity ?? 0);
       },
@@ -1174,7 +1189,8 @@ class _SwipeToReplyState extends State<_SwipeToReply>
           // The reply badge rises with the pull, spins into place and pops
           // (solid fill) the moment the reply is armed.
           Positioned(
-            left: 12,
+            left: left ? null : 12,
+            right: left ? 12 : null,
             child: Opacity(
               opacity: t,
               child: Transform.rotate(
@@ -1201,7 +1217,8 @@ class _SwipeToReplyState extends State<_SwipeToReply>
                             ]
                           : null,
                     ),
-                    child: Icon(Icons.reply_rounded,
+                    child: Icon(
+                        left ? Icons.forward_rounded : Icons.reply_rounded,
                         size: 18,
                         color: _armed ? Colors.white : scheme.primary),
                   ),
@@ -1211,7 +1228,9 @@ class _SwipeToReplyState extends State<_SwipeToReply>
           ),
           Transform(
             transform: m,
-            alignment: widget.isMe ? Alignment.centerLeft : Alignment.centerRight,
+            alignment: (widget.isMe != left)
+                ? Alignment.centerLeft
+                : Alignment.centerRight,
             child: widget.child,
           ),
         ],

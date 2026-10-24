@@ -109,7 +109,6 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
         .push(MaterialPageRoute(builder: (_) => page));
   }
 
-  @override
   Widget _glassBar(ColorScheme scheme, bool isDark) {
     final ink = isDark ? Colors.white : const Color(0xFF2B2829);
     final soft = ink.withValues(alpha: 0.55);

@@ -546,15 +546,10 @@ extension _ChatHeartComposer on _ChatPageState {
           ]);
     switch (kind) {
       case 'photo':
+        // The WHOLE photo, portrait or landscape (no crop).
         return (w) => withSave(GestureDetector(
               onTap: () => _openHeartPhoto(url, msg),
-              child: authNetworkImage(
-                url: url,
-                headers: mediaAuthHeaders(url),
-                width: w,
-                height: w * 0.8,
-                fit: BoxFit.cover,
-              ),
+              child: _HeartFitMedia(url: url, width: w),
             ));
       case 'video':
         return (w) => withSave(GestureDetector(
@@ -566,12 +561,12 @@ extension _ChatHeartComposer on _ChatPageState {
                   builder: (_) => _ChatVideoPlayer(url: url),
                 );
               },
-              child: Container(
+              // The clip's own first frame, whole, in its own shape.
+              child: _HeartFitMedia(
+                url: '$url/thumb',
                 width: w,
-                height: w * 9 / 16,
-                color: Colors.black.withValues(alpha: 0.55),
-                alignment: Alignment.center,
-                child: Column(
+                placeholderAspect: 16 / 9,
+                overlay: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
@@ -1160,5 +1155,127 @@ extension _ChatHeartComposer on _ChatPageState {
       return;
     }
     rebuildWith(() => _heartUnlockAt = when);
+  }
+}
+
+
+/// A heart's photo (or a clip's first frame) shown WHOLE in a frame that
+/// takes the picture's own shape — portrait gets taller, landscape wider —
+/// kept between 3:4 and 16:9. Past those bounds the picture is fitted whole
+/// over a soft blurred copy of itself (no black bars, no crop). Until the
+/// shape is known it holds a steady placeholder, then settles once.
+class _HeartFitMedia extends StatefulWidget {
+  const _HeartFitMedia({
+    required this.url,
+    required this.width,
+    this.placeholderAspect = 0.8,
+    this.overlay,
+  });
+
+  final String url;
+  final double width;
+  final double placeholderAspect; // width / height before the size is known
+  final Widget? overlay;
+
+  @override
+  State<_HeartFitMedia> createState() => _HeartFitMediaState();
+}
+
+class _HeartFitMediaState extends State<_HeartFitMedia> {
+  double? _aspect; // the picture's own width / height
+  ImageStream? _stream;
+  ImageStreamListener? _listener;
+
+  ImageProvider get _provider =>
+      authNetworkImageProvider(widget.url, mediaAuthHeaders(widget.url));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HeartFitMedia old) {
+    super.didUpdateWidget(old);
+    if (old.url != widget.url) {
+      _aspect = null;
+      _resolve();
+    }
+  }
+
+  void _resolve() {
+    _unlisten();
+    final stream = _provider.resolve(createLocalImageConfiguration(context));
+    _listener = ImageStreamListener((info, _) {
+      final w = info.image.width.toDouble(), h = info.image.height.toDouble();
+      if (h > 0 && mounted) setState(() => _aspect = w / h);
+    }, onError: (_, _) {});
+    stream.addListener(_listener!);
+    _stream = stream;
+  }
+
+  void _unlisten() {
+    final l = _listener;
+    if (l != null) _stream?.removeListener(l);
+    _listener = null;
+  }
+
+  @override
+  void dispose() {
+    _unlisten();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const minA = 3 / 4, maxA = 16 / 9;
+    final a = _aspect;
+    final frameA = (a ?? widget.placeholderAspect).clamp(minA, maxA);
+    final w = widget.width;
+    final h = w / frameA;
+    // Does the picture fill the frame exactly, or is it fitted inside it?
+    final fits = a != null && (a - frameA).abs() < 0.01;
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: SizedBox(
+        width: w,
+        height: h,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Soft backdrop: the same picture, blurred and dimmed.
+            if (!fits)
+              ClipRect(
+                child: ImageFiltered(
+                  imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                  child: Image(
+                    image: _provider,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+            if (!fits) ColoredBox(color: Colors.black.withValues(alpha: 0.28)),
+            Image(
+              image: _provider,
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => ColoredBox(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  child: const Center(
+                      child: Icon(Icons.broken_image_outlined,
+                          color: Colors.white70))),
+            ),
+            if (widget.overlay != null)
+              ColoredBox(
+                color: Colors.black.withValues(alpha: 0.25),
+                child: Center(child: widget.overlay),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }

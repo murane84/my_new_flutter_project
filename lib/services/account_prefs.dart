@@ -18,6 +18,12 @@ class AccountPrefs {
 
   static const String _settingKey = 'app_prefs';
   static const String _kRev = 'account_prefs_rev_v1';
+  // Set after the first successful sync on this install. Until then a local
+  // change (often just a screen saving its defaults on open) must not beat
+  // the account copy — a reinstall would otherwise upload fresh defaults
+  // over the user's real settings.
+  static const String _kSynced = 'account_prefs_synced_v1';
+  static bool _syncedThisInstall = false;
 
   /// The synced SharedPreferences keys (values copied as-is, type kept).
   static const List<String> keys = [
@@ -66,6 +72,7 @@ class AccountPrefs {
     SharedPreferences.getInstance()
         .then((p) => p.setInt(_kRev, rev))
         .catchError((_) => false);
+    if (!_syncedThisInstall) return; // [sync] decides first, then uploads
     _push?.cancel();
     _push = Timer(const Duration(seconds: 3), () => _upload(rev));
   }
@@ -101,10 +108,16 @@ class AccountPrefs {
     try {
       final p = await SharedPreferences.getInstance();
       final localRev = p.getInt(_kRev) ?? 0;
+      final firstSync = !(p.getBool(_kSynced) ?? false);
+      // Already reconciled once on this install → edits upload normally even
+      // if this launch's check can't reach the server.
+      if (!firstSync) _syncedThisInstall = true;
       final remote = await ApiService().getSetting(_settingKey);
       if (remote == null) return; // offline — next launch
       final data = remote.data;
-      if (remote.rev > localRev && data is Map) {
+      // First sync on this install: an existing account copy always wins.
+      if ((remote.rev > localRev || (firstSync && remote.rev > 0)) &&
+          data is Map) {
         _restoring = true;
         try {
           for (final e in data.entries) {
@@ -149,6 +162,8 @@ class AccountPrefs {
           await _upload(rev);
         }
       }
+      await p.setBool(_kSynced, true);
+      _syncedThisInstall = true;
     } catch (_) {}
   }
 }

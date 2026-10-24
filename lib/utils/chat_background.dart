@@ -246,6 +246,8 @@ Future<void> _persist() async {
 // Newest change wins (by [_kRev], the local change time).
 const String _kRev = 'chat_bg_rev_v1';
 const String _kSettingKey = 'chat_wallpaper';
+const String _kSynced = 'chat_bg_synced_v1'; // see AccountPrefs._kSynced
+bool _bgSyncedThisInstall = false;
 Timer? _pushTimer;
 bool _applyingRemote = false;
 
@@ -255,6 +257,7 @@ void _markChanged() {
   SharedPreferences.getInstance()
       .then((p) => p.setInt(_kRev, rev))
       .catchError((_) => false);
+  if (!_bgSyncedThisInstall) return; // the first sync decides, then uploads
   _pushTimer?.cancel();
   _pushTimer = Timer(const Duration(seconds: 3), () => _push(rev));
 }
@@ -282,10 +285,14 @@ Future<void> syncChatBackgroundWithAccount() async {
     await loadChatBackground();
     final p = await SharedPreferences.getInstance();
     final localRev = p.getInt(_kRev) ?? 0;
+    final firstSync = !(p.getBool(_kSynced) ?? false);
+    if (!firstSync) _bgSyncedThisInstall = true;
     final remote = await ApiService().getSetting(_kSettingKey);
     if (remote == null) return; // offline — try next launch
     final data = remote.data;
-    if (remote.rev > localRev && data is Map) {
+    // First sync on this install: an existing account copy always wins.
+    if ((remote.rev > localRev || (firstSync && remote.rev > 0)) &&
+        data is Map) {
       _applyingRemote = true;
       try {
         final d = Map<String, dynamic>.from(data);
@@ -329,6 +336,8 @@ Future<void> syncChatBackgroundWithAccount() async {
       await p.setInt(_kRev, rev);
       await _push(rev);
     }
+    await p.setBool(_kSynced, true);
+    _bgSyncedThisInstall = true;
   } catch (_) {}
 }
 

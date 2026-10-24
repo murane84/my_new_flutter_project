@@ -2824,6 +2824,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       await FcmService.instance.unregisterToken();
     } catch (_) {}
     NowPlayingPresence.instance.stop();
+    LiveInbox.instance.clearAll(); // no messages carried into another account
     await ConnectedContactsService.instance.clear();
     await ApiService().logoutUser();
     try {
@@ -3082,6 +3083,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // the token is still valid, before logoutUser clears it). Best-effort.
     await FcmService.instance.unregisterToken();
     NowPlayingPresence.instance.stop();
+    LiveInbox.instance.clearAll(); // no messages carried into another account
     // Remove Aluta's "Connected apps" contact rows for the account we're leaving.
     await ConnectedContactsService.instance.clear();
     await ApiService().logoutUser();

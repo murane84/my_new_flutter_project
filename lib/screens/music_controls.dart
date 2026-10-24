@@ -489,9 +489,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     }
   }
 
-  // One stable closure (extension tear-offs aren't equal), so offRestore
-  // really removes it.
-  late final Future<void> Function() _eqRestore = () => _restoreEqualizer();
+  // A real method (its tear-offs compare equal — extension tear-offs don't),
+  // so offRestore really removes it.
+  Future<void> _eqRestore() => _restoreEqualizer();
 
   @override
   void dispose() {

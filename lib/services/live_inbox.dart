@@ -47,6 +47,9 @@ class LiveInbox {
     return [for (final e in list) Map<String, dynamic>.from(e.msg)];
   }
 
+  /// Sign-out: nothing of this account may leak into the next one.
+  void clearAll() => _byThread.clear();
+
   void clear({int? friendId, int? conversationId}) =>
       _byThread.remove(conversationId != null ? 'g$conversationId' : 'd$friendId');
 }

@@ -2453,6 +2453,98 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// they're listening to (driven by NowPlayingPresence).
   void _onPresenceChanged() {
     if (mounted) setState(() {});
+    _maybeBothListening();
+  }
+
+  // ── "You're both listening" ──────────────────────────────────────────────
+  // Two friends independently playing the same song (or the same artist) at
+  // the same moment → one gentle line with a one-tap Listen Together. Only
+  // when I share my listening with them (so it's mutual), at most once per
+  // friend every 4 h, never during a Listen Together session.
+  final Set<String> _bothShownThisRun = {};
+
+  static String _normSong(String t) => t
+      .toLowerCase()
+      .replaceAll(RegExp(r'\(.*?\)|\[.*?\]'), ' ')
+      .replaceAll(RegExp(r'\b(feat|ft)\.?\b.*'), ' ')
+      .replaceAll(RegExp(r'\.(mp3|m4a|aac|wav|flac|ogg|opus)$'), ' ')
+      .replaceAll(RegExp(r'[^a-z0-9\u00c0-\uffff]+'), ' ')
+      .trim();
+
+  static String _normArtist(String a) {
+    final n = _normSong(a.split(RegExp(r',|&| x | feat', caseSensitive: false))
+        .first);
+    return (n == 'aluta' || n == 'unknown' || n == 'unknown artist') ? '' : n;
+  }
+
+  Future<void> _maybeBothListening() async {
+    if (!mounted || !_appForeground || WelcomeTour.showing) return;
+    if (ref.read(liveSessionProvider).active) return;
+    final presence = NowPlayingPresence.instance;
+    final mine = presence.myTrack;
+    if (mine == null) return;
+    final myTitle = _normSong(mine.title);
+    final myArtist = _normArtist(mine.artist);
+    if (myTitle.isEmpty) return;
+    for (final f in _allFriends) {
+      final fid = (f['id'] as num?)?.toInt();
+      if (fid == null || !presence.sharesWith(fid)) continue;
+      final t = presence.trackFor(fid);
+      if (t == null) continue;
+      final theirTitle = _normSong((t['title'] ?? '').toString());
+      final theirArtist = _normArtist((t['artist'] ?? '').toString());
+      final sameSong = theirTitle.isNotEmpty &&
+          theirTitle == myTitle &&
+          (myArtist.isEmpty || theirArtist.isEmpty || myArtist == theirArtist);
+      final sameArtist =
+          !sameSong && myArtist.isNotEmpty && myArtist == theirArtist;
+      if (!sameSong && !sameArtist) continue;
+      final runKey = '$fid|${sameSong ? myTitle : myArtist}';
+      if (_bothShownThisRun.contains(runKey)) continue;
+      _bothShownThisRun.add(runKey);
+      // Throttle across launches: once per friend every 4 h.
+      try {
+        final p = await SharedPreferences.getInstance();
+        final k = 'both_listening_at_$fid';
+        final last = p.getInt(k) ?? 0;
+        final now = DateTime.now().millisecondsSinceEpoch;
+        if (now - last < const Duration(hours: 4).inMilliseconds) continue;
+        await p.setInt(k, now);
+      } catch (_) {}
+      if (!mounted) return;
+      final name = _contactDisplayName(
+          f['phone']?.toString(), (f['username'] ?? 'Friend').toString());
+      final first = name.trim().split(RegExp(r'\s+')).first;
+      final what = sameSong
+          ? mine.title.trim()
+          : (t['artist'] ?? mine.artist).toString().trim();
+      final bonded = _spaceWithFriend(fid) != null;
+      _lastMomentAt = DateTime.now();
+      HapticFeedback.lightImpact();
+      showMomentCard(
+        context,
+        title: sameSong
+            ? 'You and $first are both listening to $what 🎧'
+            : 'You and $first are both on $what right now 🎧',
+        // Bonded → straight into your Space (Listen Together lives there);
+        // otherwise the chat, where the 🎧 starts it.
+        subtitle: bonded
+            ? 'Listen together?'
+            : 'Listen together from your chat?',
+        leading: Icons.headphones_rounded,
+        hold: const Duration(seconds: 9),
+        actions: [
+          if (bonded)
+            MomentAction(Icons.headphones_rounded, 'Listen together',
+                () => _tuneInto(fid, first),
+                primary: true),
+          MomentAction(Icons.chat_bubble_rounded,
+              bonded ? 'Message' : 'Open chat', () => openChat(f),
+              primary: !bonded),
+        ],
+      );
+      return; // one line at a time
+    }
   }
 
   /// Mark [id] as typing to me and auto-clear after 5s (each typing event

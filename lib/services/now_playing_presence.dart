@@ -88,6 +88,22 @@ class NowPlayingPresence extends ChangeNotifier {
   /// Set by HomePage to the home socket's send function.
   void Function(Map<String, dynamic>)? emitSink;
 
+  /// What I'm broadcasting right now (title, artist), or null when I'm not
+  /// sharing / not playing. Only a shared play counts for "you're both
+  /// listening" — if they can't see mine, I shouldn't get theirs as a match.
+  ({String title, String artist})? get myTrack {
+    if (!_lastPlaying || _lastKey.isEmpty) return null;
+    final i = _lastKey.indexOf('|');
+    return (
+      title: i < 0 ? _lastKey : _lastKey.substring(0, i),
+      artist: i < 0 ? '' : _lastKey.substring(i + 1),
+    );
+  }
+
+  /// Friends allowed to see my listening (everyone, or the picked few).
+  bool sharesWith(int friendId) =>
+      _shareEnabled && (!shareToSelected || _allowedFriends.contains(friendId));
+
   /// The track a friend is playing right now, or null.
   Map<String, dynamic>? trackFor(int id) => _friends[id];
   bool get anyListening => _friends.isNotEmpty;
@@ -261,8 +277,10 @@ class NowPlayingPresence extends ChangeNotifier {
         title != 'Aluta';
     final key = playing ? '$title|$artist' : '';
     if (!force && playing == _lastPlaying && key == _lastKey) return;
+    final changed = playing != _lastPlaying || key != _lastKey;
     _lastPlaying = playing;
     _lastKey = key;
+    if (changed) notifyListeners(); // lets home spot "you're both listening"
     sink({
       'type': 'now_playing',
       'playing': playing,

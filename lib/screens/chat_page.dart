@@ -41,6 +41,7 @@ import '../services/call_service.dart';
 import '../services/online_watch.dart';
 import '../services/quick_status.dart';
 import '../services/live_inbox.dart';
+import '../services/now_playing_presence.dart';
 import '../services/contact_names.dart';
 import '../services/web_paste.dart' as webpaste;
 import '../utils/net_image.dart';

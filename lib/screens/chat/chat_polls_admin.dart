@@ -182,11 +182,26 @@ extension _ChatPollsAdmin on _ChatPageState {
     final scheme = Theme.of(context).colorScheme;
     final q = TextEditingController(
         text: startJam ? 'What do we play next? 🎶' : '');
-    final opts = [TextEditingController(), TextEditingController()];
-    var multi = false;
-    var jam = startJam;
     // Song titles I can offer for a jam (my loaded playlist / web queue).
     final songTitles = _jamSongTitles();
+    // What the circle is playing right now ("Lorraine · Nisamehe") + mine —
+    // the obvious first picks for a jam.
+    final live = _jamLiveSuggestions();
+    // Started as a jam → the first two songs are already filled in, so the
+    // button works straight away (edit or add more if you like).
+    final seeds = startJam
+        ? <String>{for (final s in live) s.title, ...songTitles}
+            .take(2)
+            .toList()
+        : const <String>[];
+    final opts = [
+      for (final t in seeds) TextEditingController(text: t),
+      for (var i = seeds.length; i < 2; i++) TextEditingController(),
+    ];
+    if (seeds.length == 2) opts.add(TextEditingController());
+    var multi = false;
+    var jam = startJam;
+    var showWhy = false; // tapped the button before it was ready
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
@@ -202,6 +217,33 @@ extension _ChatPollsAdmin on _ChatPageState {
         final ok = q.text.trim().isNotEmpty &&
             clean.length >= 2 &&
             distinct == clean.length;
+        // Say what's missing instead of a silent grey button.
+        final String? why = q.text.trim().isEmpty
+            ? (jam ? 'Write the question for the jam' : 'Write a question')
+            : clean.length < 2
+                ? (jam
+                    ? (clean.isEmpty
+                        ? 'Add two songs to vote on'
+                        : 'Add one more song to start the jam')
+                    : 'Add at least two options')
+                : distinct != clean.length
+                    ? (jam ? 'Songs need to be different' : 'Options need to be different')
+                    : null;
+        void addOption(String text) {
+          // Into the first empty box (or a new one), never a duplicate.
+          if (clean.map((e) => e.toLowerCase()).contains(text.toLowerCase())) {
+            return;
+          }
+          final empty = opts.where((c) => c.text.trim().isEmpty);
+          if (empty.isNotEmpty) {
+            empty.first.text = text;
+          } else if (opts.length < 12) {
+            opts.add(TextEditingController(text: text));
+          }
+          if (opts.last.text.trim().isNotEmpty && opts.length < 12) {
+            opts.add(TextEditingController());
+          }
+        }
         InputDecoration deco(String hint, {Widget? suffix}) => InputDecoration(
               hintText: hint,
               isDense: true,
@@ -248,9 +290,15 @@ extension _ChatPollsAdmin on _ChatPageState {
                               color: scheme.onSurface)),
                     ),
                     // A jam: fill the options from my songs.
-                    if (songTitles.isNotEmpty)
+                    if (songTitles.isNotEmpty || jam)
                       TextButton.icon(
                         onPressed: () async {
+                          if (songTitles.isEmpty) {
+                            showToast(context,
+                                'Load some songs in your player to pick from — or type a song name',
+                                type: ToastType.info);
+                            return;
+                          }
                           final picked =
                               await _pickJamSongs(ctx, songTitles);
                           if (picked == null || picked.length < 2) return;
@@ -287,6 +335,24 @@ extension _ChatPollsAdmin on _ChatPageState {
                     onChanged: (_) => setS(() {}),
                     decoration: deco('Ask something…').copyWith(counterText: ''),
                   ),
+                  // Playing right now in the circle → one tap adds it.
+                  if (jam && live.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final s in live)
+                          ActionChip(
+                            avatar: const Icon(Icons.headphones_rounded,
+                                size: 16),
+                            label: Text('${s.who} · ${s.title}',
+                                overflow: TextOverflow.ellipsis),
+                            onPressed: () => setS(() => addOption(s.title)),
+                          ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   for (var i = 0; i < opts.length; i++)
                     Padding(
@@ -304,7 +370,8 @@ extension _ChatPollsAdmin on _ChatPageState {
                             opts.add(TextEditingController());
                           }
                         }),
-                        decoration: deco('Option ${i + 1}',
+                        decoration: deco(
+                                jam ? 'Song ${i + 1}' : 'Option ${i + 1}',
                                 suffix: opts.length > 2 &&
                                         i < opts.length - 1
                                     ? IconButton(
@@ -328,23 +395,39 @@ extension _ChatPollsAdmin on _ChatPageState {
                     onChanged: (v) => setS(() => multi = v),
                     title: const Text('Allow several answers'),
                   ),
-                  if (clean.length >= 2 && distinct != clean.length)
+                  // What's still needed — always shown once tapped, and the
+                  // "different" clash as soon as it happens.
+                  if (why != null &&
+                      (showWhy || distinct != clean.length))
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6),
-                      child: Text('Options need to be different',
-                          style:
-                              TextStyle(color: scheme.error, fontSize: 12)),
+                      child: Row(children: [
+                        Icon(Icons.info_outline_rounded,
+                            size: 15, color: scheme.error),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(why,
+                              style: TextStyle(
+                                  color: scheme.error, fontSize: 12.5)),
+                        ),
+                      ]),
                     ),
                   const SizedBox(height: 4),
                   FilledButton.icon(
-                    onPressed: ok
-                        ? () => Navigator.pop(ctx, {
-                              'q': q.text.trim(),
-                              'options': clean,
-                              'multi': multi,
-                              if (jam) 'kind': 'jam',
-                            })
-                        : null,
+                    // Never a dead end: not ready yet → it says why.
+                    onPressed: () {
+                      if (!ok) {
+                        HapticFeedback.lightImpact();
+                        setS(() => showWhy = true);
+                        return;
+                      }
+                      Navigator.pop(ctx, {
+                        'q': q.text.trim(),
+                        'options': clean,
+                        'multi': multi,
+                        if (jam) 'kind': 'jam',
+                      });
+                    },
                     icon: const Icon(Icons.send_rounded, size: 18),
                     label: Text(jam ? 'Start the jam' : 'Send poll'),
                     style: FilledButton.styleFrom(
@@ -369,6 +452,28 @@ extension _ChatPollsAdmin on _ChatPageState {
     });
     if (result == null || !mounted) return;
     _sendPoll(result);
+  }
+
+  /// Songs the group is playing right now (members who share their listening
+  /// with me), then mine — "who · title", de-duplicated by title.
+  List<({String who, String title})> _jamLiveSuggestions() {
+    final out = <({String who, String title})>[];
+    final seen = <String>{};
+    void add(String who, String title) {
+      final t = title.trim();
+      if (t.isEmpty || t == 'Aluta' || !seen.add(t.toLowerCase())) return;
+      out.add((who: who, title: t));
+    }
+
+    for (final m in _groupMembers) {
+      final id = int.tryParse((m['user_id'] ?? m['id'] ?? '').toString());
+      if (id == null || id.toString() == _myId) continue;
+      final np = NowPlayingPresence.instance.trackFor(id);
+      if (np == null) continue;
+      add(_memberName(m).split(' ').first, (np['title'] ?? '').toString());
+    }
+    add('You', _nowPlayingTitle());
+    return out.take(6).toList();
   }
 
   /// Titles from my loaded playlist (or the web queue), de-duplicated.

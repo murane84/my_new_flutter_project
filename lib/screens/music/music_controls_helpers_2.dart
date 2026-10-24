@@ -674,6 +674,12 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+            // Volume left, Speed right, A-B in the EXACT centre: as its
+            // label grows ("A 0:42 · B?" → "0:42–1:05") it widens equally to
+            // both sides and never pushes the others.
+            Stack(
+              alignment: Alignment.center,
+              children: [
             Row(
               children: [
                 CompositedTransformTarget(
@@ -748,10 +754,6 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                   ),
                 ),
                 const Spacer(),
-                if (!live) ...[
-                  _abChip(scheme, accent),
-                  const SizedBox(width: 8),
-                ],
                 // Speed button — anchored right so popup scales from here
                 GestureDetector(
                   onTap: _toggleSpeedPanel,
@@ -834,6 +836,9 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                     ),
                   ),
                 ),
+              ],
+            ),
+                if (!live) _abChip(scheme, accent),
               ],
             ),
             const SizedBox(height: 10),
@@ -1524,7 +1529,7 @@ Column(
         ? 'A-B'
         : (b == null ? 'A ${_fmt(a)} · B?' : '${_fmt(a)}–${_fmt(b)}');
     final fg = on ? accent : scheme.onSurface.withAlpha(175);
-    return Tooltip(
+    final chip = Tooltip(
       message: 'Repeat a part (A-B) · hold to clear',
       child: Tactile(
         child: GestureDetector(
@@ -1549,24 +1554,43 @@ Column(
               border: Border.all(
                   color: on ? accent.withAlpha(150) : accent.withAlpha(50)),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(b != null ? Icons.repeat_on_rounded : Icons.repeat_rounded,
-                    size: 13, color: fg),
-                const SizedBox(width: 4),
-                Text(label,
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: fg,
-                        fontFeatures: const [FontFeature.tabularFigures()])),
-              ],
+            child: AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(b != null ? Icons.repeat_on_rounded : Icons.repeat_rounded,
+                      size: 13, color: fg),
+                  const SizedBox(width: 4),
+                  Text(label,
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: fg,
+                          fontFeatures: const [FontFeature.tabularFigures()])),
+                  // One tap to stop (holding the pill still works too).
+                  if (on) ...[
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        _clearAB();
+                        after?.call();
+                      },
+                      child: Icon(Icons.close_rounded,
+                          size: 14, color: fg.withAlpha(200)),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
+    // A slow, soft breath while a part is looping.
+    return _Breathe(active: b != null, child: chip);
   }
 
   Widget _controlsGlass(ColorScheme scheme, Color accent, Widget child,

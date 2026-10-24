@@ -1055,19 +1055,32 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
               border: Border.all(
                   color: accent.withValues(alpha: on ? 0.6 : 0.22)),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(b != null ? Icons.repeat_on_rounded : Icons.repeat_rounded,
-                    size: 13, color: fg),
-                const SizedBox(width: 4),
-                Text(label,
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: fg,
-                        fontFeatures: const [FontFeature.tabularFigures()])),
-              ],
+            child: AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(b != null ? Icons.repeat_on_rounded : Icons.repeat_rounded,
+                      size: 13, color: fg),
+                  const SizedBox(width: 4),
+                  Text(label,
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: fg,
+                          fontFeatures: const [FontFeature.tabularFigures()])),
+                  if (on) ...[
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _clearAB,
+                      child: Icon(Icons.close_rounded,
+                          size: 14, color: fg.withValues(alpha: 0.8)),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ),
@@ -1392,16 +1405,11 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                   active: _showVolume || _volume <= 0,
                 ),
               ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _abPill(theme),
-                  const SizedBox(width: 8),
-                  _speedPill(theme, speedLabel),
-                ],
-              ),
+              _speedPill(theme, speedLabel),
             ],
           ),
+          // A-B in the exact centre: widens equally both ways as it changes.
+          _abPill(theme),
           // Floating volume slider — glows over the row, fades back to the icon.
           IgnorePointer(
             ignoring: !_showVolume,

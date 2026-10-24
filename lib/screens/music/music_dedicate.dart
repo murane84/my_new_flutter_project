@@ -389,3 +389,55 @@ class _PeekNameState extends State<_PeekName> {
     );
   }
 }
+
+
+/// A slow, gentle scale "breath" while [active] (A-B looping). Still when the
+/// system asks for reduced motion.
+class _Breathe extends StatefulWidget {
+  const _Breathe({required this.active, required this.child});
+  final bool active;
+  final Widget child;
+
+  @override
+  State<_Breathe> createState() => _BreatheState();
+}
+
+class _BreatheState extends State<_Breathe>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1800));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) _c.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _Breathe old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !_c.isAnimating) {
+      _c.repeat(reverse: true);
+    } else if (!widget.active && _c.isAnimating) {
+      _c.stop();
+      _c.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (still || !widget.active) return widget.child;
+    return ScaleTransition(
+      scale: Tween(begin: 1.0, end: 1.04)
+          .animate(CurvedAnimation(parent: _c, curve: Curves.easeInOut)),
+      child: widget.child,
+    );
+  }
+}

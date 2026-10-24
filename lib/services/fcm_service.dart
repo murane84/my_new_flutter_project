@@ -138,6 +138,19 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         senderId: from.isEmpty ? null : from,
         senderName: mine((data['from_name'] ?? '').toString()),
       );
+    } else if (type == 'friend_online') {
+      // "Tell me when they're online" fired (server online_watch.py). In the
+      // foreground the socket shows the in-app card instead.
+      if (foreground) return;
+      final fid = (data['friend_id'] ?? '').toString();
+      final who = mine((data['friend_name'] ?? 'Your friend').toString());
+      await showMessageNotification(
+        title: '$who is online now 🟢',
+        body: "Say hi while they're here 👋",
+        id: 7400 + (int.tryParse(fid) ?? 0) % 1000,
+        senderId: fid.isEmpty ? null : fid,
+        senderName: who,
+      );
     } else if (type == 'heart_opened' && foreground) {
       // App open: the in-app heart pill already shows it — no second banner.
       return;

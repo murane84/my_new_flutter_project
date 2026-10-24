@@ -83,6 +83,7 @@ import 'add_friend_sheet.dart';
 import 'spinning_vinyl_ring.dart';
 import '../services/connected_contacts_service.dart';
 import '../services/now_playing_presence.dart';
+import '../services/online_watch.dart';
 import '../services/live_rooms_registry.dart';
 import '../services/telecom_service.dart';
 import '../utils/file_bytes.dart';
@@ -475,6 +476,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // safety net — live friend_now_playing events can be missed there, which
     // left friends' listening status never appearing.
     NowPlayingPresence.instance.startReceiving(poll: kIsWeb);
+    // "Tell me when they're online" watches I'm still waiting on.
+    OnlineWatchList.instance.load();
     // Seed any live "Listening Rooms" a friend is already hosting (events keep
     // this current afterwards).
     LiveRoomsRegistry.instance.loadSnapshot();
@@ -1932,6 +1935,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
       NowPlayingPresence.instance.applyEvent(event);
       return;
     }
+    // A friend I asked about just came online (one-shot watch, server
+    // online_watch.py). Phones also get the push; this is the in-app line.
+    if (type == 'friend_came_online') {
+      final d = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final fid = (d['user_id'] as num?)?.toInt();
+      if (fid != null) _onWatchedFriendOnline(fid, d);
+      return;
+    }
     // They opened a secret heart I sent (server hearts.py). Phones get the
     // FCM ping; desktop/web have no FCM, so show a tender in-app bar here
     // unless that chat is already open (its bubble updates in place).
@@ -2454,6 +2465,41 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void _onPresenceChanged() {
     if (mounted) setState(() {});
     _maybeBothListening();
+  }
+
+  /// "Belyner is online now 🟢" — the watch I set fired (once, then ends).
+  void _onWatchedFriendOnline(int fid, Map<String, dynamic> d) {
+    OnlineWatchList.instance.fired(fid);
+    if (!mounted) return;
+    final f = _allFriends.firstWhere(
+        (x) => (x['id'] as num?)?.toInt() == fid,
+        orElse: () => <String, dynamic>{});
+    final name = _contactDisplayName(f['phone']?.toString(),
+        (f['username'] ?? d['username'] ?? 'Your friend').toString());
+    final first = name.trim().split(RegExp(r'\s+')).first;
+    HapticFeedback.lightImpact();
+    _lastMomentAt = DateTime.now();
+    showMomentCard(
+      context,
+      title: '$first is online now 🟢',
+      subtitle: 'You asked to know — say hi while they\'re here',
+      leading: Icons.notifications_active_rounded,
+      hold: const Duration(seconds: 9),
+      actions: [
+        if (f.isNotEmpty)
+          MomentAction(Icons.waving_hand_rounded, 'Say hi', () => openChat(f),
+              primary: true),
+        if (f.isNotEmpty)
+          MomentAction(Icons.call_rounded, 'Call', () {
+            _showCallChoice(
+              friendId: fid,
+              name: name,
+              avatar: f['avatar_url'] as String?,
+              phone: f['phone'] as String?,
+            );
+          }),
+      ],
+    );
   }
 
   // ── "You're both listening" ──────────────────────────────────────────────

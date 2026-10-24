@@ -613,3 +613,55 @@ def get_blocked_friends_status(
     blocked_status = crud.get_blocked_friends_status(db, user_id)
     return blocked_status   
 
+
+
+# ── "Tell me when they're online" (one-shot watch) ───────────────────────────
+def _are_friends(db: Session, a: int, b: int) -> bool:
+    return db.query(Friend).filter(
+        ((Friend.user_id == a) & (Friend.friend_id == b))
+        | ((Friend.user_id == b) & (Friend.friend_id == a))
+    ).first() is not None
+
+
+@router.get("/users/me/online-watches", tags=["Users"])
+def my_online_watches(db: Session = Depends(get_db),
+                      current_user: User = Depends(get_current_user)):
+    """Friend ids I've asked to be told about (still waiting)."""
+    from models import OnlineWatch
+    rows = db.query(OnlineWatch).filter(
+        OnlineWatch.watcher_id == current_user.id).all()
+    return {"watching": [int(r.target_id) for r in rows]}
+
+
+@router.post("/users/{friend_id}/online-watch", tags=["Users"])
+def watch_online(friend_id: int, db: Session = Depends(get_db),
+                 current_user: User = Depends(get_current_user)):
+    """One heads-up the next time {friend_id} comes online, then it ends.
+    Already online → nothing is stored ({"online": true})."""
+    from models import OnlineWatch
+    from websocket_manager import connected_users
+    if friend_id == current_user.id or not _are_friends(
+            db, current_user.id, friend_id):
+        raise HTTPException(status_code=404, detail="Not in your circle")
+    if connected_users.get(int(friend_id)):
+        return {"watching": False, "online": True}
+    row = db.query(OnlineWatch).filter(
+        OnlineWatch.watcher_id == current_user.id,
+        OnlineWatch.target_id == friend_id).first()
+    if row is None:
+        db.add(OnlineWatch(watcher_id=current_user.id, target_id=friend_id))
+    else:
+        row.created_at = datetime.now(timezone.utc)  # refresh the 7-day window
+    db.commit()
+    return {"watching": True, "online": False}
+
+
+@router.delete("/users/{friend_id}/online-watch", tags=["Users"])
+def unwatch_online(friend_id: int, db: Session = Depends(get_db),
+                   current_user: User = Depends(get_current_user)):
+    from models import OnlineWatch
+    db.query(OnlineWatch).filter(
+        OnlineWatch.watcher_id == current_user.id,
+        OnlineWatch.target_id == friend_id).delete()
+    db.commit()
+    return {"watching": False}

@@ -1425,6 +1425,48 @@ class ApiService {
     }
   }
 
+  /// "Tell me when they're online": start (POST) or stop (DELETE) a one-shot
+  /// watch on [friendId]. Returns 'watching', 'online' (already online, so
+  /// nothing stored), 'stopped', or null on failure.
+  Future<String?> setOnlineWatch(int friendId, bool on) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final uri = Uri.parse('${await _baseUrl}/users/$friendId/online-watch');
+      final resp = on
+          ? await http.post(uri, headers: _authHeaders(token))
+          : await http.delete(uri, headers: _authHeaders(token));
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
+      if (!on) return 'stopped';
+      final data = jsonDecode(resp.body);
+      return (data is Map && data['online'] == true) ? 'online' : 'watching';
+    } catch (e) {
+      _logger.w('setOnlineWatch failed: $e');
+      return null;
+    }
+  }
+
+  /// Friend ids I'm still waiting to hear are online.
+  Future<Set<int>> onlineWatches() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return {};
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/users/me/online-watches'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return {};
+      final data = jsonDecode(resp.body);
+      final list = data is Map ? data['watching'] : null;
+      return list is List
+          ? list.map((e) => (e as num).toInt()).toSet()
+          : <int>{};
+    } catch (e) {
+      _logger.w('onlineWatches failed: $e');
+      return {};
+    }
+  }
+
   /// Friends who are playing music right now — seeds the "Listening now" zone.
   /// Returns [{user_id, username, avatar_url, track:{title,artist}}].
   Future<List<Map<String, dynamic>>> friendsListening() async {

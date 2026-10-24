@@ -38,6 +38,7 @@ import '../utils/marquee_text.dart';
 import 'live_session_screen.dart';
 import 'gif_picker.dart';
 import '../services/call_service.dart';
+import '../services/online_watch.dart';
 import '../services/contact_names.dart';
 import '../services/web_paste.dart' as webpaste;
 import '../utils/net_image.dart';
@@ -3852,6 +3853,27 @@ class _ChatPageState extends State<ChatPage>
           ? 'Nobody else has the group open right now — try again in a moment'
           : "$_peerFirst isn't in your chat right now — try again in a moment";
     } else {
+      final fid = widget.friendId;
+      if (!_isGroup && fid > 0) {
+        // DM, they're offline → offer the one-shot "tell me when online".
+        final first = _peerFirst;
+        _showPill("$first is offline · Tell me when they're back",
+            Icons.notifications_active_rounded, () async {
+          final res = OnlineWatchList.instance.isWatching(fid)
+              ? 'watching'
+              : await OnlineWatchList.instance.toggle(fid);
+          if (!mounted) return;
+          showToast(
+              context,
+              res == 'online'
+                  ? '$first is online now — show it again'
+                  : res == 'watching'
+                      ? "We'll tell you when $first is online"
+                      : "Couldn't set that up — try again",
+              type: res == null ? ToastType.error : ToastType.success);
+        }, hold: const Duration(seconds: 6));
+        return;
+      }
       line = _isGroup
           ? 'Everyone else is offline — try again when they\'re back'
           : "$_peerFirst is offline — try again when they're back";

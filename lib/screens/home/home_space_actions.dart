@@ -363,6 +363,23 @@ extension _HomeSpaceActions on HomePageState {
   }
 
   /// A friend row's long-press quick sheet: pin as Our Space, call, or open chat.
+  Future<void> _toggleOnlineWatch(int fid, String first) async {
+    final res = await OnlineWatchList.instance.toggle(fid);
+    if (!mounted) return;
+    switch (res) {
+      case 'watching':
+        showToast(context, "We'll tell you when $first is online",
+            type: ToastType.success);
+      case 'online':
+        showToast(context, '$first is online right now', type: ToastType.info);
+      case 'stopped':
+        showToast(context, 'Okay — not waiting for $first anymore');
+      default:
+        showToast(context, "Couldn't set that up — try again",
+            type: ToastType.error);
+    }
+  }
+
   void _showFriendQuickSheet(Map<String, dynamic> f, String name) {
     final scheme = Theme.of(context).colorScheme;
     final fid = int.tryParse(f['id'].toString()) ?? -1;
@@ -453,6 +470,31 @@ extension _HomeSpaceActions on HomePageState {
                 openChat(f);
               },
             ),
+            // One heads-up the next time they come online, then it ends.
+            if (fid > 0 &&
+                (OnlineWatchList.instance.isWatching(fid) ||
+                    !ref.read(presenceProvider).isOnline(fid)))
+              Builder(builder: (_) {
+                final first = name.trim().split(RegExp(r'\s+')).first;
+                final on = OnlineWatchList.instance.isWatching(fid);
+                return ListTile(
+                  leading: Icon(
+                      on
+                          ? Icons.notifications_off_outlined
+                          : Icons.notifications_active_outlined,
+                      color: scheme.primary),
+                  title: Text(on
+                      ? 'Stop waiting for $first'
+                      : 'Let me know when $first is online'),
+                  subtitle: on
+                      ? null
+                      : const Text('Just once — then it switches off'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _toggleOnlineWatch(fid, first);
+                  },
+                );
+              }),
             const SizedBox(height: 8),
           ],
         ),

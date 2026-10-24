@@ -318,6 +318,16 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
     connected_users[uid].append(websocket)
     print(f"✅ User {uid} connected. Total sockets: {len(connected_users[uid])}")
 
+    # First socket = they just came online → one-shot "tell me when they're
+    # online" watches fire (WS + push to each watcher, then end).
+    if len(connected_users[uid]) == 1:
+        try:
+            from online_watch import fire_online_watches
+            asyncio.get_running_loop().run_in_executor(
+                None, fire_online_watches, uid)
+        except Exception:
+            pass
+
     # Re-deliver any "listen together" invite that arrived while this user was
     # offline. The invite is otherwise a fire-and-forget WS event, so a listener
     # who was closed when it was sent never saw it and the host waited forever.

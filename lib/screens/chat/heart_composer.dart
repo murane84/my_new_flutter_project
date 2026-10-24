@@ -159,9 +159,9 @@ extension _ChatHeartComposer on _ChatPageState {
         isVideo = r.isVideo;
       } else {
         x = video
-            ? await ImagePicker().pickVideo(
-                source: ImageSource.gallery,
-                maxDuration: const Duration(seconds: 30))
+            // No maxDuration here: it only applies to the camera, and the
+            // 30 s limit is checked right after picking (_heartUseFile).
+            ? await ImagePicker().pickVideo(source: ImageSource.gallery)
             : await ImagePicker().pickImage(
                 source: ImageSource.gallery, imageQuality: 90, maxWidth: 2048);
       }
@@ -175,6 +175,22 @@ extension _ChatHeartComposer on _ChatPageState {
   }
 
   Future<void> _heartUseFile(XFile x, {required bool video}) async {
+    // Length check first (cheap) — a 30 s+ clip is refused before reading
+    // a big file into memory.
+    if (video && !kIsWeb && _isMobile) {
+      try {
+        final info = await VideoCompress.getMediaInfo(x.path);
+        final ms = info.duration?.round();
+        if (ms != null && ms > _kHeartClipMaxMs) {
+          if (mounted) {
+            showToast(context,
+                'Heart clips are up to 30 seconds — pick a shorter one',
+                type: ToastType.error);
+          }
+          return;
+        }
+      } catch (_) {}
+    }
     var bytes = await x.readAsBytes();
     final ext = x.name.contains('.')
         ? x.name.split('.').last.toLowerCase()
@@ -205,6 +221,7 @@ extension _ChatHeartComposer on _ChatPageState {
         return;
       }
       if (bytes.length > 12 * 1024 * 1024) {
+        if (mounted) showToast(context, 'Making your clip lighter…');
         try {
           final info = await VideoCompress.compressVideo(x.path,
               quality: VideoQuality.MediumQuality,

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tell Android we handle modern phone video ourselves (HEVC / HDR), so the
+     system photo picker hands us the original file instead of transcoding it
+     first ("Preparing your selected media… 0 of 1 ready", which can take ages
+     or never finish). Big clips are re-encoded to H.264 in-app anyway. -->
+<media-capabilities xmlns:android="http://schemas.android.com/apk/res/android">
+    <format android:name="HEVC" supported="true" />
+    <format android:name="HDR10" supported="true" />
+    <format android:name="HDR10Plus" supported="true" />
+    <format android:name="Dolby-Vision" supported="true" />
+    <format android:name="HLG" supported="true" />
+</media-capabilities>

@@ -248,6 +248,10 @@
                 android:name="android.provider.CONTACTS_STRUCTURE"
                 android:resource="@xml/aluta_contacts" />
         </service>
+        <!-- Picking a video: no slow system transcode (see xml/media_capabilities). -->
+        <property
+            android:name="android.media.PROPERTY_MEDIA_CAPABILITIES"
+            android:resource="@xml/media_capabilities" />
         <!-- Notification action buttons that run without opening the app
              (the inline "Reply" on message banners). -->
         <receiver

@@ -3511,8 +3511,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
                           : _activeFriendLastSeen?.isNotEmpty == true
                               ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
                               : 'Offline';
+                      const lead = '🎧 Listening to ';
                       final text = listening
-                          ? '🎧 Listening to $t${a.isEmpty ? '' : ' — $a'}'
+                          ? '$lead$t${a.isEmpty ? '' : ' — $a'}'
                           : qs.isEmpty
                               ? base
                               : '$qs · $base';
@@ -3521,10 +3522,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
                         child: _ScrollingText(
                           key: ValueKey(text),
                           text: text,
+                          // The song title stands out from "Listening to".
+                          bold: listening
+                              ? (lead.length, lead.length + t.length)
+                              : null,
                           style: TextStyle(
                             fontSize: 11,
-                            fontWeight:
-                                listening ? FontWeight.w600 : FontWeight.normal,
+                            fontWeight: FontWeight.normal,
                             color: listening
                                 ? scheme.primary
                                 : _activeFriendOnline == true

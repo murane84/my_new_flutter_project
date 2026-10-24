@@ -59,24 +59,47 @@ class _PanelToggleBtn extends StatelessWidget {
 /// now-playing bar so long song filenames stay fully readable without stealing
 /// vertical space.
 class _ScrollingText extends StatelessWidget {
-  const _ScrollingText({super.key, required this.text, required this.style});
+  const _ScrollingText(
+      {super.key, required this.text, required this.style, this.bold});
 
   final String text;
   final TextStyle style;
+
+  /// Optional (start, end) character range drawn bold — e.g. the song title
+  /// inside "🎧 Listening to Lets Get It On", so it doesn't read as one
+  /// run-on sentence.
+  final (int, int)? bold;
+
+  TextSpan _span() {
+    final b = bold;
+    if (b == null || b.$1 < 0 || b.$2 > text.length || b.$1 >= b.$2) {
+      return TextSpan(text: text, style: style);
+    }
+    return TextSpan(style: style, children: [
+      TextSpan(text: text.substring(0, b.$1)),
+      TextSpan(
+          text: text.substring(b.$1, b.$2),
+          style: const TextStyle(fontWeight: FontWeight.w800)),
+      TextSpan(text: text.substring(b.$2)),
+    ]);
+  }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final span = _span();
         final tp = TextPainter(
-          text: TextSpan(text: text, style: style),
+          text: span,
           maxLines: 1,
           textDirection: TextDirection.ltr,
         )..layout();
         final overflows = tp.width > constraints.maxWidth;
         if (!overflows) {
-          return Text(text,
-              style: style, maxLines: 1, overflow: TextOverflow.clip);
+          return Text.rich(span, maxLines: 1, overflow: TextOverflow.clip);
+        }
+        if (bold != null) {
+          return _RichMarquee(span: span, width: tp.width);
         }
         return Marquee(
           text: text,
@@ -89,6 +112,82 @@ class _ScrollingText extends StatelessWidget {
           showFadingOnlyWhenScrolling: true,
         );
       },
+    );
+  }
+}
+
+/// The same glide as [Marquee] (26 px/s, 2 s rest each round, soft fading
+/// edges) but for styled text — the marquee package only takes a plain String.
+class _RichMarquee extends StatefulWidget {
+  const _RichMarquee({required this.span, required this.width});
+  final TextSpan span;
+  final double width;
+
+  @override
+  State<_RichMarquee> createState() => _RichMarqueeState();
+}
+
+class _RichMarqueeState extends State<_RichMarquee>
+    with SingleTickerProviderStateMixin {
+  static const _gap = 46.0;
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: Duration(
+        milliseconds: ((widget.width + _gap) / 26 * 1000).round()),
+  );
+  bool _alive = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loop();
+  }
+
+  Future<void> _loop() async {
+    while (_alive && mounted) {
+      await Future.delayed(const Duration(seconds: 2));
+      if (!_alive || !mounted) return;
+      try {
+        await _c.forward(from: 0).orCancel;
+      } catch (_) {
+        return; // disposed mid-glide
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _alive = false;
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final line = Text.rich(widget.span, maxLines: 1, softWrap: false);
+    return ShaderMask(
+      shaderCallback: (r) => const LinearGradient(
+        colors: [Colors.transparent, Colors.black, Colors.black, Colors.transparent],
+        stops: [0, 0.06, 0.88, 1],
+      ).createShader(r),
+      blendMode: BlendMode.dstIn,
+      child: ClipRect(
+        child: AnimatedBuilder(
+          animation: _c,
+          builder: (_, _) => OverflowBox(
+            alignment: Alignment.centerLeft,
+            maxWidth: double.infinity,
+            child: Transform.translate(
+              offset: Offset(-_c.value * (widget.width + _gap), 0),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                line,
+                const SizedBox(width: _gap),
+                line,
+              ]),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

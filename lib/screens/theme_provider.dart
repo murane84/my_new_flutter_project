@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/account_prefs.dart';
 
 /// App-wide appearance: theme mode (System / Light / Dark) and a curated app
 /// accent colour. Dark is the brand's signature look, but the choice is the
@@ -20,6 +21,7 @@ class ThemeProvider with ChangeNotifier {
 
   ThemeProvider() {
     _load();
+    AccountPrefs.onRestore(_load); // theme came back from the account
   }
 
   /// Back-compat: the old quick dark⇆light toggle (still used on the auth pages
@@ -64,11 +66,13 @@ class ThemeProvider with ChangeNotifier {
     await prefs.setString('themeModeStr', _modeToString(mode));
     // Keep the legacy bool loosely in sync for any old reader.
     await prefs.setBool('isDarkMode', mode == ThemeMode.dark);
+    AccountPrefs.touch();
   }
 
   Future<void> _persistAccent(Color c) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('accentColor', c.toARGB32());
+    AccountPrefs.touch();
   }
 
   static String _modeToString(ThemeMode m) => m == ThemeMode.dark

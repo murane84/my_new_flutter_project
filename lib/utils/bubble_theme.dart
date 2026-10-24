@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart' show HSLColor;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/account_prefs.dart';
 
 /// User-chosen message-bubble colours.
 ///
@@ -35,7 +36,13 @@ Color get bubbleRecvColor => Color(_recv);
 
 /// Load the saved bubble theme. Call once at startup alongside the other
 /// preference loaders.
+bool _bubbleRestoreHooked = false;
+
 Future<void> loadBubbleTheme() async {
+  if (!_bubbleRestoreHooked) {
+    _bubbleRestoreHooked = true;
+    AccountPrefs.onRestore(loadBubbleTheme); // account copy came back
+  }
   try {
     final p = await SharedPreferences.getInstance();
     _custom = p.getBool(_kBubbleCustom) ?? false;
@@ -54,6 +61,7 @@ Future<void> setBubbleCustomEnabled(bool v) async {
     final p = await SharedPreferences.getInstance();
     await p.setBool(_kBubbleCustom, v);
   } catch (_) {}
+  AccountPrefs.touch();
 }
 
 Future<void> setBubbleSentColor(Color c) async {
@@ -63,6 +71,7 @@ Future<void> setBubbleSentColor(Color c) async {
     final p = await SharedPreferences.getInstance();
     await p.setInt(_kBubbleSent, _sent);
   } catch (_) {}
+  AccountPrefs.touch();
 }
 
 Future<void> setBubbleRecvColor(Color c) async {
@@ -72,6 +81,7 @@ Future<void> setBubbleRecvColor(Color c) async {
     final p = await SharedPreferences.getInstance();
     await p.setInt(_kBubbleRecv, _recv);
   } catch (_) {}
+  AccountPrefs.touch();
 }
 
 /// Turn the custom theme off and restore the seed swatches.
@@ -86,6 +96,7 @@ Future<void> resetBubbleTheme() async {
     await p.setInt(_kBubbleSent, _sent);
     await p.setInt(_kBubbleRecv, _recv);
   } catch (_) {}
+  AccountPrefs.touch();
 }
 
 int _argb(Color c) =>

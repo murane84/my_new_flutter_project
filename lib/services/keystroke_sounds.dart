@@ -4,6 +4,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show MethodChannel;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'account_prefs.dart';
 
 /// In-app sound effects, with two INDEPENDENT switches:
 ///
@@ -42,7 +43,13 @@ class KeystrokeSounds {
   final Map<String, int> _rr = {};
 
   /// Load both saved preferences (and warm the engine if either is on).
+  bool _restoreHooked = false;
+
   Future<void> init() async {
+    if (!_restoreHooked) {
+      _restoreHooked = true;
+      AccountPrefs.onRestore(init); // tones came back from the account
+    }
     try {
       final p = await SharedPreferences.getInstance();
       keystrokesEnabled = p.getBool(prefKey) ?? false;
@@ -57,6 +64,7 @@ class KeystrokeSounds {
       final p = await SharedPreferences.getInstance();
       await p.setBool(prefKey, value);
     } catch (_) {}
+    AccountPrefs.touch();
     if (value) await _ensureLoaded();
   }
 
@@ -66,6 +74,7 @@ class KeystrokeSounds {
       final p = await SharedPreferences.getInstance();
       await p.setBool(prefMessages, value);
     } catch (_) {}
+    AccountPrefs.touch();
     if (value) await _ensureLoaded();
   }
 

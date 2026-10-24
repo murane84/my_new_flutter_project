@@ -758,7 +758,7 @@ def friends_quick_statuses(db: Session = Depends(get_db),
 
 
 # ── Account-backed settings (wallpapers, …) ─────────────────────────────────
-_SETTING_KEYS = {"chat_wallpaper"}
+_SETTING_KEYS = {"chat_wallpaper", "app_prefs"}
 
 
 @router.get("/users/me/settings/{key}", tags=["Users"])

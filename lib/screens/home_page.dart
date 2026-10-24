@@ -109,6 +109,7 @@ import '../services/moment_prefs.dart';
 import '../widgets/welcome_tour.dart';
 import 'moments_settings_screen.dart';
 import '../utils/readable.dart';
+import '../services/account_prefs.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
@@ -439,6 +440,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // …and reconcile it with the account copy in the background (a reinstall
     // or a new phone gets its wallpapers back; never blocks startup).
     syncChatBackgroundWithAccount();
+    AccountPrefs.sync(); // theme, bubbles, tones, nudges — same idea
     loadBubbleTheme();       // the chosen message-bubble colour theme
     _fetchFriends();          // then refresh from network
     _loadSpaces();            // pinned "Our Space" hero(es) — one-shot, no poll

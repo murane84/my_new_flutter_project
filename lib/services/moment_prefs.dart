@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'account_prefs.dart';
 
 /// On/off switches for Aluta's "moments" — the warm, app-initiated touches —
 /// gathered in one place (Moments & nudges). All default ON; all local.
@@ -23,7 +24,12 @@ class MomentPrefs {
   };
 
   Future<void>? _loading;
-  Future<void> load() => _loading ??= _doLoad();
+  Future<void> load() {
+    if (_loading == null) {
+      AccountPrefs.onRestore(_doLoad); // toggles came back from the account
+    }
+    return _loading ??= _doLoad();
+  }
 
   Future<void> _doLoad() async {
     try {
@@ -40,6 +46,7 @@ class MomentPrefs {
       final p = await SharedPreferences.getInstance();
       await p.setBool(_keys[k]!, v);
     } catch (_) {}
+    AccountPrefs.touch();
   }
 
   Future<void> setWelcome(bool v) => _set('welcome', welcomeCards, v);

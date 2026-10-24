@@ -18,6 +18,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/song_insights.dart';
 import '../utils/readable.dart';
+import '../services/account_prefs.dart';
 
 /// The personalization surface (build step 5): whole-app **theme** (System /
 /// Light / Dark) + a curated **accent** preset set. Dark stays the brand's
@@ -938,6 +939,7 @@ class _StatusMediaSectionState extends State<_StatusMediaSection> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_kKey, v);
     } catch (_) {}
+    AccountPrefs.touch();
   }
 
   @override

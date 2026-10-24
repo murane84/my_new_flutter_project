@@ -1,10 +1,13 @@
 import 'dart:convert';
+import 'dart:ui' show DartPluginRegistrant;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tzdata;
+
+import '../screens/api_service.dart';
 
 /// Native bridge (see android MainActivity) for OS state the notification
 /// plugin can't report — currently the full-screen-intent grant.
@@ -78,7 +81,22 @@ void Function(String actionId, Map<String, dynamic> payload)? onCallAction;
 /// routes here so we can open the sender's thread directly instead of just
 /// landing on the chat list. `payload` carries `friend_id` + `sender_name`. The
 /// killed-app (cold start) equivalent is [consumeMessageLaunchAction].
-void Function(Map<String, dynamic> payload)? onMessageTap;
+/// A tap that lands before home has wired this up is kept and handed over the
+/// moment it is set, so a tap is never silently lost.
+void Function(Map<String, dynamic> payload)? _onMessageTap;
+Map<String, dynamic>? _pendingMessageTap;
+void Function(Map<String, dynamic> payload)? get onMessageTap => _onMessageTap;
+set onMessageTap(void Function(Map<String, dynamic> payload)? fn) {
+  _onMessageTap = fn;
+  final p = _pendingMessageTap;
+  if (fn != null && p != null) {
+    _pendingMessageTap = null;
+    fn(p);
+  }
+}
+
+/// Inline "Reply" action on message notifications (type a reply in the shade).
+const String kMsgReply = 'msg_reply';
 
 Map<String, dynamic> _decodePayload(String? raw) {
   if (raw == null || raw.isEmpty) return const {};
@@ -98,11 +116,69 @@ void _onNotifResponse(NotificationResponse r) {
     onCallAction?.call(a!, _decodePayload(r.payload));
     return;
   }
-  // Tapping a message notification's body → open that thread.
   final p = _decodePayload(r.payload);
-  if (p['type'] == 'message') {
-    onMessageTap?.call(p);
+  // Inline reply typed in the notification → send it, no app needed.
+  if (a == kMsgReply) {
+    _sendInlineReply(p, r.input);
+    return;
   }
+  // Tapping a message notification's body → open that thread.
+  if (p['type'] == 'message') {
+    final fn = _onMessageTap;
+    if (fn != null) {
+      fn(p);
+    } else {
+      _pendingMessageTap = p; // home not wired yet → hand over when it is
+    }
+  }
+}
+
+/// Send what was typed into a notification's Reply box to that DM / group,
+/// mark the thread read, and clear the banner. Works from the background
+/// isolate too (app closed). On failure the banner says so — tap opens chat.
+Future<void> _sendInlineReply(Map<String, dynamic> p, String? input) async {
+  final text = (input ?? '').trim();
+  if (text.isEmpty) return;
+  final fid = int.tryParse((p['friend_id'] ?? '').toString());
+  final cid = int.tryParse((p['conversation_id'] ?? '').toString());
+  if (fid == null && cid == null) return;
+  final notifId = messageNotifId(
+      senderId: p['friend_id']?.toString(),
+      conversationId: p['conversation_id']?.toString());
+  final api = ApiService();
+  Future<Map<String, dynamic>?> send() =>
+      api.sendMessage(fid ?? 0, text, conversationId: cid);
+  var sent = await send();
+  // A closed app's access token may have expired — refresh once, retry.
+  if (sent == null && await api.refreshAccessToken()) sent = await send();
+  try {
+    if (!_ready) await initNotifications();
+    if (sent != null) {
+      if (cid != null) {
+        await api.markConversationRead(cid);
+      } else if (fid != null) {
+        await api.markMessagesAsReadPatch(fid);
+      }
+      await _fln.cancel(id: notifId);
+    } else {
+      await _fln.show(
+        id: notifId,
+        title: (p['group_title'] ?? p['sender_name'] ?? 'Aluta').toString(),
+        body: "Couldn't send your reply — tap to open the chat",
+        payload: jsonEncode(p),
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _channelId,
+            _channelName,
+            importance: Importance.high,
+            priority: Priority.high,
+            icon: '@mipmap/launcher_icon',
+            groupKey: _msgGroupKey,
+          ),
+        ),
+      );
+    }
+  } catch (_) {/* best-effort */}
 }
 
 /// Background isolate tap handler (app killed). Must be a top-level, AOT entry.
@@ -110,8 +186,14 @@ void _onNotifResponse(NotificationResponse r) {
 /// itself (cancelNotification: true) and the caller times out. Accept is picked
 /// up on next launch via [consumeCallLaunchAction].
 @pragma('vm:entry-point')
-void _onNotifBgResponse(NotificationResponse r) {
-  // Intentionally minimal — see doc comment above.
+Future<void> _onNotifBgResponse(NotificationResponse r) async {
+  // Calls: intentionally nothing (see above). An inline message reply typed
+  // while the app is closed is sent from here.
+  if (r.actionId != kMsgReply) return;
+  try {
+    DartPluginRegistrant.ensureInitialized(); // secure storage + prefs here
+  } catch (_) {}
+  await _sendInlineReply(_decodePayload(r.payload), r.input);
 }
 
 /// On cold start, returns the call action the user tapped in the notification
@@ -408,7 +490,7 @@ Future<void> showMessageNotification({
       title: title,
       body: body,
       payload: payload,
-      notificationDetails: const NotificationDetails(
+      notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           _channelId,
           _channelName,
@@ -418,6 +500,20 @@ Future<void> showMessageNotification({
           // Grouped so Android bundles multiple chats into one stack in the
           // shade; the per-conversation id keeps one banner per sender.
           groupKey: _msgGroupKey,
+          // A chat banner gets an inline Reply box (answer without opening).
+          actions: payload == null
+              ? null
+              : const [
+                  AndroidNotificationAction(
+                    kMsgReply,
+                    'Reply',
+                    inputs: [
+                      AndroidNotificationActionInput(label: 'Write a reply…'),
+                    ],
+                    showsUserInterface: false,
+                    cancelNotification: false,
+                  ),
+                ],
         ),
       ),
     );

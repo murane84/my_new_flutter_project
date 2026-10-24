@@ -1647,6 +1647,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// minimal record from the payload — ChatPage fetches the rest by id.
   void _handleMessageTap(Map<String, dynamic> payload) {
     if (!mounted) return;
+    // Whatever sits on top of home (a sheet, Our Space, Now Playing, a pushed
+    // chat…) would hide the thread we're about to open — close back to home
+    // first, so the tap always visibly lands in that chat. A live call screen
+    // is left alone (the chat opens underneath it).
+    if (!_callScreenOpen && !_groupCallScreenOpen) {
+      final home = ModalRoute.of(context);
+      final nav = Navigator.of(context);
+      if (home != null && !home.isCurrent) {
+        nav.popUntil((r) => r == home);
+      }
+    }
     // The exact message that was notified — the thread scrolls to + highlights
     // it once open (completes the deep-link, not just landing in the thread).
     final jumpMsg = (payload['message_id'] ?? '').toString();
@@ -2319,6 +2330,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         _groups = groups;
         _filteredGroups = _applyGroupQuery(groups, _searchQuery);
       });
+      _prefetchUnreadGroups(groups);
     } catch (_) {
       // Offline / fetch error — fall back to the cached list if we have none.
       if (mounted && _groups.isEmpty) await _loadCachedGroups();
@@ -2513,6 +2525,36 @@ class HomePageState extends rp.ConsumerState<HomePage>
         final msgs = await ApiService()
             .fetchMessagesBetween(me, fid, skip: 0, limit: 20);
         for (final m in msgs.reversed) {
+          LiveInbox.instance.add(m, me.toString());
+        }
+      } catch (_) {}
+    }
+  }
+
+  // Groups: same quiet prefetch for unread that arrived by push only.
+  final Map<int, int> _prefetchedGroupUnread = {};
+
+  Future<void> _prefetchUnreadGroups(List<Map<String, dynamic>> groups) async {
+    final me = _myUserId;
+    if (me == null) return;
+    final due = <int>[];
+    for (final g in groups) {
+      final cid = (g['id'] as num?)?.toInt();
+      final n = (g['unread_count'] as num?)?.toInt() ?? 0;
+      if (cid == null) continue;
+      if (n == 0) {
+        _prefetchedGroupUnread.remove(cid);
+      } else if (n > (_prefetchedGroupUnread[cid] ?? 0)) {
+        _prefetchedGroupUnread[cid] = n;
+        due.add(cid);
+      }
+    }
+    for (final cid in due.take(3)) {
+      if ((_activeGroup?['id'] as num?)?.toInt() == cid) continue;
+      try {
+        final msgs = await ApiService()
+            .fetchConversationMessages(cid, skip: 0, limit: 20);
+        for (final m in msgs) {
           LiveInbox.instance.add(m, me.toString());
         }
       } catch (_) {}

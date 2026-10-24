@@ -40,6 +40,7 @@ import 'gif_picker.dart';
 import '../services/call_service.dart';
 import '../services/online_watch.dart';
 import '../services/quick_status.dart';
+import '../services/live_inbox.dart';
 import '../services/contact_names.dart';
 import '../services/web_paste.dart' as webpaste;
 import '../utils/net_image.dart';
@@ -872,8 +873,17 @@ class _ChatPageState extends State<ChatPage>
     await _loadQuoteAuthors();
     await _loadLastSeen(); // where I left off → the "N new messages" divider
     await _loadCachedMessages(); // show cached messages instantly (clears loader)
+    // + what arrived on the home socket since that cache was written — the
+    // same message the badge / peek / notification showed, on the first frame.
+    _mergeLiveInbox();
     if (mounted && _isLoading) setState(() => _isLoading = false);
+    // The "N new messages" divider can go up now too (re-checked after fetch).
+    _placeUnreadDivider();
     _syncUploads(); // re-attach any media upload still running for this chat
+
+    // Fetch the thread straight away when my id is already known — don't
+    // queue it behind the profile round-trip below.
+    final early = _myId != null ? _loadMessages() : null;
 
     // Best-effort refresh from the network. On success this also re-caches the
     // user id (see ApiService.getUserData); offline it simply no-ops.
@@ -888,7 +898,7 @@ class _ChatPageState extends State<ChatPage>
       if (av != null && av.isNotEmpty) _myAvatar = av;
     }
 
-    await _loadMessages();        // fetch fresh from network (best-effort)
+    await (early ?? _loadMessages()); // fresh from network (best-effort)
     if (_isGroup) unawaited(_loadGroupMembers()); // for the @-mention picker
     _placeUnreadDivider();        // "N new messages" + open where I left off
     if (_isGroup) {
@@ -940,19 +950,21 @@ class _ChatPageState extends State<ChatPage>
           ? msgs.any((m) => m['sender_id'].toString() != _myId)
           : msgs.any((m) =>
               m['receiver_id'].toString() == _myId && m['is_read'] == false);
-      if (unread && _isAtBottom) {
-        if (_isGroup) {
-          await ApiService().markConversationRead(_cid);
-        } else {
-          await ApiService().markMessagesAsReadPatch(widget.friendId);
-        }
-      }
-
       if (!mounted) return;
+      // Paint first; the read receipt follows (it used to hold the bubbles
+      // back for a whole extra round-trip).
       setState(() {
         _messages = _merge(_messages, msgs, markRead: true);
         _isLoading = false;
       });
+      LiveInbox.instance.clear(
+          friendId: _isGroup ? null : widget.friendId,
+          conversationId: _isGroup ? _cid : null);
+      if (unread && _isAtBottom) {
+        unawaited(_isGroup
+            ? ApiService().markConversationRead(_cid)
+            : ApiService().markMessagesAsReadPatch(widget.friendId));
+      }
       _saveMessagesCache();
       if (_isAtBottom) _scrollToBottom();
     } catch (_) {
@@ -1006,6 +1018,18 @@ class _ChatPageState extends State<ChatPage>
   }
 
   int _lastCachedAck = 0;
+
+  /// Fold in messages the home socket caught while this chat was closed.
+  void _mergeLiveInbox() {
+    final fresh = LiveInbox.instance.peek(
+        friendId: _isGroup ? null : widget.friendId,
+        conversationId: _isGroup ? _cid : null);
+    if (fresh.isEmpty || !mounted) return;
+    setState(() {
+      _messages = _merge(_messages, fresh);
+      _isLoading = false;
+    });
+  }
 
   Future<void> _autoReconnect() async {
     if (_isReconnecting || !mounted) return;

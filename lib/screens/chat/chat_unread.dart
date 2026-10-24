@@ -65,13 +65,16 @@ extension _ChatUnread on _ChatPageState {
       count++;
     }
     if (anchor == null) return;
+    // Placed early (cache + live inbox) and re-checked after the fetch: only
+    // scroll when the anchor actually moved, so it never jumps twice.
+    final moved = anchor != _unreadAnchorId;
     rebuildWith(() {
       _unreadAnchorId = anchor;
       _unreadCount = count;
     });
     // A handful fit on screen anyway; only scroll when the first unread would
     // otherwise be off-screen. Opened from a notification → that jump wins.
-    if (count >= 4 && widget.initialJumpMessageId == null) {
+    if (moved && count >= 4 && widget.initialJumpMessageId == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _jumpToMessage(anchor!, flash: false);
       });

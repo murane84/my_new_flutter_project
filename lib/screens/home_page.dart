@@ -85,6 +85,7 @@ import '../services/connected_contacts_service.dart';
 import '../services/now_playing_presence.dart';
 import '../services/online_watch.dart';
 import '../services/quick_status.dart';
+import '../services/live_inbox.dart';
 import '../services/live_rooms_registry.dart';
 import '../services/telecom_service.dart';
 import '../utils/file_bytes.dart';
@@ -2080,6 +2081,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
       // NOTE: dropped during an earlier home_page rebuild, which regressed the
       // gray double-tick — keep this here.
       final mid = data['id'];
+      // Keep it for the thread: opening that chat paints it at once (with the
+      // "new messages" divider) instead of after the history fetch.
+      LiveInbox.instance.add(data, _myUserId?.toString());
       if (mid != null &&
           data['receiver_id']?.toString() == _myUserId?.toString() &&
           data['delivered'] == false) {
@@ -2273,6 +2277,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       ref.read(unreadProvider.notifier).syncFromFriends(counts);
       ref.read(presenceProvider.notifier).syncFromFriends(online);
       ConnectionStatus.instance.set(true);
+      _prefetchUnread(counts);
       // Groups live in the same list — refresh them too (non-blocking).
       _fetchGroups();
     } catch (_) {
@@ -2484,6 +2489,34 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void _onPresenceChanged() {
     if (mounted) setState(() {});
     _maybeBothListening();
+  }
+
+  // Unread that came in while the socket was down (app in the background,
+  // push only) never reached LiveInbox. Fetch those threads' newest messages
+  // quietly now, so opening one is instant too. Only when a count GREW, at
+  // most 3 chats per refresh.
+  final Map<int, int> _prefetchedUnread = {};
+
+  Future<void> _prefetchUnread(Map<int, int> counts) async {
+    final me = _myUserId;
+    if (me == null) return;
+    final due = <int>[
+      for (final e in counts.entries)
+        if (e.value > 0 && e.value > (_prefetchedUnread[e.key] ?? 0)) e.key,
+    ];
+    _prefetchedUnread
+      ..removeWhere((k, _) => (counts[k] ?? 0) == 0)
+      ..addAll({for (final id in due) id: counts[id]!});
+    for (final fid in due.take(3)) {
+      if (fid.toString() == _activeFriendId) continue; // open chat has it
+      try {
+        final msgs = await ApiService()
+            .fetchMessagesBetween(me, fid, skip: 0, limit: 20);
+        for (final m in msgs.reversed) {
+          LiveInbox.instance.add(m, me.toString());
+        }
+      } catch (_) {}
+    }
   }
 
   // ── "It's been a while" — gentle reconnect 🌱 ─────────────────────────────

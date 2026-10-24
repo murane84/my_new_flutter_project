@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/glow_cards.dart';
 import '../services/aluta_mood.dart';
 import '../services/song_insights.dart';
+import '../services/account_prefs.dart';
 
 int _glowDaySeed() {
   final d = DateTime.now();
@@ -130,6 +131,7 @@ class _GlowFeedState extends State<GlowFeed> {
       final p = await SharedPreferences.getInstance();
       await p.setStringList(_savedKey, _saved.toList());
     } catch (_) {}
+    AccountPrefs.touch();
   }
 
   String _shareText(GlowCard c) => glowShareText(c);

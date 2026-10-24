@@ -208,6 +208,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       await p.setBool(_kPlFavKey, _favOnly);
       await p.setString(_kPlGroupKey, _activeGroup ?? '');
     } catch (_) {}
+    AccountPrefs.touch();
   }
 
   /// A short label for the active sort mode (parallel to [_activeFilterLabel]).

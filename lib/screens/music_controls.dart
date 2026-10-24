@@ -46,6 +46,7 @@ import '../services/app_busy.dart';
 import '../utils/app_config.dart';
 import '../utils/avatar_widget.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import '../services/account_prefs.dart';
 
 part 'music/music_control_widgets.dart'; // _CtrlBtn, _CtrlChip, _SpeedPanel
 part 'music/music_playlist_overlay.dart'; // _PlaylistOverlay + state
@@ -419,7 +420,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _lastTrackTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (_player.playing) _saveLastTrack();
     });
-    if (Platform.isAndroid) _restoreEqualizer();
+    if (Platform.isAndroid) {
+      _restoreEqualizer();
+      AccountPrefs.onRestore(_eqRestore); // EQ back from the account
+    }
 
     // Ambient controls (now-playing bar, car/lock-screen buttons) drive the
     // local player — or the LIVE session when one is active (live-aware).
@@ -485,8 +489,13 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     }
   }
 
+  // One stable closure (extension tear-offs aren't equal), so offRestore
+  // really removes it.
+  late final Future<void> Function() _eqRestore = () => _restoreEqualizer();
+
   @override
   void dispose() {
+    AccountPrefs.offRestore(_eqRestore);
     _setHostingBusy(false);
     // Only clear the bus if we're still the registered owner.
     if (playbackBus.onToggle == _transportPlayPause) {

@@ -263,6 +263,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         final p = await SharedPreferences.getInstance();
         await p.setStringList(_pinsPref, snap);
       } catch (_) {}
+      AccountPrefs.touch();
     }();
   }
   // When a chat is opened from a message notification, the id of the message to
@@ -386,6 +387,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadPinnedChats();
+    AccountPrefs.onRestore(_loadPinnedChats); // pins back from the account
     _wireSongMoments();
     // Drives the playlist drawer's smooth slide/fade in & out. MusicControls
     // flips playlistDrawerBus.isOpen; we animate the host from that.
@@ -553,6 +555,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     playlistDrawerBus.isOpen.removeListener(_onPlaylistDrawerToggled);
     NowPlayingPresence.instance.removeListener(_onPresenceChanged);
     QuickStatus.instance.removeListener(_onPresenceChanged);
+    AccountPrefs.offRestore(_loadPinnedChats);
     NowPlayingPresence.instance.stopReceiving();
     for (final t in _typingTimers.values) {
       t.cancel();

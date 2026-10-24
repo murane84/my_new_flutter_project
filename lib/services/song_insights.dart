@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'aluta_mood.dart';
+import 'account_prefs.dart';
 
 /// How a song makes you feel — the answer to the on-repeat card.
 enum SongFeel {
@@ -90,7 +91,16 @@ class SongInsights {
 
   /// One shared load — every caller awaits the same read, so nobody works
   /// on (or saves over) an empty memory.
-  Future<void> load() => _loading ??= _doLoad();
+  Future<void> load() {
+    if (_loading == null) {
+      // Nudges on/off came back from the account → re-read just that.
+      AccountPrefs.onRestore(() async {
+        final p = await SharedPreferences.getInstance();
+        enabled.value = p.getBool(_enabledKey) ?? true;
+      });
+    }
+    return _loading ??= _doLoad();
+  }
 
   Future<void> _doLoad() async {
     try {
@@ -136,6 +146,7 @@ class SongInsights {
       final p = await SharedPreferences.getInstance();
       await p.setBool(_enabledKey, on);
     } catch (_) {}
+    AccountPrefs.touch();
   }
 
   Map<String, dynamic> _song(String title, String artist) {

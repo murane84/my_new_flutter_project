@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'biometric_service.dart';
+import 'account_prefs.dart';
 
 /// Viewer-side privacy for secret-heart messages (message_type 'heart').
 ///
@@ -65,6 +66,7 @@ class HeartLock with WidgetsBindingObserver {
       final p = await SharedPreferences.getInstance();
       await p.setBool(_receiptsKey, v);
     } catch (_) {}
+    AccountPrefs.touch();
   }
 
   Future<void> markCoachSeen() async {
@@ -100,6 +102,7 @@ class HeartLock with WidgetsBindingObserver {
       } catch (_) {}
     }
     if (_loaded) return;
+    AccountPrefs.onRestore(_reloadFromPrefs); // privacy back from account
     try {
       final p = await SharedPreferences.getInstance();
       enabled = p.getBool(_prefKey) ?? false;
@@ -115,6 +118,24 @@ class HeartLock with WidgetsBindingObserver {
     try {
       final p = await SharedPreferences.getInstance();
       await p.setBool(_prefKey, value);
+    } catch (_) {}
+    AccountPrefs.touch();
+  }
+
+  /// Re-read the synced choices after the account copy came back. The lock
+  /// only switches ON if this device can actually verify you (biometrics /
+  /// device PIN) — otherwise it stays off rather than locking you out.
+  Future<void> _reloadFromPrefs() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      sendReceipts = p.getBool(_receiptsKey) ?? true;
+      final want = p.getBool(_prefKey) ?? false;
+      if (want && !await BiometricService.instance.isAvailable()) {
+        enabled = false;
+        await p.setBool(_prefKey, false);
+      } else {
+        enabled = want;
+      }
     } catch (_) {}
   }
 

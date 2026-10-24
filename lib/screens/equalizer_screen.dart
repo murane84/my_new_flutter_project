@@ -3,6 +3,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/popup_shell.dart';
 import '../services/song_insights.dart';
+import '../services/account_prefs.dart';
 
 /// A functional equalizer + sound-enhancement screen.
 ///
@@ -115,6 +116,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
     await prefs.setDouble('eq_loud', _loud);
     await prefs.setStringList(
         'eq_gains', _gains.map((g) => g.toStringAsFixed(2)).toList());
+    AccountPrefs.touch(); // the sound follows the account
   }
 
   /// Push all current values to the native effects.

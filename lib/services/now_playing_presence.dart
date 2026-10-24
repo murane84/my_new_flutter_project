@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'audio_handler.dart';
 import 'live_session_service.dart' show activeLiveSession;
 import '../screens/api_service.dart';
+import 'account_prefs.dart';
 
 /// Live "now playing" presence — the seed of Concept 05's "Listening now" zone
 /// and the substrate C1 (Listening Rooms) will reuse.
@@ -41,7 +42,13 @@ class NowPlayingPresence extends ChangeNotifier {
 
   /// Load the saved share preference (call once at startup). Emits the current
   /// state once loaded so the first broadcast already respects the choice.
+  bool _restoreHooked = false;
+
   Future<void> loadShareSetting() async {
+    if (!_restoreHooked) {
+      _restoreHooked = true;
+      AccountPrefs.onRestore(loadShareSetting); // privacy back from account
+    }
     try {
       final p = await SharedPreferences.getInstance();
       _shareEnabled = p.getBool('share_listening_now') ?? true;
@@ -67,6 +74,7 @@ class NowPlayingPresence extends ChangeNotifier {
       final p = await SharedPreferences.getInstance();
       await p.setBool('share_listening_now', v);
     } catch (_) {}
+    AccountPrefs.touch();
   }
 
   /// Choose WHO sees my listening now: mode 'everyone' or 'selected' (with the
@@ -83,6 +91,7 @@ class NowPlayingPresence extends ChangeNotifier {
       await p.setStringList('share_listening_allowed',
           _allowedFriends.map((e) => e.toString()).toList());
     } catch (_) {}
+    AccountPrefs.touch();
   }
 
   /// Set by HomePage to the home socket's send function.

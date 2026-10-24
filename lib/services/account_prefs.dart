@@ -31,6 +31,20 @@ class AccountPrefs {
     'keystroke_sounds', 'message_tones',
     // Appearance → status videos
     'status_dl_videos_wifi',
+    // Privacy: who sees my "listening now" (services/now_playing_presence)
+    'share_listening_now', 'share_listening_mode', 'share_listening_allowed',
+    // Secret hearts: read receipts + lock (services/heart_lock)
+    'send_heart_receipts', 'lock_secret_hearts',
+    // Pinned chats (home)
+    'pinned_chats_v1',
+    // Music nudges (services/song_insights)
+    'music_nudges_on',
+    // Equalizer (screens/equalizer_screen + music controls)
+    'eq_enabled', 'eq_preset', 'eq_bass', 'eq_loud', 'eq_gains',
+    // Playlist view (sort · smart · favourites · group)
+    'pl_sort_v1', 'pl_smart_v1', 'pl_fav_v1', 'pl_group_v1',
+    // Saved "Today's glow" cards
+    'glow_saved_v1',
   ];
 
   static final List<FutureOr<void> Function()> _reloaders = [];
@@ -40,6 +54,10 @@ class AccountPrefs {
   /// Run [fn] after a newer account copy was written into local prefs, so
   /// the owner re-reads its values.
   static void onRestore(FutureOr<void> Function() fn) => _reloaders.add(fn);
+
+  /// Stop reloading [fn] (a screen that registered it went away).
+  static void offRestore(FutureOr<void> Function() fn) =>
+      _reloaders.remove(fn);
 
   /// A synced preference just changed locally → upload soon.
   static void touch() {
@@ -65,6 +83,8 @@ class AccountPrefs {
         out[k] = {'t': 'd', 'v': v};
       } else if (v is String) {
         out[k] = {'t': 's', 'v': v};
+      } else if (v is List) {
+        out[k] = {'t': 'l', 'v': v.map((e) => e.toString()).toList()};
       }
     }
     return out;
@@ -101,10 +121,15 @@ class AccountPrefs {
                 if (v is num) await p.setDouble(k, v.toDouble());
               case 's':
                 if (v is String) await p.setString(k, v);
+              case 'l':
+                if (v is List) {
+                  await p.setStringList(
+                      k, v.map((e) => e.toString()).toList());
+                }
             }
           }
           await p.setInt(_kRev, remote.rev);
-          for (final fn in _reloaders) {
+          for (final fn in List.of(_reloaders)) {
             try {
               await fn();
             } catch (_) {}

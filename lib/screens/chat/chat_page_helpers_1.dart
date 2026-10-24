@@ -750,7 +750,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
         convKey: _convKey,
         title: _isGroup ? widget.groupTitle : widget.friendName,
         apiBase: _apiBase,
-        bonded: _canHarmony,
+        bonded: _bondedHere,
       );
 
   Future<void> _saveMessagesCache() async {

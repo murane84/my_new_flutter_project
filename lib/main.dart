@@ -42,6 +42,7 @@ import 'screens/token_helper.dart' show warmMediaAuth;
 import 'state/playback_state.dart' show providerContainer;
 import 'services/web_update_checker.dart';
 import 'utils/readable.dart';
+import 'utils/chat_background.dart' show loadChatBackground;
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 bool _spaceFullHooked = false;
@@ -180,6 +181,11 @@ Future<void> _bootstrapServices() {
     try {
       await initAudioService();
     } catch (_) {/* never block launch on the media session */}
+    // Saved chat wallpapers, before any chat paints (otherwise a chat shows
+    // the built-in default for a beat, then swaps to the chosen one).
+    try {
+      await loadChatBackground();
+    } catch (_) {}
     try {
       await initNotifications();
     } catch (_) {}

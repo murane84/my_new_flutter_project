@@ -241,6 +241,9 @@ extension _HomePageHelpers2 on HomePageState {
           convKey: chatConvKey(
               friendId: int.tryParse(_activeFriendId ?? '') ?? 0),
           title: name,
+          bonded:
+              _spaceWithFriend(int.tryParse(_activeFriendId ?? '') ?? -1) !=
+                  null,
         );
     void search() => chatSearchRequest.value++;
     // Phones: the name + last-seen need the room, so only the two most-used

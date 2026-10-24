@@ -561,6 +561,8 @@ class _ChatPageState extends State<ChatPage>
   // natural default in the picker.
   List<Map<String, dynamic>> _mySpaces = const [];
   bool get _canHarmony => _mySpaces.isNotEmpty;
+  // This DM is with one of my bonded partners (wallpaper's smart default).
+  bool get _bondedHere => !_isGroup && _defaultKeepSpaceId != null;
 
   // Ambient quick-stars: hidden while reading/scrolling, revealed by a genuine
   // tap for a few seconds, then they gently dissolve. Driven by a notifier so
@@ -579,6 +581,11 @@ class _ChatPageState extends State<ChatPage>
           .where((s) => (s['status'] ?? 'active').toString() == 'active')
           .toList();
       if (mounted) setState(() => _mySpaces = bonds);
+      // Remember whether this DM is with my bonded partner, so its wallpaper
+      // (Motif by default) paints right on the first frame next time.
+      if (mounted && !_isGroup) {
+        noteChatBonded(_convKey, _defaultKeepSpaceId != null);
+      }
       _bondRituals();
     } catch (_) {
       // Leave _mySpaces empty — the Harmony actions just won't show.
@@ -5039,7 +5046,7 @@ class _ChatPageState extends State<ChatPage>
     // the same colour reads well in both light and dark mode.
     final bool customBubbles = bubbleCustomEnabled;
     final bool onPhoto = chatBackgroundSmart(_convKey,
-            isGroup: _isGroup, bonded: _canHarmony)
+            isGroup: _isGroup, bonded: _bondedHere)
         .isPhoto;
     final Color sentBubble = customBubbles
         ? bubbleSentColor
@@ -6384,7 +6391,7 @@ class _ChatPageState extends State<ChatPage>
                     valueListenable: chatBgRevision,
                     builder: (ctx, _, _) {
                       final bg = chatBackgroundSmart(_convKey,
-                          isGroup: _isGroup, bonded: _canHarmony);
+                          isGroup: _isGroup, bonded: _bondedHere);
                       if (bg.isPhoto) {
                         return _chatPhotoWallpaper(bg, isDark);
                       }

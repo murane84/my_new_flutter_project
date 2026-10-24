@@ -107,6 +107,24 @@ const String _kApplyAll = 'chat_bg_apply_all_v1';
 // chat gets a smart default by kind (see [chatBackgroundSmart]).
 const String _kAllChosen = 'chat_bg_all_chosen_v1';
 bool _allChosen = false;
+// DMs known to be with a bonded partner (they start on the Motif). Remembered
+// so the right wallpaper paints on the FIRST frame, not after the Spaces load.
+const String _kBondedKeys = 'chat_bg_bonded_keys_v1';
+Set<String> _bondedKeys = {};
+
+/// Tell the wallpaper whether this DM is with a bonded partner (from the
+/// chat, once its Spaces are known). Persisted; repaints only on a change.
+Future<void> noteChatBonded(String convKey, bool bonded) async {
+  if (convKey.isEmpty || convKey.startsWith('g')) return;
+  final changed =
+      bonded ? _bondedKeys.add(convKey) : _bondedKeys.remove(convKey);
+  if (!changed) return;
+  chatBgRevision.value++;
+  try {
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList(_kBondedKeys, _bondedKeys.toList());
+  } catch (_) {}
+}
 
 // Remembered "Apply to all chats" choice so picking a wallpaper (e.g. from the
 // gallery) keeps applying to every DM once the user has chosen that, instead
@@ -144,7 +162,11 @@ ChatBg chatBackgroundSmart(String convKey,
   final o = _overrides[convKey];
   if (o != null) return o;
   if (_allChosen) return _all;
-  if (bonded) return const ChatBg('motif', null);
+  // "Bonded" is about THIS DM's person — never a group, and never just
+  // "I have a Space with someone".
+  if (!isGroup && (bonded || _bondedKeys.contains(convKey))) {
+    return const ChatBg('motif', null);
+  }
   if (isGroup) return const ChatBg('watermark', null);
   return _all;
 }
@@ -155,7 +177,13 @@ ChatBg get chatBackgroundAll => _all;
 /// Whether a chat has its own wallpaper distinct from the all-chats default.
 bool hasChatOverride(String convKey) => _overrides.containsKey(convKey);
 
-Future<void> loadChatBackground() async {
+Future<void>? _loading;
+
+/// Load the saved wallpapers once (memoised): the app bootstrap awaits it so
+/// the first chat frame already has the right one; later calls reuse it.
+Future<void> loadChatBackground() => _loading ??= _loadChatBackground();
+
+Future<void> _loadChatBackground() async {
   try {
     final p = await SharedPreferences.getInstance();
     // One-time migration: an existing single global choice becomes the
@@ -180,6 +208,7 @@ Future<void> loadChatBackground() async {
       });
     }
     _applyAllPref = p.getBool(_kApplyAll) ?? true;
+    _bondedKeys = (p.getStringList(_kBondedKeys) ?? const []).toSet();
     // Existing users who already picked something non-default keep it.
     _allChosen = p.getBool(_kAllChosen) ?? (_all.mode != 'default');
     chatBackground.value = _all;

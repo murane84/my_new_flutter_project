@@ -1446,6 +1446,54 @@ class ApiService {
     }
   }
 
+  /// Quick status ("free" | "busy" | "driving" | "sleeping" | null to
+  /// clear). Returns the saved status map ({status, expires_at}) or null.
+  Future<Map<String, dynamic>?> setQuickStatus(String? status) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.put(
+        Uri.parse('${await _baseUrl}/users/me/quick-status'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'status': status}),
+      );
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
+      final data = jsonDecode(resp.body);
+      final st = data is Map ? data['status'] : null;
+      return st is Map ? Map<String, dynamic>.from(st) : <String, dynamic>{};
+    } catch (e) {
+      _logger.w('setQuickStatus failed: $e');
+      return null;
+    }
+  }
+
+  /// [mine] → my own status; otherwise every friend's live one.
+  Future<List<Map<String, dynamic>>> quickStatuses({bool mine = false}) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return [];
+      final resp = await http.get(
+        Uri.parse(mine
+            ? '${await _baseUrl}/users/me/quick-status'
+            : '${await _baseUrl}/users/friends/quick-statuses'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return [];
+      final data = jsonDecode(resp.body);
+      if (data is! Map) return [];
+      final raw = mine ? [data['status']] : data['statuses'];
+      return raw is List
+          ? raw
+              .whereType<Map>()
+              .map((m) => Map<String, dynamic>.from(m))
+              .toList()
+          : [];
+    } catch (e) {
+      _logger.w('quickStatuses failed: $e');
+      return [];
+    }
+  }
+
   /// Friend ids I'm still waiting to hear are online.
   Future<Set<int>> onlineWatches() async {
     try {

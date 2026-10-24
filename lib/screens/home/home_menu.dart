@@ -37,6 +37,16 @@ extension _HomeMenu on HomePageState {
           label: _isTogether ? 'Together ✓' : 'Aluta Together',
           onTap: _openTogether,
         ),
+        // Quick status — "Free to talk" / Busy / Driving / Sleeping, ends itself.
+        GenieMenuEntry(
+          icon: Icons.circle_notifications_rounded,
+          label: switch (QuickStatus.instance.mine) {
+            null => 'Set a status',
+            final m => '${QuickStatus.emoji(m.status)} '
+                '${QuickStatus.label(m.status)}',
+          },
+          onTap: _showQuickStatusSheet,
+        ),
         GenieMenuEntry(
           icon: Icons.groups_rounded,
           label: 'Groups',

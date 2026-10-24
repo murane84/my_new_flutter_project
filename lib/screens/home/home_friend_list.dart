@@ -1407,6 +1407,25 @@ extension _HomeFriendListView on HomePageState {
     );
   }
 
+  /// "📞 Free to talk" — a tiny pill next to a friend's name.
+  Widget _quickStatusChip(String st, ColorScheme scheme) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+        decoration: BoxDecoration(
+          color: (st == 'free' ? Colors.green : scheme.onSurfaceVariant)
+              .withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          '${QuickStatus.emoji(st)} ${QuickStatus.label(st)}',
+          maxLines: 1,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: st == 'free' ? Colors.green.shade700 : scheme.onSurfaceVariant,
+          ),
+        ),
+      );
+
   Widget _buildFriendTile(
       Map<String, dynamic> f, Color textColor, ColorScheme scheme) {
     // Show your saved phone-book name for this number when you have it saved,
@@ -1490,16 +1509,27 @@ extension _HomeFriendListView on HomePageState {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    name,
-                    style: TextStyle(
-                      fontWeight:
-                          hasUnread ? FontWeight.bold : FontWeight.w500,
-                      fontSize: 14,
-                      color: textColor,
+                  Row(children: [
+                    Flexible(
+                      child: Text(
+                        name,
+                        style: TextStyle(
+                          fontWeight:
+                              hasUnread ? FontWeight.bold : FontWeight.w500,
+                          fontSize: 14,
+                          color: textColor,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                    // Their quick status ("📞 Free to talk"), while it lasts.
+                    if (QuickStatus.instance
+                            .statusOf((f['id'] as num).toInt()) case final st?)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 6),
+                        child: _quickStatusChip(st, scheme),
+                      ),
+                  ]),
                   const SizedBox(height: 2),
                   _tileSubtitle(
                       scheme, textColor, npLine, isTyping, lastMsg, hasUnread),

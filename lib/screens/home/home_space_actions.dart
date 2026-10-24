@@ -363,6 +363,98 @@ extension _HomeSpaceActions on HomePageState {
   }
 
   /// A friend row's long-press quick sheet: pin as Our Space, call, or open chat.
+  /// Pick a quick status for my circle: Free to talk · Busy · Driving ·
+  /// Sleeping (1 h; sleeping 8 h), or clear it.
+  void _showQuickStatusSheet() {
+    final scheme = Theme.of(context).colorScheme;
+    final cur = QuickStatus.instance.mine;
+    String left(DateTime until) {
+      final m = until.difference(DateTime.now()).inMinutes;
+      return m >= 60 ? '${(m / 60).round()} h left' : '$m min left';
+    }
+
+    Future<void> pick(BuildContext ctx, String? st) async {
+      Navigator.pop(ctx);
+      HapticFeedback.selectionClick();
+      final ok = await QuickStatus.instance.setMine(st);
+      if (!mounted) return;
+      showToast(
+          context,
+          !ok
+              ? "Couldn't update your status — try again"
+              : st == null
+                  ? 'Status cleared'
+                  : '${QuickStatus.emoji(st)} ${QuickStatus.label(st)} — '
+                      'your circle can see it for '
+                      '${st == 'sleeping' ? '8 hours' : 'an hour'}',
+          type: ok ? ToastType.success : ToastType.error);
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: scheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text('Let your circle know',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      color: scheme.onSurface)),
+              const SizedBox(height: 2),
+              Text(
+                  cur == null
+                      ? 'It switches itself off — no need to remember'
+                      : 'Now: ${QuickStatus.label(cur.status)} · ${left(cur.until)}',
+                  style: TextStyle(
+                      fontSize: 12, color: scheme.onSurfaceVariant)),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final st in QuickStatus.kinds)
+                    ChoiceChip(
+                      selected: cur?.status == st,
+                      label: Text(
+                          '${QuickStatus.emoji(st)}  ${QuickStatus.label(st)}'),
+                      onSelected: (_) => pick(ctx, st),
+                    ),
+                ],
+              ),
+              if (cur != null) ...[
+                const SizedBox(height: 6),
+                TextButton.icon(
+                  onPressed: () => pick(ctx, null),
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  label: const Text('Clear status'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _toggleOnlineWatch(int fid, String first) async {
     final res = await OnlineWatchList.instance.toggle(fid);
     if (!mounted) return;

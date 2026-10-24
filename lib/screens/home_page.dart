@@ -84,6 +84,7 @@ import 'spinning_vinyl_ring.dart';
 import '../services/connected_contacts_service.dart';
 import '../services/now_playing_presence.dart';
 import '../services/online_watch.dart';
+import '../services/quick_status.dart';
 import '../services/live_rooms_registry.dart';
 import '../services/telecom_service.dart';
 import '../utils/file_bytes.dart';
@@ -478,6 +479,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     NowPlayingPresence.instance.startReceiving(poll: kIsWeb);
     // "Tell me when they're online" watches I'm still waiting on.
     OnlineWatchList.instance.load();
+    // Quick statuses ("Free to talk" …): mine + my circle's.
+    QuickStatus.instance.addListener(_onPresenceChanged);
+    QuickStatus.instance.load();
     // Seed any live "Listening Rooms" a friend is already hosting (events keep
     // this current afterwards).
     LiveRoomsRegistry.instance.loadSnapshot();
@@ -542,6 +546,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     ContactNames.instance.revision.removeListener(_onContactsChanged);
     playlistDrawerBus.isOpen.removeListener(_onPlaylistDrawerToggled);
     NowPlayingPresence.instance.removeListener(_onPresenceChanged);
+    QuickStatus.instance.removeListener(_onPresenceChanged);
     NowPlayingPresence.instance.stopReceiving();
     for (final t in _typingTimers.values) {
       t.cancel();
@@ -1937,6 +1942,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
     // A friend I asked about just came online (one-shot watch, server
     // online_watch.py). Phones also get the push; this is the in-app line.
+    if (type == 'friend_status') {
+      final d = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      QuickStatus.instance.applyEvent(d);
+      return;
+    }
     if (type == 'friend_came_online') {
       final d = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
       final fid = (d['user_id'] as num?)?.toInt();
@@ -3246,20 +3256,26 @@ class HomePageState extends rp.ConsumerState<HomePage>
                   // When they're playing music right now, that's the status:
                   // "🎧 Listening to …" in the theme colour — tap to tune in.
                   ListenableBuilder(
-                    listenable: NowPlayingPresence.instance,
+                    listenable: Listenable.merge(
+                        [NowPlayingPresence.instance, QuickStatus.instance]),
                     builder: (context, _) {
                       final fid = int.tryParse(_activeFriendId ?? '') ?? -1;
                       final np = NowPlayingPresence.instance.trackFor(fid);
                       final t = (np?['title'] ?? '').toString().trim();
                       final a = (np?['artist'] ?? '').toString().trim();
                       final listening = np != null && t.isNotEmpty;
+                      // Their quick status leads ("📞 Free to talk · Online").
+                      final qs = QuickStatus.instance.lineFor(fid);
+                      final base = _activeFriendOnline == true
+                          ? 'Online'
+                          : _activeFriendLastSeen?.isNotEmpty == true
+                              ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
+                              : 'Offline';
                       final text = listening
                           ? '🎧 Listening to $t${a.isEmpty ? '' : ' — $a'}'
-                          : _activeFriendOnline == true
-                              ? 'Online'
-                              : _activeFriendLastSeen?.isNotEmpty == true
-                                  ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
-                                  : 'Offline';
+                          : qs.isEmpty
+                              ? base
+                              : '$qs · $base';
                       final line = SizedBox(
                         height: 15,
                         child: _ScrollingText(

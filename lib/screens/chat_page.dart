@@ -39,6 +39,7 @@ import 'live_session_screen.dart';
 import 'gif_picker.dart';
 import '../services/call_service.dart';
 import '../services/online_watch.dart';
+import '../services/quick_status.dart';
 import '../services/contact_names.dart';
 import '../services/web_paste.dart' as webpaste;
 import '../utils/net_image.dart';
@@ -6753,11 +6754,18 @@ class _ChatPageState extends State<ChatPage>
                 Text(
                   _isGroup
                       ? '${widget.memberCount} members'
-                      : _isFriendOnline
-                          ? 'online'
-                          : _lastSeen.isNotEmpty
-                              ? 'last seen ${formatLastSeen(_lastSeen)}'
-                              : 'offline',
+                      : [
+                          // "📞 Free to talk · online"
+                          if (QuickStatus.instance
+                              .lineFor(widget.friendId)
+                              .isNotEmpty)
+                            QuickStatus.instance.lineFor(widget.friendId),
+                          _isFriendOnline
+                              ? 'online'
+                              : _lastSeen.isNotEmpty
+                                  ? 'last seen ${formatLastSeen(_lastSeen)}'
+                                  : 'offline',
+                        ].join(' · '),
                   style: TextStyle(
                     fontSize: 11,
                     color: (!_isGroup && _isFriendOnline)

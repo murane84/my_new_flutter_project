@@ -1054,3 +1054,14 @@ class OnlineWatch(Base):
     target_id = Column(Integer, index=True, nullable=False)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class QuickStatus(Base):
+    """A short, self-expiring status ("Free to talk", "Busy", "Driving",
+    "Sleeping"). One row per user; expired rows are simply ignored.
+    Auto-created by create_all; no ALTER."""
+    __tablename__ = "quick_statuses"
+
+    user_id = Column(Integer, primary_key=True)
+    status = Column(String, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)

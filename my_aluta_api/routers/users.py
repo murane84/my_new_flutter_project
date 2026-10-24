@@ -665,3 +665,86 @@ def unwatch_online(friend_id: int, db: Session = Depends(get_db),
         OnlineWatch.target_id == friend_id).delete()
     db.commit()
     return {"watching": False}
+
+
+# ── Quick status ("Free to talk" · Busy · Driving · Sleeping) ────────────────
+QUICK_STATUSES = {"free": 60, "busy": 60, "driving": 60, "sleeping": 8 * 60}
+
+
+def _friend_id_list(db: Session, uid: int) -> list:
+    rows = db.query(Friend).filter(
+        (Friend.user_id == uid) | (Friend.friend_id == uid)).all()
+    return list({int(r.friend_id if r.user_id == uid else r.user_id)
+                 for r in rows} - {uid})
+
+
+def _status_out(row) -> dict | None:
+    if row is None:
+        return None
+    exp = row.expires_at
+    if exp is not None and exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    if exp is None or exp <= datetime.now(timezone.utc):
+        return None
+    return {"user_id": int(row.user_id), "status": row.status,
+            "expires_at": exp.isoformat()}
+
+
+@router.get("/users/me/quick-status", tags=["Users"])
+def my_quick_status(db: Session = Depends(get_db),
+                    current_user: User = Depends(get_current_user)):
+    from models import QuickStatus
+    row = db.query(QuickStatus).filter(
+        QuickStatus.user_id == current_user.id).first()
+    return {"status": _status_out(row)}
+
+
+@router.put("/users/me/quick-status", tags=["Users"])
+def set_quick_status(body: dict, db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_user)):
+    """{"status": "free"|"busy"|"driving"|"sleeping"|null}. Expires on its
+    own (1 h; sleeping 8 h). Friends get a live `friend_status` event."""
+    from datetime import timedelta
+    from models import QuickStatus
+    from websocket_manager import safe_broadcast_users
+    status_val = (body or {}).get("status")
+    row = db.query(QuickStatus).filter(
+        QuickStatus.user_id == current_user.id).first()
+    if not status_val:
+        if row is not None:
+            db.delete(row)
+            db.commit()
+        out = None
+    else:
+        if status_val not in QUICK_STATUSES:
+            raise HTTPException(status_code=400, detail="Unknown status")
+        exp = datetime.now(timezone.utc) + timedelta(
+            minutes=QUICK_STATUSES[status_val])
+        if row is None:
+            row = QuickStatus(user_id=current_user.id, status=status_val,
+                              expires_at=exp)
+            db.add(row)
+        else:
+            row.status = status_val
+            row.expires_at = exp
+        db.commit()
+        out = _status_out(row)
+    try:
+        safe_broadcast_users(_friend_id_list(db, current_user.id), {
+            "type": "friend_status",
+            "data": out or {"user_id": current_user.id, "status": None},
+        })
+    except Exception:
+        pass
+    return {"status": out}
+
+
+@router.get("/users/friends/quick-statuses", tags=["Users"])
+def friends_quick_statuses(db: Session = Depends(get_db),
+                           current_user: User = Depends(get_current_user)):
+    from models import QuickStatus
+    ids = _friend_id_list(db, current_user.id)
+    if not ids:
+        return {"statuses": []}
+    rows = db.query(QuickStatus).filter(QuickStatus.user_id.in_(ids)).all()
+    return {"statuses": [o for o in (_status_out(r) for r in rows) if o]}

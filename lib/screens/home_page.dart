@@ -662,6 +662,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           if (_maybeMusicWelcome(away)) return;
           // A music nudge that waited for you to come back.
           if (_onSongNudge() || _maybeWeeklyRecap()) return;
+          if (away >= const Duration(minutes: 30)) _maybeReconnectNudge();
           // Long time away → wait for the reconnect refresh, then summarise.
           if (away >= const Duration(hours: 3)) {
             Future.delayed(const Duration(milliseconds: 2600),
@@ -2251,6 +2252,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
         _serverReachable = true;
         _isLoadingFriends = false;
       });
+      // Sunday's gentle "it's been a while" card, once the list is fresh.
+      if (!_reconnectChecked) {
+        _reconnectChecked = true;
+        Future.delayed(const Duration(seconds: 6), _maybeReconnectNudge);
+      }
       // Mirror the authoritative unread counts + online presence into Riverpod
       // (the badges and friend-list dots/count now read from these providers).
       final counts = <int, int>{};
@@ -2475,6 +2481,99 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void _onPresenceChanged() {
     if (mounted) setState(() {});
     _maybeBothListening();
+  }
+
+  // ── "It's been a while" — gentle reconnect 🌱 ─────────────────────────────
+  // Sundays only, at most ONE card a week: the friend who's gone quiet the
+  // longest (2+ weeks, but not a stale contact from months ago). "Not now"
+  // twice for a person → never again for them. No streaks, no pressure.
+  bool _reconnectChecked = false;
+
+  Future<void> _maybeReconnectNudge() async {
+    if (!mounted || !_appForeground || WelcomeTour.showing) return;
+    if (!MomentPrefs.instance.welcomeCards.value || _momentCooling) return;
+    if (ref.read(liveSessionProvider).active) return;
+    final now = DateTime.now();
+    if (now.weekday != DateTime.sunday || now.hour < 9) return;
+    final SharedPreferences p;
+    try {
+      p = await SharedPreferences.getInstance();
+    } catch (_) {
+      return;
+    }
+    final week = '${now.year}-${now.difference(DateTime(now.year)).inDays ~/ 7}';
+    if (p.getString('reconnect_week') == week) return;
+    Map<String, dynamic>? pick;
+    var pickDays = 0;
+    for (final f in _allFriends) {
+      final fid = (f['id'] as num?)?.toInt();
+      final ts = (f['last_timestamp'] ?? '').toString();
+      if (fid == null || ts.isEmpty) continue;
+      if ((p.getInt('reconnect_no_$fid') ?? 0) >= 2) continue;
+      final days = now.difference(parseServerTime(ts)).inDays;
+      if (days < 14 || days > 120) continue;
+      if (days > pickDays) {
+        pick = f;
+        pickDays = days;
+      }
+    }
+    if (pick == null || !mounted) return;
+    final f = pick;
+    final fid = (f['id'] as num).toInt();
+    await p.setString('reconnect_week', week);
+    // A song they shared before, from this device's copy of the chat.
+    String? song;
+    try {
+      final raw = p.getString('chat_cache_${_myUserId ?? 'x'}_$fid');
+      if (raw != null) {
+        final list = jsonDecode(raw);
+        if (list is List) {
+          for (final m in list.whereType<Map>()) {
+            if ((m['message_type'] ?? '') != 'song') continue;
+            final t = ((m['content'] ?? '').toString().trim().isNotEmpty
+                    ? m['content']
+                    : m['media_name'] ?? '')
+                .toString()
+                .replaceAll(RegExp(r'\.(mp3|m4a|aac|wav|flac|ogg|opus)$',
+                    caseSensitive: false), '')
+                .trim();
+            if (t.isNotEmpty && !t.startsWith('>')) {
+              song = t;
+              break;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    final name = _contactDisplayName(
+        f['phone']?.toString(), (f['username'] ?? 'Friend').toString());
+    final first = name.trim().split(RegExp(r'\s+')).first;
+    final weeks = pickDays ~/ 7;
+    final quiet = weeks >= 2 ? '$weeks weeks quiet' : 'a while quiet';
+    _lastMomentAt = DateTime.now();
+    Future<void> notNow() async {
+      try {
+        await p.setInt(
+            'reconnect_no_$fid', (p.getInt('reconnect_no_$fid') ?? 0) + 1);
+      } catch (_) {}
+    }
+
+    showMomentCard(
+      context,
+      title: '$first — $quiet 🌱',
+      subtitle: song == null
+          ? 'Send $first a song?'
+          : 'You two once shared “$song” — send $first a song?',
+      leading: Icons.spa_rounded,
+      hold: const Duration(seconds: 12),
+      onIgnored: notNow,
+      actions: [
+        MomentAction(Icons.music_note_rounded, 'Send a song', () => openChat(f),
+            primary: true),
+        MomentAction(Icons.close_rounded, 'Not now', notNow),
+      ],
+    );
   }
 
   /// "Belyner is online now 🟢" — the watch I set fired (once, then ends).

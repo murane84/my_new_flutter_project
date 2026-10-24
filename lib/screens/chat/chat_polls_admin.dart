@@ -299,8 +299,12 @@ extension _ChatPollsAdmin on _ChatPageState {
                                 type: ToastType.info);
                             return;
                           }
-                          final picked =
-                              await _pickJamSongs(ctx, songTitles);
+                          final picked = await _pickJamSongs(
+                              ctx, songTitles,
+                              initial: opts
+                                  .map((c) => c.text.trim())
+                                  .where((t) => t.isNotEmpty)
+                                  .toList());
                           if (picked == null || picked.length < 2) return;
                           setS(() {
                             jam = true;
@@ -500,57 +504,334 @@ extension _ChatPollsAdmin on _ChatPageState {
     return out;
   }
 
-  Future<List<String>?> _pickJamSongs(
-      BuildContext ctx, List<String> titles) async {
-    final chosen = <String>{};
+  /// The jam song picker: a search pill, each song as a soft card with its
+  /// own colour disc (title + artist split out), tap to pick — picks get a
+  /// numbered badge in the order chosen — and a sticky "Add N songs" button
+  /// that says what's missing instead of greying out. [initial] = songs
+  /// already in the jam (pre-picked).
+  Future<List<String>?> _pickJamSongs(BuildContext ctx, List<String> titles,
+      {List<String> initial = const []}) async {
+    final scheme = Theme.of(ctx).colorScheme;
+    final isDark = Theme.of(ctx).brightness == Brightness.dark;
+    final chosen = <String>[
+      for (final t in initial)
+        if (titles.contains(t)) t,
+    ];
+    var query = '';
+    var nudge = false;
+
+    // File-name titles → (title, artist). "Artist - Title" (spaced dash) is
+    // the common tag style; "Title-Artist" (tight dash, e.g. "Chagua
+    // Moja-Fid Q") is the other. A side carrying ft / feat / x / & / a comma
+    // is the artist either way.
+    ({String title, String artist}) split(String raw) {
+      final spaced = RegExp(r'^(.+?)\s+[-–—]\s+(.+)$').firstMatch(raw);
+      final tight = spaced ?? RegExp(r'^(.+?)\s*[-–—]\s*(.+)$').firstMatch(raw);
+      if (tight == null) return (title: raw, artist: '');
+      final a = tight.group(1)!.trim(), b = tight.group(2)!.trim();
+      final feat = RegExp(r'(\bft\.?\b|\bfeat\.?\b|\s[x&]\s|,)', caseSensitive: false);
+      final aIsArtist = feat.hasMatch(a) && !feat.hasMatch(b);
+      final bIsArtist = feat.hasMatch(b) && !feat.hasMatch(a);
+      if (aIsArtist) return (title: b, artist: a);
+      if (bIsArtist) return (title: a, artist: b);
+      return spaced != null ? (title: b, artist: a) : (title: a, artist: b);
+    }
+
+    Color discColor(String t) {
+      final h = t.toLowerCase().codeUnits.fold<int>(7, (a, c) => (a * 31 + c) & 0x7fffffff);
+      return HSLColor.fromAHSL(1, (h % 360).toDouble(), 0.55, isDark ? 0.42 : 0.55)
+          .toColor();
+    }
+
     return showModalBottomSheet<List<String>>(
       context: ctx,
       isScrollControlled: true,
-      builder: (c) => StatefulBuilder(
-        builder: (c, setC) => SafeArea(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-                maxHeight: MediaQuery.sizeOf(c).height * 0.7),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 14, 8, 4),
-                child: Row(children: [
-                  Expanded(
-                    child: Text('Pick 2–12 songs (${chosen.length})',
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w800)),
-                  ),
-                  TextButton(
-                    onPressed: chosen.length >= 2
-                        ? () => Navigator.pop(
-                            c, titles.where(chosen.contains).toList())
-                        : null,
-                    child: const Text('Use'),
-                  ),
-                ]),
-              ),
-              Flexible(
-                child: ListView(shrinkWrap: true, children: [
-                  for (final t in titles)
-                    CheckboxListTile(
-                      dense: true,
-                      value: chosen.contains(t),
-                      title: Text(t, maxLines: 1, overflow: TextOverflow.ellipsis),
-                      secondary: const Icon(Icons.music_note_rounded),
-                      onChanged: (v) => setC(() {
-                        if (v == true && chosen.length < 12) {
-                          chosen.add(t);
-                        } else {
-                          chosen.remove(t);
-                        }
-                      }),
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (c) => StatefulBuilder(builder: (c, setC) {
+        final q = query.trim().toLowerCase();
+        final shown = q.isEmpty
+            ? titles
+            : titles.where((t) => t.toLowerCase().contains(q)).toList();
+        final n = chosen.length;
+        final ready = n >= 2;
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(c).bottom),
+          child: SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(c).height * 0.82),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const SizedBox(height: 8),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: scheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2)),
+                ),
+                // Header: the jam disc + title + live count.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 10),
+                  child: Row(children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(colors: [
+                          scheme.primary,
+                          Color.lerp(scheme.primary, Colors.white, 0.3)!,
+                        ]),
+                        boxShadow: [
+                          BoxShadow(
+                              color: scheme.primary.withValues(alpha: 0.35),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4)),
+                        ],
+                      ),
+                      child: const Icon(Icons.queue_music_rounded,
+                          color: Colors.white, size: 22),
                     ),
-                ]),
-              ),
-            ]),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Pick the jam songs',
+                              style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                  color: scheme.onSurface)),
+                          const SizedBox(height: 2),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            child: Text(
+                              n == 0
+                                  ? 'Choose 2 to 12 — the group votes'
+                                  : '$n picked · ${n < 2 ? 'one more to go' : 'tap more or add'}',
+                              key: ValueKey(n),
+                              style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: n >= 2
+                                      ? scheme.primary
+                                      : scheme.onSurfaceVariant),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (n > 0)
+                      TextButton(
+                        onPressed: () => setC(chosen.clear),
+                        child: const Text('Clear'),
+                      ),
+                  ]),
+                ),
+                // Search pill (only worth it on a longer list).
+                if (titles.length > 6)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: TextField(
+                      onChanged: (v) => setC(() => query = v),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText: 'Search your songs',
+                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        filled: true,
+                        fillColor: scheme.surfaceContainerHighest
+                            .withValues(alpha: 0.6),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: BorderSide.none),
+                      ),
+                    ),
+                  ),
+                Flexible(
+                  child: shown.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.all(28),
+                          child: Text('No song matches “$query”',
+                              style:
+                                  TextStyle(color: scheme.onSurfaceVariant)),
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+                          itemCount: shown.length,
+                          itemBuilder: (_, i) {
+                            final t = shown[i];
+                            final pos = chosen.indexOf(t);
+                            final on = pos >= 0;
+                            final parts = split(t);
+                            final disc = discColor(t);
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 3),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(16),
+                                  onTap: () => setC(() {
+                                    nudge = false;
+                                    if (on) {
+                                      chosen.remove(t);
+                                    } else if (chosen.length < 12) {
+                                      chosen.add(t);
+                                      HapticFeedback.selectionClick();
+                                    }
+                                  }),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 170),
+                                    padding: const EdgeInsets.fromLTRB(
+                                        10, 9, 12, 9),
+                                    decoration: BoxDecoration(
+                                      color: on
+                                          ? scheme.primary.withValues(
+                                              alpha: isDark ? 0.18 : 0.08)
+                                          : scheme.surfaceContainerHighest
+                                              .withValues(alpha: 0.35),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: on
+                                            ? scheme.primary
+                                                .withValues(alpha: 0.65)
+                                            : Colors.transparent,
+                                        width: 1.4,
+                                      ),
+                                    ),
+                                    child: Row(children: [
+                                      // A little vinyl in the song's colour.
+                                      Container(
+                                        width: 38,
+                                        height: 38,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          gradient: RadialGradient(colors: [
+                                            Colors.white
+                                                .withValues(alpha: 0.9),
+                                            disc,
+                                            Color.lerp(
+                                                disc, Colors.black, 0.35)!,
+                                          ], stops: const [0.12, 0.2, 1]),
+                                        ),
+                                        child: Icon(Icons.music_note_rounded,
+                                            size: 16,
+                                            color: Colors.white
+                                                .withValues(alpha: 0.9)),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(parts.title,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                    fontSize: 14.5,
+                                                    fontWeight: on
+                                                        ? FontWeight.w700
+                                                        : FontWeight.w600,
+                                                    color: scheme.onSurface)),
+                                            if (parts.artist.isNotEmpty)
+                                              Text(parts.artist,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: scheme
+                                                          .onSurfaceVariant)),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // Pick order badge / empty ring.
+                                      AnimatedScale(
+                                        scale: on ? 1 : 0.9,
+                                        duration:
+                                            const Duration(milliseconds: 160),
+                                        curve: Curves.easeOutBack,
+                                        child: Container(
+                                          width: 26,
+                                          height: 26,
+                                          alignment: Alignment.center,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: on
+                                                ? scheme.primary
+                                                : Colors.transparent,
+                                            border: Border.all(
+                                                color: on
+                                                    ? scheme.primary
+                                                    : scheme.outlineVariant,
+                                                width: 1.6),
+                                          ),
+                                          child: on
+                                              ? Text('${pos + 1}',
+                                                  style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w800))
+                                              : null,
+                                        ),
+                                      ),
+                                    ]),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+                // Sticky action: always tappable, says what's missing.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    if (nudge && !ready)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                            n == 0
+                                ? 'Pick at least two songs'
+                                : 'Pick one more song',
+                            style: TextStyle(
+                                color: scheme.error, fontSize: 12.5)),
+                      ),
+                    FilledButton.icon(
+                      onPressed: () {
+                        if (!ready) {
+                          HapticFeedback.lightImpact();
+                          setC(() => nudge = true);
+                          return;
+                        }
+                        Navigator.pop(c, List<String>.of(chosen));
+                      },
+                      icon: const Icon(Icons.playlist_add_check_rounded,
+                          size: 20),
+                      label: Text(ready
+                          ? 'Add $n songs to the jam'
+                          : n == 1
+                              ? 'Pick one more'
+                              : 'Pick 2 songs'),
+                      style: FilledButton.styleFrom(
+                          minimumSize: const Size.fromHeight(48),
+                          backgroundColor: ready
+                              ? scheme.primary
+                              : scheme.primary.withValues(alpha: 0.45),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16))),
+                    ),
+                  ]),
+                ),
+              ]),
+            ),
           ),
-        ),
-      ),
+        );
+      }),
     );
   }
 

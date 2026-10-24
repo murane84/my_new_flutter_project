@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -9,7 +10,12 @@ import 'chat_page.dart';
 /// recent matching messages grouped by nothing fancy — most-recent first — and
 /// tap one to open that thread and jump to the message.
 class MessageSearchScreen extends StatefulWidget {
-  const MessageSearchScreen({super.key});
+  /// Home passes this so a tapped hit opens in the normal chat panel (same
+  /// header as the chat list) and lands with the jump rings. Without it the
+  /// thread is pushed as its own page.
+  final void Function(Map<String, dynamic> hit)? onOpen;
+
+  const MessageSearchScreen({super.key, this.onOpen});
 
   @override
   State<MessageSearchScreen> createState() => _MessageSearchScreenState();
@@ -69,6 +75,12 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
   }
 
   void _open(Map<String, dynamic> r) {
+    if (widget.onOpen != null) {
+      FocusScope.of(context).unfocus();
+      Navigator.of(context).pop();
+      widget.onOpen!(r);
+      return;
+    }
     final scheme = Theme.of(context).colorScheme;
     final jumpId = r['id']?.toString();
     final isGroup = r['is_group'] == true;
@@ -98,31 +110,111 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
   }
 
   @override
+  Widget _glassBar(ColorScheme scheme, bool isDark) {
+    final ink = isDark ? Colors.white : const Color(0xFF2B2829);
+    final soft = ink.withValues(alpha: 0.55);
+    final none =
+        !_loading && _lastTerm.length >= 2 && _results.isEmpty;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(26),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          height: 48,
+          padding: const EdgeInsets.only(left: 6, right: 4),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.42)
+                : Colors.white.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(
+              color: none
+                  ? scheme.error.withValues(alpha: 0.45)
+                  : scheme.primary.withValues(alpha: isDark ? 0.5 : 0.4),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: scheme.primary.withValues(alpha: 0.14),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              // Aluta signature: the logo disc leads the pill.
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(colors: [
+                    scheme.primary,
+                    Color.lerp(scheme.primary, Colors.white, 0.25)!,
+                  ]),
+                ),
+                child: const Icon(Icons.search_rounded,
+                    size: 18, color: Colors.white),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _ctrl,
+                  autofocus: true,
+                  onChanged: (v) {
+                    setState(() {}); // × appears / hides
+                    _onChanged(v);
+                  },
+                  textInputAction: TextInputAction.search,
+                  cursorColor: scheme.primary,
+                  style: TextStyle(color: ink, fontSize: 15),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    hintText: 'Search all your chats',
+                    hintStyle: TextStyle(color: soft, fontSize: 14),
+                  ),
+                ),
+              ),
+              if (_ctrl.text.isNotEmpty)
+                IconButton(
+                  tooltip: 'Clear',
+                  visualDensity: VisualDensity.compact,
+                  constraints:
+                      const BoxConstraints(minWidth: 34, minHeight: 34),
+                  icon: Icon(Icons.close_rounded, size: 20, color: ink),
+                  onPressed: () {
+                    _ctrl.clear();
+                    _run('');
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
-        title: TextField(
-          controller: _ctrl,
-          autofocus: true,
-          onChanged: _onChanged,
-          textInputAction: TextInputAction.search,
-          decoration: const InputDecoration(
-            hintText: 'Search messages…',
-            border: InputBorder.none,
-          ),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: Colors.transparent,
+        toolbarHeight: 64,
+        // Same frosted pill as the in-chat search.
+        title: Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: _glassBar(scheme, isDark),
         ),
-        actions: [
-          if (_ctrl.text.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.close_rounded),
-              onPressed: () {
-                _ctrl.clear();
-                _run('');
-              },
-            ),
-        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

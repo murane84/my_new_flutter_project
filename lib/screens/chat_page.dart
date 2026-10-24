@@ -4154,7 +4154,11 @@ class _ChatPageState extends State<ChatPage>
     var tries = 0;
     void attempt() {
       if (!mounted) return;
-      if (_msgKeys[target]?.currentContext != null) {
+      // Built → jump. Loaded but far up (not built yet) → jump anyway:
+      // _jumpToMessage walks the list to it (a search hit from home is
+      // usually old).
+      if (_msgKeys[target]?.currentContext != null ||
+          (tries >= 2 && _messages.any((m) => m['id'].toString() == target))) {
         _jumpToMessage(target);
         return;
       }

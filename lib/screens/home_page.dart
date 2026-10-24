@@ -3869,7 +3869,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
             tooltip: 'Search messages',
             icon: const Icon(Icons.search_rounded),
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => const MessageSearchScreen())),
+                builder: (_) => MessageSearchScreen(
+                      // Open in the normal chat panel + land with the rings.
+                      onOpen: (r) => _handleMessageTap({
+                        'message_id': r['id'],
+                        if (r['is_group'] == true)
+                          'conversation_id': r['conversation_id'],
+                        'group_title': r['group_title'],
+                        'friend_id': r['friend_id'],
+                        'sender_name': r['friend_name'],
+                      }),
+                    ))),
           ),
           // Single overflow menu with GROUPED submenus, so adding new actions
           // nests them under a parent instead of making the menu grow taller.

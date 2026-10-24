@@ -1,5 +1,9 @@
 part of '../chat_page.dart';
 
+/// Bumped by the host (group header: "Mama and Neema are listening now") to
+/// open the open group's jam composer.
+final ValueNotifier<int> chatJamRequest = ValueNotifier<int>(0);
+
 // ── Group admins + polls ────────────────────────────────────────────────────
 // Admins: a small accent "admin" tag beside their name on bubbles, and when
 // the group is set to admins-only (server-enforced) the composer becomes a
@@ -168,12 +172,19 @@ extension _ChatPollsAdmin on _ChatPageState {
     }
   }
 
-  Future<void> _openPollComposer() async {
+  /// Host asked (group header's "… listening now" strip) to start a jam.
+  void _onJamRequest() {
+    if (!mounted || !_isGroup) return;
+    _openPollComposer(startJam: true);
+  }
+
+  Future<void> _openPollComposer({bool startJam = false}) async {
     final scheme = Theme.of(context).colorScheme;
-    final q = TextEditingController();
+    final q = TextEditingController(
+        text: startJam ? 'What do we play next? 🎶' : '');
     final opts = [TextEditingController(), TextEditingController()];
     var multi = false;
-    var jam = false;
+    var jam = startJam;
     // Song titles I can offer for a jam (my loaded playlist / web queue).
     final songTitles = _jamSongTitles();
     final result = await showModalBottomSheet<Map<String, dynamic>>(

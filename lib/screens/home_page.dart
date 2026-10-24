@@ -3104,6 +3104,25 @@ class HomePageState extends rp.ConsumerState<HomePage>
     );
   }
 
+  /// First names (as I know them) of group members playing music right now.
+  List<String> _groupListeners(List members) {
+    final out = <String>[];
+    for (final m in members.whereType<Map>()) {
+      final id = (m['id'] as num?)?.toInt();
+      if (id == null || id == _myUserId) continue;
+      if (NowPlayingPresence.instance.trackFor(id) == null) continue;
+      final f = _allFriends.firstWhere(
+          (x) => (x['id'] as num?)?.toInt() == id,
+          orElse: () => <String, dynamic>{});
+      final name = _contactDisplayName(
+          (f['phone'] ?? m['phone'])?.toString(),
+          (m['username'] ?? f['username'] ?? '').toString());
+      final first = name.trim().split(RegExp(r'\s+')).first;
+      if (first.isNotEmpty) out.add(first);
+    }
+    return out;
+  }
+
   Widget _buildChatHeader(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final textColor = scheme.onSurface;
@@ -3154,11 +3173,44 @@ class HomePageState extends rp.ConsumerState<HomePage>
                                 fontWeight: FontWeight.bold, fontSize: 14),
                             overflow: TextOverflow.ellipsis,
                           ),
-                          Text(
-                            '${members.length} members · tap for info',
-                            style: TextStyle(
-                                fontSize: 11, color: textColor.withAlpha(130)),
-                            overflow: TextOverflow.ellipsis,
+                          // Circle "listening now": members playing music
+                          // right now (that share it with me) → tap to start
+                          // a group jam. Otherwise the member count.
+                          ListenableBuilder(
+                            listenable: NowPlayingPresence.instance,
+                            builder: (context, _) {
+                              final who = _groupListeners(members);
+                              if (who.isEmpty) {
+                                return Text(
+                                  '${members.length} members · tap for info',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: textColor.withAlpha(130)),
+                                  overflow: TextOverflow.ellipsis,
+                                );
+                              }
+                              final names = who.length == 1
+                                  ? '${who[0]} is'
+                                  : who.length == 2
+                                      ? '${who[0]} and ${who[1]} are'
+                                      : '${who[0]}, ${who[1]} +${who.length - 2} are';
+                              return GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () {
+                                  HapticFeedback.selectionClick();
+                                  chatJamRequest.value++;
+                                },
+                                child: Text(
+                                  '🎧 $names listening now · Start a jam',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: scheme.primary),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),

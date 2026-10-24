@@ -614,6 +614,7 @@ class _ChatPageState extends State<ChatPage>
     _scrollCtrl.addListener(_onScroll);
     chatSearchRequest.addListener(_onSearchRequest);
     chatMediaRequest.addListener(_onMediaRequest);
+    chatJamRequest.addListener(_onJamRequest);
     chatComposeRequest.addListener(_consumeCompose);
     WidgetsBinding.instance.addPostFrameCallback((_) => _consumeCompose());
     // Mirror the app-wide connection status so this banner never disagrees
@@ -736,6 +737,7 @@ class _ChatPageState extends State<ChatPage>
     if (_isAtBottom) _markSeenUpToNewest();
     chatSearchRequest.removeListener(_onSearchRequest);
     chatMediaRequest.removeListener(_onMediaRequest);
+    chatJamRequest.removeListener(_onJamRequest);
     _browserAnim.dispose();
     if (_mediaBrowser != null) {
       // Not mid-teardown: let the host's header button settle next frame.

@@ -16,6 +16,30 @@ part of '../chat_page.dart';
 //   can never send a stale mention.
 
 extension _ChatMentions on _ChatPageState {
+  String get _membersCacheKey => 'group_members_v1_$_cid';
+
+  /// Members + roles as last seen on this device — so the "admin" tags, the
+  /// admins-only composer and the @-picker are right on the FIRST frame,
+  /// instead of popping in after the network round-trip.
+  Future<void> _loadCachedGroupMembers() async {
+    if (!_isGroup || _groupMembers.isNotEmpty) return;
+    try {
+      final p = await SharedPreferences.getInstance();
+      final raw = p.getString(_membersCacheKey);
+      if (raw == null || !mounted) return;
+      final d = jsonDecode(raw);
+      if (d is! Map) return;
+      _adminsOnly = d['admins_only'] == true;
+      _amAdmin = d['my_role']?.toString() == 'admin';
+      _groupMembers = ((d['members'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
+          .toList();
+      _publishMentionNames();
+      rebuildWith(() {});
+    } catch (_) {}
+  }
+
   /// Load the group's members (for the picker). Best-effort.
   Future<void> _loadGroupMembers() async {
     if (!_isGroup) return;
@@ -34,6 +58,18 @@ extension _ChatMentions on _ChatPageState {
       ContactNames.instance.rememberAll(_groupMembers);
       _publishMentionNames();
       rebuildWith(() {});
+      if (data != null) {
+        try {
+          final p = await SharedPreferences.getInstance();
+          await p.setString(
+              _membersCacheKey,
+              jsonEncode({
+                'admins_only': _adminsOnly,
+                'my_role': data['my_role'],
+                'members': _groupMembers,
+              }));
+        } catch (_) {}
+      }
     } catch (_) {}
   }
 

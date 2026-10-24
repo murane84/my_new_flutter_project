@@ -879,6 +879,12 @@ class _ChatPageState extends State<ChatPage>
     // (and doesn't overwrite it with only the currently-loaded originals).
     await _loadQuoteAuthors();
     await _loadLastSeen(); // where I left off → the "N new messages" divider
+    // Group roles first (cached), and the live member fetch right away — the
+    // "admin" tags must not trail in after the thread.
+    if (_isGroup) {
+      await _loadCachedGroupMembers();
+      unawaited(_loadGroupMembers());
+    }
     await _loadCachedMessages(); // show cached messages instantly (clears loader)
     // + what arrived on the home socket since that cache was written — the
     // same message the badge / peek / notification showed, on the first frame.
@@ -906,7 +912,6 @@ class _ChatPageState extends State<ChatPage>
     }
 
     await (early ?? _loadMessages()); // fresh from network (best-effort)
-    if (_isGroup) unawaited(_loadGroupMembers()); // for the @-mention picker
     _placeUnreadDivider();        // "N new messages" + open where I left off
     if (_isGroup) {
       // Mentions already on screen at open don't need the "@" stepper.

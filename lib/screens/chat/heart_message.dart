@@ -144,7 +144,7 @@ String heartOpensLabel(DateTime when, {String prefix = 'Opens '}) {
   if (isGroup && forName != null) {
     if (forMe) {
       return targetOpened
-          ? (icon: Icons.favorite_rounded, text: 'You opened it', warm: true)
+          ? (icon: Icons.favorite_rounded, text: 'For you · opened', warm: true)
           : (
               icon: Icons.favorite_border_rounded,
               text: 'For you · hold to open',
@@ -159,11 +159,14 @@ String heartOpensLabel(DateTime when, {String prefix = 'Opens '}) {
             warm: false,
           );
   }
-  // A heart for the whole group: receivers see it's for everyone.
+  // A heart for the whole group: receivers always see it's for everyone
+  // (the cover no longer says it).
   if (isGroup && !isMe) {
-    return iOpened
-        ? null
-        : (icon: Icons.groups_rounded, text: 'For everyone', warm: false);
+    return (
+      icon: iOpened ? Icons.favorite_rounded : Icons.groups_rounded,
+      text: 'For everyone',
+      warm: iOpened,
+    );
   }
   if (!isMe) return null;
   if (isGroup) {
@@ -1219,11 +1222,8 @@ class _HeartBubbleState extends State<HeartBubble>
       'song' => Icons.music_note_rounded,
       _ => null,
     };
-    // Keep the cover's lines short so they always fit inside the heart.
-    final fn = widget.forName;
-    final forLine = fn == null
-        ? null
-        : 'for ${fn.length > 12 ? '${fn.substring(0, 11)}…' : fn}';
+    // Who it's for lives in the pill under the heart (both sides), not on
+    // the cover — a line up there sat across the heart's top dip.
     if (widget.locked) {
       return Column(
         key: const ValueKey('cover-locked'),
@@ -1237,7 +1237,7 @@ class _HeartBubbleState extends State<HeartBubble>
             ],
           ]),
           const SizedBox(height: 4),
-          Text(forLine ?? 'sealed',
+          Text('sealed',
               textAlign: TextAlign.center,
               maxLines: 1,
               softWrap: false,
@@ -1266,18 +1266,6 @@ class _HeartBubbleState extends State<HeartBubble>
       key: ValueKey('cover-$sealed-$_hint-$_awaitingNote'),
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (forLine != null) ...[
-          Text(forLine,
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.fade,
-              style: TextStyle(
-                  color: ink.withValues(alpha: 0.85),
-                  fontSize: 9,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.4)),
-          const SizedBox(height: 2),
-        ],
         Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon, color: ink, size: 20),
           if (kindIcon != null) ...[

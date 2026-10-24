@@ -400,7 +400,11 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
     final mine = m['mine'] == true;
     final author = (m['author'] as Map?)?.cast<String, dynamic>();
     final authorName = mine ? 'You' : ContactNames.instance.displayName(of: author, registered: (author?['username'] ?? '').toString());
-    final created = DateTime.tryParse((m['created_at'] ?? '').toString());
+    // Server time → this phone's local time (a bare UTC stamp would
+    // otherwise be read as local and drift by the timezone).
+    final createdRaw = (m['created_at'] ?? '').toString();
+    final DateTime? created =
+        createdRaw.isEmpty ? null : parseServerTime(createdRaw);
     final song = _songFromRef(m['ref']);
     final commentCount = (m['comment_count'] as num?)?.toInt() ??
         ((m['comments'] as List?)?.length ?? 0);
@@ -470,7 +474,9 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
                           Flexible(
                             child: Text(
                               created != null
-                                  ? '${_momentLabel(kind)} · ${_timeAgo(created)}'
+                                  // "kept 8h ago": when it was pinned here —
+                                  // not when the original was sent.
+                                  ? '${_momentLabel(kind)} · ${_keptWhen(created)}'
                                   : _momentLabel(kind),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -814,6 +820,13 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
       barrierColor: Colors.black,
       builder: (dctx) => _MomentVideoPlayer(url: url),
     );
+  }
+
+  String _keptWhen(DateTime dt) {
+    final d = DateTime.now().difference(dt.toLocal());
+    if (d.inMinutes < 1) return 'kept just now';
+    if (d.inDays < 7) return 'kept ${_timeAgo(dt)} ago';
+    return 'kept ${_timeAgo(dt)}';
   }
 
   String _timeAgo(DateTime dt) {

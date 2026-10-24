@@ -239,6 +239,18 @@ extension _ChatPageHelpers1 on _ChatPageState {
         kind = 'note';
         caption = text;
         break;
+      case 'heart':
+        // A secret heart stays secret: keep WHO and WHEN, never its note.
+        final mine = msg['sender_id']?.toString() == _myId;
+        final ts = (msg['timestamp'] ?? '').toString();
+        final when = ts.isEmpty
+            ? ''
+            : '\nsent ${DateFormat('d MMM · h:mm a').format(parseServerTime(ts))}';
+        kind = 'note';
+        caption = mine
+            ? '💌 A secret heart I sent $_peerFirst$when'
+            : '💌 A secret heart from $_peerFirst$when';
+        break;
       default:
         // call / live / location / contact / file — keep a friendly label.
         final label = _replyQuoteText(msg).trim();

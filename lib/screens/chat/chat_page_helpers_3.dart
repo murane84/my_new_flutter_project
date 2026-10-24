@@ -1722,7 +1722,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
     return Material(
       color: scheme.surfaceContainerHighest,
       child: InkWell(
-        onTap: () => _jumpToMessage(pinned['id'].toString()),
+        onTap: () => _jumpDebounced(pinned['id'].toString()),
         child: Container(
           decoration: BoxDecoration(
             border: Border(

@@ -428,6 +428,12 @@ class _ChatPageState extends State<ChatPage>
   ({String label, IconData icon, VoidCallback onTap})? _pill;
   Timer? _pillTimer;
   DateTime? _lastPulseSent;
+  // "Back to reply" bookkeeping: where the FIRST jump of a chain started
+  // (chained quote → quote jumps still lead back there), and the last jump
+  // target + time so a double tap on the same quote doesn't re-jump.
+  String? _jumpOrigin;
+  String? _lastJumpTarget;
+  DateTime? _lastJumpAt;
 
   // Styles *bold* _italic_ etc. live in the composer as you type.
   final _ctrl = FormattingTextController();
@@ -3733,19 +3739,62 @@ class _ChatPageState extends State<ChatPage>
           type: ToastType.info);
       return;
     }
-    _jumpToMessage(target['id'].toString()).then((landed) {
+    final targetId = target['id'].toString();
+    if (_isRepeatJump(targetId)) {
+      // Same quote tapped again: just keep the way back up a little longer.
+      if (_jumpOrigin != null) _refreshPill();
+      return;
+    }
+    // Chained jumps keep the very first starting point.
+    final origin = _jumpOrigin ?? fromId;
+    _jumpToMessage(targetId).then((landed) {
       // A way back to the reply I tapped, for a few seconds.
-      if (!mounted || fromId == null || !landed) return;
+      if (!mounted || origin == null || !landed) return;
       _showPill('Back to reply', Icons.reply_rounded, () {
-        _jumpToMessage(fromId);
+        _lastJumpTarget = origin;
+        _lastJumpAt = DateTime.now();
+        _jumpToMessage(origin);
       });
+      _jumpOrigin = origin; // after _showPill (which clears it)
     });
+  }
+
+  /// True when [id] is the same place we jumped to under 3 s ago (a double
+  /// tap) — then the caller skips the jump. Records this jump otherwise.
+  bool _isRepeatJump(String id) {
+    final now = DateTime.now();
+    if (_lastJumpTarget == id &&
+        _lastJumpAt != null &&
+        now.difference(_lastJumpAt!) < const Duration(seconds: 3)) {
+      return true;
+    }
+    _lastJumpTarget = id;
+    _lastJumpAt = now;
+    return false;
+  }
+
+  /// Jump for banners / search: a quick repeat tap on the same target is
+  /// ignored (no second scroll, no second ripple), and an open "Back to
+  /// reply" pill stays put.
+  void _jumpDebounced(String id) {
+    if (_isRepeatJump(id)) {
+      if (_jumpOrigin != null) _refreshPill();
+      return;
+    }
+    _jumpToMessage(id);
+  }
+
+  void _refreshPill({Duration hold = const Duration(seconds: 8)}) {
+    if (_pill == null) return;
+    _pillTimer?.cancel();
+    _pillTimer = Timer(hold, _hidePill);
   }
 
   /// A floating pill over the thread; tapping it runs [onTap] and hides it.
   void _showPill(String label, IconData icon, VoidCallback onTap,
       {Duration hold = const Duration(seconds: 8)}) {
     _pillTimer?.cancel();
+    _jumpOrigin = null; // only one pill: a new one replaces the way back
     setState(() => _pill = (
           label: label,
           icon: icon,
@@ -3759,6 +3808,7 @@ class _ChatPageState extends State<ChatPage>
 
   void _hidePill() {
     _pillTimer?.cancel();
+    _jumpOrigin = null;
     if (mounted && _pill != null) setState(() => _pill = null);
   }
 

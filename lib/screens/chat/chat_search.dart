@@ -123,7 +123,7 @@ extension _ChatSearch on _ChatPageState {
       _searchHits = hits;
       _searchIdx = keep >= 0 ? keep : 0;
     });
-    if (jump && hits.isNotEmpty) _jumpToMessage(hits[_searchIdx]);
+    if (jump && hits.isNotEmpty) _jumpDebounced(hits[_searchIdx]);
   }
 
   /// [older] = step up the thread (towards older matches).
@@ -132,7 +132,7 @@ extension _ChatSearch on _ChatPageState {
     final n = _searchHits.length;
     final next = (_searchIdx + (older ? 1 : -1) + n) % n;
     rebuildWith(() => _searchIdx = next);
-    _jumpToMessage(_searchHits[next]);
+    _jumpDebounced(_searchHits[next]);
   }
 
   Widget _buildSearchBar(ColorScheme scheme, bool isDark) {

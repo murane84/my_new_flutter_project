@@ -240,16 +240,38 @@ extension _ChatPageHelpers1 on _ChatPageState {
         caption = text;
         break;
       case 'heart':
-        // A secret heart stays secret: keep WHO and WHEN, never its note.
-        final mine = msg['sender_id']?.toString() == _myId;
-        final ts = (msg['timestamp'] ?? '').toString();
-        final when = ts.isEmpty
-            ? ''
-            : '\nsent ${DateFormat('d MMM · h:mm a').format(parseServerTime(ts))}';
-        kind = 'note';
-        caption = mine
-            ? '💌 A secret heart I sent $_peerFirst$when'
-            : '💌 A secret heart from $_peerFirst$when';
+        // The heart ITSELF is kept: Our Space shows who / mood / when and
+        // reopens the very letter (note + photo / clip / song / voice) from
+        // Love letters — the note never travels into the moment.
+        final hid = int.tryParse(msg['id']?.toString() ?? '');
+        if (hid == null) {
+          showToast(context, 'Send it first, then keep it',
+              type: ToastType.info);
+          return;
+        }
+        final hMime = (msg['media_mime'] as String?)?.toLowerCase() ?? '';
+        final hName = (msg['media_name'] as String?) ?? '';
+        final mediaKind = rel.isEmpty
+            ? null
+            : hMime.startsWith('image/')
+                ? 'photo'
+                : hMime.startsWith('video/')
+                    ? 'video'
+                    : hMime.startsWith('audio/')
+                        ? (hName.startsWith('heart_voice') ? 'voice' : 'song')
+                        : null;
+        kind = 'heart';
+        ref = jsonEncode({
+          'mid': hid,
+          'ts': msg['timestamp'],
+          'mood': msg['heart_mood'] ?? 'love',
+          'from': msg['sender_id'],
+          'media': ?mediaKind,
+          if (mediaKind == 'song')
+            'title': hName.contains('.')
+                ? hName.substring(0, hName.lastIndexOf('.'))
+                : hName,
+        });
         break;
       default:
         // call / live / location / contact / file — keep a friendly label.

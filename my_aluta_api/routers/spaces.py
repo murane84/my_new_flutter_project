@@ -110,7 +110,7 @@ class _DiaryCommentBody(BaseModel):
 # plan unlocks a small, deliberate set. Caps are read per-plan in create_space.
 FREE_SPACE_CAP = 1
 TOGETHER_SPACE_CAP = 8
-_VALID_MOMENT_KINDS = {"dedication", "voice", "photo", "song", "note", "video", "gif", "listen"}
+_VALID_MOMENT_KINDS = {"dedication", "voice", "photo", "song", "note", "video", "gif", "listen", "heart"}
 
 
 # ── serialization ────────────────────────────────────────────────────────────

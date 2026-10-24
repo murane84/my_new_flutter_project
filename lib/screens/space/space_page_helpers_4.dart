@@ -601,6 +601,15 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
               const SizedBox(height: 10),
               _listenMomentCard(scheme, m),
             ],
+            // A kept secret heart: reopens the letter itself.
+            if (kind == 'heart') ...[
+              const SizedBox(height: 12),
+              _keptHeartCard(scheme, m),
+            ] else if (kind == 'note' &&
+                _legacyHeartCard(scheme, caption) != null) ...[
+              const SizedBox(height: 12),
+              _legacyHeartCard(scheme, caption)!,
+            ] else
             // Non-media captions (note / song / voice) read beneath the content.
             if (caption.isNotEmpty &&
                 kind != 'photo' &&
@@ -905,6 +914,8 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
         return Icons.movie_rounded;
       case 'gif':
         return Icons.gif_box_rounded;
+      case 'heart':
+        return Icons.favorite_rounded;
       default:
         return Icons.sticky_note_2_rounded;
     }
@@ -1018,6 +1029,8 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
         return 'A GIF';
       case 'listen':
         return 'A listen';
+      case 'heart':
+        return 'A secret heart';
       default:
         return 'A note';
     }

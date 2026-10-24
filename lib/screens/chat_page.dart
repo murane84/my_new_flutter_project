@@ -1137,8 +1137,13 @@ class _ChatPageState extends State<ChatPage>
       return;
     }
     if (type == 'held_released') {
-      // A morning message went out (its bubble arrives as message_sent).
-      _loadHeld();
+      // A morning message went out: drop it from the strip and pull the real
+      // bubble in (the chat doesn't consume message_sent).
+      final rid = (event['data'] as Map?)?['receiver_id']?.toString();
+      if (!_isGroup && rid == widget.friendId.toString()) {
+        _loadHeld();
+        _loadMessages();
+      }
       return;
     }
     if (type == 'resend_request') {

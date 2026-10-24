@@ -379,6 +379,9 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
     if (mounted) setState(() {});
   }
   static _VoiceNotePlayerState? _active; // one note at a time
+  // Voice hellos already auto-played this run (scrolling away and back
+  // rebuilds the bubble — it must not play again).
+  static final Set<String> _autoPlayed = {};
 
   final ja.AudioPlayer _player = ja.AudioPlayer();
   bool _prepared = false;
@@ -427,7 +430,7 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
           s.processingState != ja.ProcessingState.completed);
       setState(() {});
     });
-    if (widget.autoPlaySoft) {
+    if (widget.autoPlaySoft && _autoPlayed.add(widget.url)) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted || !await _prepare() || !mounted) return;
         final other = _active;

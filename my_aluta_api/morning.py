@@ -45,6 +45,13 @@ def next_morning_utc(offset_min: int, now: datetime | None = None) -> datetime:
     return target - off
 
 
+def is_their_morning(offset_min: int, now: datetime | None = None) -> bool:
+    """05:00–10:59 their time: 'deliver at their morning' just sends now."""
+    now = now or datetime.now(timezone.utc)
+    hour = (now + timedelta(minutes=offset_min)).hour
+    return MORNING_HOUR <= hour < 11
+
+
 def _aware(dt):
     return dt.replace(tzinfo=timezone.utc) if dt is not None and dt.tzinfo is None else dt
 

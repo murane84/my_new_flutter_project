@@ -89,6 +89,13 @@ extension _ChatMorning on _ChatPageState {
           type: ToastType.error);
       return;
     }
+    if (res['sent_now'] == true) {
+      // Already morning where they are → it went out right away.
+      showToast(context, "☀️ It's already morning for $_peerFirst — sent now",
+          type: ToastType.success);
+      _loadMessages();
+      return;
+    }
     rebuildWith(() => _held = [..._held, res]);
     showToast(context, "🌅 It'll be waiting when $_peerFirst wakes up",
         type: ToastType.success);

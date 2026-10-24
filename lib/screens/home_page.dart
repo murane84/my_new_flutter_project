@@ -676,6 +676,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
       // Re-seed who's listening now (a live event may have been missed while
       // backgrounded).
       NowPlayingPresence.instance.loadSnapshot();
+      // Same for quick statuses + watches (socket events may have been missed).
+      QuickStatus.instance.load();
+      OnlineWatchList.instance.load();
     }
   }
 
@@ -3108,7 +3111,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
   List<String> _groupListeners(List members) {
     final out = <String>[];
     for (final m in members.whereType<Map>()) {
-      final id = (m['id'] as num?)?.toInt();
+      // Group members carry `user_id` (fall back to `id`).
+      final id = int.tryParse((m['user_id'] ?? m['id'] ?? '').toString());
       if (id == null || id == _myUserId) continue;
       if (NowPlayingPresence.instance.trackFor(id) == null) continue;
       final f = _allFriends.firstWhere(

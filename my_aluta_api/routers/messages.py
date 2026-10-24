@@ -167,7 +167,17 @@ def hold_for_morning(body: dict, db: Session = Depends(get_db),
         raise HTTPException(status_code=400, detail="Nothing to hold")
     if len(content) > 8000:
         raise HTTPException(status_code=400, detail="Too long")
-    when = morning.next_morning_utc(morning.offset_for(db, rid))
+    off = morning.offset_for(db, rid)
+    if morning.is_their_morning(off):
+        # It's already morning there — no point waiting a whole day.
+        row = HeldMessage(sender_id=current_user.id, receiver_id=rid,
+                          content=content,
+                          deliver_after=datetime.now(timezone.utc))
+        db.add(row)
+        db.commit()
+        morning.release_for(rid)
+        return {"sent_now": True}
+    when = morning.next_morning_utc(off)
     row = HeldMessage(sender_id=current_user.id, receiver_id=rid,
                       content=content, deliver_after=when)
     db.add(row)

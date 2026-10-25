@@ -7,7 +7,7 @@ and the watch ends (deleted). Watches older than WATCH_TTL are dropped.
 from datetime import datetime, timedelta, timezone
 
 from database import SessionLocal
-from models import OnlineWatch, User, BlockStatus
+from models import OnlineWatch, User, BlockStatus, ListenIntent
 
 WATCH_TTL = timedelta(days=7)
 
@@ -44,6 +44,12 @@ def fire_online_watches(target_id: int) -> None:
                     db, r.watcher_id, target_id):
                 fire.append(int(r.watcher_id))
             db.delete(r)
+        # Watchers who were waiting to LISTEN TOGETHER (then cleared).
+        intents = db.query(ListenIntent).filter(
+            ListenIntent.target_id == target_id).all()
+        listen = {int(i.watcher_id) for i in intents}
+        for i in intents:
+            db.delete(i)
         db.commit()
     except Exception as e:  # noqa: BLE001
         print(f"[online_watch] fire failed for {target_id}: {e}")
@@ -53,9 +59,11 @@ def fire_online_watches(target_id: int) -> None:
         db.close()
     for w in fire:
         try:
+            for_listen = w in listen
             safe_notify_user(w, {
                 "type": "friend_came_online",
-                "data": {"user_id": target_id, "username": name},
+                "data": {"user_id": target_id, "username": name,
+                         "purpose": "listen" if for_listen else None},
             })
             # Data-only (the app draws it, in the watcher's own name for
             # them; no duplicate system banner).
@@ -63,6 +71,7 @@ def fire_online_watches(target_id: int) -> None:
                 w,
                 {"type": "friend_online", "friend_id": target_id,
                  "friend_name": name,
+                 "purpose": "listen" if for_listen else "",
                  # from_id → push.py adds their phone so the app shows MY
                  # saved name for them.
                  "from_id": target_id, "from_name": name},

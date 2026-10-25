@@ -2896,16 +2896,34 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final first = name.trim().split(RegExp(r'\s+')).first;
     HapticFeedback.lightImpact();
     _lastMomentAt = DateTime.now();
+    // Waited so we could listen together → that's the first button.
+    final forListen = d['purpose'] == 'listen' ||
+        OnlineWatchList.instance.wantsListen(fid);
+    OnlineWatchList.instance.clearListen(fid);
+    final space = _spaceWithFriend(fid);
     showMomentCard(
       context,
       title: '$first is online now 🟢',
-      subtitle: 'You asked to know — say hi while they\'re here',
-      leading: Icons.notifications_active_rounded,
-      hold: const Duration(seconds: 9),
+      subtitle: forListen
+          ? 'Ready to listen together?'
+          : 'You asked to know — say hi while they\'re here',
+      leading: forListen
+          ? Icons.headphones_rounded
+          : Icons.notifications_active_rounded,
+      hold: Duration(seconds: forListen ? 14 : 9),
       actions: [
+        if (forListen)
+          MomentAction(Icons.headphones_rounded, 'Listen together', () {
+            if (space != null) {
+              spaceAutoListen.value = fid; // the Space starts it on open
+              _openSpace(space);
+            } else if (f.isNotEmpty) {
+              openChat(f);
+            }
+          }, primary: true),
         if (f.isNotEmpty)
           MomentAction(Icons.waving_hand_rounded, 'Say hi', () => openChat(f),
-              primary: true),
+              primary: !forListen),
         if (f.isNotEmpty)
           MomentAction(Icons.call_rounded, 'Call', () {
             _showCallChoice(

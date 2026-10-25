@@ -144,9 +144,12 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       if (foreground) return;
       final fid = (data['friend_id'] ?? '').toString();
       final who = mine((data['friend_name'] ?? 'Your friend').toString());
+      final listen = (data['purpose'] ?? '') == 'listen';
       await showMessageNotification(
         title: '$who is online now 🟢',
-        body: "Say hi while they're here 👋",
+        body: listen
+            ? 'Ready to listen together? 🎧'
+            : "Say hi while they're here 👋",
         id: 7400 + (int.tryParse(fid) ?? 0) % 1000,
         senderId: fid.isEmpty ? null : fid,
         senderName: who,

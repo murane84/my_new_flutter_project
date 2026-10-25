@@ -1108,3 +1108,20 @@ class UserSetting(Base):
     rev = Column(String, nullable=False, default="0")
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class ListenIntent(Base):
+    """'Notify me when she's online — to listen together': rides alongside an
+    OnlineWatch so the heads-up (WS + push, on any of the watcher's devices)
+    says "ready to listen together?" and offers it. Cleared when it fires or
+    the watch is dropped. Auto-created by create_all; no ALTER."""
+    __tablename__ = "listen_intents"
+    __table_args__ = (
+        UniqueConstraint("watcher_id", "target_id", name="uq_listen_intent"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    watcher_id = Column(Integer, index=True, nullable=False)
+    target_id = Column(Integer, index=True, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)

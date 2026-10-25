@@ -1430,11 +1430,13 @@ class ApiService {
   /// "Tell me when they're online": start (POST) or stop (DELETE) a one-shot
   /// watch on [friendId]. Returns 'watching', 'online' (already online, so
   /// nothing stored), 'stopped', or null on failure.
-  Future<String?> setOnlineWatch(int friendId, bool on) async {
+  Future<String?> setOnlineWatch(int friendId, bool on,
+      {String? purpose}) async {
     try {
       final token = await _getToken();
       if (token == null) return null;
-      final uri = Uri.parse('${await _baseUrl}/users/$friendId/online-watch');
+      final uri = Uri.parse('${await _baseUrl}/users/$friendId/online-watch'
+          '${on && purpose != null ? '?purpose=$purpose' : ''}');
       final resp = on
           ? await http.post(uri, headers: _authHeaders(token))
           : await http.delete(uri, headers: _authHeaders(token));
@@ -1621,6 +1623,32 @@ class ApiService {
     } catch (e) {
       _logger.w('partnerMusicTop failed: $e');
       return null;
+    }
+  }
+
+  /// Friend ids I'm waiting on, and which of those are to listen together.
+  Future<({Set<int> watching, Set<int> listen})> onlineWatchState() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return (watching: <int>{}, listen: <int>{});
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/users/me/online-watches'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        return (watching: <int>{}, listen: <int>{});
+      }
+      final data = jsonDecode(resp.body);
+      Set<int> ids(Object? l) => l is List
+          ? l.map((e) => (e as num).toInt()).toSet()
+          : <int>{};
+      return (
+        watching: ids(data is Map ? data['watching'] : null),
+        listen: ids(data is Map ? data['listen'] : null),
+      );
+    } catch (e) {
+      _logger.w('onlineWatchState failed: $e');
+      return (watching: <int>{}, listen: <int>{});
     }
   }
 

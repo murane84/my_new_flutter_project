@@ -29,6 +29,7 @@ import '../services/track_title.dart' show displayTitleForPath;
 import '../utils/readable.dart';
 import '../services/contact_names.dart';
 import '../widgets/concert_stage.dart';
+import '../services/online_watch.dart';
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
 /// Presented with `showDialog(...)` so it floats over the chat instead of
@@ -228,6 +229,36 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   final Map<String, String> _fpByPath = {};
   final Set<String> _instantPaths = {};
   String _status = 'Connecting…';
+  // Host waiting for a 1:1 partner: are they even online? (polled gently
+  // until they join) — offline → say so + "notify me", not wait forever.
+  Timer? _awayTimer;
+  bool _peerAway = false;
+  bool _peerJoined = false;
+
+  void _watchPeerPresence() {
+    final id = widget.receiverId;
+    if (!_isHost || widget.isRoom || id == null) return;
+    Future<void> check() async {
+      if (!mounted || _peerJoined) {
+        _awayTimer?.cancel();
+        return;
+      }
+      final st = await ApiService().fetchFriendStatus(id);
+      if (!mounted || _peerJoined || st.isEmpty) return;
+      final away = st['is_online'] != true;
+      if (away == _peerAway) return;
+      setState(() {
+        _peerAway = away;
+        _status = away
+            ? '${widget.peerName} is offline · we\'ll ping you when back'
+            : 'Waiting for ${widget.peerName} to join…';
+      });
+    }
+
+    check();
+    _awayTimer?.cancel();
+    _awayTimer = Timer.periodic(const Duration(seconds: 15), (_) => check());
+  }
   String _title = '';
   bool _ready = false;
   // True while we're closing the popup to minimise (keep the session alive).
@@ -453,6 +484,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               ? 'Your room is live — your circle can drop in'
               : 'Waiting for ${widget.peerName} to join…';
         });
+        _watchPeerPresence();
       } else {
         setState(() => _status = 'Joining ${widget.peerName}’s session…');
         await _c.joinAsListener(
@@ -499,6 +531,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     if (!mounted) return;
     switch (e['type']) {
       case 'peer_joined':
+        _peerJoined = true;
+        _peerAway = false;
+        _awayTimer?.cancel();
         setState(() {
           _lostConnection = false;
           _peerGoneGraceful = false;
@@ -1065,6 +1100,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
 
   @override
   void dispose() {
+    _awayTimer?.cancel();
     _discSpin.dispose();
     _stagePlaying.dispose();
     _stageCheer.dispose();
@@ -1988,6 +2024,37 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.hintColor),
                 ),
+                // Partner offline while I wait → one tap to be pinged.
+                if (_peerAway && !_peerJoined && widget.receiverId != null)
+                  ListenableBuilder(
+                    listenable: OnlineWatchList.instance,
+                    builder: (_, _) {
+                      final id = widget.receiverId!;
+                      final on = OnlineWatchList.instance.wantsListen(id);
+                      return TextButton.icon(
+                        onPressed: on
+                            ? null
+                            : () async {
+                                final res = await OnlineWatchList.instance
+                                    .watchForListen(id);
+                                if (!mounted) return;
+                                _snack(res == null
+                                    ? "Couldn't set that up — try again"
+                                    : res == 'online'
+                                        ? '${widget.peerName} is online now'
+                                        : "We'll ping you when ${widget.peerName} is back 🎧");
+                              },
+                        icon: Icon(
+                            on
+                                ? Icons.notifications_active_rounded
+                                : Icons.notifications_none_rounded,
+                            size: 16),
+                        label: Text(on
+                            ? "We'll ping you when they're back"
+                            : 'Notify me when ${widget.peerName} is online'),
+                      );
+                    },
+                  ),
               ],
             );
           },

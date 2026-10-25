@@ -42,6 +42,7 @@ import '../services/online_watch.dart';
 import '../services/quick_status.dart';
 import '../services/live_inbox.dart';
 import '../services/now_playing_presence.dart';
+import '../widgets/listen_presence_gate.dart';
 import '../services/contact_names.dart';
 import '../services/web_paste.dart' as webpaste;
 import '../utils/net_image.dart';
@@ -1439,6 +1440,13 @@ class _ChatPageState extends State<ChatPage>
             type: ToastType.error);
       }
       return;
+    }
+    // Are they here? Offline → "notify me when they're online" instead of
+    // a blind invite.
+    if (!_isGroup && widget.friendId > 0) {
+      final go = await listenTogetherGate(context,
+          friendId: widget.friendId, name: _livePeerLabel);
+      if (!go || !mounted) return;
     }
 
     final loaded = playlistNotifier.value;

@@ -66,7 +66,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
   /// Open a live session as host playing `path` for the partner in sync. Shared
   /// by the Listen-together button, the tune-in card, and the playlist rows.
   Future<void> _hostSession(String path, int startPos,
-      {String? titleOverride}) async {
+      {String? titleOverride, bool gated = false}) async {
     final others = _others;
     if (others.isEmpty) return;
     final partner = others.first;
@@ -74,6 +74,12 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
     final partnerName = ContactNames.instance.displayName(of: partner, registered: (partner['username'] ?? 'them').toString());
     final myUserId = widget.myUserId;
     if (partnerId == null || myUserId == null) return;
+    // Playlist rows / crate start here directly — same presence check.
+    if (!gated) {
+      final go = await listenTogetherGate(context,
+          friendId: partnerId, name: partnerName);
+      if (!go || !mounted) return;
+    }
 
     Uint8List bytes;
     try {

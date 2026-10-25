@@ -12,11 +12,37 @@ class OnlineWatchList extends ChangeNotifier {
   final Set<int> _ids = {};
   bool isWatching(int id) => _ids.contains(id);
 
+  // Friends I was about to Listen Together with when they were offline —
+  // their "online now" card then offers Listen together in one tap.
+  final Set<int> _listenIntent = {};
+  bool wantsListen(int id) => _listenIntent.contains(id);
+  void clearListen(int id) => _listenIntent.remove(id);
+
+  /// Watch [id] for the next online moment, remembering it's for a listen.
+  /// Returns 'watching' / 'online' / null (failed).
+  Future<String?> watchForListen(int id) async {
+    // Stored on the server with the watch (purpose=listen), so the heads-up
+    // on ANY of my devices offers Listen together — even after a reinstall.
+    final res = await ApiService().setOnlineWatch(id, true, purpose: 'listen');
+    if (res == 'watching') {
+      _ids.add(id);
+      _listenIntent.add(id);
+    } else {
+      _listenIntent.remove(id);
+    }
+    notifyListeners();
+    return res;
+  }
+
   Future<void> load() async {
-    final ids = await ApiService().onlineWatches();
+    // From the account: every device knows what I'm waiting for, and why.
+    final st = await ApiService().onlineWatchState();
     _ids
       ..clear()
-      ..addAll(ids);
+      ..addAll(st.watching);
+    _listenIntent
+      ..clear()
+      ..addAll(st.listen);
     notifyListeners();
   }
 

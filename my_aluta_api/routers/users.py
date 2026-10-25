@@ -635,17 +635,24 @@ def my_online_watches(db: Session = Depends(get_db),
                       current_user: User = Depends(get_current_user)):
     """Friend ids I've asked to be told about (still waiting)."""
     from models import OnlineWatch
+    from models import ListenIntent
     rows = db.query(OnlineWatch).filter(
         OnlineWatch.watcher_id == current_user.id).all()
-    return {"watching": [int(r.target_id) for r in rows]}
+    listen = db.query(ListenIntent).filter(
+        ListenIntent.watcher_id == current_user.id).all()
+    return {"watching": [int(r.target_id) for r in rows],
+            "listen": [int(r.target_id) for r in listen]}
 
 
 @router.post("/users/{friend_id}/online-watch", tags=["Users"])
-def watch_online(friend_id: int, db: Session = Depends(get_db),
+def watch_online(friend_id: int, purpose: str | None = None,
+                 db: Session = Depends(get_db),
                  current_user: User = Depends(get_current_user)):
     """One heads-up the next time {friend_id} comes online, then it ends.
-    Already online → nothing is stored ({"online": true})."""
-    from models import OnlineWatch
+    Already online → nothing is stored ({"online": true}). purpose=listen →
+    the heads-up offers Listen Together (kept on the account, so every one of
+    my devices gets it)."""
+    from models import OnlineWatch, ListenIntent
     from websocket_manager import connected_users
     if friend_id == current_user.id or not _are_friends(
             db, current_user.id, friend_id):
@@ -659,6 +666,10 @@ def watch_online(friend_id: int, db: Session = Depends(get_db),
         db.add(OnlineWatch(watcher_id=current_user.id, target_id=friend_id))
     else:
         row.created_at = datetime.now(timezone.utc)  # refresh the 7-day window
+    if purpose == "listen" and db.query(ListenIntent).filter(
+            ListenIntent.watcher_id == current_user.id,
+            ListenIntent.target_id == friend_id).first() is None:
+        db.add(ListenIntent(watcher_id=current_user.id, target_id=friend_id))
     db.commit()
     return {"watching": True, "online": False}
 
@@ -666,10 +677,13 @@ def watch_online(friend_id: int, db: Session = Depends(get_db),
 @router.delete("/users/{friend_id}/online-watch", tags=["Users"])
 def unwatch_online(friend_id: int, db: Session = Depends(get_db),
                    current_user: User = Depends(get_current_user)):
-    from models import OnlineWatch
+    from models import OnlineWatch, ListenIntent
     db.query(OnlineWatch).filter(
         OnlineWatch.watcher_id == current_user.id,
         OnlineWatch.target_id == friend_id).delete()
+    db.query(ListenIntent).filter(
+        ListenIntent.watcher_id == current_user.id,
+        ListenIntent.target_id == friend_id).delete()
     db.commit()
     return {"watching": False}
 

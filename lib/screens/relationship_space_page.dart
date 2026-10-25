@@ -42,6 +42,7 @@ import '../widgets/genie_menu.dart';
 import '../theme/aluta_palette.dart';
 import '../utils/readable.dart';
 import 'chat/song_cache.dart';
+import '../widgets/listen_presence_gate.dart';
 import '../utils/marquee_text.dart';
 import '../services/contact_names.dart';
 import '../widgets/keepsake_photo.dart';
@@ -429,6 +430,11 @@ Widget diaryReactionRow({
 /// "something in a bond changed, re-fetch if you're showing one".
 final ValueNotifier<int> spaceEventBus = ValueNotifier<int>(0);
 
+/// Set by home to a partner's user id when "she's online now — Listen
+/// together" was tapped: the Space opening for that partner starts the
+/// session straight away (then clears it).
+final ValueNotifier<int?> spaceAutoListen = ValueNotifier<int?>(null);
+
 /// Derive a friendly title for a Space from its members (excluding me).
 String deriveSpaceName(Map<String, dynamic> space, int? myUserId) {
   final explicit = (space['name'] ?? '').toString().trim();
@@ -732,6 +738,14 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       // reveals any freshly-earned unlock.
       if (_partnerId != null) _fetchStreak();
       if (_partnerId != null) _fetchRecap();
+      // Arrived from "she's online now · Listen together" → start it.
+      final auto = spaceAutoListen.value;
+      if (auto != null && auto == _partnerId) {
+        spaceAutoListen.value = null;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _listenTogether(skipGate: true);
+        });
+      }
     }
     // Reconcile the device's pinned-plan reminders with the current diary.
     _syncReminders();
@@ -761,11 +775,22 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   /// (what's playing now, else choose one), then open the live session as host —
   /// the partner gets the "listen together" invite. Plays the bond a song in
   /// sync, exactly as the button promises.
-  Future<void> _listenTogether() async {
+  Future<void> _listenTogether({bool skipGate = false}) async {
     if (_others.isEmpty) {
       showToast(context, 'This space has no one to listen with yet.',
           type: ToastType.info);
       return;
+    }
+    // Is the partner here? Offline → offer "notify me" instead of
+    // broadcasting into an empty room.
+    final pid = _partnerId;
+    if (!skipGate && pid != null) {
+      final go = await listenTogetherGate(context,
+          friendId: pid,
+          name: ContactNames.instance.displayName(
+              of: _others.first,
+              registered: (_others.first['username'] ?? '').toString()));
+      if (!go || !mounted) return;
     }
     // The opening song: what's already playing (one tap), else pick one.
     final playing = playbackBus.isPlaying?.call() ?? false;
@@ -779,7 +804,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       path = await _pickSong();
     }
     if (path == null || !mounted) return;
-    await _hostSession(path, startPos);
+    await _hostSession(path, startPos, gated: true);
   }
 
   String _songTitle(String path) {

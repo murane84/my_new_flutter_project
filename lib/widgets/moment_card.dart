@@ -90,6 +90,17 @@ class _MomentCardState extends State<_MomentCard>
   double _drag = 0;
   bool _leaving = false;
   bool _acted = false;
+  // Tap a card whose words don't fit → it opens up in place to the full
+  // text and stays until dismissed (no auto-hide while you read).
+  bool _expanded = false;
+  bool _canExpand = false; // set each build: is any text cut off?
+
+  void _toggleExpand() {
+    HapticFeedback.selectionClick();
+    setState(() => _expanded = !_expanded);
+    _timer?.cancel();
+    if (!_expanded) _timer = Timer(widget.hold, _leave);
+  }
 
   @override
   void initState() {
@@ -141,12 +152,16 @@ class _MomentCardState extends State<_MomentCard>
               );
             },
             child: GestureDetector(
-              onTap: widget.onTap == null
-                  ? null
-                  : () {
+              // A card with its own details view opens that; any other card
+              // expands in place when its text was cut off.
+              onTap: widget.onTap != null
+                  ? () {
                       _acted = true;
                       _leave();
                       widget.onTap!();
+                    }
+                  : () {
+                      if (_canExpand || _expanded) _toggleExpand();
                     },
               onVerticalDragUpdate: (d) {
                 setState(() => _drag = (_drag + d.delta.dy).clamp(-120, 12));
@@ -191,27 +206,89 @@ class _MomentCardState extends State<_MomentCard>
                               _Pulse(color: scheme.primary, icon: widget.leading),
                               const SizedBox(width: 10),
                               Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(widget.title,
-                                        style: TextStyle(
-                                            fontSize: 14.5,
-                                            fontWeight: FontWeight.w800,
-                                            height: 1.25,
-                                            color: ink)),
-                                    if (widget.subtitle != null) ...[
-                                      const SizedBox(height: 2),
-                                      Text(widget.subtitle!,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              color: ink.withValues(
-                                                  alpha: 0.6))),
+                                child: LayoutBuilder(builder: (ctx, c) {
+                                  final titleStyle = TextStyle(
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w800,
+                                      height: 1.25,
+                                      color: ink);
+                                  final subStyle = TextStyle(
+                                      fontSize: 12,
+                                      height: 1.35,
+                                      color: ink.withValues(alpha: 0.6));
+                                  bool cut(String t, TextStyle st, int lines) {
+                                    final tp = TextPainter(
+                                      text: TextSpan(text: t, style: st),
+                                      maxLines: lines,
+                                      textDirection: Directionality.of(ctx),
+                                    )..layout(maxWidth: c.maxWidth);
+                                    return tp.didExceedMaxLines;
+                                  }
+
+                                  // Does anything not fit? Then the card can
+                                  // open up (or has its own details view).
+                                  final more = widget.onTap != null ||
+                                      cut(widget.title, titleStyle, 3) ||
+                                      (widget.subtitle != null &&
+                                          cut(widget.subtitle!, subStyle, 1));
+                                  _canExpand = more && widget.onTap == null;
+                                  return Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(widget.title,
+                                          maxLines: _expanded ? null : 3,
+                                          overflow: _expanded
+                                              ? TextOverflow.visible
+                                              : TextOverflow.ellipsis,
+                                          style: titleStyle),
+                                      if (widget.subtitle != null) ...[
+                                        const SizedBox(height: 2),
+                                        AnimatedSize(
+                                          duration: const Duration(
+                                              milliseconds: 220),
+                                          curve: Curves.easeOutCubic,
+                                          alignment: Alignment.topLeft,
+                                          child: Text(widget.subtitle!,
+                                              maxLines: _expanded ? null : 1,
+                                              overflow: _expanded
+                                                  ? TextOverflow.visible
+                                                  : TextOverflow.ellipsis,
+                                              style: subStyle),
+                                        ),
+                                      ],
+                                      if (more) ...[
+                                        const SizedBox(height: 3),
+                                        Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                  widget.onTap != null
+                                                      ? 'Tap to see all'
+                                                      : (_expanded
+                                                          ? 'Tap to fold'
+                                                          : 'Tap to read all'),
+                                                  style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      color: scheme.primary)),
+                                              Icon(
+                                                  widget.onTap != null
+                                                      ? Icons
+                                                          .chevron_right_rounded
+                                                      : (_expanded
+                                                          ? Icons
+                                                              .expand_less_rounded
+                                                          : Icons
+                                                              .expand_more_rounded),
+                                                  size: 15,
+                                                  color: scheme.primary),
+                                            ]),
+                                      ],
                                     ],
-                                  ],
-                                ),
+                                  );
+                                }),
                               ),
                               IconButton(
                                 visualDensity: VisualDensity.compact,

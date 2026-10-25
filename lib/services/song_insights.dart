@@ -355,6 +355,49 @@ class SongInsights {
     );
   }
 
+  /// Everything Aluta has learned about one song, for its insight card:
+  /// plays per day over the last 7 days (oldest first), this week's total
+  /// and rank, all-time plays (the ~10 weeks kept), its feel and "ours".
+  ({
+    String title,
+    String artist,
+    List<int> last7,
+    int week,
+    int? rank,
+    int total,
+    int daysThisWeek,
+    SongFeel? feel,
+    bool ours,
+  })? songStats(String title) {
+    final s = _songs[_keyOf(title)];
+    if (s == null) return null;
+    final now = DateTime.now();
+    final last7 = [
+      for (var i = 6; i >= 0; i--)
+        _playsOn(s, _day(now.subtract(Duration(days: i)))),
+    ];
+    var total = 0;
+    ((s['d'] as Map?) ?? {}).forEach((_, v) => total += (v as num).toInt());
+    final week = last7.fold<int>(0, (a, b) => a + b);
+    int? rank;
+    if (week > 0) {
+      final ranking = weekInMusic().songs;
+      final i = ranking.indexWhere((e) => _keyOf(e.title) == _keyOf(title));
+      if (i >= 0) rank = i + 1;
+    }
+    return (
+      title: s['t'].toString(),
+      artist: (s['a'] ?? '').toString(),
+      last7: last7,
+      week: week,
+      rank: rank,
+      total: total,
+      daysThisWeek: last7.where((n) => n > 0).length,
+      feel: SongFeel.of(s['f'] as String?),
+      ours: s['ours'] == true,
+    );
+  }
+
   /// The whole last 7 days for the "Your week in music" sheet: every song
   /// played, most-played first, with plays and feel; plus totals.
   ({

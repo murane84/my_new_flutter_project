@@ -880,6 +880,28 @@ class HomePageState extends rp.ConsumerState<HomePage>
     return true;
   }
 
+  /// Tap a song banner → its insight card (plays chart, rank, feel, …).
+  void _openSongInsight(String title) {
+    final partner = _partnerInfo();
+    showSongInsight(context, title,
+        partnerName: partner?.name,
+        onSendWeek: partner == null
+            ? null
+            : (text) async {
+                final sent = await ApiService().sendMessage(partner.id, text);
+                if (mounted) {
+                  showToast(
+                      context,
+                      sent != null
+                          ? 'Sent to ${partner.name} 💞'
+                          : 'Could not send it right now',
+                      type: sent != null
+                          ? ToastType.success
+                          : ToastType.error);
+                }
+              });
+  }
+
   void _showSongNudge(SongNudge n) {
     final si = SongInsights.instance;
     // Partner-only nudges with no partner: drop quietly (no slot spent, no
@@ -902,6 +924,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           leading: Icons.repeat_rounded,
           hold: const Duration(seconds: 12),
           onIgnored: () => si.markIgnored(n.title),
+          onTap: () => _openSongInsight(n.title),
           actions: [
             for (final f in SongFeel.values)
               MomentAction(Icons.circle, f.label, () {
@@ -918,6 +941,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           title: AlutaMood.songMissingAgain(n.title, pname),
           leading: Icons.favorite_rounded,
           onIgnored: () => si.markIgnored(n.title),
+          onTap: () => _openSongInsight(n.title),
           actions: [
             if (partner != null)
               MomentAction(Icons.favorite_rounded, 'Send a heart', () {
@@ -934,6 +958,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           title: AlutaMood.songOurs(n.title, pname),
           leading: Icons.queue_music_rounded,
           onIgnored: () => si.markIgnored(n.title),
+          onTap: () => _openSongInsight(n.title),
           actions: [
             if (partner != null)
               MomentAction(Icons.playlist_add_rounded, 'Add to Our Playlist',
@@ -1043,6 +1068,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       subtitle: sub,
       leading: lead,
       hold: Duration(seconds: f == SongFeel.hurting ? 14 : 9),
+      onTap: () => _openSongInsight(title),
       actions: actions,
     );
   }
@@ -1113,6 +1139,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
       title: '✨ Today\'s glow: $line',
       subtitle: c.source.isEmpty ? null : c.source,
       leading: Icons.auto_awesome_rounded,
+      // The banner trims the glow — tap opens it whole in Glow.
+      onTap: () {
+        setState(() {
+          _activeFriendId = null;
+          _activeGroup = null;
+        });
+        _setFriendLayer('glow');
+      },
       actions: [
         MomentAction(Icons.auto_awesome_rounded, 'Open Glow', () {
           setState(() {

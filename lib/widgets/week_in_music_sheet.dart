@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 
 import '../services/song_insights.dart';
 
@@ -244,5 +245,199 @@ Future<void> showWeekInMusic(
         ]),
       ),
     ),
+  );
+}
+
+
+/// A floating, dismissible card with everything Aluta learned about one song
+/// — opened by tapping a song nudge banner ("on repeat", "makes you miss…",
+/// "feels like yours"): a 7-day play chart, this week's plays and rank,
+/// how many days you played it, all-time plays, its feel (tap to change) and
+/// whether it's in Our Playlist. "See my week" opens the full week.
+Future<void> showSongInsight(BuildContext context, String title,
+    {String? partnerName,
+    void Function(String text)? onSendWeek}) {
+  final scheme = Theme.of(context).colorScheme;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  return showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierColor: Colors.black.withValues(alpha: 0.35),
+    builder: (ctx) => StatefulBuilder(builder: (ctx, setD) {
+      final st = SongInsights.instance.songStats(title);
+      if (st == null) {
+        return const SizedBox.shrink();
+      }
+      final peak = st.last7.fold<int>(1, (a, b) => b > a ? b : a);
+      const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+      final today = DateTime.now();
+      Widget chip(String t) => Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: isDark ? 0.16 : 0.08),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(t,
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onSurface)),
+          );
+      return Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 40),
+        backgroundColor: scheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(colors: [
+                        Colors.white.withValues(alpha: 0.9),
+                        scheme.primary,
+                        Color.lerp(scheme.primary, Colors.black, 0.4)!,
+                      ], stops: const [0.1, 0.2, 1]),
+                    ),
+                    child: const Icon(Icons.music_note_rounded,
+                        color: Colors.white, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(st.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w900,
+                                color: scheme.onSurface)),
+                        if (st.artist.isNotEmpty)
+                          Text(st.artist,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: scheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ]),
+                const SizedBox(height: 14),
+                // Plays per day, this week.
+                SizedBox(
+                  height: 96,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      for (var i = 0; i < 7; i++)
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              if (st.last7[i] > 0)
+                                Text('${st.last7[i]}',
+                                    style: TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: scheme.onSurfaceVariant)),
+                              const SizedBox(height: 2),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                height: 4 + 58 * st.last7[i] / peak,
+                                margin:
+                                    const EdgeInsets.symmetric(horizontal: 6),
+                                decoration: BoxDecoration(
+                                  color: st.last7[i] > 0
+                                      ? scheme.primary.withValues(
+                                          alpha: i == 6 ? 1 : 0.65)
+                                      : scheme.outlineVariant
+                                          .withValues(alpha: 0.5),
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                  i == 6
+                                      ? 'Today'
+                                      : days[today
+                                              .subtract(Duration(days: 6 - i))
+                                              .weekday -
+                                          1],
+                                  style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: i == 6
+                                          ? FontWeight.w800
+                                          : FontWeight.w500,
+                                      color: scheme.onSurfaceVariant)),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(spacing: 6, runSpacing: 6, children: [
+                  chip('🔁 ${st.week}× this week'),
+                  if (st.rank != null) chip('🏆 #${st.rank} this week'),
+                  chip('📅 ${st.daysThisWeek} of 7 days'),
+                  if (st.total > st.week) chip('🎧 ${st.total}× lately'),
+                  if (st.ours) chip('💞 In Our Playlist'),
+                ]),
+                const SizedBox(height: 14),
+                Text('How does it feel?',
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 6),
+                Wrap(spacing: 6, runSpacing: 6, children: [
+                  for (final f in SongFeel.values)
+                    ChoiceChip(
+                      selected: st.feel == f,
+                      label: Text('${f.emoji} ${f.label}'),
+                      onSelected: (_) {
+                        HapticFeedback.selectionClick();
+                        SongInsights.instance.setFeel(st.title, f);
+                        setD(() {});
+                      },
+                    ),
+                ]),
+                const SizedBox(height: 14),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    showWeekInMusic(context,
+                        partnerName: partnerName, onSend: onSendWeek);
+                  },
+                  icon: const Icon(Icons.format_list_numbered_rounded,
+                      size: 18),
+                  label: const Text('See my week in music'),
+                  style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(44),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14))),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }),
   );
 }

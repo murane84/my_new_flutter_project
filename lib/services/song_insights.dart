@@ -355,6 +355,57 @@ class SongInsights {
     );
   }
 
+  /// The whole last 7 days for the "Your week in music" sheet: every song
+  /// played, most-played first, with plays and feel; plus totals.
+  ({
+    List<({String title, String artist, int plays, SongFeel? feel})> songs,
+    int total,
+    SongFeel? feel,
+    int together,
+  }) weekInMusic() {
+    final now = DateTime.now();
+    final since = now.subtract(const Duration(days: 6));
+    final ranked = _songs.values
+        .map((s) => (s, _playsSince(s, since)))
+        .where((e) => e.$2 > 0)
+        .toList()
+      ..sort((a, b) => b.$2.compareTo(a.$2));
+    final feels = <SongFeel, int>{};
+    var total = 0;
+    for (final e in ranked) {
+      total += e.$2;
+      final f = SongFeel.of(e.$1['f'] as String?);
+      if (f != null) feels[f] = (feels[f] ?? 0) + e.$2;
+    }
+    SongFeel? feel;
+    var fn = 0;
+    feels.forEach((f, c) {
+      if (c > fn) {
+        fn = c;
+        feel = f;
+      }
+    });
+    final cut = _day(since);
+    var together = 0;
+    _together.forEach((k, v) {
+      if (k.compareTo(cut) >= 0) together += v;
+    });
+    return (
+      songs: [
+        for (final e in ranked)
+          (
+            title: e.$1['t'].toString(),
+            artist: (e.$1['a'] ?? '').toString(),
+            plays: e.$2,
+            feel: SongFeel.of(e.$1['f'] as String?),
+          ),
+      ],
+      total: total,
+      feel: feel,
+      together: together,
+    );
+  }
+
   void markRecapShown() {
     _lastRecapWeek = _weekId(DateTime.now());
     _save();

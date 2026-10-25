@@ -110,6 +110,7 @@ import '../widgets/welcome_tour.dart';
 import 'moments_settings_screen.dart';
 import '../utils/readable.dart';
 import '../services/account_prefs.dart';
+import '../widgets/week_in_music_sheet.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
@@ -1147,28 +1148,40 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final together = r.together > 0
         ? ' · together ${r.together}×'
         : '';
+    Future<void> send(String text) async {
+      if (partner == null) return;
+      final sent = await ApiService().sendMessage(partner.id, text);
+      if (mounted) {
+        showToast(
+            context,
+            sent != null
+                ? 'Sent to ${partner.name} 💞'
+                : 'Could not send it right now',
+            type: sent != null ? ToastType.success : ToastType.error);
+      }
+    }
+
+    // The banner only fits a couple of titles — tap it (or "See all") for
+    // the whole week, ranked.
+    void openFull() => showWeekInMusic(context,
+        partnerName: partner?.name, onSend: partner == null ? null : send);
+
     showMomentCard(
       context,
       title: AlutaMood.weeklyRecapTitle(feelLabel),
       subtitle: '${lines.join('  ')}$together',
       leading: Icons.insights_rounded,
       hold: const Duration(seconds: 14),
+      onTap: openFull,
       actions: [
+        MomentAction(Icons.format_list_numbered_rounded, 'See all', openFull,
+            primary: true),
         if (partner != null)
-          MomentAction(Icons.send_rounded, 'Send to ${partner.name}', () async {
-            final text = '🎶 My week in music\n${lines.join('\n')}'
+          MomentAction(Icons.send_rounded, 'Send to ${partner.name}', () {
+            send('🎶 My week in music\n${lines.join('\n')}'
                 '${feelLabel == null ? '' : '\nMostly $feelLabel'}'
-                '${r.together > 0 ? '\nWe listened together ${r.together}× 💞' : ''}';
-            final sent = await ApiService().sendMessage(partner.id, text);
-            if (mounted) {
-              showToast(
-                  context,
-                  sent != null
-                      ? 'Sent to ${partner.name} 💞'
-                      : 'Could not send it right now',
-                  type: sent != null ? ToastType.success : ToastType.error);
-            }
-          }, primary: true),
+                '${r.together > 0 ? '\nWe listened together ${r.together}× 💞' : ''}');
+          }),
       ],
     );
     return true;

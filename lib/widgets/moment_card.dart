@@ -31,6 +31,8 @@ void showMomentCard(
   Duration hold = const Duration(seconds: 9),
   // Closed (timeout / ✕ / swipe) without tapping any action.
   VoidCallback? onIgnored,
+  // Tapping the card itself (not a button) — e.g. open the full details.
+  VoidCallback? onTap,
 }) {
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return;
@@ -44,6 +46,7 @@ void showMomentCard(
       actions: actions,
       hold: hold,
       onIgnored: onIgnored,
+      onTap: onTap,
       onGone: () {
         if (identical(_current, entry)) _current = null;
         if (entry.mounted) entry.remove();
@@ -63,6 +66,7 @@ class _MomentCard extends StatefulWidget {
     required this.hold,
     required this.onGone,
     this.onIgnored,
+    this.onTap,
   });
 
   final String title;
@@ -72,6 +76,7 @@ class _MomentCard extends StatefulWidget {
   final Duration hold;
   final VoidCallback onGone;
   final VoidCallback? onIgnored;
+  final VoidCallback? onTap;
 
   @override
   State<_MomentCard> createState() => _MomentCardState();
@@ -136,6 +141,13 @@ class _MomentCardState extends State<_MomentCard>
               );
             },
             child: GestureDetector(
+              onTap: widget.onTap == null
+                  ? null
+                  : () {
+                      _acted = true;
+                      _leave();
+                      widget.onTap!();
+                    },
               onVerticalDragUpdate: (d) {
                 setState(() => _drag = (_drag + d.delta.dy).clamp(-120, 12));
               },

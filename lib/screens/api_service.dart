@@ -1597,6 +1597,33 @@ class ApiService {
     }
   }
 
+  /// My bonded partner's top song titles over the last [days] (7 or 30) —
+  /// only when they share their listening with me. Null on failure; an
+  /// empty list when they don't share / have nothing.
+  Future<List<String>?> partnerMusicTop(int friendId, {int days = 7}) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/users/$friendId/music-week?days=$days'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
+      final d = jsonDecode(resp.body);
+      final top = d is Map ? d['top'] : null;
+      return top is List
+          ? [
+              for (final e in top)
+                if (e is Map && (e['title'] ?? '').toString().isNotEmpty)
+                  e['title'].toString(),
+            ]
+          : <String>[];
+    } catch (e) {
+      _logger.w('partnerMusicTop failed: $e');
+      return null;
+    }
+  }
+
   /// Friend ids I'm still waiting to hear are online.
   Future<Set<int>> onlineWatches() async {
     try {

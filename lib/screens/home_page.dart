@@ -672,6 +672,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           if (_maybeMusicWelcome(away)) return;
           // A music nudge that waited for you to come back.
           if (_onSongNudge() || _maybeWeeklyRecap()) return;
+          _maybeTogetherMusic(); // shared top 3 (Sun) · our soundtrack (1st)
           if (away >= const Duration(minutes: 30)) _maybeReconnectNudge();
           // Long time away → wait for the reconnect refresh, then summarise.
           if (away >= const Duration(hours: 3)) {
@@ -841,10 +842,15 @@ class HomePageState extends rp.ConsumerState<HomePage>
     };
     SongInsights.instance.load().then((_) {
       if (!mounted) return;
+      // Your listening history follows the account (merge, never lose).
+      SongInsights.instance.syncWithAccount();
       SongInsights.instance.pending.addListener(_onSongNudge);
       Future.delayed(const Duration(seconds: 6), () {
         if (!mounted) return;
-        if (!_maybeWeeklyRecap()) _maybeGlowOfDay();
+        if (!_maybeWeeklyRecap()) {
+          _maybeGlowOfDay();
+          Future.delayed(const Duration(seconds: 30), _maybeTogetherMusic);
+        }
       });
     });
     // Listen Together sessions count toward the weekly recap.
@@ -880,11 +886,145 @@ class HomePageState extends rp.ConsumerState<HomePage>
     return true;
   }
 
+  /// "Your week in music" with everything wired: send to partner, the
+  /// shared top songs, and Listen Together.
+  void _openWeekInMusic() {
+    final partner = _partnerInfo();
+    showWeekInMusic(
+      context,
+      partnerName: partner?.name,
+      onSend: partner == null ? null : (t) => _sendToPartner(partner, t),
+      partnerTop: partner == null
+          ? null
+          : () => ApiService().partnerMusicTop(partner.id),
+      onListenTogether: partner == null
+          ? null
+          : () => SongBridge.instance.listenTogether?.call(),
+    );
+  }
+
+  Future<void> _sendToPartner(
+      ({Map<String, dynamic> space, int id, String name}) partner,
+      String text) async {
+    final sent = await ApiService().sendMessage(partner.id, text);
+    if (mounted) {
+      showToast(
+          context,
+          sent != null
+              ? 'Sent to ${partner.name} 💞'
+              : 'Could not send it right now',
+          type: sent != null ? ToastType.success : ToastType.error);
+    }
+  }
+
+  /// Sundays: "You both had X in your top 3" (once a week). The 1st–3rd:
+  /// "Our <month> soundtrack" — the songs you both played most last month,
+  /// keepable in Our Space. Only with a partner who shares their listening.
+  bool _togetherMusicBusy = false;
+  Future<void> _maybeTogetherMusic() async {
+    if (_togetherMusicBusy) return;
+    if (!mounted || !_appForeground || _momentCooling) return;
+    if (WelcomeTour.showing || !MomentPrefs.instance.welcomeCards.value) return;
+    if (ref.read(liveSessionProvider).active) return;
+    final partner = _partnerInfo();
+    if (partner == null) return;
+    final si = SongInsights.instance;
+    final now = DateTime.now();
+    _togetherMusicBusy = true;
+    try {
+      final p = await SharedPreferences.getInstance();
+      // ── Monthly soundtrack ──
+      if (si.monthCardDue()) {
+        final theirs = await ApiService().partnerMusicTop(partner.id, days: 30);
+        if (theirs == null || !mounted) return;
+        final mine = si.topTitles(days: 30, limit: 15);
+        final keys = {for (final t in theirs) SongInsights.keyOf(t)};
+        final both = [
+          for (final t in mine)
+            if (keys.contains(SongInsights.keyOf(t))) t,
+        ].take(5).toList();
+        si.markMonthCardShown();
+        if (both.isEmpty) return;
+        final month = DateFormat('MMMM')
+            .format(DateTime(now.year, now.month - 1, 1));
+        final tog = si.togetherSince(31);
+        _lastMomentAt = DateTime.now();
+        showMomentCard(
+          context,
+          title: 'Your $month soundtrack 💞',
+          subtitle: '${both.join(' · ')}${tog > 0 ? ' · together $tog×' : ''}',
+          leading: Icons.album_rounded,
+          hold: const Duration(seconds: 14),
+          actions: [
+            MomentAction(Icons.push_pin_rounded, 'Keep in Our Space',
+                () async {
+              final sid = (partner.space['id'] as num?)?.toInt();
+              if (sid == null) return;
+              final res = await ApiService().addMoment(sid,
+                  kind: 'note',
+                  caption: '🎶 Our $month soundtrack\n'
+                      '${[for (var i = 0; i < both.length; i++) '${i + 1}. ${both[i]}'].join('\n')}'
+                      '${tog > 0 ? '\nWe listened together $tog× 💞' : ''}');
+              if (res != null) spaceEventBus.value++;
+              if (mounted) {
+                showToast(context,
+                    res != null ? 'Kept in Our Space 💛' : 'Could not keep that',
+                    type: res != null ? ToastType.success : ToastType.error);
+              }
+            }, primary: true),
+            MomentAction(Icons.headphones_rounded, 'Listen together',
+                () => SongBridge.instance.listenTogether?.call()),
+          ],
+        );
+        return;
+      }
+      // ── Sunday: both in your top 3 ──
+      if (now.weekday != DateTime.sunday || now.hour < 12) return;
+      final wk = '${now.year}-${now.difference(DateTime(now.year)).inDays ~/ 7}';
+      if (p.getString('shared_top_week') == wk) return;
+      final theirs = await ApiService().partnerMusicTop(partner.id);
+      if (theirs == null || !mounted) return;
+      await p.setString('shared_top_week', wk);
+      final mine = si.topTitles(days: 7, limit: 3);
+      final their3 = {for (final t in theirs.take(3)) SongInsights.keyOf(t)};
+      final hit = mine.where((t) => their3.contains(SongInsights.keyOf(t)));
+      if (hit.isEmpty) return;
+      _lastMomentAt = DateTime.now();
+      showMomentCard(
+        context,
+        title: AlutaMood.sharedTop(hit.first, partner.name),
+        leading: Icons.favorite_rounded,
+        hold: const Duration(seconds: 12),
+        onTap: _openWeekInMusic,
+        actions: [
+          MomentAction(Icons.headphones_rounded, 'Play it together',
+              () => SongBridge.instance.listenTogether?.call(),
+              primary: true),
+          MomentAction(Icons.format_list_numbered_rounded, 'See my week',
+              _openWeekInMusic),
+        ],
+      );
+    } catch (_) {
+    } finally {
+      _togetherMusicBusy = false;
+    }
+  }
+
   /// Tap a song banner → its insight card (plays chart, rank, feel, …).
   void _openSongInsight(String title) {
     final partner = _partnerInfo();
     showSongInsight(context, title,
         partnerName: partner?.name,
+        // Who brought it to me (from my chats) → a one-tap thank-you.
+        sharedBy: () async {
+          final r = await _whoSharedSong(title);
+          if (r == null) return null;
+          return (
+            name: r.$2,
+            thank: () => openChat(r.$1),
+          );
+        },
+        onOpenWeek: _openWeekInMusic,
         onSendWeek: partner == null
             ? null
             : (text) async {
@@ -906,7 +1046,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final si = SongInsights.instance;
     // Partner-only nudges with no partner: drop quietly (no slot spent, no
     // "ignore" counted).
-    if (n.kind != 'repeat' && _partnerInfo() == null) {
+    if ((n.kind == 'missing' || n.kind == 'ours') && _partnerInfo() == null) {
       si.pending.value = null;
       return;
     }
@@ -932,6 +1072,42 @@ class HomePageState extends rp.ConsumerState<HomePage>
                 Future.delayed(const Duration(milliseconds: 650),
                     () => _songFollowUp(n.title, n.artist, f));
               }, emoji: f.emoji),
+          ],
+        );
+        break;
+      case 'back':
+      case 'streak':
+      case 'night':
+        showMomentCard(
+          context,
+          title: n.kind == 'back'
+              ? AlutaMood.songBack(n.title)
+              : n.kind == 'streak'
+                  ? AlutaMood.songStreak(n.title)
+                  : AlutaMood.songNight(n.title),
+          subtitle: n.artist.isEmpty ? null : n.artist,
+          leading: n.kind == 'back'
+              ? Icons.history_rounded
+              : n.kind == 'streak'
+                  ? Icons.local_fire_department_rounded
+                  : Icons.nights_stay_rounded,
+          onIgnored: () => si.markIgnored(n.title),
+          onTap: () => _openSongInsight(n.title),
+          actions: [
+            MomentAction(Icons.insights_rounded, 'See its story', () {
+              acted();
+              _openSongInsight(n.title);
+            }, primary: true),
+            if (partner != null)
+              MomentAction(Icons.send_rounded, 'Send to $pname', () {
+                acted();
+                SongBridge.instance.messagePartner?.call(
+                    text: n.kind == 'night'
+                        ? '🌙 My late-night song this week: “${n.title}”'
+                        : n.kind == 'streak'
+                            ? '🔁 5 days in a row with “${n.title}” — listen?'
+                            : '🎶 Back on “${n.title}” again — remember it?');
+              }),
           ],
         );
         break;
@@ -1197,8 +1373,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
     // The banner only fits a couple of titles — tap it (or "See all") for
     // the whole week, ranked.
-    void openFull() => showWeekInMusic(context,
-        partnerName: partner?.name, onSend: partner == null ? null : send);
+    void openFull() => _openWeekInMusic();
 
     showMomentCard(
       context,

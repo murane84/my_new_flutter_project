@@ -47,6 +47,12 @@ extension _HomeMenu on HomePageState {
           },
           onTap: _showQuickStatusSheet,
         ),
+        // Your listening, any day (not only the Sunday recap).
+        GenieMenuEntry(
+          icon: Icons.insights_rounded,
+          label: 'My week in music',
+          onTap: _openWeekInMusic,
+        ),
         GenieMenuEntry(
           icon: Icons.groups_rounded,
           label: 'Groups',

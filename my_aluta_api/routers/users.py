@@ -758,7 +758,9 @@ def friends_quick_statuses(db: Session = Depends(get_db),
 
 
 # ── Account-backed settings (wallpapers, …) ─────────────────────────────────
-_SETTING_KEYS = {"chat_wallpaper", "app_prefs"}
+_SETTING_KEYS = {"chat_wallpaper", "app_prefs", "song_insights"}
+# Per-key size caps (bytes of JSON). Listening history is the big one.
+_SETTING_CAPS = {"song_insights": 768 * 1024}
 
 
 @router.get("/users/me/settings/{key}", tags=["Users"])
@@ -788,7 +790,7 @@ def put_user_setting(key: str, body: dict, db: Session = Depends(get_db),
         raise HTTPException(status_code=404, detail="Unknown setting")
     rev = int((body or {}).get("rev") or 0)
     raw = json.dumps((body or {}).get("data"))
-    if len(raw) > 64 * 1024:
+    if len(raw) > _SETTING_CAPS.get(key, 64 * 1024):
         raise HTTPException(status_code=413, detail="Too large")
     row = db.query(UserSetting).filter(
         UserSetting.user_id == current_user.id, UserSetting.key == key).first()
@@ -802,3 +804,72 @@ def put_user_setting(key: str, body: dict, db: Session = Depends(get_db),
         return {"saved": False, "rev": int(row.rev or 0)}
     db.commit()
     return {"saved": True, "rev": rev}
+
+
+# ── Partner's week in music (for the shared recap) ───────────────────────────
+def _bonded(db: Session, a: int, b: int) -> bool:
+    from models import BondRequest
+    return db.query(BondRequest).filter(
+        BondRequest.status == "accepted",
+        ((BondRequest.from_user_id == a) & (BondRequest.to_user_id == b))
+        | ((BondRequest.from_user_id == b) & (BondRequest.to_user_id == a)),
+    ).first() is not None
+
+
+def _shares_listening_with(db: Session, owner: int, viewer: int) -> bool:
+    """The owner's own "share what I'm listening to" choice (synced in their
+    app_prefs): off → nobody; 'selected' → only the picked friends."""
+    from models import UserSetting
+    row = db.query(UserSetting).filter(
+        UserSetting.user_id == owner, UserSetting.key == "app_prefs").first()
+    if row is None:
+        return True  # default: shared with everyone
+    try:
+        d = json.loads(row.data or "{}") or {}
+    except Exception:
+        return True
+    def val(k, default):
+        box = d.get(k)
+        return box.get("v", default) if isinstance(box, dict) else default
+    if val("share_listening_now", True) is False:
+        return False
+    if val("share_listening_mode", "everyone") == "selected":
+        allowed = val("share_listening_allowed", []) or []
+        return str(viewer) in [str(x) for x in allowed]
+    return True
+
+
+@router.get("/users/{friend_id}/music-week", tags=["Users"])
+def partner_music_week(friend_id: int, days: int = 7,
+                       db: Session = Depends(get_db),
+                       current_user: User = Depends(get_current_user)):
+    """My bonded partner's top songs over the last [days] (7 or 30), from
+    their account-backed listening history — only if they share their
+    listening with me. Titles + plays only."""
+    from datetime import timedelta
+    from models import UserSetting
+    if not _bonded(db, current_user.id, friend_id):
+        raise HTTPException(status_code=404, detail="Not your partner")
+    if not _shares_listening_with(db, friend_id, current_user.id):
+        return {"shared": False, "top": []}
+    row = db.query(UserSetting).filter(
+        UserSetting.user_id == friend_id,
+        UserSetting.key == "song_insights").first()
+    if row is None:
+        return {"shared": True, "top": []}
+    try:
+        d = json.loads(row.data or "{}") or {}
+    except Exception:
+        d = {}
+    days = 30 if days > 7 else 7
+    cut = (datetime.now(timezone.utc) - timedelta(days=days - 1)).strftime("%Y%m%d")
+    top = []
+    for s in (d.get("s") or {}).values():
+        if not isinstance(s, dict):
+            continue
+        plays = sum(int(v) for k, v in (s.get("d") or {}).items()
+                    if str(k) >= cut and isinstance(v, (int, float)))
+        if plays > 0:
+            top.append({"title": str(s.get("t") or ""), "plays": plays})
+    top.sort(key=lambda e: -e["plays"])
+    return {"shared": True, "top": top[:15]}

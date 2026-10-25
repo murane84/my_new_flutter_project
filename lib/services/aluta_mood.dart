@@ -266,6 +266,30 @@ class AlutaMood {
         '${_q(title)} tena 🥹 — mtumie ${partner.isEmpty ? 'yeye' : partner} moyo? 💌',
       ]);
 
+  static String songBack(String title) => _pick('sb', [
+        "You're back on ${_q(title)} after a while 👀",
+        '${_q(title)} is back in your ears 🎶 — missed it?',
+        'Umerudi kwa ${_q(title)} 👀 — uliumiss?',
+      ]);
+
+  static String songStreak(String title) => _pick('ss', [
+        '${_q(title)} — 5 days in a row 🔁',
+        "Five days straight with ${_q(title)} 🎧 — it's a whole mood",
+        'Siku 5 mfululizo na ${_q(title)} 🔁',
+      ]);
+
+  static String songNight(String title) => _pick('sn', [
+        'Your late-night song this week 🌙 ${_q(title)}',
+        '${_q(title)} keeps you company at night 🌙',
+        'Wimbo wako wa usiku wiki hii 🌙 ${_q(title)}',
+      ]);
+
+  static String sharedTop(String title, String partner) => _pick('st', [
+        'You and $partner both had ${_q(title)} in your top 3 this week 💞',
+        '${_q(title)} is in both your top 3 this week 💞',
+        'Wewe na $partner mna ${_q(title)} kwenye top 3 wiki hii 💞',
+      ]);
+
   static String songOurs(String title, String partner) => _pick('so', [
         '${_q(title)} has been your song for weeks 💞 — add it to Our Playlist${partner.isEmpty ? '' : ' with $partner'}?',
         '${_q(title)} ni wimbo wenu 💞 — uweke kwenye Our Playlist?',

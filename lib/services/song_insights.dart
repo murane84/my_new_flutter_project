@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -5,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'aluta_mood.dart';
 import 'account_prefs.dart';
+import '../screens/api_service.dart';
 
 /// How a song makes you feel — the answer to the on-repeat card.
 enum SongFeel {
@@ -31,7 +33,7 @@ enum SongFeel {
 class SongNudge {
   const SongNudge(this.kind, this.title,
       {this.artist = '', this.feel, required this.day});
-  final String kind; // 'repeat' · 'missing' · 'ours'
+  final String kind; // 'repeat' · 'missing' · 'ours' · 'back' · 'streak' · 'night'
   final String title;
   final String artist;
   final SongFeel? feel;
@@ -45,7 +47,10 @@ class SongNudge {
 ///  • at most ONE music nudge per day (the weekly recap has its own slot);
 ///  • a nudge ignored twice for a song never comes back for that song;
 ///  • a "Music nudges" switch turns it all off (Moments & nudges);
-///  • nothing leaves the phone — no server, no analytics.
+///  • it's YOUR listening history: backed up to your own account (so a
+///    reinstall or a new phone keeps your weeks), merged across devices,
+///    never used for analytics. Your bonded partner sees only your top
+///    titles, and only while you share your listening with them.
 class SongInsights {
   SongInsights._();
   static final SongInsights instance = SongInsights._();
@@ -67,6 +72,8 @@ class SongInsights {
   Map<String, Map<String, dynamic>> _songs = {};
   String? _lastNudgeDay;
   String? _lastRecapWeek;
+  String? _lastNightWeek; // week the "late-night song" card was shown
+  String? _lastMonthCard; // yyyymm the "Our soundtrack" card was shown
   Map<String, int> _together = {}; // yyyymmdd → live sessions started
   Future<void>? _loading;
 
@@ -113,30 +120,128 @@ class SongInsights {
           MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)));
       _lastNudgeDay = j['ln'] as String?;
       _lastRecapWeek = j['lr'] as String?;
+      _lastNightWeek = j['lnw'] as String?;
+      _lastMonthCard = j['lmc'] as String?;
       _together = ((j['tg'] as Map?) ?? {})
           .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
     } catch (_) {}
+  }
+
+  Map<String, dynamic> _snapshot() => {
+        's': _songs,
+        'ln': _lastNudgeDay,
+        'lr': _lastRecapWeek,
+        'lnw': _lastNightWeek,
+        'lmc': _lastMonthCard,
+        'tg': _together,
+      };
+
+  // ── Account backup (merge, never overwrite) ────────────────────────────────
+  // The history lives in the user's account (user_settings 'song_insights'),
+  // so a reinstall / update / new phone keeps every week. Devices MERGE: per
+  // song per day the higher count wins, the newer feeling wins, "ours" sticks
+  // — so two phones never erase each other's plays.
+  static const _settingKey = 'song_insights';
+  Timer? _push;
+  bool _synced = false;
+
+  static Map<String, dynamic> _m(Object? v) =>
+      v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
+  static int _n(Object? v) => (v as num?)?.toInt() ?? 0;
+
+  static Map<String, dynamic> _maxMap(Object? a, Object? b) {
+    final out = _m(a);
+    _m(b).forEach((k, v) {
+      if (_n(v) > _n(out[k])) out[k] = _n(v);
+    });
+    return out;
+  }
+
+  static Map<String, dynamic> _mergeSong(
+      Map<String, dynamic> a, Map<String, dynamic> b) {
+    final out = Map<String, dynamic>.from(a);
+    if ((out['t'] ?? '').toString().isEmpty) out['t'] = b['t'];
+    if ((out['a'] ?? '').toString().isEmpty && b['a'] != null) {
+      out['a'] = b['a'];
+    }
+    out['d'] = _maxMap(a['d'], b['d']);
+    out['m'] = _maxMap(a['m'], b['m']);
+    final dm = _m(a['dm']);
+    _m(b['dm']).forEach((day, v) => dm[day] = _maxMap(dm[day], v));
+    out['dm'] = dm;
+    if (_n(b['fAt']) > _n(a['fAt']) && b['f'] != null) {
+      out['f'] = b['f'];
+      out['fAt'] = b['fAt'];
+    }
+    if (b['ours'] == true) out['ours'] = true;
+    for (final k in const ['ig', 'nAt', 'bAt', 'sAt']) {
+      if (_n(b[k]) > _n(out[k])) out[k] = _n(b[k]);
+    }
+    return out;
+  }
+
+  static String? _maxStr(String? a, Object? b) {
+    final bs = b?.toString();
+    if (bs == null || bs.isEmpty) return a;
+    if (a == null || bs.compareTo(a) > 0) return bs;
+    return a;
+  }
+
+  /// Merge the account copy in, then upload the union. Call after sign-in
+  /// (unawaited); safe to call again.
+  Future<void> syncWithAccount() async {
+    try {
+      await load();
+      final remote = await ApiService().getSetting(_settingKey);
+      if (remote == null) return; // offline — next launch
+      final d = remote.data;
+      if (d is Map) {
+        final rs = _m(d['s']);
+        rs.forEach((k, v) {
+          final theirs = _m(v);
+          final mine = _songs[k];
+          _songs[k] = mine == null ? theirs : _mergeSong(mine, theirs);
+        });
+        _maxMap(_together, d['tg']).forEach((k, v) => _together[k] = _n(v));
+        _lastNudgeDay = _maxStr(_lastNudgeDay, d['ln']);
+        _lastRecapWeek = _maxStr(_lastRecapWeek, d['lr']);
+        _lastNightWeek = _maxStr(_lastNightWeek, d['lnw']);
+        _lastMonthCard = _maxStr(_lastMonthCard, d['lmc']);
+        feelsRev.value++;
+      }
+      _synced = true;
+      await _save(); // writes locally and uploads the merged copy
+    } catch (_) {}
+  }
+
+  void _schedulePush() {
+    if (!_synced) return; // merge first, so a fresh install never uploads emptiness
+    _push?.cancel();
+    _push = Timer(const Duration(seconds: 8), () async {
+      try {
+        await ApiService().putSetting(_settingKey,
+            DateTime.now().millisecondsSinceEpoch, _snapshot());
+      } catch (_) {}
+    });
   }
 
   Future<void> _save() async {
     try {
       // Keep it small: drop day buckets older than ~10 weeks.
       final cutoff = _day(DateTime.now().subtract(const Duration(days: 70)));
+      // Time-of-day buckets only need the last two weeks.
+      final cut14 = _day(DateTime.now().subtract(const Duration(days: 14)));
       for (final s in _songs.values) {
         final d = (s['d'] as Map?)?.cast<String, dynamic>();
         d?.removeWhere((k, _) => k.compareTo(cutoff) < 0);
+        final dm = (s['dm'] as Map?)?.cast<String, dynamic>();
+        dm?.removeWhere((k, _) => k.compareTo(cut14) < 0);
       }
       _together.removeWhere((k, _) => k.compareTo(cutoff) < 0);
       final p = await SharedPreferences.getInstance();
-      await p.setString(
-          _prefsKey,
-          jsonEncode({
-            's': _songs,
-            'ln': _lastNudgeDay,
-            'lr': _lastRecapWeek,
-            'tg': _together,
-          }));
+      await p.setString(_prefsKey, jsonEncode(_snapshot()));
     } catch (_) {}
+    _schedulePush();
   }
 
   Future<void> setEnabled(bool on) async {
@@ -177,17 +282,65 @@ class SongInsights {
     await load();
     final s = _song(t, artist.trim());
     final d = Map<String, dynamic>.from((s['d'] as Map?) ?? {});
+    // Days since I last played it (before today) — "rediscovered".
+    String? lastBefore;
+    for (final k in d.keys) {
+      if (k != _today && (lastBefore == null || k.compareTo(lastBefore) > 0)) {
+        lastBefore = k;
+      }
+    }
+    final firstToday = ((d[_today] as num?)?.toInt() ?? 0) == 0;
     d[_today] = ((d[_today] as num?)?.toInt() ?? 0) + 1;
     s['d'] = d;
     final m = Map<String, dynamic>.from((s['m'] as Map?) ?? {});
     final mk = AlutaMood.moment.name;
     m[mk] = ((m[mk] as num?)?.toInt() ?? 0) + 1;
     s['m'] = m;
-    _maybeQueue(s);
+    // The same, per day (two weeks) — "your late-night song this week".
+    final dm = Map<String, dynamic>.from((s['dm'] as Map?) ?? {});
+    final todayM = Map<String, dynamic>.from((dm[_today] as Map?) ?? {});
+    todayM[mk] = ((todayM[mk] as num?)?.toInt() ?? 0) + 1;
+    dm[_today] = todayM;
+    s['dm'] = dm;
+    int? gapDays;
+    if (firstToday && lastBefore != null) {
+      final y = int.parse(lastBefore.substring(0, 4));
+      final mo = int.parse(lastBefore.substring(4, 6));
+      final da = int.parse(lastBefore.substring(6, 8));
+      gapDays = DateTime.now().difference(DateTime(y, mo, da)).inDays;
+    }
+    _maybeQueue(s, backAfterDays: gapDays);
     await _save();
   }
 
-  void _maybeQueue(Map<String, dynamic> s) {
+  /// Consecutive days played, ending today (or yesterday, if not yet today).
+  int _streakOf(Map<String, dynamic> s) {
+    final now = DateTime.now();
+    final start = _playsOn(s, _today) > 0 ? 0 : 1;
+    var n = 0;
+    for (var i = start; i < 60; i++) {
+      if (_playsOn(s, _day(now.subtract(Duration(days: i)))) > 0) {
+        n++;
+      } else {
+        break;
+      }
+    }
+    return n;
+  }
+
+  /// This week's plays of [s] in one part of the day.
+  int _momentPlaysThisWeek(Map<String, dynamic> s, AlutaMoment m) {
+    final cut = _day(DateTime.now().subtract(const Duration(days: 6)));
+    var n = 0;
+    ((s['dm'] as Map?) ?? {}).forEach((day, v) {
+      if (day.toString().compareTo(cut) >= 0 && v is Map) {
+        n += ((v[m.name] as num?)?.toInt() ?? 0);
+      }
+    });
+    return n;
+  }
+
+  void _maybeQueue(Map<String, dynamic> s, {int? backAfterDays}) {
     if (!enabled.value || _nudgedToday) return;
     final pend = pending.value;
     if (pend != null && pend.day == _today) return; // today's is waiting
@@ -220,6 +373,42 @@ class SongInsights {
       pending.value =
           SongNudge('missing', title, artist: artist, feel: feel, day: _today);
       return;
+    }
+    // 8) Rediscovered: an old favourite back after 3+ weeks.
+    if (backAfterDays != null &&
+        backAfterDays >= 21 &&
+        _playsSince(s, now.subtract(const Duration(days: 70))) >= 5 &&
+        ago('bAt') >= 30) {
+      s['bAt'] = now.millisecondsSinceEpoch;
+      pending.value =
+          SongNudge('back', title, artist: artist, feel: feel, day: _today);
+      return;
+    }
+    // 9) A gentle streak: 5 days in a row (once a month per song).
+    if (today == 1 && _streakOf(s) == 5 && ago('sAt') >= 30) {
+      s['sAt'] = now.millisecondsSinceEpoch;
+      pending.value =
+          SongNudge('streak', title, artist: artist, feel: feel, day: _today);
+      return;
+    }
+    // 10) Your late-night song this week (once a week, from 3 night plays).
+    final wk = _weekId(now);
+    if (AlutaMood.moment == AlutaMoment.night &&
+        _lastNightWeek != wk &&
+        _momentPlaysThisWeek(s, AlutaMoment.night) >= 3) {
+      final best = _songs.values.fold<Map<String, dynamic>?>(null, (b, x) {
+        if (b == null) return x;
+        return _momentPlaysThisWeek(x, AlutaMoment.night) >
+                _momentPlaysThisWeek(b, AlutaMoment.night)
+            ? x
+            : b;
+      });
+      if (identical(best, s)) {
+        _lastNightWeek = wk;
+        pending.value =
+            SongNudge('night', title, artist: artist, feel: feel, day: _today);
+        return;
+      }
     }
     // 1) On repeat today (3+) and we haven't asked how it feels lately.
     final askedAt = (s['fAt'] as num?)?.toInt() ?? 0;
@@ -368,6 +557,9 @@ class SongInsights {
     int daysThisWeek,
     SongFeel? feel,
     bool ours,
+    int streak,
+    int lastWeek,
+    Map<AlutaMoment, int> moments,
   })? songStats(String title) {
     final s = _songs[_keyOf(title)];
     if (s == null) return null;
@@ -395,19 +587,51 @@ class SongInsights {
       daysThisWeek: last7.where((n) => n > 0).length,
       feel: SongFeel.of(s['f'] as String?),
       ours: s['ours'] == true,
+      streak: _streakOf(s),
+      lastWeek: () {
+        final v = _playsSince(s, now.subtract(const Duration(days: 13))) - week;
+        return v < 0 ? 0 : v;
+      }(),
+      // When you listen: this week's part-of-day split, else all-time.
+      moments: () {
+        final w = {
+          for (final mo in AlutaMoment.values)
+            mo: _momentPlaysThisWeek(s, mo),
+        };
+        if (w.values.any((v) => v > 0)) return w;
+        return {
+          for (final mo in AlutaMoment.values)
+            mo: ((s['m'] as Map?)?[mo.name] as num?)?.toInt() ?? 0,
+        };
+      }(),
     );
   }
 
   /// The whole last 7 days for the "Your week in music" sheet: every song
-  /// played, most-played first, with plays and feel; plus totals.
+  /// played, most-played first, with plays, last week's plays (for the
+  /// ▲▼ / new / 🔥 marks), feel, "ours" and streak; plus totals, how many
+  /// are new, the mood mix and each part of the day's top song.
   ({
-    List<({String title, String artist, int plays, SongFeel? feel})> songs,
+    List<
+        ({
+          String title,
+          String artist,
+          int plays,
+          int lastWeek,
+          SongFeel? feel,
+          bool ours,
+          int streak,
+        })> songs,
     int total,
     SongFeel? feel,
     int together,
+    int newCount,
+    Map<SongFeel, int> feelMix,
+    Map<AlutaMoment, String> momentTops,
   }) weekInMusic() {
     final now = DateTime.now();
     final since = now.subtract(const Duration(days: 6));
+    final prevFrom = now.subtract(const Duration(days: 13));
     final ranked = _songs.values
         .map((s) => (s, _playsSince(s, since)))
         .where((e) => e.$2 > 0)
@@ -415,10 +639,31 @@ class SongInsights {
       ..sort((a, b) => b.$2.compareTo(a.$2));
     final feels = <SongFeel, int>{};
     var total = 0;
+    var fresh = 0;
+    final rows = <({
+      String title,
+      String artist,
+      int plays,
+      int lastWeek,
+      SongFeel? feel,
+      bool ours,
+      int streak,
+    })>[];
     for (final e in ranked) {
       total += e.$2;
       final f = SongFeel.of(e.$1['f'] as String?);
       if (f != null) feels[f] = (feels[f] ?? 0) + e.$2;
+      final last = _playsSince(e.$1, prevFrom) - e.$2;
+      if (last <= 0) fresh++;
+      rows.add((
+        title: e.$1['t'].toString(),
+        artist: (e.$1['a'] ?? '').toString(),
+        plays: e.$2,
+        lastWeek: last < 0 ? 0 : last,
+        feel: f,
+        ours: e.$1['ours'] == true,
+        streak: _streakOf(e.$1),
+      ));
     }
     SongFeel? feel;
     var fn = 0;
@@ -433,21 +678,65 @@ class SongInsights {
     _together.forEach((k, v) {
       if (k.compareTo(cut) >= 0) together += v;
     });
+    final tops = <AlutaMoment, String>{};
+    for (final mo in AlutaMoment.values) {
+      var best = 1; // at least 2 plays in that part of the day
+      for (final e in ranked) {
+        final c = _momentPlaysThisWeek(e.$1, mo);
+        if (c > best) {
+          best = c;
+          tops[mo] = e.$1['t'].toString();
+        }
+      }
+    }
     return (
-      songs: [
-        for (final e in ranked)
-          (
-            title: e.$1['t'].toString(),
-            artist: (e.$1['a'] ?? '').toString(),
-            plays: e.$2,
-            feel: SongFeel.of(e.$1['f'] as String?),
-          ),
-      ],
+      songs: rows,
       total: total,
       feel: feel,
       together: together,
+      newCount: fresh,
+      feelMix: feels,
+      momentTops: tops,
     );
   }
+
+  /// Top titles over the last [days] (for "Our soundtrack" overlap).
+  List<String> topTitles({int days = 30, int limit = 10}) {
+    final since = DateTime.now().subtract(Duration(days: days - 1));
+    final ranked = _songs.values
+        .map((s) => (s, _playsSince(s, since)))
+        .where((e) => e.$2 > 0)
+        .toList()
+      ..sort((a, b) => b.$2.compareTo(a.$2));
+    return [for (final e in ranked.take(limit)) e.$1['t'].toString()];
+  }
+
+  /// Live sessions started in the last [days].
+  int togetherSince(int days) {
+    final cut = _day(DateTime.now().subtract(Duration(days: days - 1)));
+    var n = 0;
+    _together.forEach((k, v) {
+      if (k.compareTo(cut) >= 0) n += v;
+    });
+    return n;
+  }
+
+  /// The 1st–3rd of a month, once: time for "Our soundtrack" (last month).
+  bool monthCardDue() {
+    final now = DateTime.now();
+    if (!enabled.value || now.day > 3) return false;
+    final id = '${now.year}${now.month.toString().padLeft(2, '0')}';
+    return _lastMonthCard != id;
+  }
+
+  void markMonthCardShown() {
+    final now = DateTime.now();
+    _lastMonthCard = '${now.year}${now.month.toString().padLeft(2, '0')}';
+    _save();
+  }
+
+  /// Same key logic as the store (for matching titles across people).
+  static String keyOf(String title) => _keyOf(title);
 
   void markRecapShown() {
     _lastRecapWeek = _weekId(DateTime.now());

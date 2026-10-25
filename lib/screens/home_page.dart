@@ -110,6 +110,7 @@ import '../widgets/welcome_tour.dart';
 import 'moments_settings_screen.dart';
 import '../utils/readable.dart';
 import '../services/account_prefs.dart';
+import '../services/gallery_autosave.dart';
 import '../widgets/week_in_music_sheet.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
@@ -488,6 +489,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     NowPlayingPresence.instance.startReceiving(poll: kIsWeb);
     // "Tell me when they're online" watches I'm still waiting on.
     OnlineWatchList.instance.load();
+    GalleryAutoSave.instance.load();
     // Quick statuses ("Free to talk" …): mine + my circle's.
     QuickStatus.instance.addListener(_onPresenceChanged);
     QuickStatus.instance.load();
@@ -2325,6 +2327,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
       // Keep it for the thread: opening that chat paints it at once (with the
       // "new messages" divider) instead of after the history fetch.
       LiveInbox.instance.add(data, _myUserId?.toString());
+      // "Save to Gallery" on → a received photo / video goes there now.
+      GalleryAutoSave.instance.consider(data, _myUserId?.toString());
       if (mid != null &&
           data['receiver_id']?.toString() == _myUserId?.toString() &&
           data['delivered'] == false) {
@@ -2756,6 +2760,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
             .fetchMessagesBetween(me, fid, skip: 0, limit: 20);
         for (final m in msgs.reversed) {
           LiveInbox.instance.add(m, me.toString());
+          GalleryAutoSave.instance.consider(m, me.toString());
         }
       } catch (_) {}
     }
@@ -2786,6 +2791,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
             .fetchConversationMessages(cid, skip: 0, limit: 20);
         for (final m in msgs) {
           LiveInbox.instance.add(m, me.toString());
+          GalleryAutoSave.instance.consider(m, me.toString());
         }
       } catch (_) {}
     }

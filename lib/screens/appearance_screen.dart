@@ -19,6 +19,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/song_insights.dart';
 import '../utils/readable.dart';
 import '../services/account_prefs.dart';
+import '../services/gallery_autosave.dart';
+import '../utils/toast_helper.dart';
 
 /// The personalization surface (build step 5): whole-app **theme** (System /
 /// Light / Dark) + a curated **accent** preset set. Dark stays the brand's
@@ -142,6 +144,9 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                     _StatusMediaSection(),
                   ],
                 ),
+          const SizedBox(height: 10),
+          // Received photos & videos → my Gallery (before the 24 h purge).
+          const _GalleryAutoSaveSection(),
           const SizedBox(height: 10),
           isWide
               ? const IntrinsicHeight(
@@ -1671,6 +1676,150 @@ class _BubbleThemeSection extends StatelessWidget {
             ? Icon(Icons.check_rounded,
                 size: 20, color: light ? Colors.black87 : Colors.white)
             : null,
+      ),
+    );
+  }
+}
+
+
+/// SAVE TO GALLERY — received photos (and videos) copied into the phone's
+/// Gallery as they arrive, since chat media leaves the server after 24 h.
+class _GalleryAutoSaveSection extends StatefulWidget {
+  const _GalleryAutoSaveSection();
+
+  @override
+  State<_GalleryAutoSaveSection> createState() =>
+      _GalleryAutoSaveSectionState();
+}
+
+class _GalleryAutoSaveSectionState extends State<_GalleryAutoSaveSection> {
+  final g = GalleryAutoSave.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    g.addListener(_re);
+    g.load();
+  }
+
+  @override
+  void dispose() {
+    g.removeListener(_re);
+    super.dispose();
+  }
+
+  void _re() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _toggle(bool v) async {
+    if (v) {
+      final scheme = Theme.of(context).colorScheme;
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: Icon(Icons.photo_library_rounded, color: scheme.primary),
+          title: const Text('Save to your Gallery?'),
+          content: const Text(
+              'Photos and videos people send you leave Aluta\'s server after '
+              '24 hours. With this on, each one you receive from now on is '
+              'saved into an "Aluta" album in your Gallery as it arrives.\n\n'
+              'Secret hearts are never saved this way.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Not now')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Turn on')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      final granted = await g.setOn(true);
+      if (!granted && mounted) {
+        showToast(context, 'Gallery access is needed to save your media',
+            type: ToastType.error);
+      }
+      return;
+    }
+    await g.setOn(false);
+    if (mounted) {
+      showToast(context,
+          'Off — new media stays in Aluta only (it leaves the server after 24 h)');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (!g.supported) return const SizedBox.shrink();
+    Widget sub(String label, bool value, ValueChanged<bool> onChanged) =>
+        Padding(
+          padding: const EdgeInsets.only(left: 44, top: 4),
+          child: Row(children: [
+            Expanded(
+              child: Text(label,
+                  style: TextStyle(
+                      fontSize: 13, color: scheme.onSurfaceVariant)),
+            ),
+            SizedBox(
+              height: 22,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Switch(value: value, onChanged: onChanged),
+              ),
+            ),
+          ]),
+        );
+    return DecoratedBox(
+      decoration: _raisedCardDecoration(scheme, isDark),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              _accentIconChip(scheme, Icons.photo_library_rounded),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Save to Gallery',
+                        style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface)),
+                    const SizedBox(height: 2),
+                    Text(
+                        g.on
+                            ? 'Received photos${g.videos ? ' & videos' : ''} go to your Gallery'
+                            : 'Off · media leaves the server after 24 h',
+                        maxLines: 2,
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 24,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Switch(value: g.on, onChanged: _toggle),
+                ),
+              ),
+            ]),
+            if (g.on) ...[
+              sub('Videos too', g.videos, g.setVideos),
+              if (g.videos)
+                sub('Videos only on Wi-Fi', g.videosWifiOnly, g.setWifiOnly),
+            ],
+          ],
+        ),
       ),
     );
   }

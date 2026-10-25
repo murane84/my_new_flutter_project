@@ -43,6 +43,7 @@ import '../services/quick_status.dart';
 import '../services/live_inbox.dart';
 import '../services/now_playing_presence.dart';
 import '../widgets/listen_presence_gate.dart';
+import '../services/gallery_autosave.dart';
 import '../services/contact_names.dart';
 import '../services/web_paste.dart' as webpaste;
 import '../utils/net_image.dart';
@@ -1003,6 +1004,10 @@ class _ChatPageState extends State<ChatPage>
         _messages = _merge(_messages, msgs, markRead: true);
         _isLoading = false;
       });
+      // Media that arrived while I was away → Gallery (if switched on).
+      for (final m in msgs) {
+        GalleryAutoSave.instance.consider(m, _myId);
+      }
       LiveInbox.instance.clear(
           friendId: _isGroup ? null : widget.friendId,
           conversationId: _isGroup ? _cid : null);

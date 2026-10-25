@@ -51,6 +51,8 @@ class AccountPrefs {
     'pl_sort_v1', 'pl_smart_v1', 'pl_fav_v1', 'pl_group_v1',
     // Saved "Today's glow" cards
     'glow_saved_v1',
+    // Save received photos & videos to my Gallery (services/gallery_autosave)
+    'gallery_autosave_on', 'gallery_autosave_videos', 'gallery_autosave_wifi',
   ];
 
   static final List<FutureOr<void> Function()> _reloaders = [];

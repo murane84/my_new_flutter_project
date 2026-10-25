@@ -920,7 +920,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   }
 
   /// Sundays: "You both had X in your top 3" (once a week). The 1st–3rd:
-  /// "Our <month> soundtrack" — the songs you both played most last month,
+  /// "Our `month` soundtrack" — the songs you both played most last month,
   /// keepable in Our Space. Only with a partner who shares their listening.
   bool _togetherMusicBusy = false;
   Future<void> _maybeTogetherMusic() async {
@@ -990,7 +990,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final mine = si.topTitles(days: 7, limit: 3);
       final their3 = {for (final t in theirs.take(3)) SongInsights.keyOf(t)};
       final hit = mine.where((t) => their3.contains(SongInsights.keyOf(t)));
-      if (hit.isEmpty) return;
+      if (hit.isEmpty || !mounted) return;
       _lastMomentAt = DateTime.now();
       showMomentCard(
         context,

@@ -1448,6 +1448,7 @@ class _ChatPageState extends State<ChatPage>
     }
     // Are they here? Offline → "notify me when they're online" instead of
     // a blind invite.
+    if (!mounted) return;
     if (!_isGroup && widget.friendId > 0) {
       final go = await listenTogetherGate(context,
           friendId: widget.friendId, name: _livePeerLabel);

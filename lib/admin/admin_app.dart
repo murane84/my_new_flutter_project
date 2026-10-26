@@ -332,47 +332,155 @@ class _AdminRootState extends State<_AdminRoot> {
               ),
             ),
             SafeArea(
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 28),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 420),
-                    child: Column(
-                      children: [
-                        _logo(),
-                        const SizedBox(height: 18),
-                        const Text(
-                          'Aluta',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 36,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 3,
-                          ),
+              child: LayoutBuilder(builder: (context, c) {
+                // Desktop: brand on the left, the card on the right, both
+                // centred — everything fits on one screen, no scrolling.
+                if (c.maxWidth >= 900) {
+                  return Center(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 40, vertical: 24),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1080),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(child: _brandPanel()),
+                            const SizedBox(width: 56),
+                            SizedBox(
+                              width: 440,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  child,
+                                  const AdminInstallCard(onGradient: true),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'ADMIN',
-                          style: TextStyle(
-                            color: Colors.white.withAlpha(200),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 6,
-                          ),
-                        ),
-                        const SizedBox(height: 26),
-                        child,
-                        const AdminInstallCard(onGradient: true),
-                      ],
+                      ),
+                    ),
+                  );
+                }
+                return Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 28),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Column(
+                        children: [
+                          _logo(),
+                          const SizedBox(height: 18),
+                          _wordmark(),
+                          const SizedBox(height: 26),
+                          child,
+                          const AdminInstallCard(onGradient: true),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ),
+                );
+              }),
             ),
           ],
         ),
       );
+
+  Widget _wordmark({bool left = false}) => Column(
+        crossAxisAlignment:
+            left ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+        children: [
+          Text(
+            'Aluta',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: left ? 54 : 36,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 3,
+              height: 1.05,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'ADMIN',
+            style: TextStyle(
+              color: Colors.white.withAlpha(200),
+              fontSize: left ? 15 : 13,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 6,
+            ),
+          ),
+        ],
+      );
+
+  /// Left half on desktop: logo, wordmark and what keeps admin safe.
+  Widget _brandPanel() {
+    Widget point(IconData icon, String title, String body) => Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(30),
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(color: Colors.white.withAlpha(50)),
+                ),
+                child: Icon(icon, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15)),
+                    const SizedBox(height: 2),
+                    Text(body,
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 13, height: 1.35)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            _logo(),
+            const SizedBox(width: 22),
+            _wordmark(left: true),
+          ],
+        ),
+        const SizedBox(height: 26),
+        const Text(
+          'Run Aluta without opening the server — metrics, people and plans in '
+          'one place.',
+          style: TextStyle(color: Colors.white, fontSize: 18, height: 1.4),
+        ),
+        const SizedBox(height: 28),
+        point(Icons.verified_user_rounded, 'Approved devices only',
+            'A password alone is never enough — new devices need a trusted one.'),
+        point(Icons.notifications_active_rounded, 'You hear about everything',
+            'Every new device, sign-in from a new network or lockout alerts you.'),
+        point(Icons.lock_rounded, 'Lock it in one tap',
+            '“Not me” ends every session until you change your password.'),
+        point(Icons.receipt_long_rounded, 'Every action recorded',
+            'The activity log shows who did what, from where, and when.'),
+      ],
+    );
+  }
 
   Widget _logo() => SizedBox(
         width: 96,

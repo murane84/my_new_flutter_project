@@ -1,7 +1,7 @@
 ﻿{
     "name":  "Aluta Admin",
     "short_name":  "Aluta Admin",
-    "start_url":  ".",
+    "start_url":  "/admin/",
     "display":  "standalone",
     "background_color":  "#0F0F14",
     "theme_color":  "#0F0F14",
@@ -31,5 +31,7 @@
                       "type":  "image/png",
                       "purpose":  "maskable"
                   }
-              ]
+              ],
+    "id":  "/admin/",
+    "scope":  "/admin/"
 }

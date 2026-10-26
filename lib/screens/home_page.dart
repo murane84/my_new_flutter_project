@@ -11,6 +11,7 @@ import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter/foundation.dart'
     show kIsWeb, kReleaseMode, defaultTargetPlatform, TargetPlatform, ValueListenable;
 import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:permission_handler/permission_handler.dart' as ph;
 import 'package:phone_numbers_parser/phone_numbers_parser.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 // Hide intl's TextDirection so TextPainter/TextDirection.ltr resolve to dart:ui's.
@@ -4127,9 +4128,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
       await Future.delayed(const Duration(seconds: 2));
       return;
     }
+    // Also re-read the phone book: anyone in it who has joined Aluta since is
+    // added to the circle (quietly — no prompt, no toast unless someone new).
+    final fromContacts = _findFriendsFromContacts(quiet: true);
     await _fetchFriends();
     _loadSpaces();
     _loadPlan();
+    await fromContacts;
   }
 
   static const _kSpacesCache = 'cached_spaces_v1';

@@ -1602,7 +1602,7 @@ class _ChatPageState extends State<ChatPage>
   /// "Forwarded to …" (e.g. a resend says "Sent it again to …").
   Future<bool> _forwardTo(
       Map<String, dynamic> msg, Map<String, dynamic> friend,
-      {String? doneToast}) async {
+      {String? doneToast, bool quiet = false}) async {
     final fid = friend['id'];
     final fidInt = fid is int ? fid : int.tryParse(fid.toString());
     if (fidInt == null) return false;
@@ -1631,11 +1631,13 @@ class _ChatPageState extends State<ChatPage>
       );
       if (!mounted) return false;
       if (sent != null) {
-        showToast(
-            context,
-            doneToast ??
-                'Forwarded to ${ContactNames.instance.displayName(of: friend, registered: (friend['username'] ?? 'contact').toString())}',
-            type: ToastType.success);
+        if (!quiet) {
+          showToast(
+              context,
+              doneToast ??
+                  'Forwarded to ${ContactNames.instance.displayName(of: friend, registered: (friend['username'] ?? 'contact').toString())}',
+              type: ToastType.success);
+        }
         // If forwarding into the currently-open thread, show it immediately.
         if (fidInt == widget.friendId) {
           setState(() {
@@ -1647,11 +1649,11 @@ class _ChatPageState extends State<ChatPage>
           _saveMessagesCache();
         }
         return true;
-      } else {
+      } else if (!quiet) {
         showToast(context, 'Could not forward', type: ToastType.error);
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted && !quiet) {
         showToast(context, 'Could not forward', type: ToastType.error);
       }
     }
@@ -2120,6 +2122,7 @@ class _ChatPageState extends State<ChatPage>
             compact: true,
             onGallery: () => act(() => _pickGalleryImages()),
             onVideo: () => act(_pickVideo),
+            onMusic: () => act(_pickMusic),
             onCamera: () => act(() => _pickImage(ImageSource.camera)),
             onLocation: () => act(_shareLocation),
             onContact: () => act(_shareContact),
@@ -2395,9 +2398,22 @@ class _ChatPageState extends State<ChatPage>
   /// to the original and a clear message if it's still too big.
   Future<void> _pickVideo() async {
     try {
-      final x = await ImagePicker().pickVideo(source: ImageSource.gallery);
-      if (x == null) return;
-      await _processAndSendVideo(x);
+      // Several clips at once where the platform supports it; one otherwise.
+      List<XFile> picked;
+      try {
+        picked = await ImagePicker().pickMultiVideo();
+      } catch (_) {
+        final one = await ImagePicker().pickVideo(source: ImageSource.gallery);
+        picked = one == null ? const [] : [one];
+      }
+      if (picked.isEmpty) return;
+      if (picked.length > 1 && mounted) {
+        showToast(context, 'Sending ${picked.length} videos…');
+      }
+      for (final x in picked) {
+        if (!mounted) break;
+        await _processAndSendVideo(x);
+      }
     } catch (_) {
       if (mounted) {
         showToast(context, 'Could not pick video', type: ToastType.error);
@@ -2482,36 +2498,110 @@ class _ChatPageState extends State<ChatPage>
 
   Future<void> _pickDocument() async {
     try {
-      final res = await FilePicker.pickFiles();
+      final res = await FilePicker.pickFiles(
+        allowMultiple: true, // ignore: deprecated_member_use
+      );
       if (res == null || res.files.isEmpty) return;
-      final f = res.files.first;
-      // readAsBytes() supersedes the deprecated withData/.bytes pair: it reads
-      // from the file path on native (no eager whole-file load) while still
-      // returning the in-memory bytes on web. A read failure throws and is
-      // caught by the surrounding try/catch below.
-      final bytes = await f.readAsBytes();
-      if (bytes.isEmpty) {
-        if (mounted) showToast(context, 'Could not read file', type: ToastType.error);
-        return;
-      }
-      final ext = (f.extension ?? '').toLowerCase();
-      const imgExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-      if (imgExt.contains(ext)) {
-        // Images get the caption preview too, so a document-picked photo can
-        // still be sent with a message in a single bubble.
-        await _previewAndSendImage(bytes, f.name, _mimeForExt(ext));
-      } else {
-        await _uploadAndSend(
-          bytes: bytes,
-          filename: f.name,
-          mime: _mimeForExt(ext),
-          type: 'file',
-          // Big files are purged from the server once cached (cache-then-purge).
-          ephemeral: bytes.length > 15 * 1024 * 1024,
-        );
+      final single = res.files.length == 1;
+      for (final f in res.files) {
+        if (!mounted) break;
+        // readAsBytes() supersedes the deprecated withData/.bytes pair: it
+        // reads from the file path on native (no eager whole-file load) while
+        // still returning the in-memory bytes on web. A read failure throws
+        // and is caught by the surrounding try/catch below.
+        final bytes = await f.readAsBytes();
+        if (bytes.isEmpty) {
+          if (mounted) {
+            showToast(context, 'Could not read ${f.name}',
+                type: ToastType.error);
+          }
+          continue;
+        }
+        final ext = (f.extension ?? '').toLowerCase();
+        const imgExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        if (single && imgExt.contains(ext)) {
+          // One photo gets the caption preview, so a document-picked photo
+          // can still be sent with a message in a single bubble.
+          await _previewAndSendImage(bytes, f.name, _mimeForExt(ext));
+        } else {
+          await _uploadAndSend(
+            bytes: bytes,
+            filename: f.name,
+            mime: _mimeForExt(ext),
+            type: imgExt.contains(ext) ? 'image' : 'file',
+            // Big files are purged from the server once cached.
+            ephemeral: bytes.length > 15 * 1024 * 1024,
+          );
+        }
       }
     } catch (_) {
       if (mounted) showToast(context, 'Could not pick file', type: ToastType.error);
+    }
+  }
+
+  /// Send song files — pick several at once; each goes out as a playable song
+  /// card (ephemeral on the server, cached on both phones), like sharing from
+  /// the player. 15 MB per song.
+  Future<void> _pickMusic() async {
+    try {
+      final res = await FilePicker.pickFiles(
+        allowMultiple: true, // ignore: deprecated_member_use
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'opus', 'flac'],
+      );
+      if (res == null || res.files.isEmpty) return;
+      var tooBig = 0;
+      for (final f in res.files) {
+        if (!mounted) break;
+        final bytes = await f.readAsBytes();
+        if (bytes.isEmpty) continue;
+        if (bytes.length > 15 * 1024 * 1024) {
+          tooBig++;
+          continue;
+        }
+        final ext = (f.extension ?? '').toLowerCase();
+        final dot = f.name.lastIndexOf('.');
+        final label = (dot > 0 ? f.name.substring(0, dot) : f.name)
+            .replaceAll('_', ' ')
+            .trim();
+        await _uploadAndSend(
+          bytes: bytes,
+          filename: f.name,
+          mime: _songMime(ext),
+          type: 'song',
+          caption: label,
+          ephemeral: true,
+        );
+      }
+      if (tooBig > 0 && mounted) {
+        showToast(
+            context,
+            tooBig == 1
+                ? '1 song was over 15 MB and was skipped'
+                : '$tooBig songs were over 15 MB and were skipped',
+            type: ToastType.info);
+      }
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not pick songs', type: ToastType.error);
+      }
+    }
+  }
+
+  String _songMime(String ext) {
+    switch (ext) {
+      case 'm4a':
+      case 'aac':
+        return 'audio/mp4';
+      case 'wav':
+        return 'audio/wav';
+      case 'ogg':
+      case 'opus':
+        return 'audio/ogg';
+      case 'flac':
+        return 'audio/flac';
+      default:
+        return 'audio/mpeg';
     }
   }
 

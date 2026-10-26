@@ -641,14 +641,20 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   // ── Share a song into a chat (async attachment / recommendation) ────────────
 
-  void _shareSong(String path) {
-    final title = metadataStore.title(path, _nameFromPath(path));
-    final artist = metadataStore.artist(path, '');
+  void _shareSong(String path) => _shareSongs([path]);
+
+  void _shareSongs(List<String> paths) {
+    if (paths.isEmpty) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _ShareSheet(path: path, title: title, artist: artist),
+      builder: (_) => _ShareSheet(
+        paths: paths,
+        library: _playlist,
+        titleOf: (p) => metadataStore.title(p, _nameFromPath(p)),
+        artistOf: (p) => metadataStore.artist(p, ''),
+      ),
     );
   }
 
@@ -1707,6 +1713,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       },
       onFavorite: _toggleFavorite,
       onShare: _shareSong,
+      onShareMany: _shareSongs,
       onAdd: _pickMusic,
       onCreateGroup: _createGroup,
       onDeleteGroup: _deleteGroup,

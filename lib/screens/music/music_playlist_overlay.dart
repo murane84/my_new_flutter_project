@@ -36,6 +36,9 @@ class _PlaylistOverlay extends StatefulWidget {
   final void Function(int) onRemove;
   final void Function(String) onFavorite;
   final void Function(String) onShare;
+
+  /// Share the selected songs (several at once) to one or more chats.
+  final void Function(List<String> paths)? onShareMany;
   final VoidCallback onClose;
   final VoidCallback onAdd;
 
@@ -83,6 +86,7 @@ class _PlaylistOverlay extends StatefulWidget {
     required this.onRemove,
     required this.onFavorite,
     required this.onShare,
+    this.onShareMany,
     required this.onClose,
     required this.onAdd,
     required this.onCreateGroup,
@@ -1485,6 +1489,12 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           Text('${_selected.length} selected',
               style: const TextStyle(fontWeight: FontWeight.bold)),
           const Spacer(),
+          if (widget.onShareMany != null)
+            _iconBtn(scheme, Icons.send_rounded, 'Share to chats', () {
+              if (paths.isEmpty) return;
+              widget.onShareMany!(paths);
+              _exitSelect();
+            }, color: scheme.primary),
           _iconBtn(scheme, Icons.playlist_add_rounded, 'Add to group', () {
             if (paths.isNotEmpty) _bulkAddToGroup(context);
           }),

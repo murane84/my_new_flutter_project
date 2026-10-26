@@ -27,7 +27,11 @@ class AttachSheet extends StatefulWidget {
     required this.onListenTogether,
     required this.onPickPhoto,
     this.onPoll,
+    this.onMusic,
   });
+
+  /// Send song files (several at once) as playable song cards.
+  final VoidCallback? onMusic;
 
   /// Groups only: start a poll (null hides the tile).
   final VoidCallback? onPoll;
@@ -195,6 +199,9 @@ class _AttachSheetState extends State<AttachSheet> {
           widget.onVideo),
       _Opt(Icons.photo_camera_rounded, 'Camera', const Color(0xFFEC407A),
           widget.onCamera),
+      if (widget.onMusic != null)
+        _Opt(Icons.library_music_rounded, 'Music', const Color(0xFFFF4081),
+            widget.onMusic!),
       _Opt(Icons.location_on_rounded, 'Location', const Color(0xFF26A69A),
           widget.onLocation),
       _Opt(Icons.person_rounded, 'Contact', const Color(0xFF42A5F5),

@@ -512,12 +512,88 @@ class _AdminRootState extends State<_AdminRoot> {
     );
   }
 
-  Widget _link(String label, VoidCallback onTap, {bool open = false}) =>
-      TextButton.icon(
-        onPressed: onTap,
-        style: TextButton.styleFrom(foregroundColor: Colors.white70),
-        icon: Icon(open ? Icons.expand_less : Icons.expand_more, size: 18),
-        label: Text(label),
+  /// A clearly separate option tile (setup / recovery) — not a faint link.
+  Widget _option({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool open,
+    required VoidCallback onTap,
+    bool highlight = false,
+  }) {
+    final accent = highlight ? Colors.white : Colors.white70;
+    return Material(
+      color: open
+          ? Colors.white.withAlpha(30)
+          : Colors.black.withAlpha(highlight ? 50 : 30),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: highlight
+              ? Colors.white.withAlpha(open ? 200 : 120)
+              : Colors.white.withAlpha(open ? 120 : 45),
+          width: highlight ? 1.4 : 1,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: highlight ? kAdminRed : Colors.white.withAlpha(25),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: TextStyle(
+                            color: accent,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14)),
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 12)),
+                  ],
+                ),
+              ),
+              Icon(open ? Icons.expand_less : Icons.expand_more,
+                  color: Colors.white60),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _orDivider() => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Row(
+          children: [
+            Expanded(child: Divider(color: Colors.white.withAlpha(50))),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 10),
+              child: Text('OR',
+                  style: TextStyle(
+                      color: Colors.white54,
+                      fontSize: 11,
+                      letterSpacing: 2,
+                      fontWeight: FontWeight.w600)),
+            ),
+            Expanded(child: Divider(color: Colors.white.withAlpha(50))),
+          ],
+        ),
       );
 
   Widget _heading(String title, String body) => Column(
@@ -585,12 +661,18 @@ class _AdminRootState extends State<_AdminRoot> {
             ],
             const SizedBox(height: 20),
             _pill('Sign in', _busy ? null : () => _submit(), busy: _busy),
-            const SizedBox(height: 10),
-            _link('First device? Use the setup code',
-                () => setState(() => _showSetup = !_showSetup),
-                open: _showSetup),
+            _orDivider(),
+            _option(
+              icon: Icons.vpn_key_rounded,
+              title: 'First device? Use the setup code',
+              subtitle: 'Your very first admin device — with the code from '
+                  'Railway (ADMIN_BOOTSTRAP_CODE).',
+              open: _showSetup,
+              highlight: true,
+              onTap: () => setState(() => _showSetup = !_showSetup),
+            ),
             if (_showSetup) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: 12),
               _field(
                 controller: _bootstrap,
                 label: 'Setup code',
@@ -601,14 +683,18 @@ class _AdminRootState extends State<_AdminRoot> {
               _pill('Set up this device',
                   _busy ? null : () => _submit(setup: true),
                   outline: true),
-              const SizedBox(height: 6),
             ],
-            _link('Lost every trusted device? Use a recovery code',
-                () => setState(() => _showRecovery = !_showRecovery),
-                open: _showRecovery),
+            const SizedBox(height: 10),
+            _option(
+              icon: Icons.restore_rounded,
+              title: 'Lost every trusted device?',
+              subtitle: 'Use one of your 10 recovery codes (72-hour wait).',
+              open: _showRecovery,
+              onTap: () => setState(() => _showRecovery = !_showRecovery),
+            ),
             if (_showRecovery) ...[
               const Padding(
-                padding: EdgeInsets.fromLTRB(4, 2, 4, 10),
+                padding: EdgeInsets.fromLTRB(4, 12, 4, 10),
                 child: Text(
                   'A recovery code enrolls this device after 72 hours. You’ll '
                   'be alerted the whole time and can cancel it.',
@@ -677,6 +763,13 @@ class _AdminRootState extends State<_AdminRoot> {
             AdminInline(text: _pendingNote!),
           ],
           const SizedBox(height: 20),
+          if (_noTrusted) ...[
+            _pill('Use the setup code instead', () {
+              _cancelPending();
+              setState(() => _showSetup = true);
+            }),
+            const SizedBox(height: 10),
+          ],
           Row(
             children: [
               Expanded(child: _pill('Cancel', _cancelPending, outline: true)),

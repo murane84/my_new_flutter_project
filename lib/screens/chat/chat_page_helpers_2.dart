@@ -98,80 +98,147 @@ extension _ChatPageHelpers2 on _ChatPageState {
       return;
     }
     final scheme = Theme.of(context).colorScheme;
-    showModalBottomSheet(
+    // Pick one or several people, then send once.
+    final picked = await showModalBottomSheet<List<Map<String, dynamic>>>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (ctx) => Container(
-        margin: const EdgeInsets.all(10),
-        constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(ctx).size.height * 0.6),
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 10),
-                width: 36,
-                height: 3,
-                decoration: BoxDecoration(
-                  color: scheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Forward to',
-                      style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: scheme.onSurface)),
-                ),
-              ),
-              const Divider(height: 1),
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: friends.length,
-                  itemBuilder: (_, i) {
-                    final f = friends[i];
-                    final name = ContactNames.instance.displayName(of: f, registered: (f['username'] ?? 'Friend').toString());
-                    final rawA = f['avatar_url'] as String?;
-                    final avatarUrl =
-                        (rawA != null && rawA.isNotEmpty) ? fullMediaUrl(rawA) : null;
-                    return ListTile(
-                      leading: CircleAvatar(
-                        radius: 20,
-                        backgroundColor: scheme.primary.withAlpha(38),
-                        backgroundImage: avatarUrl != null
-                            ? authNetworkImageProvider(avatarUrl, mediaAuthHeaders(avatarUrl))
-                            : null,
-                        child: avatarUrl == null
-                            ? Text(
-                                name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                style: TextStyle(color: scheme.primary))
-                            : null,
-                      ),
-                      title: Text(name),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _forwardTo(msg, f);
+      builder: (ctx) {
+        final chosen = <String>{};
+        return StatefulBuilder(builder: (ctx, setSheet) {
+          return Container(
+            margin: const EdgeInsets.all(10),
+            constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(ctx).size.height * 0.7),
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 10),
+                    width: 36,
+                    height: 3,
+                    decoration: BoxDecoration(
+                      color: scheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text('Forward to',
+                              style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: scheme.onSurface)),
+                        ),
+                        Text(
+                          chosen.isEmpty
+                              ? 'Tap one or more'
+                              : '${chosen.length} selected',
+                          style: TextStyle(
+                              fontSize: 12, color: scheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: friends.length,
+                      itemBuilder: (_, i) {
+                        final f = friends[i];
+                        final key = f['id'].toString();
+                        final on = chosen.contains(key);
+                        final name = ContactNames.instance.displayName(
+                            of: f,
+                            registered:
+                                (f['username'] ?? 'Friend').toString());
+                        final rawA = f['avatar_url'] as String?;
+                        final avatarUrl = (rawA != null && rawA.isNotEmpty)
+                            ? fullMediaUrl(rawA)
+                            : null;
+                        return ListTile(
+                          leading: CircleAvatar(
+                            radius: 20,
+                            backgroundColor: scheme.primary.withAlpha(38),
+                            backgroundImage: avatarUrl != null
+                                ? authNetworkImageProvider(
+                                    avatarUrl, mediaAuthHeaders(avatarUrl))
+                                : null,
+                            child: avatarUrl == null
+                                ? Text(
+                                    name.isNotEmpty
+                                        ? name[0].toUpperCase()
+                                        : '?',
+                                    style: TextStyle(color: scheme.primary))
+                                : null,
+                          ),
+                          title: Text(name),
+                          trailing: Icon(
+                            on
+                                ? Icons.check_circle_rounded
+                                : Icons.radio_button_unchecked_rounded,
+                            color: on ? scheme.primary : scheme.outline,
+                          ),
+                          onTap: () => setSheet(() {
+                            if (!chosen.remove(key)) chosen.add(key);
+                          }),
+                        );
                       },
-                    );
-                  },
-                ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: chosen.isEmpty
+                            ? null
+                            : () => Navigator.pop(
+                                ctx,
+                                friends
+                                    .where((f) =>
+                                        chosen.contains(f['id'].toString()))
+                                    .toList()),
+                        icon: const Icon(Icons.send_rounded, size: 18),
+                        label: Text(chosen.length <= 1
+                            ? 'Send'
+                            : 'Send to ${chosen.length}'),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
-      ),
+            ),
+          );
+        });
+      },
     );
+    if (picked == null || picked.isEmpty || !mounted) return;
+    if (picked.length == 1) {
+      await _forwardTo(msg, picked.first);
+      return;
+    }
+    var ok = 0;
+    for (final f in picked) {
+      if (!mounted) return;
+      if (await _forwardTo(msg, f, quiet: true)) ok++;
+    }
+    if (!mounted) return;
+    showToast(
+        context,
+        ok == picked.length
+            ? 'Forwarded to ${picked.length} people'
+            : 'Forwarded to $ok of ${picked.length} — check your connection',
+        type: ok == picked.length ? ToastType.success : ToastType.error);
   }
 
   /// A genuine tap on the thread reveals the quick stars for a few seconds,
@@ -663,6 +730,15 @@ extension _ChatPageHelpers2 on _ChatPageState {
                 type: ToastType.error);
           }
           return;
+        }
+        // A song we send plays from our own bubble even after the server
+        // purges it: seed our cache from the bytes we already hold.
+        if (type == 'song') {
+          final aid = SongCache.assetId(up['url'].toString());
+          if (aid != null) {
+            unawaited(SongCache.putBytes(aid, sendBytes,
+                filename: sendName, mime: sendMime));
+          }
         }
         // File is on the server; keep the ring moving while the message row is
         // created (the animated bar eases, so this reads as one smooth fill).

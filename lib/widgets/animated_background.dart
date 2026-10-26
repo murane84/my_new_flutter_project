@@ -66,7 +66,7 @@ class _AnimatedBackgroundState extends State<AnimatedBackground>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.watch<ThemeProvider>().isDarkMode;
+    final isDark = context.watch<ThemeProvider>().isDarkIn(context);
 
     return RepaintBoundary(
       child: AnimatedBuilder(

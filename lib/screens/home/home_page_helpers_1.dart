@@ -1175,10 +1175,26 @@ extension _HomePageHelpers1 on HomePageState {
 
   /// Read the phone's address book, match numbers against registered users, and
   /// auto-add the matches as friends. Android/iOS only.
-  Future<void> _findFriendsFromContacts() async {
+  ///
+  /// [quiet] (pull-to-refresh): never asks for the contacts permission, shows
+  /// no progress toasts, and only speaks up when someone new was added. The
+  /// saved-name map is re-read too, so newly saved names show at once.
+  Future<void> _findFriendsFromContacts({bool quiet = false}) async {
     final mobile = !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS);
+    if (quiet) {
+      if (!mobile) return;
+      try {
+        final st = await ph.Permission.contacts.status;
+        if (st != ph.PermissionStatus.granted &&
+            st != ph.PermissionStatus.limited) {
+          return;
+        }
+      } catch (_) {
+        return;
+      }
+    }
     if (!mobile) {
       if (mounted) {
         showToast(context, 'Contact sync is only available on the phone app.',
@@ -1189,20 +1205,26 @@ extension _HomePageHelpers1 on HomePageState {
     try {
       final granted = await FlutterContacts.requestPermission(readonly: true);
       if (!granted) {
-        if (mounted) {
+        if (mounted && !quiet) {
           showToast(context, 'Contacts permission denied.',
               type: ToastType.error);
         }
         return;
       }
-      if (mounted) {
+      if (mounted && !quiet) {
         showToast(context, 'Checking your contacts…', type: ToastType.info);
       }
       final contacts =
           await FlutterContacts.getContacts(withProperties: true);
       // Contacts are authorised now — populate the phonebook-name map too so
-      // group headers immediately show saved names.
-      ContactNames.instance.ensureLoaded();
+      // group headers immediately show saved names (a pull re-reads it so a
+      // freshly saved name appears without restarting).
+      if (quiet) {
+        // (Home repaints on ContactNames.revision when the re-read lands.)
+        unawaited(ContactNames.instance.refresh());
+      } else {
+        ContactNames.instance.ensureLoaded();
+      }
       // Default region for LOCAL (no country code) contact numbers = the
       // device's country. Numbers already in +international form are parsed as
       // written. Everything is normalised to E.164 so matching is correct
@@ -1234,7 +1256,7 @@ extension _HomePageHelpers1 on HomePageState {
       }
       final phones = phoneSet.toList();
       if (phones.isEmpty) {
-        if (mounted) {
+        if (mounted && !quiet) {
           showToast(context, 'No phone numbers found in your contacts.',
               type: ToastType.info);
         }
@@ -1244,6 +1266,18 @@ extension _HomePageHelpers1 on HomePageState {
       final added = (res['added'] as num?)?.toInt() ?? 0;
       final matched = (res['matched'] as List?)?.length ?? 0;
       if (!mounted) return;
+      if (quiet) {
+        if (added > 0) {
+          showToast(
+              context,
+              added == 1
+                  ? '1 contact joined Aluta — added to your circle 🎉'
+                  : '$added contacts joined Aluta — added to your circle 🎉',
+              type: ToastType.success);
+          await _fetchFriends();
+        }
+        return;
+      }
       showToast(
         context,
         matched == 0
@@ -1257,7 +1291,7 @@ extension _HomePageHelpers1 on HomePageState {
       // under matched contacts). Runs once per session; a no-op off Android.
       ConnectedContactsService.instance.refresh();
     } catch (e) {
-      if (mounted) {
+      if (mounted && !quiet) {
         showToast(context, 'Could not sync contacts.', type: ToastType.error);
       }
     }

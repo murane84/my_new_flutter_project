@@ -698,17 +698,35 @@ extension _HomePageHelpers1 on HomePageState {
   /// A friend-list preview string for a cached chat message.
   String _previewFromCachedMessage(Map<String, dynamic> m) {
     final type = (m['message_type'] ?? 'text').toString();
+    final text = (m['content'] ?? '').toString().trim();
+    final name = (m['media_name'] ?? '').toString().trim();
+    String withText(String label) => text.isEmpty ? label : '$label · $text';
+    if (m['is_deleted'] == true) return 'This message was deleted';
     switch (type) {
+      case 'heart':
+        // Never peek a secret heart's note.
+        return '❤️ Secret message';
+      case 'song':
+        // Content carries "Title — Artist"; fall back to the file name.
+        if (text.isNotEmpty) return '🎵 $text';
+        if (name.isNotEmpty) {
+          final dot = name.lastIndexOf('.');
+          return '🎵 ${dot > 0 ? name.substring(0, dot) : name}';
+        }
+        return '🎵 Song';
       case 'image':
-        return '📷 Photo';
+        final mime = (m['media_mime'] ?? '').toString();
+        return withText(mime.contains('gif') ? '🎞️ GIF' : '📷 Photo');
       case 'audio':
-        return '🎤 Voice';
+        return withText('🎤 Voice note');
       case 'video':
-        return '🎬 Video';
+        return withText('🎬 Video');
       case 'gif':
-        return 'GIF';
+        return '🎞️ GIF';
       case 'file':
-        return '📎 File';
+        return name.isNotEmpty ? '📎 $name' : '📎 File';
+      case 'poll':
+        return text.isEmpty ? '📊 Poll' : '📊 $text';
       case 'location':
         return '📍 Location';
       case 'contact':
@@ -759,6 +777,21 @@ extension _HomePageHelpers1 on HomePageState {
     }
   }
 
+  /// Parse a timestamp on an absolute scale. DM rows come from the server as a
+  /// NAIVE "YYYY-MM-DD HH:MM" in UTC; Dart would read that as LOCAL time and
+  /// shift it by the phone's offset (3 h in Dar), making a newer server message
+  /// look older than the cached one. No zone → treat as UTC.
+  DateTime? _absTime(String s) {
+    final t = s.trim();
+    if (t.isEmpty) return null;
+    final dt = DateTime.tryParse(t);
+    if (dt == null) return null;
+    final hasZone = t.endsWith('Z') || RegExp(r'[+-]\d\d:?\d\d$').hasMatch(t);
+    if (hasZone || dt.isUtc) return dt;
+    return DateTime.utc(dt.year, dt.month, dt.day, dt.hour, dt.minute,
+        dt.second, dt.millisecond);
+  }
+
   /// Make the DURABLE LOCAL chat cache the primary source of each row's
   /// last-message preview. The server copy is only used when it carries a
   /// strictly NEWER message (a fresh message to a chat that isn't open, which
@@ -783,24 +816,26 @@ extension _HomePageHelpers1 on HomePageState {
           continue;
         }
         if (list is! List || list.isEmpty) continue;
-        // Newest non-purged cached message for this chat.
+        // Newest cached message that yields a preview. A server-purged row
+        // still counts when its TYPE says what it was (a song / photo / voice
+        // note keeps its card locally) — skipping those used to fall back to
+        // an older text, e.g. "Good morning" under four songs sent after it.
         Map? m;
+        String localPrev = '';
         for (int i = list.length - 1; i >= 0; i--) {
           final x = list[i];
-          if (x is Map && x['purged'] != true) {
-            m = x;
-            break;
-          }
+          if (x is! Map) continue;
+          final p = _previewFromCachedMessage(Map<String, dynamic>.from(x));
+          if (p.trim().isEmpty) continue;
+          m = x;
+          localPrev = p;
+          break;
         }
         if (m == null) continue;
-        final localPrev =
-            _previewFromCachedMessage(Map<String, dynamic>.from(m));
-        if (localPrev.trim().isEmpty) continue;
-        final localTs =
-            DateTime.tryParse((m['timestamp'] ?? m['created_at'] ?? '').toString());
+        final localTs = _absTime(
+            (m['timestamp'] ?? m['created_at'] ?? '').toString());
         final serverPrev = (f['last_message'] ?? '').toString().trim();
-        final serverTs =
-            DateTime.tryParse((f['last_timestamp'] ?? '').toString());
+        final serverTs = _absTime((f['last_timestamp'] ?? '').toString());
         // Prefer local unless the server clearly has a newer message.
         final serverIsNewer = serverPrev.isNotEmpty &&
             serverTs != null &&

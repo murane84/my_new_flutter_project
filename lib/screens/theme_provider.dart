@@ -17,7 +17,20 @@ class ThemeProvider with ChangeNotifier {
 
   ThemeMode get themeMode => _themeMode;
   Color get accent => _accent;
+  /// True only when the user explicitly chose Dark. For what's actually ON
+  /// SCREEN (System mode follows the phone) use [isDarkIn].
   bool get isDarkMode => _themeMode == ThemeMode.dark;
+
+  /// Whether the app is showing dark right now — System mode resolved against
+  /// the phone's setting. The quick toggles must read THIS, or a phone already
+  /// in dark (System) "switches" to Dark on the first tap with no visible change.
+  bool isDarkIn(BuildContext context) =>
+      _themeMode == ThemeMode.dark ||
+      (_themeMode == ThemeMode.system &&
+          MediaQuery.platformBrightnessOf(context) == Brightness.dark);
+
+  /// Quick dark⇆light toggle from whatever is showing now.
+  void toggleFrom(BuildContext context) => toggleTheme(!isDarkIn(context));
 
   ThemeProvider() {
     _load();

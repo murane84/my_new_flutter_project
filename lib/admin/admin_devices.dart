@@ -103,13 +103,7 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
                   border: OutlineInputBorder()),
             ),
             const SizedBox(height: 10),
-            TextField(
-              controller: pw,
-              obscureText: true,
-              decoration: const InputDecoration(
-                  labelText: 'Your Aluta password',
-                  border: OutlineInputBorder()),
-            ),
+            AdminPasswordField(controller: pw),
             const SizedBox(height: 8),
             const Text('It stays read-only for 24 hours.',
                 style: TextStyle(color: Colors.white54, fontSize: 12)),

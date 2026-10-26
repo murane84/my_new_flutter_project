@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-const Color kAdminRed = Color(0xFFC62828);
+const Color kAdminRed = Color(0xFFD90429); // Aluta brand red
 const Color kAdminCard = Color(0xFF1B1B24);
 const Color kAdminCard2 = Color(0xFF242431);
 
@@ -392,13 +392,10 @@ Future<String?> askPassword(BuildContext context,
             Text(message, style: const TextStyle(color: Colors.white70)),
             const SizedBox(height: 12),
           ],
-          TextField(
+          AdminPasswordField(
             controller: ctl,
-            obscureText: true,
             autofocus: true,
             onSubmitted: (v) => Navigator.pop(ctx, v),
-            decoration: const InputDecoration(
-                labelText: 'Your Aluta password', border: OutlineInputBorder()),
           ),
         ],
       ),
@@ -411,6 +408,48 @@ Future<String?> askPassword(BuildContext context,
       ],
     ),
   );
+}
+
+/// Password box with the show/hide eye.
+class AdminPasswordField extends StatefulWidget {
+  const AdminPasswordField({
+    super.key,
+    required this.controller,
+    this.label = 'Your Aluta password',
+    this.autofocus = false,
+    this.onSubmitted,
+  });
+  final TextEditingController controller;
+  final String label;
+  final bool autofocus;
+  final ValueChanged<String>? onSubmitted;
+
+  @override
+  State<AdminPasswordField> createState() => _AdminPasswordFieldState();
+}
+
+class _AdminPasswordFieldState extends State<AdminPasswordField> {
+  bool _obscure = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: widget.controller,
+      obscureText: _obscure,
+      autofocus: widget.autofocus,
+      onSubmitted: widget.onSubmitted,
+      decoration: InputDecoration(
+        labelText: widget.label,
+        border: const OutlineInputBorder(),
+        prefixIcon: const Icon(Icons.lock_outline, size: 20),
+        suffixIcon: IconButton(
+          tooltip: _obscure ? 'Show password' : 'Hide password',
+          icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+          onPressed: () => setState(() => _obscure = !_obscure),
+        ),
+      ),
+    );
+  }
 }
 
 void adminToast(BuildContext context, String text, {bool error = false}) {

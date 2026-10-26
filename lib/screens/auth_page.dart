@@ -49,11 +49,12 @@ class AuthPage extends StatelessWidget {
         actions: [
           IconButton(
             icon: Icon(
-              themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+              themeProvider.isDarkIn(context)
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
               color: iconColor,
             ),
-            onPressed: () =>
-                themeProvider.toggleTheme(!themeProvider.isDarkMode),
+            onPressed: () => themeProvider.toggleFrom(context),
           ),
         ],
       ),

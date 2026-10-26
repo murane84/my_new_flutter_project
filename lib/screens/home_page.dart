@@ -41,6 +41,7 @@ import '../utils/bounce_tap.dart';
 import '../utils/brand_theme.dart';
 import '../widgets/chat_wallpaper_sheet.dart';
 import 'api_service.dart';
+import '../services/device_report.dart';
 import 'websocket_manager.dart';
 import 'live_session_screen.dart';
 import 'legal_screen.dart';
@@ -465,6 +466,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // authed home only mounts after login, so this doubles as "register on
     // login" and re-registers on every relaunch (token can rotate).
     FcmService.instance.registerToken();
+    // What this install runs on (admin panel's device split). Once per run.
+    DeviceReport.send();
     // Pick up any file downloads left unfinished (app killed / slept).
     DownloadManager.instance.init();
 

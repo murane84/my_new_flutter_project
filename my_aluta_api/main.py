@@ -30,6 +30,7 @@ from routers import spaces as spaces_router
 from routers import plan as plan_router
 from routers import wallpapers as wallpapers_router
 from routers import ozilane as ozilane_router
+import admin_panel
 from websocket_routes import router as websocket_router
 import websocket_manager
 from sqlalchemy import text
@@ -132,6 +133,8 @@ app.include_router(spaces_router.router)
 app.include_router(plan_router.router)
 app.include_router(wallpapers_router.router)
 app.include_router(ozilane_router.router)
+# Aluta Admin (backoffice) API — device-authorized, signed requests only.
+app.include_router(admin_panel.router)
 app.include_router(websocket_router)
 
 
@@ -239,6 +242,14 @@ def ensure_media_schema():
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_linked_at TIMESTAMPTZ",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_2fa_enabled BOOLEAN DEFAULT FALSE",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE",
+        # Admin panel sign-up metrics: account creation time. New rows get
+        # now(); existing rows are backfilled ONCE from their earliest known
+        # activity (first message sent, else last login / last seen).
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ",
+        "ALTER TABLE users ALTER COLUMN created_at SET DEFAULT now()",
+        "UPDATE users SET created_at = COALESCE("
+        "(SELECT MIN(m.timestamp) FROM messages m WHERE m.sender_id = users.id),"
+        " last_login, last_seen, now()) WHERE created_at IS NULL",
     ]
     try:
         with engine.begin() as conn:
@@ -434,6 +445,43 @@ app.openapi = custom_openapi
 #    gives SPA deep-link fallback to index.html. Declared LAST so it only
 #    handles GET paths the API routers / /health / /api / /media didn't.
 _WEBAPP_DIR = os.path.join(os.path.dirname(__file__), "webapp")
+
+
+# ✅ Aluta Admin web app (a separate Flutter web build) at /admin/. Lives in
+#    ./adminapp so copying the main web build into ./webapp never touches it.
+#    Its API is /admin/api/* (routed above, so it always wins over this).
+_ADMINAPP_DIR = os.path.join(os.path.dirname(__file__), "adminapp")
+
+
+@app.get("/admin", include_in_schema=False)
+async def _admin_root():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("/admin/")
+
+
+@app.get("/admin/{full_path:path}", include_in_schema=False)
+async def _serve_admin_app(full_path: str):
+    if full_path.startswith("api/"):
+        return Response(status_code=404)
+    if os.path.isdir(_ADMINAPP_DIR):
+        candidate = os.path.normpath(os.path.join(_ADMINAPP_DIR, full_path))
+        if (full_path
+                and candidate.startswith(_ADMINAPP_DIR)
+                and os.path.isfile(candidate)):
+            resp = FileResponse(candidate)
+        else:
+            index = os.path.join(_ADMINAPP_DIR, "index.html")
+            if not os.path.isfile(index):
+                return Response("Admin app not deployed yet", status_code=404)
+            resp = FileResponse(index)
+            resp.headers["Cache-Control"] = "no-cache"
+        # The admin panel must never be framed (clickjacking) or indexed.
+        resp.headers["X-Frame-Options"] = "DENY"
+        resp.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
+        resp.headers["X-Robots-Tag"] = "noindex, nofollow"
+        resp.headers["Referrer-Policy"] = "no-referrer"
+        return resp
+    return Response("Admin app not deployed yet", status_code=404)
 
 
 @app.get("/{full_path:path}", include_in_schema=False)

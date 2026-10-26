@@ -97,3 +97,62 @@ def push_health(db: Session = Depends(get_db)):
         "service_account_present": push._load_credentials() is not None,
         "registered_devices_total": total_tokens,
     }
+
+
+# ── Device report (admin panel device split) ────────────────────────────────
+
+from typing import Optional  # noqa: E402
+from fastapi import Request  # noqa: E402
+from pydantic import BaseModel  # noqa: E402
+
+_NATIVE = {"android", "windows", "ios", "macos", "linux"}
+
+
+class DeviceReportIn(BaseModel):
+    install_id: str
+    platform: str                    # android | windows | ios | macos | linux | web
+    os_version: Optional[str] = None
+    app_version: Optional[str] = None
+
+
+def _web_platform(ua: str) -> str:
+    u = ua or ""
+    if "iPhone" in u or "iPad" in u or "iPod" in u:
+        return "web-ios"
+    if "Android" in u:
+        return "web-android"
+    return "web-desktop"
+
+
+@router.post("/devices/report")
+def report_device(
+    payload: DeviceReportIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The app says what it runs on (once per start-up). Web builds are split
+    into iPhone / Android / computer from the browser's user agent."""
+    from models import UserDevice
+    install = (payload.install_id or "").strip()[:80]
+    if not install:
+        return {"ok": False}
+    ua = (request.headers.get("user-agent") or "")[:300]
+    plat = (payload.platform or "").strip().lower()
+    if plat not in _NATIVE:
+        plat = _web_platform(ua)
+    now = datetime.now(timezone.utc)
+    row = db.query(UserDevice).filter(
+        UserDevice.user_id == current_user.id,
+        UserDevice.install_id == install).first()
+    if not row:
+        row = UserDevice(user_id=current_user.id, install_id=install,
+                         platform=plat, first_seen=now)
+        db.add(row)
+    row.platform = plat
+    row.os_version = (payload.os_version or "")[:80] or None
+    row.app_version = (payload.app_version or "")[:40] or None
+    row.user_agent = ua or None
+    row.last_seen = now
+    db.commit()
+    return {"ok": True, "platform": plat}

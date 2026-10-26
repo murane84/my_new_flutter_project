@@ -62,6 +62,10 @@ class User(Base):
     # reads from here, so a real billing webhook later only needs to set it.
     plan_tier = Column(String, default="free", nullable=False, server_default="free")
     together_since = Column(DateTime(timezone=True), nullable=True)
+    # When the account was created (added 26 Oct 2026 for the admin panel's
+    # sign-up metrics; older rows were backfilled from their first activity).
+    created_at = Column(DateTime(timezone=True), server_default=func.now(),
+                        nullable=True)
 
     sent_messages = relationship(
         "Message",
@@ -1125,3 +1129,116 @@ class ListenIntent(Base):
     target_id = Column(Integer, index=True, nullable=False)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class UserDevice(Base):
+    """What each install of Aluta runs on — reported by the app on start-up
+    (POST /devices/report). Powers the admin panel's device split (Android /
+    Windows / Web on iPhone / …) and app-version spread. One row per install;
+    `last_seen` moves on every report. Auto-created by create_all; no ALTER."""
+    __tablename__ = "user_devices"
+    __table_args__ = (
+        UniqueConstraint("user_id", "install_id", name="uq_user_device"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=False)
+    install_id = Column(String, nullable=False)
+    # android | windows | ios | macos | linux | web-ios | web-android | web-desktop
+    platform = Column(String, nullable=False, index=True)
+    os_version = Column(String, nullable=True)
+    app_version = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    first_seen = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_seen = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+        index=True)
+
+
+# ── Aluta Admin (backoffice) — see admin_panel.py ───────────────────────────
+# Admin access = owner password + an APPROVED device. Each admin browser holds a
+# non-extractable ECDSA P-256 key; the server keeps only the public half and
+# every admin request is signed with it. All tables auto-created; no ALTER.
+
+class AdminDevice(Base):
+    __tablename__ = "admin_devices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=False)
+    key_id = Column(String, unique=True, index=True, nullable=False)  # sha256(spki)
+    public_key = Column(Text, nullable=False)        # base64 SPKI (DER)
+    name = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    # pending | recovering | trusted | denied | revoked
+    status = Column(String, nullable=False, default="pending")
+    probation_until = Column(DateTime(timezone=True), nullable=True)
+    activate_at = Column(DateTime(timezone=True), nullable=True)   # recovery delay
+    approved_by = Column(Integer, nullable=True)     # admin_devices.id
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+    pair_code_hash = Column(String, nullable=True)
+    pair_expires_at = Column(DateTime(timezone=True), nullable=True)
+    pair_attempts = Column(Integer, nullable=False, default=0)
+    request_ip = Column(String, nullable=True)
+    last_ip = Column(String, nullable=True)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class AdminSession(Base):
+    __tablename__ = "admin_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token_hash = Column(String, unique=True, index=True, nullable=False)
+    user_id = Column(Integer, index=True, nullable=False)
+    device_id = Column(Integer, index=True, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_used_at = Column(DateTime(timezone=True), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked = Column(Boolean, nullable=False, default=False)
+
+
+class AdminRecoveryCode(Base):
+    __tablename__ = "admin_recovery_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=False)
+    code_hash = Column(String, nullable=False)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class AdminState(Base):
+    """Per-owner admin security state: bootstrap burn, wrong-password lockout,
+    and the 'Not me — lock admin' freeze (lifted only by a NEW Aluta password,
+    signed in from a trusted device)."""
+    __tablename__ = "admin_state"
+
+    user_id = Column(Integer, primary_key=True)
+    bootstrap_used = Column(Boolean, nullable=False, default=False)
+    fail_count = Column(Integer, nullable=False, default=0)
+    fail_window_start = Column(DateTime(timezone=True), nullable=True)
+    locked_until = Column(DateTime(timezone=True), nullable=True)
+    lockouts = Column(Integer, nullable=False, default=0)
+    lockout_window_start = Column(DateTime(timezone=True), nullable=True)
+    frozen_at = Column(DateTime(timezone=True), nullable=True)
+    frozen_pw_fp = Column(String, nullable=True)
+
+
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+        index=True)
+    user_id = Column(Integer, nullable=True)
+    device_id = Column(Integer, nullable=True)
+    action = Column(String, nullable=False)
+    target = Column(String, nullable=True)
+    detail = Column(Text, nullable=True)
+    ip = Column(String, nullable=True)
+    ok = Column(Boolean, nullable=False, default=True)

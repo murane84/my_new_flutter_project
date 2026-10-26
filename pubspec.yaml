@@ -70,6 +70,7 @@ dependencies:
   platform: ^3.1.6
   connectivity_plus: ^7.0.0
   device_info_plus: ^13.1.0
+  package_info_plus: ^10.2.2  # app version for the device report (admin panel)
   # Secret heart leans with the phone (accelerometer). 7.x needs AGP 8.12.1+.
   sensors_plus: ^6.1.1
   # Runtime too: the splash holds the native launch logo until its own is ready.

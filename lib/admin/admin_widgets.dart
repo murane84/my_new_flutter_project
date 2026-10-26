@@ -152,7 +152,7 @@ class AdminSection extends StatelessWidget {
                       style: const TextStyle(
                           fontSize: 16, fontWeight: FontWeight.w700)),
                 ),
-                if (trailing != null) trailing!,
+                ?trailing,
               ],
             ),
             if (subtitle != null) ...[

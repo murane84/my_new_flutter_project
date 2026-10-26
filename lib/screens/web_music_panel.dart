@@ -1984,11 +1984,28 @@ class _WebWavePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final n = heights.length;
-    if (n == 0) return;
-    const gap = 2.0;
+    final len = heights.length;
+    if (len == 0) return;
+    // Wide screens get MORE, thinner bars (≈4 px each) instead of stretching
+    // the same few into fat pills that no longer read as a waveform.
+    const pitch = 6.5; // bar + gap
+    final fit = (size.width / pitch).floor();
+    final n = fit > len ? (fit > 240 ? 240 : fit) : len;
+    final gap = n > len ? 2.5 : 2.0;
     final barW = (size.width - gap * (n - 1)) / n;
     if (barW <= 0) return;
+    double hAt(int i) {
+      if (n == len) return heights[i];
+      // Resample the track's pattern smoothly, plus a fixed per-bar wobble so
+      // it still looks like a real waveform rather than a gentle curve.
+      final t = n == 1 ? 0.0 : i * (len - 1) / (n - 1);
+      final j = t.floor();
+      final k = j + 1 < len ? j + 1 : len - 1;
+      final v = heights[j] + (heights[k] - heights[j]) * (t - j);
+      final w = ((i * 7919 + 104729) % 1000) / 1000.0;
+      final out = v * (0.7 + 0.6 * w);
+      return out < 0.18 ? 0.18 : (out > 1.0 ? 1.0 : out);
+    }
     final playedX = fraction * size.width;
     final mid = size.height / 2;
     final aPaint = Paint()
@@ -1999,7 +2016,7 @@ class _WebWavePainter extends CustomPainter {
       ..color = inactive;
     for (var i = 0; i < n; i++) {
       final x = i * (barW + gap);
-      final h = (heights[i] * size.height).clamp(3.0, size.height);
+      final h = (hAt(i) * size.height).clamp(3.0, size.height);
       final rect = RRect.fromRectAndRadius(
         Rect.fromLTWH(x, mid - h / 2, barW, h),
         Radius.circular(barW / 2),

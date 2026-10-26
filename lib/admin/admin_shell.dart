@@ -8,7 +8,7 @@ import 'admin_overview.dart';
 import 'admin_widgets.dart';
 
 /// Signed-in frame: Overview · Devices · Activity log, plus the always-there
-/// "Lock admin" (Not me) and sign-out.
+/// "Lock admin" (Not me), the dark/light switch and sign-out.
 class AdminShell extends StatefulWidget {
   const AdminShell({super.key, required this.session, required this.onSignOut});
   final Map<String, dynamic> session;
@@ -54,7 +54,8 @@ class _AdminShellState extends State<AdminShell> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.lock_outline, color: kAdminRed),
+        icon: const AdminIconChip(
+            icon: Icons.lock_rounded, color: kAdminRed, size: 44),
         title: const Text('Lock admin now?'),
         content: const Text(
           'Use this if anything looks wrong. It ends every admin session '
@@ -82,8 +83,32 @@ class _AdminShellState extends State<AdminShell> {
     await widget.onSignOut();
   }
 
+  Widget _brandMark() => Container(
+        width: 36,
+        height: 36,
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Image.asset(
+          'assets/images/logo.png',
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) =>
+              const Icon(Icons.shield_rounded, color: kAdminRed, size: 20),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
+    final p = context.adm;
     final owner = (widget.session['owner'] as Map?)?.cast<String, dynamic>();
     final probation = _device['on_probation'] == true;
     final pending = (_me?['pending_requests'] as num?)?.toInt() ?? 0;
@@ -97,8 +122,8 @@ class _AdminShellState extends State<AdminShell> {
     final banners = <Widget>[
       if (probation)
         _Banner(
-          color: const Color(0xFFF9A825),
-          icon: Icons.hourglass_bottom,
+          color: const Color(0xFFFFA000),
+          icon: Icons.hourglass_bottom_rounded,
           text: 'This device is read-only until '
               '${fmtDateTime(_device['probation_until'] as String?)} '
               '(new-device probation).',
@@ -106,7 +131,7 @@ class _AdminShellState extends State<AdminShell> {
       if (pending > 0)
         _Banner(
           color: kAdminRed,
-          icon: Icons.devices_other,
+          icon: Icons.devices_other_rounded,
           text: pending == 1
               ? 'A device is asking for admin access.'
               : '$pending devices are asking for admin access.',
@@ -122,69 +147,136 @@ class _AdminShellState extends State<AdminShell> {
       ],
     );
 
+    Widget navIcon(IconData i, {int badge = 0}) => Badge(
+          isLabelVisible: badge > 0,
+          label: Text('$badge'),
+          backgroundColor: kAdminRed,
+          child: Icon(i),
+        );
+
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF15151C),
         titleSpacing: 16,
+        shape: Border(bottom: BorderSide(color: p.border)),
         title: Row(
           children: [
-            const Icon(Icons.shield_outlined, color: kAdminRed),
+            _brandMark(),
             const SizedBox(width: 10),
-            const Text('Aluta Admin',
-                style: TextStyle(fontWeight: FontWeight.w800)),
-            const SizedBox(width: 12),
-            if (owner != null && wide)
-              Text('@${owner['username']}',
-                  style: const TextStyle(color: Colors.white54, fontSize: 14)),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Aluta',
+                    style: TextStyle(
+                        color: p.text,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                        letterSpacing: 1.5)),
+                const Text('ADMIN',
+                    style: TextStyle(
+                        color: kAdminRed,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 10,
+                        letterSpacing: 3)),
+              ],
+            ),
+            if (owner != null && wide) ...[
+              const SizedBox(width: 16),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: p.card2,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: p.border),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.verified_user_rounded,
+                        size: 14, color: p.muted),
+                    const SizedBox(width: 6),
+                    Text('@${owner['username']}',
+                        style: TextStyle(color: p.muted, fontSize: 13)),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
         actions: [
-          Tooltip(
-            message: 'Lock admin (not me)',
-            child: IconButton(
-              onPressed: _lockAdmin,
-              icon: const Icon(Icons.lock_outline, color: kAdminRed),
-            ),
+          IconButton(
+            tooltip: p.dark ? 'Light mode' : 'Dark mode',
+            onPressed: toggleAdminTheme,
+            icon: Icon(p.dark
+                ? Icons.light_mode_rounded
+                : Icons.dark_mode_rounded),
+          ),
+          IconButton(
+            tooltip: 'Lock admin (not me)',
+            onPressed: _lockAdmin,
+            icon: const Icon(Icons.lock_rounded, color: kAdminRed),
           ),
           PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded),
             onSelected: (v) {
               if (v == 'out') widget.onSignOut();
             },
             itemBuilder: (_) => [
               PopupMenuItem(
                 enabled: false,
-                child: Text(
-                  'This device: ${_device['name'] ?? '—'}',
-                  style: const TextStyle(fontSize: 13),
+                child: Row(
+                  children: [
+                    const Icon(Icons.computer_rounded, size: 18),
+                    const SizedBox(width: 10),
+                    Text('This device: ${_device['name'] ?? '—'}',
+                        style: const TextStyle(fontSize: 13)),
+                  ],
                 ),
               ),
-              const PopupMenuItem(value: 'out', child: Text('Sign out')),
+              const PopupMenuItem(
+                value: 'out',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout_rounded, size: 18),
+                    SizedBox(width: 10),
+                    Text('Sign out'),
+                  ],
+                ),
+              ),
             ],
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: wide
           ? Row(
               children: [
-                NavigationRail(
-                  backgroundColor: const Color(0xFF15151C),
-                  selectedIndex: _tab,
-                  onDestinationSelected: (i) => setState(() => _tab = i),
-                  labelType: NavigationRailLabelType.all,
-                  destinations: const [
-                    NavigationRailDestination(
-                        icon: Icon(Icons.insights_outlined),
-                        selectedIcon: Icon(Icons.insights),
-                        label: Text('Overview')),
-                    NavigationRailDestination(
-                        icon: Icon(Icons.devices_outlined),
-                        selectedIcon: Icon(Icons.devices),
-                        label: Text('Devices')),
-                    NavigationRailDestination(
-                        icon: Icon(Icons.receipt_long_outlined),
-                        selectedIcon: Icon(Icons.receipt_long),
-                        label: Text('Activity log')),
-                  ],
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border(right: BorderSide(color: p.border)),
+                  ),
+                  child: NavigationRail(
+                    selectedIndex: _tab,
+                    onDestinationSelected: (i) => setState(() => _tab = i),
+                    labelType: NavigationRailLabelType.all,
+                    minWidth: 88,
+                    destinations: [
+                      const NavigationRailDestination(
+                          icon: Icon(Icons.space_dashboard_outlined),
+                          selectedIcon: Icon(Icons.space_dashboard_rounded),
+                          label: Text('Overview')),
+                      NavigationRailDestination(
+                          icon: navIcon(Icons.devices_outlined, badge: pending),
+                          selectedIcon:
+                              navIcon(Icons.devices_rounded, badge: pending),
+                          label: const Text('Devices')),
+                      const NavigationRailDestination(
+                          icon: Icon(Icons.receipt_long_outlined),
+                          selectedIcon: Icon(Icons.receipt_long_rounded),
+                          label: Text('Activity log')),
+                    ],
+                  ),
                 ),
                 Expanded(child: body),
               ],
@@ -195,13 +287,19 @@ class _AdminShellState extends State<AdminShell> {
           : NavigationBar(
               selectedIndex: _tab,
               onDestinationSelected: (i) => setState(() => _tab = i),
-              destinations: const [
+              destinations: [
+                const NavigationDestination(
+                    icon: Icon(Icons.space_dashboard_outlined),
+                    selectedIcon: Icon(Icons.space_dashboard_rounded),
+                    label: 'Overview'),
                 NavigationDestination(
-                    icon: Icon(Icons.insights_outlined), label: 'Overview'),
-                NavigationDestination(
-                    icon: Icon(Icons.devices_outlined), label: 'Devices'),
-                NavigationDestination(
-                    icon: Icon(Icons.receipt_long_outlined), label: 'Log'),
+                    icon: navIcon(Icons.devices_outlined, badge: pending),
+                    selectedIcon: navIcon(Icons.devices_rounded, badge: pending),
+                    label: 'Devices'),
+                const NavigationDestination(
+                    icon: Icon(Icons.receipt_long_outlined),
+                    selectedIcon: Icon(Icons.receipt_long_rounded),
+                    label: 'Log'),
               ],
             ),
     );
@@ -224,19 +322,25 @@ class _Banner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: color.withValues(alpha: 0.16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(width: 10),
-            Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
-            if (action != null)
-              TextButton(onPressed: onAction, child: Text(action!)),
-          ],
-        ),
+    final p = context.adm;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: p.dark ? 0.16 : 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          AdminIconChip(icon: icon, color: color, size: 28),
+          const SizedBox(width: 10),
+          Expanded(
+              child: Text(text,
+                  style: TextStyle(fontSize: 13, color: p.text))),
+          if (action != null)
+            TextButton(onPressed: onAction, child: Text(action!)),
+        ],
       ),
     );
   }

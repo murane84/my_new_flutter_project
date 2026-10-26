@@ -11,34 +11,37 @@ import 'admin_widgets.dart';
 /// Aluta Admin root: sign-in → (pending approval | recovery wait | first-time
 /// recovery codes) → dashboard. The password is held in memory only while a
 /// pending device waits, so approval can finish the sign-in hands-free.
-class AdminApp extends StatelessWidget {
+class AdminApp extends StatefulWidget {
   const AdminApp({super.key});
 
   @override
+  State<AdminApp> createState() => _AdminAppState();
+}
+
+class _AdminAppState extends State<AdminApp> {
+  @override
+  void initState() {
+    super.initState();
+    loadAdminTheme();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: kAdminRed,
-      brightness: Brightness.dark,
-    );
-    return MaterialApp(
-      title: 'Aluta Admin',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: scheme,
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFF0F0F14),
-        cardTheme: const CardThemeData(
-          color: Color(0xFF1B1B24),
-          elevation: 0,
-          margin: EdgeInsets.zero,
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: adminThemeMode,
+      builder: (context, mode, _) => MaterialApp(
+        title: 'Aluta Admin',
+        debugShowCheckedModeBanner: false,
+        theme: adminTheme(Brightness.light),
+        darkTheme: adminTheme(Brightness.dark),
+        themeMode: mode,
+        builder: (context, child) => Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) => AdminApi.instance.touch(),
+          child: child,
         ),
+        home: const _AdminRoot(),
       ),
-      builder: (context, child) => Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: (_) => AdminApi.instance.touch(),
-        child: child,
-      ),
-      home: const _AdminRoot(),
     );
   }
 }

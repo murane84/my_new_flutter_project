@@ -87,7 +87,7 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
                 style: const TextStyle(fontWeight: FontWeight.w600)),
             Text('Requested from IP ${d['request_ip'] ?? '—'} · '
                 '${fmtAgo(d['created_at'] as String?)}',
-                style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                style: TextStyle(color: ctx.adm.muted, fontSize: 12)),
             const SizedBox(height: 12),
             const AdminInline(
               text: 'Only approve a device you are holding or can see right '
@@ -105,8 +105,8 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
             const SizedBox(height: 10),
             AdminPasswordField(controller: pw),
             const SizedBox(height: 8),
-            const Text('It stays read-only for 24 hours.',
-                style: TextStyle(color: Colors.white54, fontSize: 12)),
+            Text('It stays read-only for 24 hours.',
+                style: TextStyle(color: ctx.adm.faint, fontSize: 12)),
           ],
         ),
         actions: [
@@ -230,8 +230,8 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Shown once. Write them down and keep them offline.',
-                  style: TextStyle(color: Colors.white70)),
+              Text('Shown once. Write them down and keep them offline.',
+                  style: TextStyle(color: ctx.adm.muted)),
               const SizedBox(height: 12),
               AdminCodesGrid(codes: codes),
             ],
@@ -269,20 +269,18 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
         list.where((d) => d['status'] != 'denied' && d['status'] != 'revoked');
     final past =
         list.where((d) => d['status'] == 'denied' || d['status'] == 'revoked');
+    final p = context.adm;
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('Devices',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4),
-          const Text(
-            'Only these browsers can open admin. A new one needs your approval '
-            'here, then stays read-only for 24 hours.',
-            style: TextStyle(color: Colors.white60),
+          const AdminPageTitle(
+            icon: Icons.devices_rounded,
+            title: 'Devices',
+            subtitle: 'Only these browsers can open admin. A new one needs '
+                'your approval here, then stays read-only for 24 hours.',
           ),
-          const SizedBox(height: 12),
           if (_error != null) ...[
             AdminInline(text: _error!, error: true),
             const SizedBox(height: 12),
@@ -310,26 +308,25 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
             children: [
               OutlinedButton.icon(
                 onPressed: _newCodes,
-                icon: const Icon(Icons.key_outlined, size: 18),
+                icon: const Icon(Icons.key_rounded, size: 18),
                 label: const Text('New recovery codes'),
               ),
               OutlinedButton.icon(
                 onPressed: _revokeOthers,
-                icon: const Icon(Icons.phonelink_erase_outlined, size: 18),
+                icon: const Icon(Icons.phonelink_erase_rounded, size: 18),
                 label: const Text('Remove all other devices'),
               ),
             ],
           ),
           if (past.isNotEmpty) ...[
             const SizedBox(height: 22),
-            const Text('Removed & denied',
-                style: TextStyle(color: Colors.white54)),
+            Text('Removed & denied', style: TextStyle(color: p.faint)),
             const SizedBox(height: 6),
             for (final d in past.take(20))
               ListTile(
                 dense: true,
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.block, color: Colors.white38, size: 18),
+                leading: Icon(Icons.block_rounded, color: p.faint, size: 18),
                 title: Text('${d['name']}'),
                 subtitle: Text('${d['status']} · ${d['browser']} · last IP '
                     '${d['last_ip'] ?? d['request_ip'] ?? '—'}'),
@@ -360,6 +357,7 @@ class _DeviceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.adm;
     final status = (d['status'] ?? '').toString();
     final me = d['is_this_device'] == true;
     final probation = d['on_probation'] == true;
@@ -369,20 +367,20 @@ class _DeviceCard extends StatelessWidget {
             true);
     final (Color color, String label) = switch (status) {
       'pending' => expired
-          ? (Colors.white38, 'Request expired')
+          ? (p.faint, 'Request expired')
           : (kAdminRed, 'Waiting for your approval'),
       'recovering' => (const Color(0xFFF9A825), 'Recovery (72 h wait)'),
       'trusted' => probation
           ? (const Color(0xFFF9A825), 'Read-only (probation)')
           : (const Color(0xFF66BB6A), 'Trusted'),
-      _ => (Colors.white38, status),
+      _ => (p.faint, status),
     };
     return Card(
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         side: status == 'pending' && !expired
-            ? const BorderSide(color: kAdminRed)
-            : BorderSide.none,
+            ? const BorderSide(color: kAdminRed, width: 1.4)
+            : BorderSide(color: p.border),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -391,19 +389,22 @@ class _DeviceCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(
-                  (d['browser'] ?? '').toString().contains('iPhone') ||
+                AdminIconChip(
+                  icon: (d['browser'] ?? '').toString().contains('iPhone') ||
                           (d['browser'] ?? '').toString().contains('Android')
-                      ? Icons.smartphone
-                      : Icons.computer,
-                  color: color,
+                      ? Icons.smartphone_rounded
+                      : Icons.computer_rounded,
+                  color: color == p.faint ? const Color(0xFF9E9E9E) : color,
+                  size: 36,
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     '${d['name']}${me ? '  (this device)' : ''}',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700, fontSize: 15),
+                    style: TextStyle(
+                        color: p.text,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15),
                   ),
                 ),
                 Container(
@@ -433,7 +434,7 @@ class _DeviceCard extends StatelessWidget {
                 if (status == 'recovering')
                   'becomes active ${fmtDateTime(d['activate_at'] as String?)}',
               ].join(' · '),
-              style: const TextStyle(color: Colors.white60, fontSize: 12),
+              style: TextStyle(color: p.muted, fontSize: 12),
             ),
             const SizedBox(height: 8),
             Wrap(
@@ -538,40 +539,56 @@ class _AdminAuditPageState extends State<AdminAuditPage> {
     'admin_unfrozen': 'Admin unlocked',
   };
 
+  (IconData, Color) _iconFor(Map<String, dynamic> e) {
+    final a = (e['action'] ?? '').toString();
+    if (e['ok'] == false) {
+      return (Icons.warning_amber_rounded, const Color(0xFFEF5350));
+    }
+    if (a.startsWith('admin_frozen')) return (Icons.lock_rounded, kAdminRed);
+    if (a.startsWith('admin_unfrozen')) {
+      return (Icons.lock_open_rounded, const Color(0xFF00C853));
+    }
+    if (a == 'login') return (Icons.login_rounded, const Color(0xFF2979FF));
+    if (a == 'logout') return (Icons.logout_rounded, const Color(0xFF78909C));
+    if (a.startsWith('recovery') || a.startsWith('bootstrap')) {
+      return (Icons.key_rounded, const Color(0xFFFF9100));
+    }
+    if (a.startsWith('device')) {
+      return (Icons.devices_rounded, const Color(0xFF7C4DFF));
+    }
+    return (Icons.receipt_long_rounded, const Color(0xFF78909C));
+  }
+
   @override
   Widget build(BuildContext context) {
+    final p = context.adm;
     return RefreshIndicator(
       onRefresh: () => _load(reset: true),
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('Activity log',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4),
-          const Text('Everything done in or to the admin panel.',
-              style: TextStyle(color: Colors.white60)),
-          const SizedBox(height: 12),
+          const AdminPageTitle(
+            icon: Icons.receipt_long_rounded,
+            title: 'Activity log',
+            subtitle: 'Everything done in or to the admin panel.',
+          ),
           if (_error != null) ...[
             AdminInline(text: _error!, error: true),
             const SizedBox(height: 12),
           ],
           Card(
+            clipBehavior: Clip.antiAlias,
             child: Column(
               children: [
                 for (final e in _rows)
                   ListTile(
-                    dense: true,
-                    leading: Icon(
-                      e['ok'] == false
-                          ? Icons.warning_amber_rounded
-                          : Icons.check_circle_outline,
-                      color: e['ok'] == false
-                          ? const Color(0xFFEF5350)
-                          : Colors.white38,
-                      size: 20,
-                    ),
-                    title: Text(_names[e['action']] ?? '${e['action']}'),
-                    subtitle: Text([
+                    leading: AdminIconChip(
+                        icon: _iconFor(e).$1, color: _iconFor(e).$2, size: 32),
+                    title: Text(_names[e['action']] ?? '${e['action']}',
+                        style: TextStyle(
+                            color: p.text, fontWeight: FontWeight.w600)),
+                    subtitle: Text(
+                        style: TextStyle(color: p.muted, fontSize: 12), [
                       fmtDateTime(e['at'] as String?),
                       if (e['device'] != null) '${e['device']}',
                       if (e['ip'] != null) 'IP ${e['ip']}',
@@ -579,10 +596,10 @@ class _AdminAuditPageState extends State<AdminAuditPage> {
                     ].join(' · ')),
                   ),
                 if (_rows.isEmpty && !_loading)
-                  const Padding(
-                    padding: EdgeInsets.all(20),
+                  Padding(
+                    padding: const EdgeInsets.all(20),
                     child: Text('Nothing yet.',
-                        style: TextStyle(color: Colors.white54)),
+                        style: TextStyle(color: p.faint)),
                   ),
               ],
             ),

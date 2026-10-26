@@ -93,31 +93,29 @@ class _AdminOverviewState extends State<AdminOverview> {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.adm;
     final o = _overview;
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text('Overview',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-              ),
-              if (_loadedAt != null)
-                Text('Updated ${fmtAgo(_loadedAt!.toUtc().toIso8601String())}',
-                    style: const TextStyle(color: Colors.white38, fontSize: 12)),
-              IconButton(
-                onPressed: _loading ? null : _load,
-                icon: _loading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.refresh),
-              ),
-            ],
+          AdminPageTitle(
+            icon: Icons.space_dashboard_rounded,
+            title: 'Overview',
+            subtitle: _loadedAt == null
+                ? 'How Aluta is doing'
+                : 'Updated ${fmtAgo(_loadedAt!.toUtc().toIso8601String())}',
+            trailing: IconButton.filledTonal(
+              tooltip: 'Refresh',
+              onPressed: _loading ? null : _load,
+              icon: _loading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.refresh_rounded),
+            ),
           ),
           if (_error != null) ...[
             AdminInline(text: _error!, error: true),
@@ -128,22 +126,22 @@ class _AdminOverviewState extends State<AdminOverview> {
               padding: EdgeInsets.all(40),
               child: Center(child: CircularProgressIndicator()),
             ),
-          if (o != null) ..._usersBlock(o),
+          if (o != null) ..._usersBlock(o, p),
           if (_signups != null) ...[
             const SizedBox(height: 14),
             _signupsBlock(),
           ],
           if (_devices != null) ...[
             const SizedBox(height: 14),
-            _devicesBlock(),
+            _devicesBlock(p),
           ],
           if (_activity != null) ...[
             const SizedBox(height: 14),
-            _activityBlock(),
+            _activityBlock(p),
           ],
           if (_storage != null) ...[
             const SizedBox(height: 14),
-            _storageBlock(),
+            _storageBlock(p),
           ],
           const SizedBox(height: 24),
         ],
@@ -151,7 +149,7 @@ class _AdminOverviewState extends State<AdminOverview> {
     );
   }
 
-  List<Widget> _usersBlock(Map<String, dynamic> o) {
+  List<Widget> _usersBlock(Map<String, dynamic> o, AdminPalette p) {
     String n(String k) => fmtInt(o[k] as num?);
     final ret = (o['retention'] as Map?)?.cast<String, dynamic>() ?? const {};
     String r(String k) {
@@ -164,7 +162,7 @@ class _AdminOverviewState extends State<AdminOverview> {
     String rh(String k) {
       final m = (ret[k] as Map?)?.cast<String, dynamic>();
       if (m == null) return '';
-      return '${m['returned']} of ${m['cohort']}';
+      return '${m['returned']} of ${m['cohort']} people';
     }
 
     final online = ((_online?['online'] as List?) ?? const [])
@@ -176,67 +174,101 @@ class _AdminOverviewState extends State<AdminOverview> {
         AdminStat(
             label: 'Registered users',
             value: n('users_total'),
-            icon: Icons.people_alt_outlined),
+            icon: Icons.groups_rounded,
+            accent: const Color(0xFF7C4DFF)),
         AdminStat(
             label: 'Online now',
             value: n('online_now'),
-            icon: Icons.circle,
-            accent: const Color(0xFF66BB6A),
-            hint: 'Tap below to see who'),
+            icon: Icons.wifi_tethering_rounded,
+            accent: const Color(0xFF00C853),
+            hint: 'Tap to see who',
+            onTap: () => setState(() => _showOnline = !_showOnline)),
         AdminStat(
             label: 'New today',
             value: n('new_today'),
-            icon: Icons.person_add_alt,
+            icon: Icons.person_add_alt_1_rounded,
+            accent: const Color(0xFF2979FF),
             hint: '${n('new_7d')} this week · ${n('new_30d')} in 30 d'),
         AdminStat(
-            label: 'Active 24 h',
+            label: 'Active in 24 h',
             value: n('active_24h'),
-            icon: Icons.bolt,
+            icon: Icons.bolt_rounded,
+            accent: const Color(0xFFFF9100),
             hint: '${n('active_7d')} in 7 d · ${n('active_30d')} in 30 d'),
         AdminStat(
             label: 'Came back after 1 day',
             value: r('d1'),
-            icon: Icons.replay,
+            icon: Icons.replay_rounded,
+            accent: const Color(0xFF00BFA5),
             hint: rh('d1')),
         AdminStat(
-            label: 'After 7 days',
+            label: 'Came back after 7 days',
             value: r('d7'),
-            icon: Icons.replay,
+            icon: Icons.event_repeat_rounded,
+            accent: const Color(0xFF00ACC1),
             hint: rh('d7')),
         AdminStat(
-            label: 'After 30 days',
+            label: 'Came back after 30 days',
             value: r('d30'),
-            icon: Icons.replay,
+            icon: Icons.favorite_rounded,
+            accent: const Color(0xFFE91E63),
             hint: rh('d30')),
         AdminStat(
             label: 'Listening together now',
             value: o['listen_together_now'] == null
                 ? '—'
                 : n('listen_together_now'),
-            icon: Icons.headphones),
+            icon: Icons.headphones_rounded,
+            accent: kAdminRed),
       ]),
-      const SizedBox(height: 10),
+      const SizedBox(height: 12),
       Card(
+        clipBehavior: Clip.antiAlias,
         child: Column(
           children: [
             ListTile(
-              leading: const Icon(Icons.circle, color: Color(0xFF66BB6A), size: 14),
-              title: Text('Who’s online (${online.length})'),
-              trailing: Icon(_showOnline ? Icons.expand_less : Icons.expand_more),
+              leading: const AdminIconChip(
+                  icon: Icons.wifi_tethering_rounded,
+                  color: Color(0xFF00C853),
+                  size: 30),
+              title: Text('Who’s online (${online.length})',
+                  style: TextStyle(color: p.text, fontWeight: FontWeight.w600)),
+              trailing: Icon(
+                  _showOnline
+                      ? Icons.expand_less_rounded
+                      : Icons.expand_more_rounded,
+                  color: p.muted),
               onTap: () => setState(() => _showOnline = !_showOnline),
             ),
             if (_showOnline)
               for (final u in online)
                 ListTile(
                   dense: true,
-                  title: Text('@${u['username']}'),
-                  subtitle: Text(_platformLabel(u['platform'] as String?)),
+                  leading: CircleAvatar(
+                    radius: 15,
+                    backgroundColor: kAdminRed.withValues(alpha: 0.15),
+                    child: Text(
+                      '${u['username'] ?? '?'}'.isNotEmpty
+                          ? '${u['username']}'[0].toUpperCase()
+                          : '?',
+                      style: const TextStyle(
+                          color: kAdminRed,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13),
+                    ),
+                  ),
+                  title: Text('@${u['username']}',
+                      style: TextStyle(color: p.text)),
+                  subtitle: Text(_platformLabel(u['platform'] as String?),
+                      style: TextStyle(color: p.muted)),
+                  trailing: Icon(_platformIcon(u['platform'] as String?),
+                      size: 18, color: p.muted),
                 ),
             if (_showOnline && online.isEmpty)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 child: Text('Nobody is connected right now.',
-                    style: TextStyle(color: Colors.white54)),
+                    style: TextStyle(color: p.muted)),
               ),
           ],
         ),
@@ -244,10 +276,18 @@ class _AdminOverviewState extends State<AdminOverview> {
       if ((o['note'] ?? '').toString().isNotEmpty) ...[
         const SizedBox(height: 6),
         Text(o['note'].toString(),
-            style: const TextStyle(color: Colors.white38, fontSize: 11)),
+            style: TextStyle(color: p.faint, fontSize: 11)),
       ],
     ];
   }
+
+  IconData _platformIcon(String? p) => switch (p) {
+        'android' || 'web-android' => Icons.android_rounded,
+        'ios' || 'web-ios' => Icons.phone_iphone_rounded,
+        'windows' || 'web-desktop' || 'macos' || 'linux' =>
+          Icons.computer_rounded,
+        _ => Icons.devices_other_rounded,
+      };
 
   static const _labels = {
     'android': 'Android app',
@@ -267,6 +307,8 @@ class _AdminOverviewState extends State<AdminOverview> {
     final d = _days(_signups, 'days');
     return AdminSection(
       title: 'Sign-ups',
+      icon: Icons.person_add_alt_1_rounded,
+      color: const Color(0xFF2979FF),
       subtitle: '${fmtInt(_sum(d))} in the last $_signupDays days',
       trailing: Wrap(
         spacing: 6,
@@ -282,11 +324,11 @@ class _AdminOverviewState extends State<AdminOverview> {
             ),
         ],
       ),
-      child: AdminDailyBars(days: d),
+      child: AdminDailyBars(days: d, color: const Color(0xFF2979FF)),
     );
   }
 
-  Widget _devicesBlock() {
+  Widget _devicesBlock(AdminPalette p) {
     final m = _devices!;
     final plats = ((m['platforms'] as List?) ?? const [])
         .whereType<Map>()
@@ -297,22 +339,24 @@ class _AdminOverviewState extends State<AdminOverview> {
         .map((e) => e.cast<String, dynamic>())
         .toList();
     final iphone = plats
-        .where((p) => p['platform'] == 'web-ios' || p['platform'] == 'ios')
-        .fold<int>(0, (a, p) => a + ((p['users'] as num?)?.toInt() ?? 0));
+        .where((x) => x['platform'] == 'web-ios' || x['platform'] == 'ios')
+        .fold<int>(0, (a, x) => a + ((x['users'] as num?)?.toInt() ?? 0));
     final reporting = (m['users_reporting'] as num?)?.toInt() ?? 0;
     return AdminSection(
       title: 'Devices',
+      icon: Icons.devices_rounded,
+      color: const Color(0xFF7C4DFF),
       subtitle: '${fmtInt(reporting)} people active in the last '
           '${m['window_days']} days reported their device',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          AdminShareBars(rows: [
-            for (final p in plats)
+          AdminShareBars(color: const Color(0xFF7C4DFF), rows: [
+            for (final pl in plats)
               (
-                (p['label'] ?? p['platform']).toString(),
-                (p['users'] as num?) ?? 0,
-                fmtInt(p['users'] as num?)
+                (pl['label'] ?? pl['platform']).toString(),
+                (pl['users'] as num?) ?? 0,
+                fmtInt(pl['users'] as num?)
               ),
           ]),
           const SizedBox(height: 10),
@@ -326,8 +370,8 @@ class _AdminOverviewState extends State<AdminOverview> {
           ),
           if (vers.isNotEmpty) ...[
             const SizedBox(height: 14),
-            const Text('App versions in use',
-                style: TextStyle(fontWeight: FontWeight.w600)),
+            Text('App versions in use',
+                style: TextStyle(color: p.text, fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
             AdminShareBars(
               color: const Color(0xFF5C6BC0),
@@ -344,39 +388,42 @@ class _AdminOverviewState extends State<AdminOverview> {
           if ((m['note'] ?? '').toString().isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(m['note'].toString(),
-                style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                style: TextStyle(color: p.faint, fontSize: 11)),
           ],
         ],
       ),
     );
   }
 
-  Widget _activityBlock() {
+  Widget _activityBlock(AdminPalette p) {
     final msgs = _days(_activity, 'messages');
     final hearts = _days(_activity, 'hearts');
     final voice = _days(_activity, 'voice_notes');
     return AdminSection(
       title: 'Activity',
+      icon: Icons.forum_rounded,
+      color: const Color(0xFF00B0FF),
       subtitle: '${fmtInt(_sum(msgs))} messages · ${fmtInt(_sum(hearts))} '
           'hearts · ${fmtInt(_sum(voice))} voice notes in ${msgs.length} days',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Messages per day',
-              style: TextStyle(color: Colors.white60, fontSize: 12)),
+          Text('Messages per day',
+              style: TextStyle(color: p.muted, fontSize: 12)),
           const SizedBox(height: 6),
-          AdminDailyBars(days: msgs, color: const Color(0xFF42A5F5)),
+          AdminDailyBars(days: msgs, color: const Color(0xFF00B0FF)),
           const SizedBox(height: 14),
-          const Text('Hearts per day',
-              style: TextStyle(color: Colors.white60, fontSize: 12)),
+          Text('Hearts per day',
+              style: TextStyle(color: p.muted, fontSize: 12)),
           const SizedBox(height: 6),
-          AdminDailyBars(days: hearts, height: 70),
+          AdminDailyBars(
+              days: hearts, height: 70, color: const Color(0xFFE91E63)),
         ],
       ),
     );
   }
 
-  Widget _storageBlock() {
+  Widget _storageBlock(AdminPalette p) {
     final s = _storage!;
     final kinds = ((s['media_by_kind'] as List?) ?? const [])
         .whereType<Map>()
@@ -392,6 +439,8 @@ class _AdminOverviewState extends State<AdminOverview> {
         .toList();
     return AdminSection(
       title: 'Storage',
+      icon: Icons.cloud_rounded,
+      color: const Color(0xFF00BFA5),
       subtitle: 'Media still on the server: '
           '${fmtBytes(s['media_live_bytes'] as num?)} in '
           '${fmtInt(s['media_live_files'] as num?)} files'
@@ -412,8 +461,8 @@ class _AdminOverviewState extends State<AdminOverview> {
           ),
           if (top.isNotEmpty) ...[
             const SizedBox(height: 14),
-            const Text('Biggest uploaders (media still on server)',
-                style: TextStyle(fontWeight: FontWeight.w600)),
+            Text('Biggest uploaders (media still on server)',
+                style: TextStyle(color: p.text, fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
             AdminShareBars(
               color: const Color(0xFFAB47BC),
@@ -429,8 +478,8 @@ class _AdminOverviewState extends State<AdminOverview> {
           ],
           if (tables.isNotEmpty) ...[
             const SizedBox(height: 14),
-            const Text('Largest tables',
-                style: TextStyle(fontWeight: FontWeight.w600)),
+            Text('Largest tables',
+                style: TextStyle(color: p.text, fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
             AdminShareBars(
               color: const Color(0xFF78909C),
@@ -448,7 +497,7 @@ class _AdminOverviewState extends State<AdminOverview> {
           Text(
             '${fmtInt(s['media_purged_rows'] as num?)} older files already left '
             'the server (kept on people’s devices).',
-            style: const TextStyle(color: Colors.white38, fontSize: 11),
+            style: TextStyle(color: p.faint, fontSize: 11),
           ),
         ],
       ),

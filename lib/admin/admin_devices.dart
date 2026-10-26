@@ -270,17 +270,28 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
     final past =
         list.where((d) => d['status'] == 'denied' || d['status'] == 'revoked');
     final p = context.adm;
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const AdminPageTitle(
+    return Column(
+      children: [
+        // Sticky page header — stays put while the content scrolls.
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+          decoration: BoxDecoration(
+            color: context.adm.bg,
+            border: Border(bottom: BorderSide(color: context.adm.border)),
+          ),
+          child: const AdminPageTitle(
             icon: Icons.devices_rounded,
             title: 'Devices',
             subtitle: 'Only these browsers can open admin. A new one needs '
                 'your approval here, then stays read-only for 24 hours.',
           ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _load,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+              children: [
           if (_error != null) ...[
             AdminInline(text: _error!, error: true),
             const SizedBox(height: 12),
@@ -333,8 +344,11 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
               ),
           ],
           const SizedBox(height: 24),
-        ],
-      ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -562,16 +576,27 @@ class _AdminAuditPageState extends State<AdminAuditPage> {
   @override
   Widget build(BuildContext context) {
     final p = context.adm;
-    return RefreshIndicator(
-      onRefresh: () => _load(reset: true),
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const AdminPageTitle(
+    return Column(
+      children: [
+        // Sticky page header — stays put while the content scrolls.
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+          decoration: BoxDecoration(
+            color: context.adm.bg,
+            border: Border(bottom: BorderSide(color: context.adm.border)),
+          ),
+          child: const AdminPageTitle(
             icon: Icons.receipt_long_rounded,
             title: 'Activity log',
             subtitle: 'Everything done in or to the admin panel.',
           ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () => _load(reset: true),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+              children: [
           if (_error != null) ...[
             AdminInline(text: _error!, error: true),
             const SizedBox(height: 12),
@@ -617,8 +642,11 @@ class _AdminAuditPageState extends State<AdminAuditPage> {
               padding: EdgeInsets.all(16),
               child: Center(child: CircularProgressIndicator()),
             ),
-        ],
-      ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

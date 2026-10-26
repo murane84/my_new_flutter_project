@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../widgets/genie_menu.dart';
+
 import 'admin_api.dart';
 import 'admin_devices.dart';
 import 'admin_install.dart';
@@ -222,32 +224,51 @@ class _AdminShellState extends State<AdminShell> {
             onPressed: _lockAdmin,
             icon: const Icon(Icons.lock_rounded, color: kAdminRed),
           ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert_rounded),
-            onSelected: (v) {
-              if (v == 'out') widget.onSignOut();
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem(
+          // Same genie menu as the Aluta app: grows out of ⋮, folds back in.
+          GenieMenuButton(
+            icon: Icon(Icons.more_vert_rounded, color: p.text),
+            tooltip: 'Menu',
+            width: 260,
+            entries: () => [
+              GenieMenuEntry(
+                icon: Icons.computer_rounded,
+                label: 'This device · ${_device['name'] ?? '—'}',
                 enabled: false,
-                child: Row(
-                  children: [
-                    const Icon(Icons.computer_rounded, size: 18),
-                    const SizedBox(width: 10),
-                    Text('This device: ${_device['name'] ?? '—'}',
-                        style: const TextStyle(fontSize: 13)),
-                  ],
-                ),
               ),
-              const PopupMenuItem(
-                value: 'out',
-                child: Row(
-                  children: [
-                    Icon(Icons.logout_rounded, size: 18),
-                    SizedBox(width: 10),
-                    Text('Sign out'),
-                  ],
-                ),
+              const GenieMenuEntry.divider(),
+              GenieMenuEntry(
+                icon: Icons.space_dashboard_rounded,
+                label: 'Overview',
+                onTap: () => setState(() => _tab = 0),
+              ),
+              GenieMenuEntry(
+                icon: Icons.devices_rounded,
+                label: pending > 0 ? 'Devices · $pending waiting' : 'Devices',
+                onTap: () => setState(() => _tab = 1),
+              ),
+              GenieMenuEntry(
+                icon: Icons.receipt_long_rounded,
+                label: 'Activity log',
+                onTap: () => setState(() => _tab = 2),
+              ),
+              const GenieMenuEntry.divider(),
+              GenieMenuEntry(
+                icon: p.dark
+                    ? Icons.light_mode_rounded
+                    : Icons.dark_mode_rounded,
+                label: p.dark ? 'Light mode' : 'Dark mode',
+                onTap: toggleAdminTheme,
+              ),
+              GenieMenuEntry(
+                icon: Icons.lock_rounded,
+                label: 'Lock admin (not me)',
+                destructive: true,
+                onTap: _lockAdmin,
+              ),
+              GenieMenuEntry(
+                icon: Icons.logout_rounded,
+                label: 'Sign out',
+                onTap: () => widget.onSignOut(),
               ),
             ],
           ),

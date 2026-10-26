@@ -95,12 +95,16 @@ class _AdminOverviewState extends State<AdminOverview> {
   Widget build(BuildContext context) {
     final p = context.adm;
     final o = _overview;
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          AdminPageTitle(
+    return Column(
+      children: [
+        // Sticky page header — stays put while the content scrolls.
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+          decoration: BoxDecoration(
+            color: context.adm.bg,
+            border: Border(bottom: BorderSide(color: context.adm.border)),
+          ),
+          child: AdminPageTitle(
             icon: Icons.space_dashboard_rounded,
             title: 'Overview',
             subtitle: _loadedAt == null
@@ -117,6 +121,13 @@ class _AdminOverviewState extends State<AdminOverview> {
                   : const Icon(Icons.refresh_rounded),
             ),
           ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _load,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+              children: [
           if (_error != null) ...[
             AdminInline(text: _error!, error: true),
             const SizedBox(height: 12),
@@ -144,8 +155,11 @@ class _AdminOverviewState extends State<AdminOverview> {
             _storageBlock(p),
           ],
           const SizedBox(height: 24),
-        ],
-      ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 

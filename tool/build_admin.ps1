@@ -20,6 +20,10 @@ $m.description = 'Aluta backoffice (owner only)'
 $m.background_color = '#0F0F14'
 $m.theme_color = '#0F0F14'
 $m.orientation = 'any'
+# Its own installable app (separate from the main Aluta PWA at /).
+$m | Add-Member -NotePropertyName id -NotePropertyValue '/admin/' -Force
+$m | Add-Member -NotePropertyName scope -NotePropertyValue '/admin/' -Force
+$m.start_url = '/admin/'
 $m | ConvertTo-Json -Depth 6 | Set-Content $manifestPath -Encoding UTF8
 
 $indexPath = Join-Path $root 'build\admin\index.html'
@@ -27,6 +31,10 @@ $html = Get-Content $indexPath -Raw
 $html = $html -replace '<title>Aluta</title>', '<title>Aluta Admin</title><meta name="robots" content="noindex, nofollow">'
 $html = $html -replace 'content="Aluta"', 'content="Aluta Admin"'
 $html = $html -replace '#C62828', '#0F0F14'
+# Catch the browser's install offer before Flutter loads (it can fire early);
+# the app shows its own "Install Aluta Admin" card from it.
+$catcher = '<script>(function(){if(window.__alutaInstallWired)return;window.__alutaInstallWired=true;window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.__alutaInstall=e;if(window.__alutaOnInstallReady)window.__alutaOnInstallReady();});window.addEventListener("appinstalled",function(){window.__alutaInstall=null;window.__alutaInstalled=true;if(window.__alutaOnInstallReady)window.__alutaOnInstallReady();});})();</script>'
+$html = $html -replace '</head>', "$catcher</head>"
 Set-Content $indexPath $html -Encoding UTF8
 
 $dest = Join-Path $root 'my_aluta_api\adminapp'

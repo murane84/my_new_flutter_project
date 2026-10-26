@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'admin_api.dart';
+import 'admin_install.dart';
 import 'admin_key.dart';
 import 'admin_shell.dart';
 import 'admin_widgets.dart';
@@ -23,6 +24,7 @@ class _AdminAppState extends State<AdminApp> {
   void initState() {
     super.initState();
     loadAdminTheme();
+    AdminInstall.instance.init();
   }
 
   @override
@@ -361,6 +363,7 @@ class _AdminRootState extends State<_AdminRoot> {
                         ),
                         const SizedBox(height: 26),
                         child,
+                        const AdminInstallCard(onGradient: true),
                       ],
                     ),
                   ),

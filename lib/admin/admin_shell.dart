@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'admin_api.dart';
 import 'admin_devices.dart';
+import 'admin_install.dart';
 import 'admin_overview.dart';
 import 'admin_widgets.dart';
 
@@ -143,6 +144,10 @@ class _AdminShellState extends State<AdminShell> {
     final body = Column(
       children: [
         ...banners,
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: AdminInstallCard(),
+        ),
         Expanded(child: IndexedStack(index: _tab, children: pages)),
       ],
     );

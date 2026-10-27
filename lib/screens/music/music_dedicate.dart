@@ -221,7 +221,7 @@ class _DedicateSheetState extends State<_DedicateSheet> {
         mediaUrl: up['url'].toString(),
         mediaName: (up['name'] ?? name).toString(),
         mediaMime: (up['mime'] ?? mime).toString(),
-        mediaSize: (up['size'] as num?)?.toInt() ?? len,
+        mediaSize: (up['size'] as num?)?.toInt() ?? bytes.length,
         mediaDuration: widget.durationMs,
       );
       if (sent == null) throw Exception('send failed');

@@ -222,36 +222,90 @@ class _GlowFeedState extends State<GlowFeed> {
     );
   }
 
+  /// The categories as a SEGMENTED TRACK, not another row of pills: one soft
+  /// rounded track holding icon + label tabs, the chosen one lifting out as a
+  /// white "thumb" with an accent icon. A clear second level under the
+  /// Harmony / Circle / Glow pills (which navigate), instead of pills on pills.
   Widget _filters(ColorScheme scheme) {
-    const labels = {
-      _Filter.all: 'For you',
-      _Filter.quotes: 'Quotes',
-      _Filter.insights: 'Insights',
-      _Filter.together: 'Together',
-      _Filter.healthy: 'Healthy love',
-      _Filter.saved: 'Saved',
+    const tabs = {
+      _Filter.all: (Icons.auto_awesome_rounded, 'For you'),
+      _Filter.quotes: (Icons.format_quote_rounded, 'Quotes'),
+      _Filter.insights: (Icons.lightbulb_rounded, 'Insights'),
+      _Filter.together: (Icons.favorite_rounded, 'Together'),
+      _Filter.healthy: (Icons.shield_rounded, 'Healthy love'),
+      _Filter.saved: (Icons.bookmark_rounded, 'Saved'),
     };
-    return SizedBox(
-      height: 36,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final track = isDark
+        ? scheme.surfaceContainerHighest.withValues(alpha: 0.6)
+        : Color.alphaBlend(scheme.primary.withValues(alpha: 0.06),
+            scheme.surfaceContainerHighest.withValues(alpha: 0.7));
+    return Container(
+      height: 42,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: track,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+            color: scheme.outlineVariant.withValues(alpha: isDark ? 0.4 : 0.6)),
+      ),
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
           for (final f in _Filter.values)
-            Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: ChoiceChip(
-                label: Text(labels[f]!),
-                avatar: f == _Filter.saved
-                    ? Icon(Icons.favorite_rounded,
-                        size: 14, color: scheme.primary)
-                    : null,
-                selected: _filter == f,
-                showCheckmark: false,
-                visualDensity: VisualDensity.compact,
-                onSelected: (_) => setState(() => _filter = f),
-              ),
-            ),
+            _segment(scheme, isDark, tabs[f]!.$1, tabs[f]!.$2, _filter == f,
+                () => setState(() => _filter = f)),
         ],
+      ),
+    );
+  }
+
+  Widget _segment(ColorScheme scheme, bool isDark, IconData icon, String label,
+      bool on, VoidCallback onTap) {
+    final fg = on ? scheme.primary : scheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.only(right: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: on
+                  ? (isDark ? scheme.surface : Colors.white)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: on
+                  ? [
+                      BoxShadow(
+                        color: Colors.black
+                            .withValues(alpha: isDark ? 0.35 : 0.10),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 15, color: fg),
+                const SizedBox(width: 6),
+                Text(label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+                      color: on ? scheme.onSurface : scheme.onSurfaceVariant,
+                    )),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

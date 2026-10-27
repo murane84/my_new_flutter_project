@@ -1022,8 +1022,47 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                     onReorderItem: (o, n) => _reorderQueue(o, n, setFull),
                     itemBuilder: (_, i) =>
                         _queueRow(i, scheme, accent, isDark, setFull),
+                    // Quiet hint so the hidden gestures are discoverable.
+                    footer: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.touch_app_rounded,
+                              size: 14,
+                              color: scheme.onSurfaceVariant
+                                  .withValues(alpha: 0.7)),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              'Hold a song to share it · drag ≡ to reorder',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: scheme.onSurfaceVariant
+                                      .withValues(alpha: 0.8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
           ),
+        ],
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _queueMenuItem(
+      String value, IconData icon, String label, ColorScheme scheme,
+      {Color? color}) {
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color ?? scheme.onSurfaceVariant),
+          const SizedBox(width: 12),
+          Text(label),
         ],
       ),
     );
@@ -1092,6 +1131,12 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
           if (!isNow) _play(i);
           setFull(() {});
         },
+        // Hold a song to send it to friends — same share sheet (multi-friend
+        // picker) as the playlist's long-press.
+        onLongPress: () {
+          HapticFeedback.mediumImpact();
+          _shareSong(path);
+        },
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 9, 2, 9),
           child: Row(
@@ -1128,28 +1173,35 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
               ),
               if (isNow)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  padding: const EdgeInsets.only(left: 6),
                   child: Icon(Icons.volume_up_rounded, size: 16, color: accent),
-                )
-              else
-                GeniePopupMenuButton<String>(
-                  tooltip: 'Track options',
-                  padding: EdgeInsets.zero,
-                  icon: Icon(Icons.more_vert_rounded,
-                      size: 20, color: scheme.onSurfaceVariant),
-                  onSelected: (v) {
-                    if (v == 'next') {
-                      _playNextInQueue(i, setFull);
-                    } else if (v == 'remove') {
-                      _removeFromQueue(i, setFull);
-                    }
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'next', child: Text('Play next')),
-                    PopupMenuItem(
-                        value: 'remove', child: Text('Remove from queue')),
-                  ],
                 ),
+              GeniePopupMenuButton<String>(
+                tooltip: 'Track options',
+                padding: EdgeInsets.zero,
+                icon: Icon(Icons.more_vert_rounded,
+                    size: 20, color: scheme.onSurfaceVariant),
+                onSelected: (v) {
+                  if (v == 'next') {
+                    _playNextInQueue(i, setFull);
+                  } else if (v == 'share') {
+                    _shareSong(path);
+                  } else if (v == 'remove') {
+                    _removeFromQueue(i, setFull);
+                  }
+                },
+                itemBuilder: (_) => [
+                  if (!isNow && i != _currentIndex + 1)
+                    _queueMenuItem('next', Icons.playlist_play_rounded,
+                        'Play next', scheme),
+                  _queueMenuItem('share', Icons.favorite_rounded,
+                      'Share with friends', scheme,
+                      color: accent),
+                  if (!isNow)
+                    _queueMenuItem('remove', Icons.remove_circle_outline_rounded,
+                        'Remove from queue', scheme),
+                ],
+              ),
               // Explicit drag handle: grab-and-drag to reorder — the same
               // gesture works with a finger (mobile) or a mouse (desktop).
               ReorderableDragStartListener(

@@ -134,53 +134,31 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
     ));
   }
 
+  /// Now Playing's speed picker — the same card as the music page (presets +
+  /// fine slider), floating above the bottom edge instead of a plain list.
   Future<void> _showSpeedSheet(BuildContext ctx) {
-    final scheme = Theme.of(ctx).colorScheme;
     return showModalBottomSheet<void>(
       context: ctx,
       useRootNavigator: true,
-      backgroundColor: scheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      barrierColor: Colors.black.withValues(alpha: 0.25),
       builder: (bctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Playback speed',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        color: scheme.onSurface)),
-              ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+          child: Center(
+            heightFactor: 1,
+            child: _SpeedPanel(
+              width: (MediaQuery.sizeOf(bctx).width - 24).clamp(260.0, 380.0),
+              currentSpeed: _speed,
+              onSelect: (sp) {
+                _setSpeed(sp);
+                Navigator.of(bctx).pop();
+              },
+              onChanged: _setSpeed,
+              onClose: () => Navigator.of(bctx).pop(),
             ),
-            for (final sp in _speeds)
-              ListTile(
-                dense: true,
-                leading: Icon(
-                    sp == _speed
-                        ? Icons.radio_button_checked_rounded
-                        : Icons.radio_button_unchecked_rounded,
-                    color: sp == _speed
-                        ? scheme.primary
-                        : scheme.onSurfaceVariant),
-                title: Text(_speedLabel(sp),
-                    style: TextStyle(
-                        color: scheme.onSurface,
-                        fontWeight: sp == _speed
-                            ? FontWeight.w700
-                            : FontWeight.normal)),
-                onTap: () {
-                  _setSpeed(sp);
-                  Navigator.of(bctx).pop();
-                },
-              ),
-            const SizedBox(height: 8),
-          ],
+          ),
         ),
       ),
     );
@@ -263,51 +241,6 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
     if (target < Duration.zero) target = Duration.zero;
     if (dur > Duration.zero && target > dur) target = dur;
     _player.seek(target);
-  }
-
-  Widget _sleepOption(
-    ColorScheme scheme, {
-    required String label,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: selected
-                ? scheme.primary.withAlpha(30)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: selected
-                  ? scheme.primary.withAlpha(120)
-                  : Colors.transparent,
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    color: selected ? scheme.primary : scheme.onSurface,
-                  ),
-                ),
-              ),
-              if (selected)
-                Icon(Icons.check_rounded, size: 18, color: scheme.primary),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   // ── Overlays ───────────────────────────────────────────────────────────────

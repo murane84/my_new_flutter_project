@@ -264,63 +264,135 @@ class _CtrlChip extends StatelessWidget {
 
 // ─── Speed panel ──────────────────────────────────────────────────────────────
 
-class _SpeedPanel extends StatelessWidget {
+class _SpeedPanel extends StatefulWidget {
   final double currentSpeed;
+
+  /// A preset was tapped (callers usually close the panel).
   final void Function(double) onSelect;
+
+  /// Live changes from the fine slider (panel stays open).
+  final void Function(double)? onChanged;
   final VoidCallback onClose;
+  final double width;
 
   const _SpeedPanel({
     required this.currentSpeed,
     required this.onSelect,
     required this.onClose,
+    this.onChanged,
+    this.width = 268,
   });
+
+  @override
+  State<_SpeedPanel> createState() => _SpeedPanelState();
+}
+
+class _SpeedPanelState extends State<_SpeedPanel> {
+  late double _v = widget.currentSpeed;
+
+  @override
+  void didUpdateWidget(covariant _SpeedPanel old) {
+    super.didUpdateWidget(old);
+    if (old.currentSpeed != widget.currentSpeed) _v = widget.currentSpeed;
+  }
+
+  String get _mood => _v < 0.9
+      ? 'Slower — easy to follow lyrics'
+      : _v > 1.1
+          ? 'Faster'
+          : 'Normal speed';
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final normal = (_v - 1.0).abs() < 0.01;
 
-    // Just the card now — the caller owns the tap-outside barrier, the
-    // position (just above the speed button) and the genie scale, so this
-    // widget is a clean leaf that scales/collapses into the button.
+    // Just the card — the caller owns the barrier / position / genie scale.
     return GestureDetector(
       onTap: () {}, // absorb inner taps so they don't reach the barrier
       child: Container(
-        width: 236,
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        width: widget.width,
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(22),
           border: Border.all(color: scheme.primary.withAlpha(110)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withAlpha(90),
+              color: Colors.black.withAlpha(isDark ? 120 : 70),
               blurRadius: 24,
               offset: const Offset(0, 8),
+            ),
+            BoxShadow(
+              color: scheme.primary.withAlpha(28),
+              blurRadius: 20,
+              spreadRadius: -6,
             ),
           ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Header: icon chip · title + mood · big current value · close.
             Row(
               children: [
-                Icon(Icons.speed_rounded, size: 16, color: scheme.primary),
-                const SizedBox(width: 8),
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color.lerp(scheme.primary, Colors.white, 0.18)!,
+                        Color.lerp(scheme.primary, Colors.black, 0.15)!,
+                      ],
+                    ),
+                  ),
+                  child: const Icon(Icons.speed_rounded,
+                      size: 18, color: Colors.white),
+                ),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    'Playback speed',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                        color: scheme.onSurface),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Playback speed',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13.5,
+                              color: scheme.onSurface)),
+                      Text(_mood,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.onSurfaceVariant)),
+                    ],
                   ),
                 ),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 160),
+                  transitionBuilder: (c, a) =>
+                      ScaleTransition(scale: a, child: c),
+                  child: Text(
+                    _speedLabel(_v),
+                    key: ValueKey(_speedLabel(_v)),
+                    style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: scheme.primary),
+                  ),
+                ),
+                const SizedBox(width: 4),
                 InkWell(
-                  onTap: onClose,
+                  onTap: widget.onClose,
                   borderRadius: BorderRadius.circular(20),
                   child: Padding(
-                    padding: const EdgeInsets.all(2),
+                    padding: const EdgeInsets.all(4),
                     child: Icon(Icons.close_rounded,
                         size: 18, color: scheme.onSurfaceVariant),
                   ),
@@ -328,8 +400,7 @@ class _SpeedPanel extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            // A tidy 3-column grid (two rows of three) so the panel fits its
-            // content with no empty gap.
+            // Presets — a tidy 3-column grid.
             for (int r = 0; r < _speeds.length; r += 3)
               Padding(
                 padding: EdgeInsets.only(
@@ -340,47 +411,160 @@ class _SpeedPanel extends StatelessWidget {
                       if (c > 0) const SizedBox(width: 8),
                       Expanded(
                         child: (r + c) < _speeds.length
-                            ? _speedChip(scheme, _speeds[r + c])
+                            ? _speedChip(scheme, isDark, _speeds[r + c])
                             : const SizedBox.shrink(),
                       ),
                     ],
                   ],
                 ),
               ),
+            if (widget.onChanged != null) ...[
+              const SizedBox(height: 10),
+              // Fine tune in 0.05 steps — live while dragging.
+              Row(
+                children: [
+                  Icon(Icons.slow_motion_video_rounded,
+                      size: 16, color: scheme.onSurfaceVariant),
+                  Expanded(
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 4,
+                        overlayShape: SliderComponentShape.noOverlay,
+                        thumbShape:
+                            const RoundSliderThumbShape(enabledThumbRadius: 8),
+                      ),
+                      child: Slider(
+                        value: _v.clamp(0.5, 2.0),
+                        min: 0.5,
+                        max: 2.0,
+                        divisions: 30,
+                        onChanged: (x) {
+                          final snapped = (x * 20).round() / 20;
+                          setState(() => _v = snapped);
+                          widget.onChanged!(snapped);
+                        },
+                      ),
+                    ),
+                  ),
+                  Icon(Icons.fast_forward_rounded,
+                      size: 16, color: scheme.onSurfaceVariant),
+                ],
+              ),
+              AnimatedCrossFade(
+                duration: const Duration(milliseconds: 180),
+                crossFadeState: normal
+                    ? CrossFadeState.showFirst
+                    : CrossFadeState.showSecond,
+                firstChild: const SizedBox(width: double.infinity),
+                secondChild: Center(
+                  child: TextButton.icon(
+                    onPressed: () => widget.onSelect(1.0),
+                    icon: const Icon(Icons.restart_alt_rounded, size: 16),
+                    label: const Text('Back to normal'),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _speedChip(ColorScheme scheme, double s) {
-    final active = (s - currentSpeed).abs() < 0.01;
-    return GestureDetector(
-      onTap: () => onSelect(s),
+  Widget _speedChip(ColorScheme scheme, bool isDark, double s) {
+    return _musicPickChip(
+      scheme,
+      isDark,
+      label: _speedLabel(s),
+      sub: s == 1.0 ? 'normal' : null,
+      active: (s - _v).abs() < 0.01,
+      onTap: () {
+        setState(() => _v = s);
+        widget.onSelect(s);
+      },
+    );
+  }
+}
+
+/// The one choice-chip look for the music pickers (speed, sleep timer):
+/// tinted tile at rest, a gradient + glow when chosen, ripple + haptic on tap.
+Widget _musicPickChip(
+  ColorScheme scheme,
+  bool isDark, {
+  required String label,
+  required bool active,
+  required VoidCallback onTap,
+  String? sub,
+}) {
+  return Material(
+    color: Colors.transparent,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(vertical: 11),
+        padding: const EdgeInsets.symmetric(vertical: 9),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: active ? scheme.primary : scheme.surfaceContainerHighest,
+          gradient: active
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color.lerp(scheme.primary, Colors.white, 0.12)!,
+                    Color.lerp(scheme.primary, Colors.black, 0.12)!,
+                  ],
+                )
+              : null,
+          color: active
+              ? null
+              : (isDark
+                  ? scheme.surfaceContainerHighest
+                  : Color.alphaBlend(scheme.primary.withValues(alpha: 0.04),
+                      scheme.surfaceContainerHighest)),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: active
                 ? scheme.primary
-                : scheme.outlineVariant.withAlpha(90),
+                : scheme.primary.withValues(alpha: isDark ? 0.25 : 0.16),
           ),
+          boxShadow: active
+              ? [
+                  BoxShadow(
+                    color: scheme.primary.withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : null,
         ),
-        child: Text(
-          _speedLabel(s),
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-            color: active ? scheme.onPrimary : scheme.onSurface,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                color: active ? scheme.onPrimary : scheme.onSurface,
+              ),
+            ),
+            if (sub != null)
+              Text(sub,
+                  style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      color: active
+                          ? scheme.onPrimary.withValues(alpha: 0.85)
+                          : scheme.onSurfaceVariant)),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 // ─── Waveform seek bar ────────────────────────────────────────────────────────

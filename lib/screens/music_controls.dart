@@ -62,7 +62,12 @@ bool get _isMobile => Platform.isAndroid || Platform.isIOS;
 
 const _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
-String _speedLabel(double s) => s == 1.0 ? '1x' : '${s}x';
+String _speedLabel(double s) {
+  // 1.0 → "1×", 1.25 → "1.25×", 1.10 → "1.1×" (never float noise).
+  var t = s.toStringAsFixed(2);
+  t = t.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+  return '$t×';
+}
 
 /// Cleans junk that downloaders bake into filenames, e.g.
 /// "Two of us- Downloaded from clipzag.com" → "Two of us".
@@ -1465,39 +1470,106 @@ class _MusicControlsState extends ConsumerState<MusicControls>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Title row with the sleep glyph.
+                // Header — same layout as the speed card: gradient icon chip,
+                // title + what's armed, close.
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+                  padding: const EdgeInsets.fromLTRB(16, 6, 12, 14),
                   child: Row(
                     children: [
-                      Icon(Icons.snooze_rounded,
-                          size: 20, color: scheme.primary),
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Color.lerp(scheme.primary, Colors.white, 0.18)!,
+                              Color.lerp(scheme.primary, Colors.black, 0.15)!,
+                            ],
+                          ),
+                        ),
+                        child: const Icon(Icons.bedtime_rounded,
+                            size: 18, color: Colors.white),
+                      ),
                       const SizedBox(width: 10),
-                      Text('Sleep Timer',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                            color: scheme.onSurface,
-                          )),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Sleep timer',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13.5,
+                                    color: scheme.onSurface)),
+                            Text(
+                                activeMin == null
+                                    ? 'Music fades out and stops'
+                                    : 'Stops in about ${activeMin + 1} min',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: scheme.onSurfaceVariant)),
+                          ],
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () => Navigator.pop(ctx),
+                        borderRadius: BorderRadius.circular(20),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(Icons.close_rounded,
+                              size: 18, color: scheme.onSurfaceVariant),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                ...opts.entries.map((e) {
-                  final isOff = e.value == null;
-                  final selected = isOff
-                      ? activeMin == null
-                      : activeMin == e.value!.inMinutes;
-                  return _sleepOption(
-                    scheme,
-                    label: e.key,
-                    selected: selected,
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _setSleepTimer(e.value);
-                    },
-                  );
-                }),
-                const SizedBox(height: 4),
+                // Options as the same 3-column chip grid as speed.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Builder(builder: (_) {
+                    final isDark =
+                        Theme.of(ctx).brightness == Brightness.dark;
+                    final entries = opts.entries.toList();
+                    return Column(
+                      children: [
+                        for (int r = 0; r < entries.length; r += 3)
+                          Padding(
+                            padding: EdgeInsets.only(
+                                bottom: r + 3 < entries.length ? 8 : 0),
+                            child: Row(
+                              children: [
+                                for (int c = 0; c < 3; c++) ...[
+                                  if (c > 0) const SizedBox(width: 8),
+                                  Expanded(
+                                    child: (r + c) < entries.length
+                                        ? _musicPickChip(
+                                            scheme,
+                                            isDark,
+                                            label: entries[r + c].key,
+                                            active: entries[r + c].value == null
+                                                ? activeMin == null
+                                                : activeMin ==
+                                                    entries[r + c]
+                                                        .value!
+                                                        .inMinutes,
+                                            onTap: () {
+                                              Navigator.pop(ctx);
+                                              _setSleepTimer(
+                                                  entries[r + c].value);
+                                            },
+                                          )
+                                        : const SizedBox.shrink(),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                      ],
+                    );
+                  }),
+                ),
               ],
             ),
           ),
@@ -2077,6 +2149,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                             _setSpeed(s);
                             _toggleSpeedPanel();
                           },
+                          onChanged: _setSpeed,
                           onClose: _toggleSpeedPanel,
                         ),
                       ),

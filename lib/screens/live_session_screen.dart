@@ -1502,15 +1502,110 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
 
   // The queue half: a fixed header + the independently-scrolling up-next list.
   Widget _queueSection(ColorScheme scheme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    final count = _isHost ? _c.queue.length : _c.remoteQueueTitles.length;
+    final canAdd = _isHost || _c.remoteContribAllowed;
+    return Stack(
       children: [
-        _buildQueueHeader(scheme),
-        Expanded(
-          child:
-              _isHost ? _buildQueueList(scheme) : _buildRemoteQueueList(scheme),
+        // A record-shop wallpaper (big faint vinyl, EQ bars, a few notes) so
+        // a short queue still reads as part of the room, not a white box.
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(painter: _QueueDoodlePainter(scheme.primary)),
+          ),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildQueueHeader(scheme),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Flexible(
+                    child: _isHost
+                        ? _buildQueueList(scheme)
+                        : _buildRemoteQueueList(scheme),
+                  ),
+                  // Short queue: invite the next song right under it.
+                  if (count <= 3 && canAdd) _queueInvite(scheme, count),
+                ],
+              ),
+            ),
+          ],
         ),
       ],
+    );
+  }
+
+  /// "Keep the music going" card under a short queue — one tap to add.
+  Widget _queueInvite(ColorScheme scheme, int count) {
+    final isDark = scheme.brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: _isHost ? _addSongToQueue : _contributeSong,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: scheme.surface.withValues(alpha: isDark ? 0.55 : 0.75),
+              border: Border.all(
+                  color: scheme.primary.withValues(alpha: isDark ? 0.35 : 0.25),
+                  width: 1.2),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(11),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color.lerp(scheme.primary, Colors.white, 0.15)!,
+                        Color.lerp(scheme.primary, Colors.black, 0.15)!,
+                      ],
+                    ),
+                  ),
+                  child: const Icon(Icons.playlist_add_rounded,
+                      size: 20, color: Colors.white),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                          count == 0
+                              ? 'Start the queue'
+                              : 'Keep the music going',
+                          style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w800,
+                              color: scheme.onSurface)),
+                      Text(
+                          _isHost
+                              ? 'Add the next song for the room'
+                              : 'The DJ lets guests add — drop a song in',
+                          maxLines: 2,
+                          style: TextStyle(
+                              fontSize: 11.5,
+                              color: scheme.onSurfaceVariant)),
+                    ],
+                  ),
+                ),
+                Icon(Icons.add_circle_rounded,
+                    size: 22, color: scheme.primary),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -3260,4 +3355,87 @@ class _ChatDoodlePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ChatDoodlePainter old) => old.accent != accent;
+}
+
+// The Up next column's wallpaper — a sibling of the chat doodles but with a
+// record-shop motif: a large faint vinyl peeking from the bottom corner, a
+// row of EQ bars along the bottom, and a sparse scatter of notes. Painted
+// behind the list, so a short queue never leaves a blank white column.
+class _QueueDoodlePainter extends CustomPainter {
+  _QueueDoodlePainter(this.accent);
+  final Color accent;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+    final w = size.width, h = size.height;
+    final rect = Offset.zero & size;
+    // Wash rising from the bottom (the chat's falls from the top).
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [
+            accent.withValues(alpha: 0.08),
+            accent.withValues(alpha: 0.0),
+          ],
+        ).createShader(rect),
+    );
+
+    // Big vinyl, mostly off the bottom-right corner.
+    final c = Offset(w * 0.92, h * 0.96);
+    final r = math.min(w * 0.62, h * 0.5);
+    canvas.drawCircle(c, r, Paint()..color = accent.withValues(alpha: 0.05));
+    final groove = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..color = accent.withValues(alpha: 0.07);
+    for (var g = r * 0.42; g < r; g += 7) {
+      canvas.drawCircle(c, g, groove);
+    }
+    canvas.drawCircle(
+        c, r * 0.34, Paint()..color = accent.withValues(alpha: 0.08));
+    canvas.drawCircle(
+        c, r * 0.05, Paint()..color = accent.withValues(alpha: 0.14));
+
+    // EQ bars along the bottom-left, fading out toward the record.
+    final rnd = math.Random(2026);
+    const bw = 5.0, gap = 5.0;
+    final bars = ((w * 0.55) / (bw + gap)).floor();
+    for (var i = 0; i < bars; i++) {
+      final bh = 10 + rnd.nextDouble() * 46;
+      final fade = 1 - i / bars;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+            Rect.fromLTWH(14 + i * (bw + gap), h - 10 - bh, bw, bh),
+            const Radius.circular(3)),
+        Paint()..color = accent.withValues(alpha: 0.10 * fade + 0.02),
+      );
+    }
+
+    // A few notes drifting up the column.
+    const glyphs = ['\u266A', '\u266B', '\u266C', '\u2661'];
+    final count = ((w * h) / 16000).clamp(6, 28).round();
+    for (var i = 0; i < count; i++) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: glyphs[rnd.nextInt(glyphs.length)],
+          style: TextStyle(
+              fontSize: 13 + rnd.nextDouble() * 18,
+              color: accent.withValues(alpha: 0.04 + rnd.nextDouble() * 0.05)),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      canvas.save();
+      canvas.translate(rnd.nextDouble() * w, rnd.nextDouble() * h);
+      canvas.rotate((rnd.nextDouble() - 0.5) * 0.8);
+      tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_QueueDoodlePainter old) => old.accent != accent;
 }

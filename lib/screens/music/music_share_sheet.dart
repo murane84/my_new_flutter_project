@@ -53,11 +53,71 @@ class _ShareSheetState extends State<_ShareSheet> {
   final Set<int> _to = {};
   late final Future<List<Map<String, dynamic>>> _friends;
 
+  // Who you share with most recently (pinned to the top), and which friends
+  // already got which song ("sent before"), remembered on this device.
+  static const _kRecent = 'share_recent_ids_v1';
+  static const _kSent = 'share_sent_v1';
+  List<int> _recent = const [];
+  Map<String, List<int>> _sentTo = const {};
+
+  String _songKey(String path) => _label(path).toLowerCase();
+
+  Future<void> _loadMemory() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final r = (p.getStringList(_kRecent) ?? const [])
+          .map(int.tryParse)
+          .whereType<int>()
+          .toList();
+      final raw = p.getString(_kSent);
+      final m = <String, List<int>>{};
+      if (raw != null) {
+        final d = jsonDecode(raw);
+        if (d is Map) {
+          d.forEach((k, v) {
+            if (v is List) {
+              m[k.toString()] = v.whereType<num>().map((x) => x.toInt()).toList();
+            }
+          });
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _recent = r;
+          _sentTo = m;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _remember(List<int> ids) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final r = [...ids, ..._recent.where((x) => !ids.contains(x))].take(8);
+      await p.setStringList(_kRecent, [for (final x in r) '$x']);
+      final m = Map<String, List<int>>.from(_sentTo);
+      for (final s in _songs) {
+        final k = _songKey(s);
+        m[k] = {...(m[k] ?? const <int>[]), ...ids}.toList();
+      }
+      // Keep the memory small: the newest 200 songs.
+      while (m.length > 200) {
+        m.remove(m.keys.first);
+      }
+      await p.setString(_kSent, jsonEncode(m));
+    } catch (_) {}
+  }
+
+  /// Friends who already got one of the songs being shared.
+  bool _gotAlready(int id) =>
+      _songs.any((s) => _sentTo[_songKey(s)]?.contains(id) ?? false);
+
   @override
   void initState() {
     super.initState();
     _songs = [...widget.paths];
     _friends = ApiService().getFriends();
+    _loadMemory();
     final to = widget.sendTo;
     if (to != null) {
       _to.add(to);
@@ -204,6 +264,13 @@ class _ShareSheetState extends State<_ShareSheet> {
     final what = _songs.length == 1
         ? (_asFile ? 'Song' : 'Recommendation')
         : '${_songs.length} ${_asFile ? 'songs' : 'recommendations'}';
+    if (ok > 0) {
+      await _remember([
+        for (final f in targets)
+          if ((f['id'] as num?) != null) (f['id'] as num).toInt(),
+      ]);
+      if (!mounted) return;
+    }
     if (failed == 0 && tooBig == 0) {
       Navigator.pop(context);
       showToast(context, '$what sent to $people', type: ToastType.success);
@@ -235,7 +302,16 @@ class _ShareSheetState extends State<_ShareSheet> {
         child: FutureBuilder<List<Map<String, dynamic>>>(
           future: _friends,
           builder: (ctx, snap) {
-            final friends = snap.data ?? const <Map<String, dynamic>>[];
+            // Recent people first (in the order you last shared with them).
+            final friends = [...(snap.data ?? const <Map<String, dynamic>>[])]
+              ..sort((a, b) {
+                int rank(Map<String, dynamic> f) {
+                  final i = _recent.indexOf((f['id'] as num?)?.toInt() ?? -1);
+                  return i < 0 ? 999 : i;
+                }
+
+                return rank(a).compareTo(rank(b));
+              });
             return Column(
               children: [
                 Container(
@@ -403,6 +479,19 @@ class _ShareSheetState extends State<_ShareSheet> {
                                   title: Text(uname,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis),
+                                  subtitle: fid != null && _gotAlready(fid)
+                                      ? Text('Already sent this song',
+                                          style: TextStyle(
+                                              fontSize: 11.5,
+                                              color: scheme.primary))
+                                      : (fid != null &&
+                                              _recent.take(3).contains(fid)
+                                          ? Text('Recent',
+                                              style: TextStyle(
+                                                  fontSize: 11.5,
+                                                  color: scheme
+                                                      .onSurfaceVariant))
+                                          : null),
                                   trailing: Icon(
                                     on
                                         ? Icons.check_circle_rounded

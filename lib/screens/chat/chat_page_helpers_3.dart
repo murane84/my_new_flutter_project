@@ -508,9 +508,19 @@ extension _ChatPageHelpers3 on _ChatPageState {
     final type = (msg['message_type'] as String?) ?? 'file';
     final expected = (msg['media_size'] as num?)?.toInt() ?? 0;
     final ext = type == 'song' ? '.mp3' : '';
-    final outName = (name == null || name.isEmpty)
-        ? 'aluta_${type}_${DateTime.now().millisecondsSinceEpoch}$ext'
-        : name;
+    // A song is saved under its real "Title - Artist" (the bubble's label),
+    // not the raw upload name ("- Downloaded from clipzag.com (8).mp3"), and
+    // the player is told the title/artist for the saved path.
+    final song = type == 'song' ? _songTitleArtist(msg) : null;
+    final outName = song != null
+        ? _songFileName(song.$1, song.$2, name, mime)
+        : (name == null || name.isEmpty)
+            ? 'aluta_${type}_${DateTime.now().millisecondsSinceEpoch}$ext'
+            : name;
+    final meta = song == null
+        ? null
+        : track_meta.TrackMeta(
+            title: song.$1, artist: song.$2.isEmpty ? null : song.$2);
     try {
       if (mounted) showToast(context, 'Preparing download…');
 
@@ -520,7 +530,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
         final cached =
             await SongCache.cachedPath(id, filename: name, mime: mime);
         if (cached != null) {
-          return await _saveFileToDevice(File(cached), outName, type);
+          return await _saveFileToDevice(File(cached), outName, type,
+              meta: meta);
         }
       }
 
@@ -532,7 +543,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
           final f =
               await MediaStore.instance.getFile(url, mediaAuthHeaders(url));
           if (f != null && await f.length() > 0) {
-            return await _saveFileToDevice(f, outName, type);
+            return await _saveFileToDevice(f, outName, type, meta: meta);
           }
         } catch (_) {}
       }
@@ -585,7 +596,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
       // Cache the fetched copy so a later tap-to-open installs/opens straight
       // from disk (what the user asked for) instead of hitting the server again.
       await MediaStore.instance.store(url, tmp);
-      final saved = await _saveFileToDevice(tmp, outName, type);
+      final saved = await _saveFileToDevice(tmp, outName, type, meta: meta);
       try {
         await tmp.delete();
       } catch (_) {}
@@ -601,7 +612,56 @@ extension _ChatPageHelpers3 on _ChatPageState {
   /// Save an on-disk [src] to the user's device without loading a big file into
   /// the Dart heap: images to the gallery, files to Android's public Downloads
   /// (native, by PATH), everything else via the system Save dialog.
-  Future<bool> _saveFileToDevice(File src, String fname, String type) async {
+  /// (title, artist) of a song message from its "Title — Artist" label; null
+  /// when the label is empty (then the file keeps its own name).
+  (String, String)? _songTitleArtist(Map<String, dynamic> msg) {
+    final label = (msg['content'] as String? ?? '').trim();
+    if (label.isEmpty) return null;
+    final i = label.indexOf(' — ');
+    if (i <= 0) return (label, '');
+    return (label.substring(0, i).trim(), label.substring(i + 3).trim());
+  }
+
+  /// "Title - Artist.mp3" — safe on every filesystem, keeping the original
+  /// file's extension.
+  String _songFileName(
+      String title, String artist, String? original, String? mime) {
+    var ext = '';
+    final o = (original ?? '').trim();
+    final dot = o.lastIndexOf('.');
+    if (dot > 0 && o.length - dot <= 6) ext = o.substring(dot).toLowerCase();
+    if (ext.isEmpty) {
+      final m = (mime ?? '').toLowerCase();
+      ext = m.contains('mp4') || m.contains('aac')
+          ? '.m4a'
+          : m.contains('wav')
+              ? '.wav'
+              : m.contains('ogg')
+                  ? '.ogg'
+                  : m.contains('flac')
+                      ? '.flac'
+                      : '.mp3';
+    }
+    final base = (artist.isEmpty ? title : '$title - $artist')
+        .replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1F]'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final cut = base.length > 120 ? base.substring(0, 120).trim() : base;
+    return '${cut.isEmpty ? 'Aluta song' : cut}$ext';
+  }
+
+  /// Tell the player the title/artist of a song file we just saved, so it
+  /// never shows the raw file name when that file is played or added.
+  Future<void> _rememberSavedSong(String path, track_meta.TrackMeta? meta) async {
+    if (meta == null || path.isEmpty) return;
+    try {
+      await track_meta.metadataStore.load();
+      await track_meta.metadataStore.set(path, meta);
+    } catch (_) {}
+  }
+
+  Future<bool> _saveFileToDevice(File src, String fname, String type,
+      {track_meta.TrackMeta? meta}) async {
     // Phone images -> gallery. Images are small, so reading the bytes here is
     // fine (PhotoManager has no by-path API).
     if (type == 'image' && _isMobile) {
@@ -634,6 +694,11 @@ extension _ChatPageHelpers3 on _ChatPageState {
             'mimeType': null,
           });
           if (where != null) {
+            // Public Downloads (MediaStore) — the path the device library
+            // scan will report for it.
+            await _rememberSavedSong(
+                '/storage/emulated/0/Download/${safe.isEmpty ? 'aluta_file' : safe}',
+                meta);
             if (mounted) {
               showToast(context, 'Saved to $where', type: ToastType.success);
             }
@@ -645,7 +710,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
     // Desktop / last resort -> Save As dialog. Reading bytes here is acceptable:
     // desktop has the RAM, and it is only the fallback on mobile.
     return await _saveBytesToDevice(await src.readAsBytes(), fname,
-        image: type == 'image');
+        image: type == 'image', meta: meta);
   }
 
   /// Present a real "Save As…" flow and write [bytes] there. `FilePicker.saveFile`
@@ -654,7 +719,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
   /// file itself, returning the chosen path (null if the user cancels). If the
   /// platform doesn't support the dialog, we fall back to the share/save sheet.
   Future<bool> _saveBytesToDevice(List<int> bytes, String fname,
-      {bool image = false}) async {
+      {bool image = false, track_meta.TrackMeta? meta}) async {
     final data = Uint8List.fromList(bytes);
     // On a phone, drop images straight into the photo gallery (easy to find,
     // like WhatsApp) instead of a file-save dialog.
@@ -677,6 +742,9 @@ extension _ChatPageHelpers3 on _ChatPageState {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       final where = await _saveToDownloads(data, fname);
       if (where != null) {
+        await _rememberSavedSong(
+            '/storage/emulated/0/Download/${fname.replaceAll(RegExp(r'[\\/]+'), '_').trim()}',
+            meta);
         if (mounted) {
           showToast(context, 'Saved to Downloads', type: ToastType.success);
         }
@@ -691,6 +759,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
       );
       // A null result is a user cancel, not an error.
       if (saved != null) {
+        await _rememberSavedSong(saved, meta);
         if (mounted) {
           showToast(context, 'Saved to device', type: ToastType.success);
         }

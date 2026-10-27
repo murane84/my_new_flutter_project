@@ -628,17 +628,27 @@ class _GenieMenuListState extends State<_GenieMenuList> {
           },
           child: Focus(
             autofocus: true,
+            // The card resizes IN STEP with the slide: only the incoming page
+            // sets the size (the outgoing one is laid over it and clipped as
+            // it slides away), so there's never a moment of blank card
+            // waiting to shrink/grow after the switch.
             child: AnimatedSize(
-              duration: const Duration(milliseconds: 240),
+              duration: const Duration(milliseconds: 210),
               curve: Curves.easeOutCubic,
               alignment: Alignment.topCenter,
               child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 240),
+                duration: const Duration(milliseconds: 210),
+                reverseDuration: const Duration(milliseconds: 160),
                 switchInCurve: Curves.easeOutCubic,
                 switchOutCurve: Curves.easeInCubic,
                 layoutBuilder: (cur, prev) => Stack(
                   alignment: Alignment.topCenter,
-                  children: [...prev, ?cur],
+                  clipBehavior: Clip.hardEdge,
+                  children: [
+                    for (final p in prev)
+                      Positioned(top: 0, left: 0, right: 0, child: p),
+                    ?cur,
+                  ],
                 ),
                 // The submenu slides in from the right; the main list comes
                 // back from the left.

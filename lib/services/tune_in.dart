@@ -98,7 +98,7 @@ class TuneInService {
     sendSignal?.call({
       'type': accept ? 'tune_in_accept' : 'tune_in_decline',
       'to': to,
-      if (reason != null) 'reason': reason,
+      'reason': ?reason,
     });
   }
 

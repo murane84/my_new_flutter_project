@@ -2069,7 +2069,7 @@ class _HeartGenieState extends State<_HeartGenie>
       color: Colors.transparent,
       child: Container(
         width: width,
-        constraints: BoxConstraints(maxHeight: size.height * 0.7),
+        constraints: BoxConstraints(maxHeight: size.height * 0.82),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(28),
           gradient: LinearGradient(
@@ -2174,16 +2174,21 @@ class _HeartGenieState extends State<_HeartGenie>
                     // ABOVE the words, never inside their scroll, and is
                     // capped in height — so the note is always in view; a
                     // photo opens full size on double-tap / its expand button.
+                    // It also gives way first when the card is short, so the
+                    // reactions, buttons and reseal line always stay in view.
                     if (widget.media != null) ...[
-                      Opacity(
-                        opacity: words,
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                              maxHeight: (size.height * 0.34)
-                                  .clamp(140.0, 340.0)),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: widget.media!(width - 48),
+                      Flexible(
+                        flex: 3,
+                        child: Opacity(
+                          opacity: words,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                                maxHeight: (size.height * 0.34)
+                                    .clamp(140.0, 340.0)),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: widget.media!(width - 48),
+                            ),
                           ),
                         ),
                       ),
@@ -2192,6 +2197,7 @@ class _HeartGenieState extends State<_HeartGenie>
                     ],
                     // The words — calm and readable; long notes scroll.
                     Flexible(
+                      flex: 2,
                       child: Opacity(
                         opacity: words,
                         child: Transform.translate(

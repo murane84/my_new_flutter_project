@@ -250,16 +250,16 @@ class _LogoutPainter extends CustomPainter {
 /// headphones badge, the host's avatar + name, the track on a pill, and clear
 /// Decline / Join actions. Pops `true` on Join, `false`/null otherwise.
 class _LiveInviteDialog extends StatelessWidget {
-  const _LiveInviteDialog({required this.hostName, required this.trackTitle});
+  const _LiveInviteDialog(
+      {required this.hostName, required this.trackTitle, this.hostAvatar});
 
   final String hostName;
   final String trackTitle;
+  final String? hostAvatar;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final initial =
-        hostName.trim().isNotEmpty ? hostName.trim()[0].toUpperCase() : '?';
     // Tidy a messy filename-title a little for display.
     var title = trackTitle.trim();
     if (title.startsWith('- ')) title = title.substring(2).trim();
@@ -328,17 +328,11 @@ class _LiveInviteDialog extends StatelessWidget {
                   // Host row.
                   Row(
                     children: [
-                      CircleAvatar(
+                      PersonAvatar(
+                        name: hostName,
+                        avatar: hostAvatar,
                         radius: 16,
-                        backgroundColor: scheme.primaryContainer,
-                        child: Text(
-                          initial,
-                          style: TextStyle(
-                            color: scheme.onPrimaryContainer,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
+                        fontSize: 13,
                       ),
                       const SizedBox(width: 10),
                       Expanded(

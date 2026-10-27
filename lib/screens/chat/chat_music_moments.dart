@@ -126,11 +126,9 @@ extension _ChatMusicMoments on _ChatPageState {
             child: ListView(shrinkWrap: true, children: [
               for (final m in members)
                 ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: scheme.primaryContainer,
-                    child: Text(_memberName(m).isNotEmpty
-                        ? _memberName(m)[0].toUpperCase()
-                        : '?'),
+                  leading: PersonAvatar(
+                    name: _memberName(m),
+                    avatar: m['avatar_url'] as String?,
                   ),
                   title: Text(_memberName(m)),
                   onTap: () => Navigator.pop(ctx, m),

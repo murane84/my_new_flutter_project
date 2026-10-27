@@ -25,6 +25,7 @@ import 'relationship_space_page.dart'
 import '../utils/marquee_text.dart';
 import '../widgets/animated_reaction.dart';
 import '../widgets/tap_chip.dart';
+import '../widgets/person_avatar.dart';
 import '../widgets/aluta_composer_field.dart';
 import '../services/track_title.dart' show displayTitleForPath;
 import '../utils/readable.dart';
@@ -1670,17 +1671,13 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                 padding: const EdgeInsets.all(1.5),
                 decoration: BoxDecoration(
                     color: scheme.surface, shape: BoxShape.circle),
-                child: CircleAvatar(
+                child: PersonAvatar(
+                  name: shown[i].name,
+                  avatar: shown[i].avatar,
                   radius: 9,
-                  backgroundColor: _nameColor(shown[i].name, scheme),
-                  child: Text(
-                      shown[i].name.isNotEmpty
-                          ? shown[i].name[0].toUpperCase()
-                          : '?',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold)),
+                  background: _nameColor(shown[i].name, scheme),
+                  foreground: Colors.white,
+                  fontSize: 9,
                 ),
               ),
             ),

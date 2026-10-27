@@ -352,17 +352,10 @@ class _ShareSheetState extends State<_ShareSheet> {
                                 final fid = (f['id'] as num?)?.toInt();
                                 final on = fid != null && _to.contains(fid);
                                 return ListTile(
-                                  leading: CircleAvatar(
+                                  leading: PersonAvatar(
+                                    name: uname,
+                                    avatar: f['avatar_url'] as String?,
                                     radius: 18,
-                                    backgroundColor: scheme.primaryContainer,
-                                    child: Text(
-                                      uname.isNotEmpty
-                                          ? uname[0].toUpperCase()
-                                          : '?',
-                                      style: TextStyle(
-                                          color: scheme.onPrimaryContainer,
-                                          fontWeight: FontWeight.bold),
-                                    ),
                                   ),
                                   title: Text(uname,
                                       maxLines: 1,

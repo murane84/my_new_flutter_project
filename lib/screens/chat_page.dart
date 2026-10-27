@@ -97,6 +97,7 @@ import 'stories/camera_capture.dart';
 import 'stories/story_models.dart';
 import 'stories/story_viewer.dart';
 import '../widgets/genie_menu.dart';
+import '../widgets/person_avatar.dart';
 import '../widgets/aluta_composer_field.dart';
 import '../widgets/pixel_snap.dart';
 import '../utils/readable.dart';

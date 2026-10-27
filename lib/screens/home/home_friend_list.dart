@@ -1283,15 +1283,11 @@ extension _HomeFriendListView on HomePageState {
       ),
       child: Row(
         children: [
-          CircleAvatar(
+          PersonAvatar(
+            name: name,
+            avatar: from?['avatar_url'] as String?,
             radius: 16,
-            backgroundColor: scheme.primary.withAlpha(60),
-            child: Text(
-              (name.isNotEmpty ? name[0] : '?').toUpperCase(),
-              style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: scheme.onPrimaryContainer),
-            ),
+            background: scheme.primary.withAlpha(60),
           ),
           const SizedBox(width: 10),
           Expanded(

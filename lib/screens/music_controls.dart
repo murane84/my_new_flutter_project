@@ -40,6 +40,7 @@ import 'chat/song_cache.dart';
 import 'music/song_identifier.dart' show showSongIdentifier;
 import '../widgets/genie_menu.dart';
 import '../widgets/tap_chip.dart';
+import '../widgets/person_avatar.dart';
 import '../widgets/song_feel_strip.dart';
 import '../utils/readable.dart';
 import '../services/contact_names.dart';

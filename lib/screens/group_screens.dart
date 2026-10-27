@@ -16,6 +16,7 @@ import '../widgets/genie_menu.dart';
 import 'user_profile_sheet.dart';
 import '../utils/readable.dart';
 import '../services/contact_names.dart';
+import '../widgets/person_avatar.dart';
 
 // Groups are presented as CARD POPUPS (AppPopupShell) — not full-window routes —
 // so on desktop they never hide the music/chat panels. Selecting or creating a
@@ -402,10 +403,9 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
               _selected.remove(id);
             }
           }),
-          secondary: CircleAvatar(
-            backgroundColor: scheme.primaryContainer,
-            child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
-                style: TextStyle(color: scheme.onPrimaryContainer)),
+          secondary: PersonAvatar(
+            name: name,
+            avatar: f['avatar_url'] as String?,
           ),
           title: Text(name),
         );
@@ -1008,10 +1008,9 @@ class _AddMembersPickerState extends State<_AddMembersPicker> {
                   _selected.remove(id);
                 }
               }),
-              secondary: CircleAvatar(
-                backgroundColor: scheme.primaryContainer,
-                child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
-                    style: TextStyle(color: scheme.onPrimaryContainer)),
+              secondary: PersonAvatar(
+                name: name,
+                avatar: f['avatar_url'] as String?,
               ),
               title: Text(name),
             );

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/group_call_service.dart';
 import '../services/contact_names.dart';
+import '../widgets/person_avatar.dart';
 import '../state/group_call_state.dart';
 
 /// Full-screen UI for the single active Aluta GROUP voice call. Reflects
@@ -196,7 +197,6 @@ class _GroupCallScreenState extends ConsumerState<GroupCallScreen> {
 
   Widget _peerTile(GroupParticipant p, bool talking) {
     final name = _display(p);
-    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
     const green = Color(0xFF34D058);
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -221,14 +221,13 @@ class _GroupCallScreenState extends ConsumerState<GroupCallScreen> {
                   ]
                 : null,
           ),
-          child: CircleAvatar(
+          child: PersonAvatar(
+            name: name,
+            avatar: p.avatar,
             radius: 30,
-            backgroundColor: Colors.white.withAlpha(28),
-            child: Text(initial,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold)),
+            background: Colors.white.withAlpha(28),
+            foreground: Colors.white,
+            fontSize: 24,
           ),
         ),
         const SizedBox(height: 6),

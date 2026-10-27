@@ -586,6 +586,9 @@ extension _HomePageHelpers1 on HomePageState {
       transitionDuration: const Duration(milliseconds: 260),
       pageBuilder: (_, _, _) => _LiveInviteDialog(
         hostName: hostName,
+        hostAvatar: _allFriends
+            .firstWhere((f) => f['id']?.toString() == data['host_id']?.toString(),
+                orElse: () => const <String, dynamic>{})['avatar_url'] as String?,
         trackTitle: (track['title'] ?? 'a song').toString(),
       ),
       transitionBuilder: (_, anim, _, child) => FadeTransition(

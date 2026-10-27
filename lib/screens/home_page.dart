@@ -42,6 +42,7 @@ import '../utils/popup_shell.dart';
 import '../utils/bounce_tap.dart';
 import '../utils/brand_theme.dart';
 import '../widgets/chat_wallpaper_sheet.dart';
+import '../widgets/person_avatar.dart';
 import 'api_service.dart';
 import '../services/device_report.dart';
 import 'websocket_manager.dart';

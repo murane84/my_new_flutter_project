@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'api_service.dart';
 import '../utils/readable.dart';
 import '../services/contact_names.dart';
+import '../widgets/person_avatar.dart';
 
 /// Manual "Add friend" — the discovery path for desktop/web users with no
 /// phone-book to scan (and a quick add on mobile too). You look someone up by
@@ -182,15 +183,10 @@ class _AddFriendSheetState extends State<_AddFriendSheet> {
       ),
       child: Row(
         children: [
-          CircleAvatar(
+          PersonAvatar(
+            name: name,
+            avatar: u['avatar_url'] as String?,
             radius: 22,
-            backgroundColor: scheme.primaryContainer,
-            child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : '?',
-              style: TextStyle(
-                  color: scheme.onPrimaryContainer,
-                  fontWeight: FontWeight.w700),
-            ),
           ),
           const SizedBox(width: 12),
           Expanded(

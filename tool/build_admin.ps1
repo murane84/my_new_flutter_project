@@ -28,7 +28,11 @@ $m | ConvertTo-Json -Depth 6 | Set-Content $manifestPath -Encoding UTF8
 
 $indexPath = Join-Path $root 'build\admin\index.html'
 $html = Get-Content $indexPath -Raw
-$html = $html -replace '<title>Aluta</title>', '<title>Aluta Admin</title><meta name="robots" content="noindex, nofollow">'
+$html = $html -replace '<title>[^<]*</title>', '<title>Aluta Admin</title>'
+# Private: never indexed, never canonical to the public site.
+$html = $html -replace '<meta name="robots" content="[^"]*">', '<meta name="robots" content="noindex, nofollow">'
+$html = $html -replace '<link rel="canonical" href="[^"]*">', '<link rel="canonical" href="https://aluta.ozilane.com/admin/">'
+$html = $html -replace '(?s)<script type="application/ld\+json">.*?</script>', ''
 $html = $html -replace 'content="Aluta"', 'content="Aluta Admin"'
 $html = $html -replace '#C62828', '#0F0F14'
 # Catch the browser's install offer before Flutter loads (it can fire early);

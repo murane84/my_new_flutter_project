@@ -1,24 +1,40 @@
 ﻿<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
+    Base path for the build (replaced by `flutter build web --base-href`).
+    Must start and end with "/".
   -->
   <base href="/admin/">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="Aluta â€” Closer, in harmony: music, chat & shared moments">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- â”€â”€ What search engines and link previews show â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+  <title>Aluta Admin</title>
+  <meta name="description" content="Aluta is a social app from Tanzania that brings chats, voice and group calls, Stories and your music into one place â€” listen to songs together in sync, share moments in Our Space, and stay close to the people who matter. On Android, Windows and the web.">
+  <meta name="application-name" content="Aluta Admin">
+  <meta name="author" content="Ozilane">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="canonical" href="https://aluta.ozilane.com/admin/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Aluta Admin">
+  <meta property="og:url" content="https://aluta.ozilane.com/">
+  <meta property="og:title" content="Aluta â€” Closer, in harmony">
+  <meta property="og:description" content="Chats, calls, Stories and music in one app â€” listen together in sync and share moments with the people you love.">
+  <meta property="og:image" content="https://aluta.ozilane.com/icons/Icon-512.png">
+  <meta property="og:image:width" content="512">
+  <meta property="og:image:height" content="512">
+  <meta property="og:image:alt" content="Aluta logo">
+  <meta property="og:locale" content="en_TZ">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Aluta â€” Closer, in harmony">
+  <meta name="twitter:description" content="Chats, calls, Stories and music in one app â€” listen together in sync and share moments with the people you love.">
+  <meta name="twitter:image" content="https://aluta.ozilane.com/icons/Icon-512.png">
+
+  
 
   <!-- Brand colour for browser UI (address bar, task switcher) -->
   <meta name="theme-color" content="#0F0F14">
@@ -32,11 +48,65 @@
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
-
-  <title>Aluta Admin</title><meta name="robots" content="noindex, nofollow">
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    /* Loading screen = real, readable content (search engines index it; the
+       app paints over it and it is removed on the first frame). */
+    html, body { margin: 0; background: #12080a; }
+    #aluta-intro {
+      position: fixed; inset: 0; display: flex; align-items: center;
+      justify-content: center; padding: 24px; box-sizing: border-box;
+      background: linear-gradient(135deg, #a3021f 0%, #55020f 55%, #0b0505 100%);
+      color: #fff; font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI",
+        Roboto, Helvetica, Arial, sans-serif; text-align: center;
+      transition: opacity .35s ease;
+    }
+    #aluta-intro .card { max-width: 560px; }
+    #aluta-intro img { width: 88px; height: 88px; border-radius: 50%;
+      background: #fff; padding: 14px; box-sizing: border-box;
+      box-shadow: 0 10px 28px rgba(0,0,0,.35); }
+    #aluta-intro h1 { margin: 18px 0 2px; font-size: 38px; letter-spacing: 3px; }
+    #aluta-intro .tag { margin: 0 0 18px; opacity: .85; }
+    #aluta-intro .about { margin: 0 auto 16px; opacity: .78; font-size: 14.5px; }
+    #aluta-intro nav a { color: #fff; opacity: .7; font-size: 13px; margin: 0 8px; }
+    #aluta-intro .dots span { display: inline-block; width: 8px; height: 8px;
+      margin: 0 4px; border-radius: 50%; background: #fff; opacity: .35;
+      animation: aluta-pulse 1.2s infinite ease-in-out; }
+    #aluta-intro .dots span:nth-child(2) { animation-delay: .2s; }
+    #aluta-intro .dots span:nth-child(3) { animation-delay: .4s; }
+    @keyframes aluta-pulse { 50% { opacity: 1; transform: translateY(-3px); } }
+  </style>
 <script>(function(){if(window.__alutaInstallWired)return;window.__alutaInstallWired=true;window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.__alutaInstall=e;if(window.__alutaOnInstallReady)window.__alutaOnInstallReady();});window.addEventListener("appinstalled",function(){window.__alutaInstall=null;window.__alutaInstalled=true;if(window.__alutaOnInstallReady)window.__alutaOnInstallReady();});})();</script></head>
 <body>
+  <main id="aluta-intro">
+    <div class="card">
+      <img src="icons/Icon-192.png" alt="Aluta logo" width="88" height="88">
+      <h1>Aluta</h1>
+      <p class="tag">Closer, in harmony â€” chat, music &amp; shared moments</p>
+      <p class="about">
+        Aluta brings your chats, voice and group calls, Stories and your music
+        into one place. Listen to songs together in sync, keep memories in
+        Our Space, send secret hearts, and stay close to the people who matter
+        â€” on Android, Windows and the web. Made in Dar es Salaam by Ozilane.
+      </p>
+      <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+      <nav>
+        <a href="/about">About Aluta</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+      </nav>
+    </div>
+  </main>
+  <script>
+    // The app is on screen â†’ fade the intro out.
+    window.addEventListener('flutter-first-frame', function () {
+      var el = document.getElementById('aluta-intro');
+      if (!el) return;
+      el.style.opacity = '0';
+      setTimeout(function () { el.remove(); }, 400);
+    });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

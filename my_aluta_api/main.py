@@ -386,6 +386,40 @@ def terms_of_use():
     return Response(status_code=404)
 
 
+# ✅ Search engines: what to crawl and which pages exist. The app itself is a
+#    Flutter canvas (not readable text), so these + the meta / loading-screen
+#    text in web/index.html are what Google and link previews use.
+_PUBLIC_BASE = os.getenv("PUBLIC_BASE_URL", "https://aluta.ozilane.com").rstrip("/")
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots_txt():
+    body = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /admin/\n"
+        "Disallow: /auth/\n"
+        "Disallow: /attachments/\n"
+        "Disallow: /media/\n"
+        f"Sitemap: {_PUBLIC_BASE}/sitemap.xml\n"
+    )
+    return Response(body, media_type="text/plain")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+def sitemap_xml():
+    pages = [("/", "1.0", "weekly"), ("/about", "0.8", "monthly"),
+             ("/privacy", "0.3", "yearly"), ("/terms", "0.3", "yearly")]
+    urls = "".join(
+        f"<url><loc>{_PUBLIC_BASE}{p}</loc><changefreq>{f}</changefreq>"
+        f"<priority>{pr}</priority></url>"
+        for p, pr, f in pages)
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+           f"{urls}</urlset>")
+    return Response(xml, media_type="application/xml")
+
+
 @app.get("/about", include_in_schema=False)
 def about_aluta():
     path = os.path.join(_LEGAL_DIR, "about.html")

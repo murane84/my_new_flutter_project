@@ -171,25 +171,39 @@ class _AdminFeedbackPageState extends State<AdminFeedbackPage> {
                   icon: const Icon(Icons.refresh_rounded),
                 ),
               ),
+              // At a glance: 3D tiles for what needs you and how it feels.
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    _statTile(p, 'New', '$newCount', Icons.fiber_new_rounded,
+                        kAdminRed),
+                    _statTile(p, 'Planned', '${_counts['planned'] ?? 0}',
+                        Icons.construction_rounded, const Color(0xFF2979FF)),
+                    _statTile(p, 'Done', '${_counts['done'] ?? 0}',
+                        Icons.check_circle_rounded, const Color(0xFF00C853)),
+                    _statTile(
+                        p,
+                        'Feeling',
+                        _avg == null
+                            ? '—'
+                            : '${_faceFor(_avg!.round())} ${_avg!.toStringAsFixed(1)}',
+                        Icons.mood_rounded,
+                        const Color(0xFFFFB300)),
+                  ],
+                ),
+              ),
               SizedBox(
-                height: 44,
+                height: 46,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   children: [
                     for (final s in _statuses)
                       Padding(
                         padding: const EdgeInsets.only(right: 8, bottom: 8),
-                        child: ChoiceChip(
-                          avatar: Icon(s.$3, size: 16),
-                          label: Text(s.$1 == null
-                              ? s.$2
-                              : '${s.$2} · ${_counts[s.$1] ?? 0}'),
-                          selected: _status == s.$1,
-                          onSelected: (_) {
-                            setState(() => _status = s.$1);
-                            _load(reset: true);
-                          },
-                        ),
+                        child: _filterPill(p, s),
                       ),
                   ],
                 ),
@@ -239,108 +253,277 @@ class _AdminFeedbackPageState extends State<AdminFeedbackPage> {
     );
   }
 
+  static String _faceFor(int r) =>
+      const ['😞', '😕', '😐', '🙂', '😍'][(r.clamp(1, 5)) - 1];
+
+  /// The raised surface used across this page (soft highlight + grounded
+  /// shadow; a gradient + glow when [on]).
+  static BoxDecoration _raised(AdminPalette p,
+      {bool on = false, Color c = kAdminRed, double r = 16}) {
+    return BoxDecoration(
+      borderRadius: BorderRadius.circular(r),
+      gradient: on
+          ? LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color.lerp(c, Colors.white, 0.16)!,
+                Color.lerp(c, Colors.black, 0.16)!,
+              ])
+          : LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: p.dark
+                  ? [p.card2, p.card]
+                  : [Colors.white, Color.alphaBlend(c.withValues(alpha: 0.04), p.card)],
+            ),
+      border: Border.all(
+          color: on ? Color.lerp(c, Colors.white, 0.25)! : p.border),
+      boxShadow: [
+        BoxShadow(
+          color: on
+              ? c.withValues(alpha: 0.35)
+              : Colors.black.withValues(alpha: p.dark ? 0.4 : 0.07),
+          blurRadius: on ? 14 : 10,
+          offset: Offset(0, on ? 5 : 4),
+        ),
+      ],
+    );
+  }
+
+  Widget _statTile(
+      AdminPalette p, String label, String value, IconData icon, Color c) {
+    return Container(
+      width: 150,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: _raised(p),
+      child: Row(children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: _raised(p, on: true, c: c, r: 11),
+          child: Icon(icon, size: 18, color: Colors.white),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: p.text,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800)),
+              Text(label,
+                  style: TextStyle(color: p.muted, fontSize: 11.5)),
+            ],
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _filterPill(AdminPalette p, (String?, String, IconData) s) {
+    final on = _status == s.$1;
+    final c = s.$1 == null ? kAdminRed : _statusColor(s.$1!);
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () {
+        setState(() => _status = s.$1);
+        _load(reset: true);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: _raised(p, on: on, c: c, r: 20),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(s.$3, size: 15, color: on ? Colors.white : c),
+          const SizedBox(width: 6),
+          Text(s.$1 == null ? s.$2 : '${s.$2} · ${_counts[s.$1] ?? 0}',
+              style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: on ? Colors.white : p.text)),
+        ]),
+      ),
+    );
+  }
+
   Widget _card(AdminPalette p, Map<String, dynamic> f) {
     final (kc, ki, kl) = _kind(f['kind'] as String?);
     final status = (f['status'] ?? 'new').toString();
     final sc = _statusColor(status);
     final rating = (f['rating'] as num?)?.toInt();
     final reply = (f['reply'] ?? '').toString().trim();
+    final who = '${f['username'] ?? f['user_id']}';
     final meta = [
-      '@${f['username'] ?? f['user_id']}',
       if (f['area'] != null) '${f['area']}',
       if (f['platform'] != null) '${f['platform']}',
       if (f['app_version'] != null) 'v${f['app_version']}',
       fmtDateTime(f['created_at'] as String?),
     ].join(' · ');
-    return Card(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: status == 'new'
-            ? const BorderSide(color: kAdminRed, width: 1.3)
-            : BorderSide(color: p.border),
+    return Container(
+      decoration: _raised(p, r: 20).copyWith(
+        border: Border.all(
+            color: status == 'new' ? kAdminRed : p.border,
+            width: status == 'new' ? 1.3 : 1),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                AdminIconChip(icon: ki, color: kc, size: 32),
-                const SizedBox(width: 10),
-                Text(kl,
-                    style: TextStyle(
-                        color: p.text,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14)),
-                if (rating != null) ...[
-                  const SizedBox(width: 10),
-                  Text('★' * rating + '☆' * (5 - rating),
-                      style: const TextStyle(
-                          color: Color(0xFFFFB300), fontSize: 14)),
-                ],
-                const Spacer(),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: sc.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text((f['status_label'] ?? status).toString(),
-                      style: TextStyle(
-                          color: sc,
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700)),
+            // Kind-coloured edge.
+            Container(
+              width: 5,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [kc, Color.lerp(kc, Colors.black, 0.3)!],
                 ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            SelectableText((f['message'] ?? '').toString(),
-                style: TextStyle(color: p.text, fontSize: 14, height: 1.4)),
-            const SizedBox(height: 8),
-            Text(meta, style: TextStyle(color: p.muted, fontSize: 12)),
-            if (reply.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: kAdminRed.withValues(alpha: p.dark ? 0.12 : 0.06),
-                  borderRadius: BorderRadius.circular(10),
-                  border: const Border(
-                      left: BorderSide(color: kAdminRed, width: 3)),
-                ),
-                child: Text('Your reply: $reply',
-                    style: TextStyle(color: p.text, fontSize: 13)),
               ),
-            ],
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                FilledButton.tonalIcon(
-                  onPressed: () => _reply(f),
-                  icon: const Icon(Icons.reply_rounded, size: 18),
-                  label: Text(reply.isEmpty ? 'Reply' : 'Edit reply'),
-                ),
-                for (final s in const [
-                  ('seen', 'Seen', Icons.visibility_rounded),
-                  ('planned', 'Planned', Icons.construction_rounded),
-                  ('done', 'Done', Icons.check_circle_rounded),
-                  ('wontfix', 'Not planned', Icons.do_not_disturb_on_rounded),
-                ])
-                  if (s.$1 != status)
-                    OutlinedButton.icon(
-                      onPressed: () => _update(f, status: s.$1),
-                      icon: Icon(s.$3, size: 16, color: _statusColor(s.$1)),
-                      label: Text(s.$2),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: _raised(p, on: true, c: kc, r: 12),
+                          child: Icon(ki, size: 19, color: Colors.white),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
+                                Text(kl,
+                                    style: TextStyle(
+                                        color: p.text,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 14)),
+                                if (rating != null) ...[
+                                  const SizedBox(width: 8),
+                                  Text(_faceFor(rating),
+                                      style: const TextStyle(fontSize: 15)),
+                                  const SizedBox(width: 3),
+                                  Text('$rating/5',
+                                      style: TextStyle(
+                                          color: p.muted,
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w700)),
+                                ],
+                              ]),
+                              Text('@$who',
+                                  style: TextStyle(
+                                      color: p.muted, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: _raised(p, on: true, c: sc, r: 20),
+                          child: Text(
+                              (f['status_label'] ?? status).toString(),
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800)),
+                        ),
+                      ],
                     ),
-              ],
+                    const SizedBox(height: 12),
+                    // The message in a quiet inset well.
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: p.dark
+                            ? Colors.black.withValues(alpha: 0.25)
+                            : p.card2,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: p.border),
+                      ),
+                      child: SelectableText((f['message'] ?? '').toString(),
+                          style: TextStyle(
+                              color: p.text, fontSize: 14, height: 1.45)),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(meta,
+                        style: TextStyle(color: p.faint, fontSize: 11.5)),
+                    if (reply.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: kAdminRed.withValues(
+                              alpha: p.dark ? 0.12 : 0.06),
+                          borderRadius: BorderRadius.circular(10),
+                          border: const Border(
+                              left: BorderSide(color: kAdminRed, width: 3)),
+                        ),
+                        child: Text('Your reply: $reply',
+                            style: TextStyle(color: p.text, fontSize: 13)),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _action(p, reply.isEmpty ? 'Reply' : 'Edit reply',
+                            Icons.reply_rounded, kAdminRed,
+                            primary: true, onTap: () => _reply(f)),
+                        for (final s in const [
+                          ('seen', 'Seen', Icons.visibility_rounded),
+                          ('planned', 'Planned', Icons.construction_rounded),
+                          ('done', 'Done', Icons.check_circle_rounded),
+                          ('wontfix', 'Not planned',
+                              Icons.do_not_disturb_on_rounded),
+                        ])
+                          if (s.$1 != status)
+                            _action(p, s.$2, s.$3, _statusColor(s.$1),
+                                onTap: () => _update(f, status: s.$1)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _action(AdminPalette p, String label, IconData icon, Color c,
+      {bool primary = false, required VoidCallback onTap}) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Ink(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: _raised(p, on: primary, c: c, r: 14),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 16, color: primary ? Colors.white : c),
+          const SizedBox(width: 6),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: primary ? Colors.white : p.text)),
+        ]),
       ),
     );
   }

@@ -103,9 +103,67 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     _loadMine();
   }
 
+  static const _faceLabels = ['Not great', 'Meh', 'Okay', 'Good', 'Love it'];
+
+  /// The raised "3D" surface every control here uses: a soft top highlight,
+  /// a grounded drop shadow, and (when [on]) the brand gradient + glow.
+  BoxDecoration _raised(ColorScheme scheme,
+      {required bool on, double radius = 16, Color? tint}) {
+    final isDark = scheme.brightness == Brightness.dark;
+    final c = tint ?? scheme.primary;
+    return BoxDecoration(
+      borderRadius: BorderRadius.circular(radius),
+      gradient: on
+          ? LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color.lerp(c, Colors.white, 0.18)!,
+                Color.lerp(c, Colors.black, 0.14)!,
+              ],
+            )
+          : LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: isDark
+                  ? [
+                      Color.alphaBlend(
+                          Colors.white.withValues(alpha: 0.08), scheme.surface),
+                      Color.alphaBlend(
+                          Colors.white.withValues(alpha: 0.03), scheme.surface),
+                    ]
+                  : [
+                      Colors.white,
+                      Color.alphaBlend(
+                          c.withValues(alpha: 0.06), scheme.surface),
+                    ],
+            ),
+      border: Border.all(
+          color: on
+              ? Color.lerp(c, Colors.white, 0.25)!
+              : c.withValues(alpha: isDark ? 0.22 : 0.14)),
+      boxShadow: [
+        BoxShadow(
+          color: on
+              ? c.withValues(alpha: 0.38)
+              : Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
+          blurRadius: on ? 14 : 8,
+          offset: Offset(0, on ? 5 : 3),
+        ),
+        if (!isDark)
+          BoxShadow(
+            color: Colors.white.withValues(alpha: 0.9),
+            blurRadius: 2,
+            offset: const Offset(-1, -1.5),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
     return AppPopupShell(
       title: 'Send feedback',
       icon: Icons.rate_review_rounded,
@@ -115,101 +173,199 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('How is Aluta for you?',
-                style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: scheme.onSurface)),
-            const SizedBox(height: 4),
-            Text(
-              'Your words go straight to the people building Aluta. We read '
-              'everything — and you\'ll see here when it\'s planned or done.',
-              style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+            // ── Hero: a glowing gradient card ─────────────────────────────
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(22),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color.lerp(scheme.primary, Colors.white, 0.10)!,
+                    Color.lerp(scheme.primary, Colors.black, 0.25)!,
+                  ],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: scheme.primary.withValues(alpha: 0.35),
+                    blurRadius: 22,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.18),
+                      border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.35)),
+                    ),
+                    child: const Icon(Icons.forum_rounded,
+                        color: Colors.white, size: 24),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('How is Aluta for you?',
+                            style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white)),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Straight to the people building Aluta. We read '
+                          'everything — you\'ll see here when it\'s planned '
+                          'or done.',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              height: 1.35,
+                              color: Colors.white.withValues(alpha: 0.88)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 14),
-            // Rating faces (optional).
+            const SizedBox(height: 18),
+            // ── Rating: raised faces that lift when chosen ────────────────
+            _label(scheme, 'How does it feel? (optional)'),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 for (var i = 0; i < 5; i++)
-                  _face(scheme, i + 1, _faces[i]),
+                  Expanded(child: _face(scheme, i + 1, _faces[i])),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
             _label(scheme, 'What is it about?'),
+            LayoutBuilder(builder: (context, c) {
+              final cols = c.maxWidth >= 460 ? 4 : 2;
+              const gap = 10.0;
+              final w = (c.maxWidth - gap * (cols - 1)) / cols;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final k in _kinds)
+                    SizedBox(width: w, child: _kindTile(scheme, k)),
+                ],
+              );
+            }),
+            const SizedBox(height: 18),
+            _label(scheme, 'Which part of Aluta? (optional)'),
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: [
-                for (final k in _kinds)
-                  ChoiceChip(
-                    label: Text('${k.$2}  ${k.$3}'),
-                    selected: _kind == k.$1,
-                    onSelected: (_) => setState(() => _kind = k.$1),
-                  ),
-              ],
+              children: [for (final a in _areas) _areaPill(scheme, a)],
             ),
-            const SizedBox(height: 14),
-            _label(scheme, 'Which part of Aluta? (optional)'),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final a in _areas)
-                  FilterChip(
-                    label: Text(a.$2),
-                    selected: _area == a.$1,
-                    onSelected: (on) =>
-                        setState(() => _area = on ? a.$1 : null),
+            const SizedBox(height: 18),
+            // ── The words: an inset well ─────────────────────────────────
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                color: isDark
+                    ? Colors.black.withValues(alpha: 0.22)
+                    : Color.alphaBlend(
+                        scheme.primary.withValues(alpha: 0.04),
+                        scheme.surfaceContainerHighest),
+                border: Border.all(
+                    color: scheme.primary.withValues(alpha: 0.16)),
+                boxShadow: [
+                  // Inner-shadow look: a dark top lip.
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
+                    blurRadius: 1,
+                    offset: const Offset(0, 1),
                   ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: _msg,
-              minLines: 4,
-              maxLines: 8,
-              maxLength: 4000,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: InputDecoration(
-                hintText: _hint,
-                filled: true,
-                fillColor: scheme.surfaceContainerHighest.withAlpha(120),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide.none,
+                ],
+              ),
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
+              child: TextField(
+                controller: _msg,
+                minLines: 4,
+                maxLines: 8,
+                maxLength: 4000,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(
+                  hintText: _hint,
+                  border: InputBorder.none,
+                  counterStyle: TextStyle(
+                      fontSize: 11, color: scheme.onSurfaceVariant),
                 ),
               ),
             ),
-            Text(
-              'We add your app version and device type so we can reproduce '
-              'problems. Nothing else is attached.',
-              style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: _sending ? null : _send,
-              icon: _sending
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.send_rounded, size: 18),
-              label: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text(_sending ? 'Sending…' : 'Send to the Aluta team'),
+            const SizedBox(height: 8),
+            Row(children: [
+              Icon(Icons.lock_outline_rounded,
+                  size: 14, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'We add your app version and device type so we can '
+                  'reproduce problems. Nothing else is attached.',
+                  style: TextStyle(
+                      fontSize: 11.5, color: scheme.onSurfaceVariant),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 14),
+            // ── Send: a glowing gradient pill ────────────────────────────
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: _sending ? null : _send,
+                child: Ink(
+                  decoration: _raised(scheme, on: true, radius: 18),
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _sending
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.send_rounded,
+                              size: 18, color: Colors.white),
+                      const SizedBox(width: 10),
+                      Text(_sending ? 'Sending…' : 'Send to the Aluta team',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14.5)),
+                    ],
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 22),
-            _label(scheme, 'What you\'ve sent'),
+            const SizedBox(height: 26),
+            Row(children: [
+              Icon(Icons.history_rounded,
+                  size: 16, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Expanded(child: _label(scheme, 'What you\'ve sent')),
+            ]),
             if (_loadingMine)
               const Padding(
                 padding: EdgeInsets.all(16),
                 child: Center(child: CircularProgressIndicator()),
               )
             else if (_mine.isEmpty)
-              Text('Nothing yet — your first note starts here.',
-                  style: TextStyle(color: scheme.onSurfaceVariant))
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: _raised(scheme, on: false, radius: 16),
+                child: Text('Nothing yet — your first note starts here.',
+                    style: TextStyle(color: scheme.onSurfaceVariant)),
+              )
             else
               for (final f in _mine) _mineTile(scheme, f),
           ],
@@ -219,12 +375,12 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   }
 
   Widget _label(ColorScheme scheme, String t) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(t,
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Text(t.toUpperCase(),
             style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.0,
                 color: scheme.onSurfaceVariant)),
       );
 
@@ -232,25 +388,80 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     final on = _rating == value;
     return GestureDetector(
       onTap: () => setState(() => _rating = on ? null : value),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutBack,
+            width: 54,
+            height: 54,
+            transform: Matrix4.translationValues(0, on ? -4 : 0, 0),
+            alignment: Alignment.center,
+            decoration: _raised(scheme, on: on, radius: 27),
+            child: AnimatedScale(
+              scale: on ? 1.2 : 1.0,
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutBack,
+              child: Text(emoji, style: const TextStyle(fontSize: 25)),
+            ),
+          ),
+          const SizedBox(height: 6),
+          AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 160),
+            style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: on ? FontWeight.w800 : FontWeight.w500,
+                color: on ? scheme.primary : scheme.onSurfaceVariant),
+            child: Text(_faceLabels[value - 1]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _kindTile(ColorScheme scheme, (String, String, String) k) {
+    final on = _kind == k.$1;
+    return GestureDetector(
+      onTap: () => setState(() => _kind = k.$1),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        transform: Matrix4.translationValues(0, on ? -2 : 0, 0),
+        decoration: _raised(scheme, on: on, radius: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedScale(
+              scale: on ? 1.15 : 1.0,
+              duration: const Duration(milliseconds: 180),
+              child: Text(k.$2, style: const TextStyle(fontSize: 22)),
+            ),
+            const SizedBox(height: 4),
+            Text(k.$3,
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: on ? Colors.white : scheme.onSurface)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _areaPill(ColorScheme scheme, (String, String) a) {
+    final on = _area == a.$1;
+    return GestureDetector(
+      onTap: () => setState(() => _area = on ? null : a.$1),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        width: 52,
-        height: 52,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: on
-              ? scheme.primary.withAlpha(36)
-              : scheme.surfaceContainerHighest.withAlpha(120),
-          border: Border.all(
-              color: on ? scheme.primary : scheme.outlineVariant.withAlpha(90),
-              width: on ? 2 : 1),
-        ),
-        child: AnimatedScale(
-          scale: on ? 1.18 : 1.0,
-          duration: const Duration(milliseconds: 160),
-          child: Text(emoji, style: const TextStyle(fontSize: 24)),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: _raised(scheme, on: on, radius: 20),
+        child: Text(a.$2,
+            style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+                color: on ? Colors.white : scheme.onSurface)),
       ),
     );
   }
@@ -269,13 +480,9 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     final reply = (f['reply'] ?? '').toString().trim();
     final when = DateTime.tryParse((f['created_at'] ?? '').toString());
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withAlpha(90),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.outlineVariant.withAlpha(70)),
-      ),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: _raised(scheme, on: false, radius: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -316,8 +523,10 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 13.5, color: scheme.onSurface)),
+          const SizedBox(height: 10),
+          _steps(scheme, status, c),
           if (reply.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(10),
@@ -333,6 +542,45 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           ],
         ],
       ),
+    );
+  }
+
+  /// Sent → Seen → Planned → Done, the reached steps lit in [c].
+  Widget _steps(ColorScheme scheme, String status, Color c) {
+    if (status == 'wontfix') return const SizedBox.shrink();
+    const order = ['new', 'seen', 'planned', 'done'];
+    const names = ['Sent', 'Seen', 'Planned', 'Done'];
+    final at = order.indexOf(status).clamp(0, 3);
+    return Row(
+      children: [
+        for (var i = 0; i < 4; i++) ...[
+          Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: i <= at ? c : scheme.outlineVariant,
+              boxShadow: i == at
+                  ? [BoxShadow(color: c.withValues(alpha: 0.5), blurRadius: 6)]
+                  : null,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(names[i],
+              style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: i == at ? FontWeight.w800 : FontWeight.w500,
+                  color: i <= at ? c : scheme.onSurfaceVariant)),
+          if (i < 3)
+            Expanded(
+              child: Container(
+                height: 2,
+                margin: const EdgeInsets.symmetric(horizontal: 6),
+                color: i < at ? c : scheme.outlineVariant.withAlpha(120),
+              ),
+            ),
+        ],
+      ],
     );
   }
 }

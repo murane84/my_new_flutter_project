@@ -266,6 +266,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   }
   String _title = '';
   bool _ready = false;
+  // The host's music plays on its own device, so the DJ keeps the transport
+  // even while the room's connection is re-established.
+  bool get _canControl => _ready || _isHost;
   // True while we're closing the popup to minimise (keep the session alive).
   bool _minimizing = false;
   // Listener lost the transport and can choose to reconnect.
@@ -643,7 +646,29 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     _dismiss();
   }
 
+  bool _reconnecting = false;
+
+  /// Re-establish the room after a drop. Tries a few times on its own (2s, 5s,
+  /// 10s apart) — each attempt bounded so a dead network can never leave the
+  /// screen stuck on "Reconnecting…" — and only then offers the manual button.
   Future<void> _reconnect() async {
+    if (_reconnecting) return;
+    _reconnecting = true;
+    const waits = [Duration.zero, Duration(seconds: 2), Duration(seconds: 5),
+        Duration(seconds: 10)];
+    try {
+      for (var i = 0; i < waits.length; i++) {
+        if (!mounted || _leaving) return;
+        if (waits[i] > Duration.zero) await Future.delayed(waits[i]);
+        if (!mounted || _leaving) return;
+        if (await _reconnectOnce(last: i == waits.length - 1)) return;
+      }
+    } finally {
+      _reconnecting = false;
+    }
+  }
+
+  Future<bool> _reconnectOnce({required bool last}) async {
     setState(() {
       _lostConnection = false;
       _ready = false;
@@ -653,10 +678,12 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       if (_isHost) {
         // Host keeps its local player/queue; just re-establish the pipe. The
         // server re-drives the re-stream to the listener via `peer_joined`.
-        await _c.reconnectAsHost(
-          myUserId: widget.myUserId,
-          token: widget.token,
-        );
+        await _c
+            .reconnectAsHost(
+              myUserId: widget.myUserId,
+              token: widget.token,
+            )
+            .timeout(const Duration(seconds: 25));
       } else {
         await _c.reconnectAsListener(
           // Prefer the controller's live session id so reconnect still works
@@ -665,7 +692,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
           sessionId: _c.sessionId ?? widget.sessionId ?? '',
           myUserId: widget.myUserId,
           token: widget.token,
-        );
+        ).timeout(const Duration(seconds: 25));
       }
       if (mounted) {
         setState(() {
@@ -675,13 +702,19 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               : 'Rejoining ${widget.peerName}…';
         });
       }
+      return true;
     } catch (_) {
       if (mounted) {
         setState(() {
-          _lostConnection = true;
-          _status = 'Couldn’t reconnect — try again';
+          // Between automatic tries keep saying "Reconnecting…"; only the last
+          // failure hands over to the manual button.
+          if (last) {
+            _lostConnection = true;
+            _status = 'Couldn’t reconnect — try again';
+          }
         });
       }
+      return false;
     }
   }
 
@@ -1343,7 +1376,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                 constraints: const BoxConstraints(),
                 iconSize: 26,
                 color: scheme.primary,
-                onPressed: !_ready
+                onPressed: !_canControl
                     ? null
                     : () {
                         if (_isHost) {
@@ -2250,7 +2283,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       visualDensity: VisualDensity.compact,
       color: on ? scheme.primary : scheme.onSurface.withAlpha(110),
       tooltip: on ? 'Shuffle on' : 'Shuffle off',
-      onPressed: _ready ? () => _c.setShuffle(!on) : null,
+      onPressed: _canControl ? () => _c.setShuffle(!on) : null,
       icon: const Icon(Icons.shuffle_rounded),
     );
   }
@@ -2267,7 +2300,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
           : mode == 'all'
               ? 'Repeat all'
               : 'Repeat off',
-      onPressed: _ready ? _cycleSessionRepeat : null,
+      onPressed: _canControl ? _cycleSessionRepeat : null,
       icon: Icon(
           mode == 'one' ? Icons.repeat_one_rounded : Icons.repeat_rounded),
     );
@@ -2299,16 +2332,16 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
             _shuffleBtn(scheme),
             btn(
                 Icons.skip_previous_rounded,
-                (_ready && hasPrev)
+                (_canControl && hasPrev)
                     ? () => _c.playIndex(_c.currentIndex - 1)
                     : null,
                 28),
             btn(Icons.replay_10_rounded,
-                _ready ? () => _liveSeekBy(-10) : null, 24),
+                _canControl ? () => _liveSeekBy(-10) : null, 24),
             DecoratedBox(
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                boxShadow: _ready
+                boxShadow: _canControl
                     ? [
                         BoxShadow(
                           color: scheme.primary.withValues(alpha: 0.45),
@@ -2320,7 +2353,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               ),
               child: IconButton.filled(
                 iconSize: 34,
-                onPressed: !_ready
+                onPressed: !_canControl
                     ? null
                     : () => playing ? _c.player.pause() : _c.player.play(),
                 icon: Icon(
@@ -2328,9 +2361,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               ),
             ),
             btn(Icons.forward_10_rounded,
-                _ready ? () => _liveSeekBy(10) : null, 24),
+                _canControl ? () => _liveSeekBy(10) : null, 24),
             btn(Icons.skip_next_rounded,
-                (_ready && hasNext) ? _c.nextTrack : null, 28),
+                (_canControl && hasNext) ? _c.nextTrack : null, 28),
             _repeatBtn(scheme),
           ],
         );

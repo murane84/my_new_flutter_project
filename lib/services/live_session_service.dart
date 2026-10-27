@@ -549,7 +549,7 @@ class LiveSessionController {
           !_switchingTrack) {
         // Respect the session repeat mode: one → replay; otherwise advance.
         if (repeatMode == 'one') {
-          playIndex(currentIndex);
+          unawaited(_replayCurrent());
         } else {
           nextTrack();
         }
@@ -702,6 +702,27 @@ class LiveSessionController {
   }
 
   /// Switch playback (host + listener) to queue entry [index].
+  /// Repeat-one: rewind the SAME source and play again, instead of reloading
+  /// the bytes and re-offering the track to every listener on each loop (that
+  /// churn, loop after loop, wore the session down). Listeners already hold
+  /// the song, so a 'play' at 0 rewinds them too.
+  Future<void> _replayCurrent() async {
+    _switchingTrack = true;
+    try {
+      await player.seek(Duration.zero);
+      unawaited(player.play()); // completes on track END — don't await
+      _sendControl({'type': 'play', 'position_ms': 0});
+    } catch (_) {
+      // Source went bad — fall back to a full reload of this track.
+      _switchingTrack = false;
+      await playIndex(currentIndex);
+      return;
+    }
+    Future<void>.delayed(const Duration(milliseconds: 800), () {
+      _switchingTrack = false;
+    });
+  }
+
   Future<void> playIndex(int index) async {
     if (index < 0 || index >= queue.length) return;
     _switchingTrack = true;
@@ -1244,12 +1265,8 @@ class LiveSessionController {
     _peerRecoverTimers.remove(peerId)?.cancel();
     final p = _peers.remove(peerId);
     if (p == null) return;
-    try {
-      await p.channel?.close();
-    } catch (_) {}
-    try {
-      await p.pc.close();
-    } catch (_) {}
+    await _bounded(p.channel?.close());
+    await _bounded(p.pc.close());
   }
 
   /// LISTENER: answer the host's offer — build the peer connection, wire the
@@ -1495,13 +1512,9 @@ class LiveSessionController {
   Future<void> _closeListenerPc() async {
     _listenerRecoverTimer?.cancel();
     _listenerRecoverTimer = null;
-    try {
-      await _lchan?.close();
-    } catch (_) {}
+    await _bounded(_lchan?.close());
     _lchan = null;
-    try {
-      await _lpc?.close();
-    } catch (_) {}
+    await _bounded(_lpc?.close());
     _lpc = null;
     _lRemoteSet = false;
     // NOTE: _lPendingIce is intentionally NOT cleared here — _listenerAnswer
@@ -1633,12 +1646,9 @@ class LiveSessionController {
     required String token,
   }) async {
     // Drop the dead socket first.
-    try {
-      await _socketSub?.cancel();
-    } catch (_) {}
-    try {
-      await _channel?.sink.close();
-    } catch (_) {}
+    await _bounded(_socketSub?.cancel());
+    _socketSub = null;
+    await _bounded(_channel?.sink.close());
     _channel = null;
     // A reconnect usually follows a network change — re-fetch ICE/TURN so the
     // fresh negotiation uses current servers/credentials, not stale cache.
@@ -1676,12 +1686,9 @@ class LiveSessionController {
     // Drop the dead socket. Do NOT touch the player, queue, _hostBytes or the
     // play/pause/position mirror subscriptions — they survive the reconnect
     // and immediately start feeding the new channel once it's open.
-    try {
-      await _socketSub?.cancel();
-    } catch (_) {}
-    try {
-      await _channel?.sink.close();
-    } catch (_) {}
+    await _bounded(_socketSub?.cancel());
+    _socketSub = null;
+    await _bounded(_channel?.sink.close());
     _channel = null;
     // A reconnect usually follows a network change — re-fetch ICE/TURN so each
     // renegotiated peer uses current servers/credentials, not stale cache.
@@ -1806,6 +1813,19 @@ class LiveSessionController {
   }
 
   void _log(String m) => debugPrint('[live] $m');
+
+  /// Await a teardown step but never let it hang a reconnect: closing a socket
+  /// or peer connection on a half-dead network can wait forever for a close
+  /// handshake that will never come.
+  static Future<void> _bounded(Future<dynamic>? f,
+      [Duration d = const Duration(seconds: 3)]) async {
+    if (f == null) return;
+    try {
+      await f.timeout(d);
+    } catch (_) {
+      // Gave up waiting — the step is best-effort.
+    }
+  }
 
   void _onSocketMessage(dynamic message) {
     // Audio is peer-to-peer now — the socket carries only JSON control. Ignore
@@ -2165,10 +2185,8 @@ class LiveSessionController {
     await _posSub?.cancel();
     await _playingSub?.cancel();
     await _completeSub?.cancel();
-    await _socketSub?.cancel();
-    try {
-      await _channel?.sink.close();
-    } catch (_) {}
+    await _bounded(_socketSub?.cancel());
+    await _bounded(_channel?.sink.close());
     _channel = null;
     // Close every peer connection + data channel (host peers and listener side).
     await _closeAllPeers();

@@ -1001,8 +1001,56 @@ Column(
           ),
           child: Column(
             children: [
-              // Position · share · like
-              Row(
+              // The disc takes whatever height is left, kept round; the
+              // position · share · like row rides over its top corners.
+              Expanded(
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: LayoutBuilder(builder: (c, cc) {
+                  // The record takes as much of the card as it can (the
+                  // position / share / like row floats over the top corners,
+                  // which a round disc never reaches). -20: room for the
+                  // loading ring (+18) around the record.
+                  final side = (cc.maxWidth * 0.82 < cc.maxHeight - 20
+                          ? cc.maxWidth * 0.82
+                          : cc.maxHeight - 20)
+                      .clamp(40.0, 340.0)
+                      .toDouble();
+                  // While a song (or the app) is busy, a glowing ring sweeps
+                  // around the record instead of a loader over the title.
+                  return Center(
+                    child: VisibilityDetector(
+                      key: const ValueKey('aluta-hero-disc'),
+                      onVisibilityChanged: (v) =>
+                          _setHostingBusy(v.visibleFraction > 0.5),
+                      child: SizedBox(
+                        width: side + 18,
+                        height: side + 18,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            discWidget(side),
+                            ValueListenableBuilder<int>(
+                              valueListenable: appBusy.major,
+                              builder: (_, major, _) => _DiscLoadRing(
+                                active: buffering || major > 0,
+                                side: side + 18,
+                                accent: accent,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+                    ),
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: Row(
                 children: [
                   Container(
                     padding:
@@ -1051,43 +1099,9 @@ Column(
                         ),
                 ],
               ),
-              // The disc takes whatever height is left, kept round.
-              Expanded(
-                child: LayoutBuilder(builder: (c, cc) {
-                  // -26: room for the loading ring around the record.
-                  final side = (cc.maxWidth * 0.66 < cc.maxHeight - 26
-                          ? cc.maxWidth * 0.66
-                          : cc.maxHeight - 26)
-                      .clamp(40.0, 260.0)
-                      .toDouble();
-                  // While a song (or the app) is busy, a glowing ring sweeps
-                  // around the record instead of a loader over the title.
-                  return Center(
-                    child: VisibilityDetector(
-                      key: const ValueKey('aluta-hero-disc'),
-                      onVisibilityChanged: (v) =>
-                          _setHostingBusy(v.visibleFraction > 0.5),
-                      child: SizedBox(
-                        width: side + 18,
-                        height: side + 18,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            discWidget(side),
-                            ValueListenableBuilder<int>(
-                              valueListenable: appBusy.major,
-                              builder: (_, major, _) => _DiscLoadRing(
-                                active: buffering || major > 0,
-                                side: side + 18,
-                                accent: accent,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ),
-                  );
-                }),
+                  ],
+                ),
               ),
               // Everything under the disc lives in a FIXED-height area: the
               // title / artist / lyric line / Up next can appear, change or

@@ -437,6 +437,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
     metadataStore.pullFromServer().then((_) {
       if (mounted) setState(() {});
     });
+    // Know who "me" is from the last session at once (the profile call can be
+    // slow or offline) — the partner lookup (Glow, Our Space) depends on it.
+    SharedPreferences.getInstance().then((p) {
+      final cached = int.tryParse(p.getString('my_user_id') ?? '');
+      if (cached != null && _myUserId == null && mounted) {
+        setState(() => _myUserId = cached);
+      }
+    });
     _loadUserData();
     _loadCachedFriends();    // show cached DM list instantly (no spinner flash)
     _loadCachedGroups();     // and the cached group chats, for offline Circle
@@ -708,10 +716,18 @@ class HomePageState extends rp.ConsumerState<HomePage>
   ({Map<String, dynamic> space, int id, String name})? _partnerInfo() {
     final space = _primarySpace;
     if (space == null) return null;
+    final me = _myUserId;
     for (final m
         in ((space['members'] as List?) ?? const []).whereType<Map>()) {
       final id = (m['id'] as num?)?.toInt();
-      if (id == null || id == _myUserId) continue;
+      if (id == null || id == me) continue;
+      // Who "me" is may not be known yet (profile still loading / offline at
+      // start). Then only a member who is in my friend list can be the
+      // partner — I'm never in my own — so Glow never offers to message me.
+      if (me == null &&
+          !_allFriends.any((x) => (x['id'] as num?)?.toInt() == id)) {
+        continue;
+      }
       final f = _allFriends.firstWhere(
           (x) => (x['id'] as num?)?.toInt() == id,
           orElse: () => <String, dynamic>{});

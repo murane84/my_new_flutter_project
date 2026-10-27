@@ -1026,7 +1026,8 @@ class _ClassicVinylState extends State<_ClassicVinyl>
             animation: _lift,
             builder: (_, _) => Transform.rotate(
               angle: -_lift.value * 1.25,
-              alignment: const Alignment(0.78, -0.84),
+              // Must match the painter's pivot (0.89, 0.17) in -1..1 space.
+              alignment: const Alignment(0.78, -0.66),
               child: CustomPaint(
                 // Light mode: darker brushed steel so the arm reads against a
                 // pale page; dark mode keeps the bright chrome.
@@ -1126,7 +1127,10 @@ class _TonearmPainter extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final side = s.width;
-    final pivot = Offset(side * 0.89, side * 0.08);
+    // Pivot sits a little below the top edge so neither the base nor the
+    // counterweight (which points up when the arm rests) reaches the player's
+    // header icons above the disc.
+    final pivot = Offset(side * 0.89, side * 0.17);
     final head = Offset(side * 0.43, side * 0.30);
     final d = head - pivot;
     final len = d.distance;
@@ -1159,7 +1163,7 @@ class _TonearmPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round,
     );
     // Counterweight stub behind the pivot.
-    final back = pivot - u * (side * 0.14);
+    final back = pivot - u * (side * 0.10);
     c.drawLine(
       pivot,
       back,

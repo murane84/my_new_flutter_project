@@ -383,6 +383,13 @@ extension _HomePageHelpers1 on HomePageState {
     // (server fans it to friends only) and begin watching local playback.
     NowPlayingPresence.instance.emitSink = (msg) => _notifyWs?.sendEvent(msg);
     NowPlayingPresence.instance.start();
+    // "Tune in" requests ride it too.
+    TuneInService.instance.sendSignal = (msg) => _notifyWs?.sendEvent(msg);
+    TuneInService.instance.onTimeout = (id) {
+      if (!mounted) return;
+      showToast(context, "${_nameForUser(id)} didn't answer — maybe later 💛",
+          type: ToastType.info);
+    };
     // The mesh's "smaller id offers" rule needs our OWN id on every entry
     // path. startGroupCall()/joinRoom() set it, but accept() (answering an
     // incoming ring) does not — so on a fresh launch the acceptor's myId was
@@ -578,7 +585,11 @@ extension _HomePageHelpers1 on HomePageState {
     final hostName =
         _contactDisplayName(_friendPhoneById(data['host_id']), rawHostName);
 
-    final accept = await showGeneralDialog<bool>(
+    // The invite I asked for ("Tune in") → straight in, no second prompt.
+    final hostId = int.tryParse('${data['host_id']}');
+    final asked = TuneInService.instance.consumeIfPending(hostId);
+
+    final bool? accept = asked ? true : await showGeneralDialog<bool>(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Dismiss',
@@ -642,6 +653,154 @@ extension _HomePageHelpers1 on HomePageState {
         track: track,
         peerName: hostName,
         myName: _username.isNotEmpty ? _username : null,
+      ),
+    ));
+  }
+
+  /// A friend's display name by id (contact name, else username).
+  String _nameForUser(int id) {
+    final f = _allFriends.firstWhere(
+        (f) => (f['id'] as num?)?.toInt() == id,
+        orElse: () => const <String, dynamic>{});
+    return _contactDisplayName(
+        _friendPhoneById(id), (f['username'] ?? 'Your friend').toString());
+  }
+
+  /// "Tune in" signaling — see TuneInService for the message flow.
+  Future<void> _onTuneInSignal(Map<String, dynamic> event) async {
+    final type = event['type']?.toString();
+    final from = (event['from'] as num?)?.toInt();
+    if (from == null || !mounted) return;
+    final svc = TuneInService.instance;
+    final known = _allFriends.any((f) => (f['id'] as num?)?.toInt() == from);
+    final name = known
+        ? _nameForUser(from)
+        : (event['name'] ?? 'Your friend').toString();
+    switch (type) {
+      case 'tune_in_request':
+        await _answerTuneIn(from, name, event['title']?.toString());
+        return;
+      case 'tune_in_accept':
+        svc.answered(from, accepted: true);
+        return;
+      case 'tune_in_decline':
+        if (svc.pending.value != from) return;
+        svc.answered(from, accepted: false);
+        final reason = event['reason']?.toString();
+        showToast(
+            context,
+            switch (reason) {
+              'busy' => '$name is in another session right now',
+              'not_playing' => '$name just stopped the music',
+              'unreadable' => "$name's song can't be shared from their device",
+              _ => '$name is keeping this one to themselves for now 💛',
+            },
+            type: ToastType.info);
+        return;
+      case 'tune_in_unreachable':
+        if (svc.pending.value != from) return;
+        svc.answered(from, accepted: false);
+        showToast(context, "$name isn't online right now — try again in a bit",
+            type: ToastType.info);
+        return;
+      case 'tune_in_cancel':
+        // Close an open "let them in?" prompt for this friend.
+        svc.cancelledBy.value = null;
+        svc.cancelledBy.value = from;
+        return;
+    }
+  }
+
+  /// Someone asked to listen along to MY song. Yes → I host what I'm playing,
+  /// from where I am, and invite them; my music never changes.
+  Future<void> _answerTuneIn(int from, String name, String? askedTitle) async {
+    final svc = TuneInService.instance;
+    if (activeLiveSession != null) {
+      svc.reply(from, accept: false, reason: 'busy');
+      return;
+    }
+    if (!(playbackBus.isPlaying?.call() ?? false)) {
+      svc.reply(from, accept: false, reason: 'not_playing');
+      return;
+    }
+    final mine = (playbackBus.currentTitle?.call() ?? '').trim();
+    final shown =
+        mine.isNotEmpty ? mine : ((askedTitle ?? '').isNotEmpty ? askedTitle! : 'your song');
+    final avatar = _allFriends.firstWhere(
+        (f) => (f['id'] as num?)?.toInt() == from,
+        orElse: () => const <String, dynamic>{})['avatar_url'] as String?;
+    svc.cancelledBy.value = null;
+    final accept = await showGeneralDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black.withAlpha(120),
+      transitionDuration: const Duration(milliseconds: 260),
+      pageBuilder: (_, _, _) => _TuneInPromptGate(
+        from: from,
+        child: _LiveInviteDialog(
+          hostName: name,
+          hostAvatar: avatar,
+          trackTitle: shown,
+          heading: 'Can I tune in?',
+          verb: ' wants to listen along to your song.',
+          note: 'Your music keeps playing — they join right where you are.',
+          declineLabel: 'Not now',
+          acceptLabel: 'Let them in',
+        ),
+      ),
+      transitionBuilder: (_, anim, _, child) => FadeTransition(
+        opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.9, end: 1.0).animate(
+            CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+          ),
+          child: child,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (accept != true) {
+      // They gave up already → no answer needed; otherwise a polite no.
+      if (svc.cancelledBy.value != from) {
+        svc.reply(from, accept: false, reason: 'no');
+      }
+      return;
+    }
+    final token = await getToken();
+    final myUserId = _myUserId;
+    if (token == null || myUserId == null || !mounted) return;
+    // The song exactly as it plays here (file on device, bytes on web).
+    Uint8List bytes = Uint8List(0);
+    final path = playbackBus.currentPath?.call();
+    try {
+      if (!kIsWeb && path != null && path.isNotEmpty) {
+        bytes = Uint8List.fromList(await readFileBytes(path));
+      } else {
+        bytes = playbackBus.currentBytes?.call() ?? Uint8List(0);
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    if (bytes.isEmpty) {
+      svc.reply(from, accept: false, reason: 'unreadable');
+      showToast(context, "Couldn't share this song from here",
+          type: ToastType.error);
+      return;
+    }
+    final pos = playbackBus.currentPositionMs?.call() ?? 0;
+    svc.reply(from, accept: true);
+    // The session carries the music on from here — no double playback.
+    playbackBus.onPause?.call();
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      fullscreenDialog: true,
+      builder: (_) => LiveSessionScreen.host(
+        token: token,
+        myUserId: myUserId,
+        receiverId: from,
+        audioBytes: bytes,
+        title: shown,
+        peerName: name,
+        startPositionMs: pos,
       ),
     ));
   }

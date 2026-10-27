@@ -63,6 +63,9 @@ import '../widgets/heart_toast.dart';
 import '../services/metadata_overrides.dart';
 import '../services/track_title.dart' show splitTitleArtist;
 import 'listening_audience_sheet.dart' show PresenceShareButton;
+import '../services/tune_in.dart';
+import '../widgets/tune_in_ask.dart';
+import '../utils/file_bytes.dart';
 import '../services/app_busy.dart';
 import '../utils/net_image.dart';
 import 'token_helper.dart';
@@ -2050,6 +2053,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
     if (type == 'live_invite') {
       _showLiveInvite(event);
+      return;
+    }
+    // "Tune in" — asking to join what a friend is already playing.
+    if (type != null && type.startsWith('tune_in_')) {
+      _onTuneInSignal(event);
       return;
     }
     if (type == 'live_declined') {

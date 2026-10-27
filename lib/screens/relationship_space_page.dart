@@ -43,6 +43,7 @@ import '../theme/aluta_palette.dart';
 import '../utils/readable.dart';
 import 'chat/song_cache.dart';
 import '../widgets/listen_presence_gate.dart';
+import '../widgets/tune_in_ask.dart';
 import '../utils/marquee_text.dart';
 import '../services/contact_names.dart';
 import '../widgets/keepsake_photo.dart';
@@ -781,9 +782,26 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           type: ToastType.info);
       return;
     }
+    final pid = _partnerId;
+    // Partner is already playing something → ASK to join THEIR song; don't
+    // start mine at them. (Starting my own only when they're not listening.)
+    final theirs = pid == null ? null : NowPlayingPresence.instance.trackFor(pid);
+    if (pid != null && theirs != null) {
+      final t = (theirs['title'] ?? '').toString().trim();
+      final a = (theirs['artist'] ?? '').toString().trim();
+      await askToTuneIn(
+        context,
+        friendId: pid,
+        name: ContactNames.instance.displayName(
+            of: _others.first,
+            registered: (_others.first['username'] ?? '').toString()),
+        avatar: _others.first['avatar_url'] as String?,
+        title: a.isNotEmpty ? '$t — $a' : t,
+      );
+      return;
+    }
     // Is the partner here? Offline → offer "notify me" instead of
     // broadcasting into an empty room.
-    final pid = _partnerId;
     if (!skipGate && pid != null) {
       final go = await listenTogetherGate(context,
           friendId: pid,

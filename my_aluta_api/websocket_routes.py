@@ -84,6 +84,16 @@ _CALL_SIGNALS = {
     "call_busy",      # callee → caller: already in another call
 }
 
+# "Tune in": ask a friend to let you listen along to what THEY are playing
+# (they host their own song and invite you). Pure relay, stamped with who
+# it's from; a request to someone with no live app is answered at once.
+_TUNE_SIGNALS = {
+    "tune_in_request",  # me → friend: may I listen along?
+    "tune_in_accept",   # friend → me: yes (an invite follows)
+    "tune_in_decline",  # friend → me: not now (reason: busy/not_playing/no)
+    "tune_in_cancel",   # me → friend: I stopped waiting
+}
+
 # Group (mesh) call per-peer negotiation messages, relayed to the `to` peer.
 _GROUP_RELAY = {"group_offer", "group_answer", "group_ice"}
 
@@ -505,6 +515,41 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                     set_active_conv(int(user_id), data.get("conv"))
                 except Exception:
                     pass
+            elif etype in _TUNE_SIGNALS:
+                to = data.get("to")
+                if to is not None:
+                    try:
+                        target = int(to)
+                        if etype == "tune_in_request" and not connected_users.get(target):
+                            await notify_user(int(user_id), {
+                                "type": "tune_in_unreachable",
+                                "from": target,
+                            })
+                        else:
+                            from database import SessionLocal
+                            db = SessionLocal()
+                            try:
+                                # Friends only — a stranger can't knock.
+                                me_id = int(user_id)
+                                is_friend = db.query(Friend).filter(
+                                    ((Friend.user_id == me_id) & (Friend.friend_id == target))
+                                    | ((Friend.user_id == target) & (Friend.friend_id == me_id))
+                                ).first() is not None
+                                me = (db.query(User)
+                                      .filter(User.id == me_id).first())
+                                name = (me.username or "") if me else ""
+                                phone = (me.phone or "") if me else ""
+                            finally:
+                                db.close()
+                            if not is_friend:
+                                raise ValueError("not friends")
+                            payload = {k: v for k, v in data.items() if k != "to"}
+                            payload["from"] = int(user_id)
+                            payload["name"] = name
+                            payload["phone"] = phone
+                            await notify_user(target, payload)
+                    except Exception:
+                        pass
             elif etype in _CALL_SIGNALS:
                 # Aluta voice-call signaling (WebRTC). Relay the whole payload
                 # to the target user, stamping who it's `from`, so the two

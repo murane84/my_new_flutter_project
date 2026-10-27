@@ -123,6 +123,22 @@ extension _HomeSpaceActions on HomePageState {
   /// share, so their space (where Listen Together / the Live Room live) is one
   /// tap from their now-playing row. No shared Space yet → nudge to pin a bond.
   void _tuneInto(int friendId, String name) {
+    // They're playing something → ASK to join their song (never push mine).
+    final track = NowPlayingPresence.instance.trackFor(friendId);
+    if (track != null) {
+      final t = (track['title'] ?? '').toString().trim();
+      final a = (track['artist'] ?? '').toString().trim();
+      askToTuneIn(
+        context,
+        friendId: friendId,
+        name: name,
+        avatar: _allFriends.firstWhere(
+            (f) => (f['id'] as num?)?.toInt() == friendId,
+            orElse: () => const <String, dynamic>{})['avatar_url'] as String?,
+        title: a.isNotEmpty ? '$t — $a' : t,
+      );
+      return;
+    }
     _setFriendLayer('harmony');
     final space = _spaceWithFriend(friendId);
     if (space != null) {

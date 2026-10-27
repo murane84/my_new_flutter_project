@@ -249,13 +249,62 @@ class _LogoutPainter extends CustomPainter {
 /// Polished "Listen together?" invitation — a centered brand card with a
 /// headphones badge, the host's avatar + name, the track on a pill, and clear
 /// Decline / Join actions. Pops `true` on Join, `false`/null otherwise.
+/// Closes the "Can I tune in?" prompt by itself when the asker gives up.
+class _TuneInPromptGate extends StatefulWidget {
+  const _TuneInPromptGate({required this.from, required this.child});
+  final int from;
+  final Widget child;
+
+  @override
+  State<_TuneInPromptGate> createState() => _TuneInPromptGateState();
+}
+
+class _TuneInPromptGateState extends State<_TuneInPromptGate> {
+  final _svc = TuneInService.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _svc.cancelledBy.addListener(_onCancel);
+  }
+
+  @override
+  void dispose() {
+    _svc.cancelledBy.removeListener(_onCancel);
+    super.dispose();
+  }
+
+  void _onCancel() {
+    if (mounted && _svc.cancelledBy.value == widget.from) {
+      Navigator.of(context).maybePop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
 class _LiveInviteDialog extends StatelessWidget {
-  const _LiveInviteDialog(
-      {required this.hostName, required this.trackTitle, this.hostAvatar});
+  const _LiveInviteDialog({
+    required this.hostName,
+    required this.trackTitle,
+    this.hostAvatar,
+    this.heading = 'Listen together?',
+    this.verb = ' wants to listen with you, live.',
+    this.note,
+    this.declineLabel = 'Decline',
+    this.acceptLabel = 'Join',
+  });
 
   final String hostName;
   final String trackTitle;
   final String? hostAvatar;
+  // Reused for "may I tune in?" (the host is asked about their OWN song).
+  final String heading;
+  final String verb;
+  final String? note;
+  final String declineLabel;
+  final String acceptLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -316,7 +365,7 @@ class _LiveInviteDialog extends StatelessWidget {
                   const SizedBox(height: 16),
                   Center(
                     child: Text(
-                      'Listen together?',
+                      heading,
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
@@ -348,8 +397,7 @@ class _LiveInviteDialog extends StatelessWidget {
                                 style:
                                     const TextStyle(fontWeight: FontWeight.w700),
                               ),
-                              const TextSpan(
-                                  text: ' wants to listen with you, live.'),
+                              TextSpan(text: verb),
                             ],
                           ),
                         ),
@@ -387,6 +435,14 @@ class _LiveInviteDialog extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (note != null) ...[
+                    const SizedBox(height: 10),
+                    Text(note!,
+                        style: TextStyle(
+                            fontSize: 12,
+                            height: 1.35,
+                            color: scheme.onSurfaceVariant)),
+                  ],
                   const SizedBox(height: 18),
                   // Actions.
                   Row(
@@ -397,13 +453,13 @@ class _LiveInviteDialog extends StatelessWidget {
                         style: TextButton.styleFrom(
                           foregroundColor: scheme.onSurfaceVariant,
                         ),
-                        child: const Text('Decline'),
+                        child: Text(declineLabel),
                       ),
                       const SizedBox(width: 8),
                       FilledButton.icon(
                         onPressed: () => Navigator.of(context).pop(true),
                         icon: const Icon(Icons.headphones_rounded, size: 18),
-                        label: const Text('Join'),
+                        label: Text(acceptLabel),
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 20, vertical: 12),

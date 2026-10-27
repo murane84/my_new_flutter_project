@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' show MediaType;
@@ -2293,19 +2294,61 @@ class ApiService {
   }
 
   /// "Thinking of you" — a one-tap ping to the bond's partner (no payload).
-  /// Returns true when the server accepted it (delivery beyond is best-effort).
-  Future<bool> nudgePartner(int spaceId) async {
+  /// [ok] when the server accepted it (delivery beyond is best-effort);
+  /// otherwise [msg] says why in plain words, and [retry] whether trying again
+  /// could help (connection / server blips, not a missing partner).
+  Future<({bool ok, bool retry, String msg})> nudgePartner(int spaceId) async {
     try {
       final token = await _getToken();
-      if (token == null) return false;
-      final resp = await http.post(
-        Uri.parse('${await _baseUrl}/spaces/$spaceId/nudge'),
-        headers: _authHeaders(token),
+      if (token == null) {
+        return (ok: false, retry: false, msg: 'Please sign in again to send it');
+      }
+      final resp = await http
+          .post(
+            Uri.parse('${await _baseUrl}/spaces/$spaceId/nudge'),
+            headers: _authHeaders(token),
+          )
+          .timeout(const Duration(seconds: 12));
+      final code = resp.statusCode;
+      if (code >= 200 && code < 300) return (ok: true, retry: false, msg: '');
+      String? detail;
+      try {
+        final d = jsonDecode(resp.body);
+        if (d is Map && d['detail'] is String) detail = d['detail'] as String;
+      } catch (_) {
+        // Not JSON — fall back to the generic wording below.
+      }
+      if (code == 401 || code == 403) {
+        return (ok: false, retry: false, msg: 'Your session expired — sign in again');
+      }
+      if (code == 404) {
+        return (
+          ok: false,
+          retry: false,
+          msg: "This Space isn't on the server anymore — reopen Our Space"
+        );
+      }
+      if (code >= 400 && code < 500) {
+        return (ok: false, retry: false, msg: detail ?? 'Could not send it');
+      }
+      return (
+        ok: false,
+        retry: true,
+        msg: 'Aluta is busy right now — try again in a moment'
       );
-      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } on TimeoutException {
+      return (
+        ok: false,
+        retry: true,
+        msg: 'Your connection is slow — it timed out, try again'
+      );
     } catch (e) {
       _logger.w('nudgePartner failed: $e');
-      return false;
+      return (
+        ok: false,
+        retry: true,
+        msg: "Couldn't reach Aluta — check your internet"
+      );
     }
   }
 

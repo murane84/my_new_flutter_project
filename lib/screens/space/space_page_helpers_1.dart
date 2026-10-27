@@ -5,6 +5,15 @@ part of '../relationship_space_page.dart';
 // private extension. A library `part`, so it shares the page's imports
 // and reaches every private field and method.
 
+// Where each soundtrack song can be played from on this device: 'here'
+// (cached / in my library), 'missing' (its shared copy is gone and I don't
+// have it), 'title' (never shared, not mine). Bumps rebuild the rows.
+final Map<int, String> _trackAvail = <int, String>{};
+final Set<int> _trackHealTried = <int>{};
+final ValueNotifier<int> _trackAvailRev = ValueNotifier<int>(0);
+// Our Playlist filter: all | mine | theirs.
+final ValueNotifier<String> _playlistFilter = ValueNotifier<String>('all');
+
 extension _SpacePageHelpers1 on _RelationshipSpacePageState {
   /// The global-space centre of a tile (via its key), or null if not laid out.
   Offset? _globalCenter(GlobalKey k) {
@@ -127,18 +136,59 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
   }
 
   // Cache every crate track that has shared audio, so a Listen Together can
-  // quick-start from the local copy on either partner's device.
+  // quick-start from the local copy on either partner's device — and SELF-
+  // HEAL like kept hearts: a song whose shared copy left the server (or was
+  // never shared) is re-shared from whichever device still has it, so the
+  // other partner can play it again. Each row learns where its song is.
   void _prefetchPlaylistAudio() {
     if (kIsWeb) return;
-    final tracks =
-        ((_space['playlist'] as List?) ?? const []).whereType<Map>();
+    final tracks = ((_space['playlist'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((t) => Map<String, dynamic>.from(t))
+        .toList();
     for (final t in tracks) {
-      final au = (t['audio_url'] ?? '').toString().trim();
-      if (au.isEmpty) continue;
-      final full = resolveAvatarUrl(au, widget.apiBase) ?? au;
-      // Fire-and-forget: download + cache; ignore failures.
-      MediaStore.instance.getFile(full, mediaAuthHeaders(full));
+      _syncTrackAudio(t);
     }
+  }
+
+  Future<void> _syncTrackAudio(Map<String, dynamic> t) async {
+    final id = (t['id'] as num?)?.toInt();
+    if (id == null) return;
+    final au = (t['audio_url'] ?? '').toString().trim();
+    final title = (t['title'] ?? '').toString().trim();
+    final local = _localPathFor((t['ref'] ?? '').toString().trim(), title);
+    void mark(String s) {
+      if (_trackAvail[id] == s) return;
+      _trackAvail[id] = s;
+      _trackAvailRev.value++;
+    }
+
+    if (au.isNotEmpty) {
+      final full = resolveAvatarUrl(au, widget.apiBase) ?? au;
+      try {
+        final f = await MediaStore.instance.getFile(full, mediaAuthHeaders(full));
+        if (f != null) return mark('here');
+      } catch (_) {}
+    }
+    // No shared copy we can reach. Mine? Then re-share it for both of us.
+    if (local != null) {
+      mark('here');
+      if (!_trackHealTried.add(id)) return;
+      try {
+        final bytes = await readFileBytes(local);
+        if (bytes.isEmpty) return;
+        final up = await ApiService().uploadMedia(
+          bytes: bytes,
+          filename: local.split(RegExp(r'[\\/]+')).last,
+          mime: _audioMimeFor(local),
+          ephemeral: true,
+        );
+        final url = (up?['url'] as String?) ?? '';
+        if (url.isNotEmpty) await ApiService().healTrackAudio(_id, id, url);
+      } catch (_) {}
+      return;
+    }
+    mark(au.isEmpty ? 'title' : 'missing');
   }
 
   Future<void> _removeTrackFromCrate(int trackId) async {
@@ -1019,8 +1069,22 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
               const SizedBox(height: 16),
               if (tracks.isEmpty)
                 _playlistEmpty(scheme)
-              else
-                ...[for (final t in tracks) _trackRow(scheme, t)],
+              else ...[
+                _playlistFilterBar(scheme, tracks),
+                const SizedBox(height: 10),
+                ValueListenableBuilder<String>(
+                  valueListenable: _playlistFilter,
+                  builder: (_, f, _) => ValueListenableBuilder<int>(
+                    valueListenable: _trackAvailRev,
+                    builder: (_, _, _) => Column(children: [
+                      for (final t in tracks)
+                        if (f == 'all' ||
+                            (f == 'mine') == (t['mine'] == true))
+                          _trackRow(scheme, t),
+                    ]),
+                  ),
+                ),
+              ],
             ],
           ),
           footer: Row(

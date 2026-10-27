@@ -8,6 +8,9 @@ import 'metadata_overrides.dart';
 /// Together picker, live share).
 String cleanTrackName(String raw) {
   var n = raw;
+  // "Sean_Paul_-_We_Be_Burning_(mp3.pm)" → "Sean Paul - We Be Burning".
+  n = n.replaceAll(RegExp(r'[\(\[]?\s*mp3\s*\.\s*\w+\s*[\)\]]?', caseSensitive: false), ' ');
+  n = n.replaceAll(RegExp(r'_+'), ' ');
   n = n.replaceAll(RegExp(r'\bsms\s*skiza\b.*', caseSensitive: false), ' ');
   n = n.replaceAll(RegExp(r'\bskiza\b.*', caseSensitive: false), ' ');
   n = n.replaceAll(

@@ -201,123 +201,325 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
     );
   }
 
+  /// "7 songs · 4 by you · 3 by Daddy" + All / Mine / Theirs.
+  Widget _playlistFilterBar(
+      ColorScheme scheme, List<Map<String, dynamic>> tracks) {
+    final mine = tracks.where((t) => t['mine'] == true).length;
+    final theirs = tracks.length - mine;
+    final partner = _others.isNotEmpty
+        ? ContactNames.instance.displayName(
+            of: _others.first,
+            registered: (_others.first['username'] ?? '').toString())
+        : 'them';
+    return ValueListenableBuilder<String>(
+      valueListenable: _playlistFilter,
+      builder: (_, f, _) {
+        Widget pill(String v, String label) {
+          final on = f == v;
+          return Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => _playlistFilter.value = v,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  gradient: on
+                      ? LinearGradient(colors: [
+                          Color.lerp(_accent, Colors.white, 0.12)!,
+                          Color.lerp(_accent, Colors.black, 0.12)!,
+                        ])
+                      : null,
+                  color: on ? null : scheme.surfaceContainerHighest,
+                  boxShadow: on
+                      ? [
+                          BoxShadow(
+                              color: _accent.withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3)),
+                        ]
+                      : null,
+                ),
+                child: Text(label,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: on ? Colors.white : scheme.onSurface)),
+              ),
+            ),
+          );
+        }
+
+        return Row(children: [
+          Expanded(
+            child: Text(
+                '${tracks.length} song${tracks.length == 1 ? '' : 's'}'
+                ' · $mine by you · $theirs by $partner',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 12, color: scheme.onSurfaceVariant)),
+          ),
+          pill('all', 'All'),
+          pill('mine', 'Mine'),
+          pill('theirs', partner.split(' ').first),
+        ]);
+      },
+    );
+  }
+
   Widget _trackRow(ColorScheme scheme, Map<String, dynamic> t) {
     final id = (t['id'] as num?)?.toInt();
-    final title = (t['title'] ?? '').toString();
+    final rawTitle = (t['title'] ?? '').toString();
+    final title = cleanTrackName(rawTitle);
     final artist = (t['artist'] ?? '').toString();
     final memo = (t['memo'] ?? '').toString().trim();
     final source = (t['source'] ?? 'manual').toString();
     final mine = t['mine'] == true;
     final adder = mine ? 'You' : (t['added_by_username'] ?? '').toString();
     final (srcIcon, srcText) = _sourceBadge(source);
+    final avail = id == null ? null : _trackAvail[id];
+    // The song playing right now (in my player) dances.
+    final nowTitle = (playbackBus.currentTitle?.call() ?? '').toLowerCase();
+    final playingNow = (playbackBus.isPlaying?.call() ?? false) &&
+        nowTitle.isNotEmpty &&
+        (nowTitle == rawTitle.toLowerCase() ||
+            nowTitle == title.toLowerCase());
     final subParts = <String>[];
     if (artist.isNotEmpty) subParts.add(artist);
     subParts.add('added by $adder');
     if (srcText.isNotEmpty) subParts.add('from $srcText');
     final subtitle = subParts.join(' · ');
-    return GestureDetector(
-      onLongPress: id == null ? null : () => _editTrackMemo(t),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Row(
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: _accent.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child:
-                      Icon(Icons.music_note_rounded, color: _accent, size: 18),
+    final partner = _others.isNotEmpty
+        ? ContactNames.instance.displayName(
+            of: _others.first,
+            registered: (_others.first['username'] ?? '').toString())
+        : 'them';
+    final missing = avail == 'missing' || avail == 'title';
+    final isDark = scheme.brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _playCrateTrack(t),
+          onLongPress: id == null ? null : () => _editTrackMemo(t),
+          child: Ink(
+            padding: const EdgeInsets.fromLTRB(10, 10, 4, 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: isDark
+                    ? [
+                        Color.alphaBlend(Colors.white.withValues(alpha: 0.07),
+                            scheme.surface),
+                        Color.alphaBlend(Colors.white.withValues(alpha: 0.03),
+                            scheme.surface),
+                      ]
+                    : [
+                        Colors.white,
+                        Color.alphaBlend(
+                            _accent.withValues(alpha: 0.05), scheme.surface),
+                      ],
+              ),
+              border: Border.all(
+                  color: playingNow
+                      ? _accent.withValues(alpha: 0.6)
+                      : _accent.withValues(alpha: isDark ? 0.2 : 0.12)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.07),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
                 ),
-                if (srcIcon != null)
-                  Positioned(
-                    right: -4,
-                    bottom: -4,
-                    child: Container(
-                      padding: const EdgeInsets.all(3),
+              ],
+            ),
+            child: Row(
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: scheme.surfaceContainerHighest,
-                        shape: BoxShape.circle,
+                        borderRadius: BorderRadius.circular(12),
+                        gradient: playingNow
+                            ? LinearGradient(colors: [
+                                Color.lerp(_accent, Colors.white, 0.15)!,
+                                Color.lerp(_accent, Colors.black, 0.15)!,
+                              ])
+                            : null,
+                        color: playingNow
+                            ? null
+                            : _accent.withValues(alpha: missing ? 0.07 : 0.16),
                       ),
-                      child: Icon(srcIcon, size: 12, color: _accent),
+                      child: playingNow
+                          ? const PlayingBars(color: Colors.white, scale: 0.7)
+                          : Icon(
+                              missing
+                                  ? Icons.music_off_rounded
+                                  : Icons.music_note_rounded,
+                              color: _accent.withValues(
+                                  alpha: missing ? 0.5 : 1),
+                              size: 19),
                     ),
+                    if (srcIcon != null)
+                      Positioned(
+                        right: -4,
+                        bottom: -4,
+                        child: Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            color: scheme.surface,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.12),
+                                  blurRadius: 3),
+                            ],
+                          ),
+                          child: Icon(srcIcon, size: 11, color: _accent),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13.5,
+                              color: playingNow ? _accent : scheme.onSurface)),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 11, color: scheme.onSurfaceVariant),
+                      ),
+                      // Where it can play from — honest, never a dead tap.
+                      if (avail != null) ...[
+                        const SizedBox(height: 3),
+                        Row(children: [
+                          Icon(
+                              missing
+                                  ? Icons.cloud_off_rounded
+                                  : Icons.offline_pin_rounded,
+                              size: 12,
+                              color: missing
+                                  ? scheme.onSurfaceVariant
+                                  : const Color(0xFF2E7D32)),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                                missing
+                                    ? (mine
+                                        ? 'Not on this device — add it to your player'
+                                        : 'Not here yet — comes back when $partner opens the playlist')
+                                    : 'Ready on this device',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: 10.5,
+                                    color: missing
+                                        ? scheme.onSurfaceVariant
+                                        : const Color(0xFF2E7D32))),
+                          ),
+                        ]),
+                      ],
+                      if (memo.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+                          decoration: BoxDecoration(
+                            color: _accent.withValues(alpha: 0.07),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border(
+                                left: BorderSide(color: _accent, width: 2.5)),
+                          ),
+                          child: Text(
+                            '“$memo”',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              height: 1.25,
+                              fontStyle: FontStyle.italic,
+                              color: scheme.onSurface.withValues(alpha: 0.8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: memo.isEmpty ? 'Add a memory' : 'Edit memory',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    memo.isEmpty
+                        ? Icons.note_add_outlined
+                        : Icons.sticky_note_2_rounded,
+                    size: 18,
+                    color: memo.isEmpty ? scheme.onSurfaceVariant : _accent,
+                  ),
+                  onPressed: id == null ? null : () => _editTrackMemo(t),
+                ),
+                Tooltip(
+                  message: 'Listen together',
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () => _playCrateTrack(t),
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Color.lerp(_accent, Colors.white, 0.15)!,
+                            Color.lerp(_accent, Colors.black, 0.18)!,
+                          ],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                              color: _accent.withValues(alpha: 0.35),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3)),
+                        ],
+                      ),
+                      child: const Icon(Icons.play_arrow_rounded,
+                          color: Colors.white, size: 20),
+                    ),
+                  ),
+                ),
+                if (id != null)
+                  IconButton(
+                    tooltip: 'Remove',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(Icons.close_rounded,
+                        size: 18, color: scheme.onSurfaceVariant),
+                    onPressed: () => _removeTrackFromCrate(id),
                   ),
               ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                          color: scheme.onSurface)),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 11, color: scheme.onSurfaceVariant),
-                  ),
-                  if (memo.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      '\u201c$memo\u201d',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        height: 1.25,
-                        fontStyle: FontStyle.italic,
-                        color: scheme.onSurface.withValues(alpha: 0.75),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            IconButton(
-              tooltip: memo.isEmpty ? 'Add a memory' : 'Edit memory',
-              visualDensity: VisualDensity.compact,
-              icon: Icon(
-                memo.isEmpty
-                    ? Icons.note_add_outlined
-                    : Icons.sticky_note_2_rounded,
-                size: 18,
-                color: memo.isEmpty ? scheme.onSurfaceVariant : _accent,
-              ),
-              onPressed: id == null ? null : () => _editTrackMemo(t),
-            ),
-            IconButton(
-              tooltip: 'Listen together',
-              visualDensity: VisualDensity.compact,
-              icon: Icon(Icons.play_circle_fill_rounded, color: _accent),
-              onPressed: () => _playCrateTrack(t),
-            ),
-            if (id != null)
-              IconButton(
-                tooltip: 'Remove',
-                visualDensity: VisualDensity.compact,
-                icon: Icon(Icons.close_rounded,
-                    size: 18, color: scheme.onSurfaceVariant),
-                onPressed: () => _removeTrackFromCrate(id),
-              ),
-          ],
+          ),
         ),
       ),
     );

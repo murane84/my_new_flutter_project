@@ -1576,6 +1576,40 @@ def annotate_track(
     return _track_dict(db, track, current_user.id)
 
 
+class _TrackAudioBody(BaseModel):
+    audio_url: str
+
+
+@router.patch("/{space_id}/playlist/{track_id}/audio")
+def heal_track_audio(
+    space_id: int,
+    track_id: int,
+    payload: _TrackAudioBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Self-heal a soundtrack song: a device that still holds the song
+    re-shares its bytes and points the track at the fresh copy, so the other
+    partner can play it again. Either partner may."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, _partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        raise HTTPException(status_code=404, detail="Track not found")
+    track = db.query(PlaylistTrack).filter(
+        PlaylistTrack.id == track_id,
+        PlaylistTrack.pair_key == pk,
+    ).first()
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+    url = (payload.audio_url or "").strip()
+    if not url.startswith("/attachments/") and not url.startswith("http"):
+        raise HTTPException(status_code=400, detail="Bad audio url")
+    track.audio_url = url[:500]
+    db.commit()
+    db.refresh(track)
+    return _track_dict(db, track, current_user.id)
+
+
 # ── Daily "Us" question ──────────────────────────────────────────────────────
 # One curated prompt per calendar day, the same for every couple. 'text' prompts
 # invite a few words; 'music' prompts ask for a song (both picks drop into the

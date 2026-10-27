@@ -2309,6 +2309,23 @@ class ApiService {
     }
   }
 
+  /// Point a soundtrack song at a freshly re-shared copy (self-heal).
+  Future<bool> healTrackAudio(int spaceId, int trackId, String url) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.patch(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/playlist/$trackId/audio'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'audio_url': url}),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.w('healTrackAudio failed: $e');
+      return false;
+    }
+  }
+
   /// Add a song to "Our Playlist" (the shared crate). Returns the created track
   /// map on success, or null on failure.
   Future<Map<String, dynamic>?> addTrack(

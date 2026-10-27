@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/aluta_composer_field.dart';
 import '../../utils/readable.dart';
 import '../../utils/typing_guard.dart';
+import '../../utils/anim_art.dart';
 import '../../utils/emoji_field.dart' show inlineEmojiPicker;
 import '../gif_picker.dart';
 
@@ -440,6 +441,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     _photoFile = null;
     _loading = false;
     _awaitArt = false;
+    _progress.duration = _photoDuration;
 
     // Mark seen (not for my own stories — the backend ignores self-views).
     final item = _story;
@@ -525,11 +527,21 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         }
         _loading = false;
       }
+      _syncToArt(item);
       _barTick = _progress;
       if (!_paused) _progress.forward(from: 0);
       setState(() {});
     }
     _prefetchNext();
+  }
+
+  /// A GIF / sticker (or animated song art) runs the status for whole loops
+  /// of its animation — the bar finishes with the GIF, not mid-way.
+  void _syncToArt(StoryItem item) {
+    if (!(item.isSticker || item.isMusic)) return;
+    final art = item.musicArtUrl;
+    if (art == null || !art.startsWith('http')) return;
+    _progress.duration = AnimArt.storyLength(AnimArt.loopOf(art));
   }
 
   /// While this status plays, quietly download the next one's photo and warm
@@ -553,7 +565,13 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     for (final it in warm) {
       final art = it.musicArtUrl;
       if (art != null && art.startsWith('http') && mounted) {
-        precacheImage(NetworkImage(art), context).ignore();
+        // Bytes once (also tells us the GIF's loop length), then decode.
+        AnimArt.load(art).then((b) {
+          if (!mounted) return;
+          precacheImage(b != null ? MemoryImage(b) : NetworkImage(art),
+                  context)
+              .ignore();
+        }).ignore();
       }
     }
     // Photos go through the on-device cache (native only).
@@ -592,7 +610,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       if (art != null && art.isNotEmpty) {
         if (!mounted) return false;
         // Stickers are often multi-MB GIFs — allow them as long as a video.
-        await precacheImage(NetworkImage(art), context)
+        // Fetch the bytes ourselves (shared with the on-screen image) so the
+        // GIF's own loop length can drive the timer.
+        final b = await AnimArt.load(art);
+        if (!mounted) return false;
+        await precacheImage(b != null ? MemoryImage(b) : NetworkImage(art),
+                context)
             .timeout(const Duration(seconds: 25));
       }
       return true;
@@ -606,6 +629,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     if (!mounted || gen != _gen || !_awaitArt) return;
     _awaitArt = false;
     _loading = false;
+    _syncToArt(_story);
     _barTick = _progress;
     if (!_paused) _progress.forward(from: 0);
     setState(() {});
@@ -613,9 +637,13 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   /// Sticker / song art that reports its first painted frame, so a status
   /// still waiting on it ([_awaitArt]) starts its timer exactly then.
-  Widget _artImage(String art) => Image.network(
-        art,
+  Widget _artImage(String art) => Image(
+        // Same bytes the timer measured (falls back to the network).
+        image: AnimArt.bytesOf(art) != null
+            ? MemoryImage(AnimArt.bytesOf(art)!)
+            : NetworkImage(art),
         fit: BoxFit.contain,
+        gaplessPlayback: true,
         frameBuilder: (ctx, child, frame, sync) {
           if (frame != null && _awaitArt) {
             final g = _gen;

@@ -14,6 +14,9 @@ enum PlayerDiscStyle {
   cassette,
   halo,
   pulse,
+  heartbeat,
+  duet,
+  equalizer,
   // Earned: unlocked by a 30-day "In tune" streak in Our Space (§5.7).
   anniversary,
 }
@@ -30,6 +33,9 @@ extension PlayerDiscStyleX on PlayerDiscStyle {
         PlayerDiscStyle.cassette => 'cassette',
         PlayerDiscStyle.halo => 'halo',
         PlayerDiscStyle.pulse => 'pulse',
+        PlayerDiscStyle.heartbeat => 'heartbeat',
+        PlayerDiscStyle.duet => 'duet',
+        PlayerDiscStyle.equalizer => 'equalizer',
         PlayerDiscStyle.anniversary => 'anniversary_vinyl',
       };
 
@@ -41,14 +47,24 @@ extension PlayerDiscStyleX on PlayerDiscStyle {
         PlayerDiscStyle.cassette => 'Cassette',
         PlayerDiscStyle.halo => 'Halo',
         PlayerDiscStyle.pulse => 'Pulse',
+        PlayerDiscStyle.heartbeat => 'Heartbeat',
+        PlayerDiscStyle.duet => 'Duet',
+        PlayerDiscStyle.equalizer => 'Equalizer',
         PlayerDiscStyle.anniversary => 'Anniversary Vinyl',
       };
 
-  /// Round styles get the circular progress ring; the cassette does not.
-  bool get roundRing =>
-      this != PlayerDiscStyle.cassette &&
-      this != PlayerDiscStyle.classicVinyl &&
-      this != PlayerDiscStyle.anniversary;
+  /// Round styles get the circular progress ring; shaped or busy ones
+  /// (cassette, turntables, heart, duet, equalizer bars) do not.
+  bool get roundRing => switch (this) {
+        PlayerDiscStyle.cassette ||
+        PlayerDiscStyle.classicVinyl ||
+        PlayerDiscStyle.anniversary ||
+        PlayerDiscStyle.heartbeat ||
+        PlayerDiscStyle.duet ||
+        PlayerDiscStyle.equalizer =>
+          false,
+        _ => true,
+      };
 
   static PlayerDiscStyle fromId(String? s) => PlayerDiscStyle.values
       .firstWhere((e) => e.id == s, orElse: () => PlayerDiscStyle.orb);
@@ -191,6 +207,22 @@ class PlayerDisc extends StatelessWidget {
           accent: accent,
           scheme: scheme,
           isDark: isDark,
+          playing: playing,
+          artBuilder: artBuilder,
+        ),
+      PlayerDiscStyle.heartbeat => _HeartbeatDisc(
+          side: side,
+          accent: accent,
+          isDark: isDark,
+          playing: playing,
+          artBuilder: artBuilder,
+        ),
+      PlayerDiscStyle.duet => _duet(),
+      PlayerDiscStyle.equalizer => _EqualizerDisc(
+          side: side,
+          accent: accent,
+          isDark: isDark,
+          spin: spin,
           playing: playing,
           artBuilder: artBuilder,
         ),
@@ -396,6 +428,130 @@ class PlayerDisc extends StatelessWidget {
           ),
         ],
       )),
+    );
+  }
+
+  // ── Duet: two records turning together, one for each of you ──────────────
+  // The back disc wears the accent, the front one carries the art; they spin
+  // in opposite directions like two people dancing to the same song.
+  Widget _duet() {
+    final rd = side * 0.64;
+    Widget record({required bool front}) {
+      final labelD = rd * 0.44;
+      final body = front
+          ? const [Color(0xFF2A2A34), Color(0xFF141418), Color(0xFF09090B)]
+          : [
+              Color.lerp(accent, Colors.white, 0.30)!,
+              accent,
+              Color.lerp(accent, Colors.black, 0.45)!,
+            ];
+      return Container(
+        width: rd,
+        height: rd,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            center: const Alignment(-0.3, -0.4),
+            radius: 1.0,
+            colors: body,
+            stops: const [0.0, 0.55, 1.0],
+          ),
+          border: Border.all(
+              color: Colors.white.withValues(alpha: front ? 0.08 : 0.22),
+              width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: (front ? Colors.black : accent)
+                  .withValues(alpha: front ? (isDark ? 0.55 : 0.32) : 0.40),
+              blurRadius: front ? 18 : 34,
+              offset: front ? const Offset(-4, 8) : Offset.zero,
+            ),
+          ],
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(
+              width: rd,
+              height: rd,
+              child: CustomPaint(
+                painter: _GroovePainter(
+                  color: Colors.white.withValues(alpha: front ? 0.06 : 0.14),
+                  innerFrac: labelD / rd * 1.12,
+                ),
+              ),
+            ),
+            Container(
+              width: rd,
+              height: rd,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: SweepGradient(
+                  colors: [
+                    Colors.transparent,
+                    Colors.white.withValues(alpha: 0.0),
+                    Colors.white.withValues(alpha: front ? 0.16 : 0.30),
+                    Colors.white.withValues(alpha: 0.0),
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.10, 0.14, 0.18, 1.0],
+                ),
+              ),
+            ),
+            Container(
+              width: labelD,
+              height: labelD,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(colors: [
+                  Color.alphaBlend(accent.withValues(alpha: front ? 0.55 : 0.20),
+                      const Color(0xFF1C1C26)),
+                  Color.alphaBlend(accent.withValues(alpha: front ? 0.40 : 0.12),
+                      const Color(0xFF0E0E14)),
+                ]),
+                border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.14), width: 1),
+              ),
+              child: ClipOval(
+                child: Center(
+                  child: front
+                      ? artBuilder(labelD * 0.82, Colors.transparent)
+                      : Icon(Icons.favorite_rounded,
+                          size: labelD * 0.42,
+                          color: Color.lerp(accent, Colors.white, 0.55)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget turning(Widget r, {required bool reverse}) => AnimatedBuilder(
+          animation: spin,
+          builder: (_, c) => Transform.rotate(
+              angle: (reverse ? -1 : 1) * spin.value * 2 * math.pi, child: c),
+          child: r,
+        );
+
+    return SizedBox(
+      width: side,
+      height: side,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            right: side * 0.02,
+            top: side * 0.04,
+            child: turning(record(front: false), reverse: true),
+          ),
+          Positioned(
+            left: side * 0.02,
+            bottom: side * 0.04,
+            child: turning(record(front: true), reverse: false),
+          ),
+        ],
+      ),
     );
   }
 
@@ -848,7 +1004,13 @@ class _ClassicVinylState extends State<_ClassicVinyl>
       ),
     );
 
-    return Stack(
+    // Sized to the full [side] (not just the record) so the tonearm is drawn
+    // at the same scale as the picker thumbnail and its rest pose clears the
+    // record completely when paused.
+    return SizedBox(
+      width: side,
+      height: side,
+      child: Stack(
       alignment: Alignment.center,
       clipBehavior: Clip.none,
       children: [
@@ -876,6 +1038,7 @@ class _ClassicVinylState extends State<_ClassicVinyl>
           ),
         ),
       ],
+      ),
     );
   }
 }
@@ -1132,6 +1295,410 @@ class _PulseRingsPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _PulseRingsPainter o) =>
       o.progress != progress ||
+      o.accent != accent ||
+      o.innerFrac != innerFrac;
+}
+
+/// Heartbeat: a glossy heart that beats a gentle lub-dub while the song plays,
+/// sending soft heart-shaped echoes outward; it rests still when paused.
+class _HeartbeatDisc extends StatefulWidget {
+  const _HeartbeatDisc({
+    required this.side,
+    required this.accent,
+    required this.isDark,
+    required this.playing,
+    required this.artBuilder,
+  });
+
+  final double side;
+  final Color accent;
+  final bool isDark;
+  final bool playing;
+  final Widget Function(double diameter, [Color? noteColor]) artBuilder;
+
+  @override
+  State<_HeartbeatDisc> createState() => _HeartbeatDiscState();
+}
+
+class _HeartbeatDiscState extends State<_HeartbeatDisc>
+    with SingleTickerProviderStateMixin {
+  // ~70 bpm — a resting heart, calm rather than frantic.
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 860));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.playing) _c.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HeartbeatDisc old) {
+    super.didUpdateWidget(old);
+    if (widget.playing && !_c.isAnimating) {
+      _c.repeat();
+    } else if (!widget.playing && _c.isAnimating) {
+      _c.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  // Two quick bumps per cycle: lub (strong) then dub (softer).
+  static double _beat(double t) {
+    double g(double m, double w) => math.exp(-math.pow((t - m) / w, 2));
+    return g(0.10, 0.055) + 0.6 * g(0.30, 0.055);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final side = widget.side;
+    final accent = widget.accent;
+    final hs = side * 0.80;
+    final artD = hs * 0.40;
+    return SizedBox(
+      width: side,
+      height: side,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (_, child) {
+          final t = _c.value;
+          final b = widget.playing ? _beat(t) : 0.0;
+          return Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: [
+              if (widget.playing)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _HeartEchoPainter(
+                          progress: t, accent: accent, baseFrac: 0.80),
+                    ),
+                  ),
+                ),
+              Transform.scale(scale: 1.0 + 0.07 * b, child: child),
+            ],
+          );
+        },
+        child: SizedBox(
+          width: hs,
+          height: hs,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _HeartPainter(accent: accent, isDark: widget.isDark),
+                ),
+              ),
+              Positioned(
+                left: (hs - artD) / 2,
+                top: hs * 0.43 - artD / 2,
+                child: Container(
+                  width: artD,
+                  height: artD,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color.lerp(accent, Colors.black, 0.35),
+                    border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.30), width: 1.2),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3)),
+                    ],
+                  ),
+                  child: ClipOval(
+                      child: Center(child: widget.artBuilder(artD * 0.92))),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Heart outline in a unit box, scaled to [s].
+Path _heartPath(Size s, {double inset = 0}) {
+  final w = s.width - inset * 2, h = s.height - inset * 2;
+  Offset p(double x, double y) => Offset(inset + x * w, inset + y * h);
+  final a = p(0.5, 0.94);
+  final path = Path()..moveTo(a.dx, a.dy);
+  void cub(double x1, double y1, double x2, double y2, double x3, double y3) {
+    final c1 = p(x1, y1), c2 = p(x2, y2), e = p(x3, y3);
+    path.cubicTo(c1.dx, c1.dy, c2.dx, c2.dy, e.dx, e.dy);
+  }
+
+  cub(0.14, 0.68, 0.0, 0.46, 0.0, 0.30);
+  cub(0.0, 0.13, 0.13, 0.04, 0.28, 0.04);
+  cub(0.39, 0.04, 0.47, 0.11, 0.5, 0.20);
+  cub(0.53, 0.11, 0.61, 0.04, 0.72, 0.04);
+  cub(0.87, 0.04, 1.0, 0.13, 1.0, 0.30);
+  cub(1.0, 0.46, 0.86, 0.68, 0.5, 0.94);
+  return path..close();
+}
+
+class _HeartPainter extends CustomPainter {
+  _HeartPainter({required this.accent, required this.isDark});
+  final Color accent;
+  final bool isDark;
+
+  @override
+  void paint(Canvas c, Size s) {
+    final path = _heartPath(s);
+    c.drawShadow(path, accent.withValues(alpha: 0.9), s.width * 0.06, false);
+    final rect = Offset.zero & s;
+    c.drawPath(
+      path,
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(-0.35, -0.45),
+          radius: 1.05,
+          colors: [
+            Color.lerp(accent, Colors.white, 0.50)!,
+            accent,
+            Color.lerp(accent, Colors.black, 0.45)!,
+          ],
+          stops: const [0.0, 0.5, 1.0],
+        ).createShader(rect),
+    );
+    // Glossy highlight on the upper-left lobe.
+    c.save();
+    c.clipPath(path);
+    c.drawOval(
+      Rect.fromLTWH(s.width * 0.10, s.height * 0.08, s.width * 0.30,
+          s.height * 0.18),
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.white.withValues(alpha: 0.45),
+            Colors.white.withValues(alpha: 0.0),
+          ],
+        ).createShader(Rect.fromLTWH(
+            s.width * 0.10, s.height * 0.08, s.width * 0.30, s.height * 0.18)),
+    );
+    c.restore();
+    c.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4
+        ..color = Colors.white.withValues(alpha: isDark ? 0.16 : 0.38),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _HeartPainter o) =>
+      o.accent != accent || o.isDark != isDark;
+}
+
+class _HeartEchoPainter extends CustomPainter {
+  _HeartEchoPainter(
+      {required this.progress, required this.accent, required this.baseFrac});
+  final double progress;
+  final Color accent;
+  final double baseFrac;
+
+  @override
+  void paint(Canvas c, Size s) {
+    // One echo per beat, starting on the "lub".
+    final t = ((progress - 0.10) % 1.0);
+    final op = (1.0 - t) * 0.45;
+    if (op <= 0.01) return;
+    final f = baseFrac + (1.0 - baseFrac) * 0.95 * t;
+    final hs = s.width * f;
+    c.save();
+    c.translate((s.width - hs) / 2, (s.height - hs) / 2);
+    c.drawPath(
+      _heartPath(Size(hs, hs)),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = s.width * 0.012 * (1.0 - t * 0.5)
+        ..color = accent.withValues(alpha: op),
+    );
+    c.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _HeartEchoPainter o) =>
+      o.progress != progress || o.accent != accent || o.baseFrac != baseFrac;
+}
+
+/// Equalizer: the art sits in a coin ringed by radial level bars that dance
+/// while playing (and slowly turn with the disc), settling to calm stubs when
+/// paused.
+class _EqualizerDisc extends StatefulWidget {
+  const _EqualizerDisc({
+    required this.side,
+    required this.accent,
+    required this.isDark,
+    required this.spin,
+    required this.playing,
+    required this.artBuilder,
+  });
+
+  final double side;
+  final Color accent;
+  final bool isDark;
+  final Animation<double> spin;
+  final bool playing;
+  final Widget Function(double diameter, [Color? noteColor]) artBuilder;
+
+  @override
+  State<_EqualizerDisc> createState() => _EqualizerDiscState();
+}
+
+class _EqualizerDiscState extends State<_EqualizerDisc>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(seconds: 4));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.playing) _c.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant _EqualizerDisc old) {
+    super.didUpdateWidget(old);
+    if (widget.playing && !_c.isAnimating) {
+      _c.repeat();
+    } else if (!widget.playing && _c.isAnimating) {
+      _c.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final side = widget.side;
+    final accent = widget.accent;
+    final artD = side * 0.54;
+    return SizedBox(
+      width: side,
+      height: side,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(end: widget.playing ? 1.0 : 0.0),
+                duration: const Duration(milliseconds: 420),
+                curve: Curves.easeOutCubic,
+                builder: (_, energy, _) => AnimatedBuilder(
+                  animation: Listenable.merge([_c, widget.spin]),
+                  builder: (_, _) => CustomPaint(
+                    painter: _EqRingPainter(
+                      time: _c.value,
+                      turn: widget.spin.value,
+                      energy: energy,
+                      accent: accent,
+                      innerFrac: 0.62,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Container(
+            width: artD,
+            height: artD,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                center: const Alignment(-0.3, -0.4),
+                radius: 0.95,
+                colors: [
+                  Color.lerp(accent, Colors.white, 0.40)!,
+                  accent,
+                  Color.lerp(accent, Colors.black, 0.40)!,
+                ],
+                stops: const [0.0, 0.55, 1.0],
+              ),
+              border: Border.all(
+                  color:
+                      Colors.white.withValues(alpha: widget.isDark ? 0.14 : 0.4),
+                  width: 1.4),
+              boxShadow: [
+                BoxShadow(
+                    color: accent.withValues(alpha: widget.playing ? 0.45 : 0.25),
+                    blurRadius: 28,
+                    spreadRadius: 1),
+              ],
+            ),
+            child: ClipOval(child: Center(child: widget.artBuilder(artD * 0.9))),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EqRingPainter extends CustomPainter {
+  _EqRingPainter({
+    required this.time,
+    required this.turn,
+    required this.energy,
+    required this.accent,
+    required this.innerFrac,
+  });
+  final double time; // 0..1 looping
+  final double turn; // disc spin 0..1
+  final double energy; // 0 paused .. 1 playing
+  final Color accent;
+  final double innerFrac;
+  static const int _n = 44;
+
+  @override
+  void paint(Canvas c, Size s) {
+    final ctr = Offset(s.width / 2, s.height / 2);
+    final rMax = s.width / 2;
+    final r0 = rMax * innerFrac;
+    final room = rMax * 0.97 - r0;
+    final hot = Color.lerp(accent, Colors.white, 0.45)!;
+    final p = Paint()
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = rMax * 2 * math.pi * innerFrac / _n * 0.48;
+    final ph = time * 2 * math.pi;
+    for (int i = 0; i < _n; i++) {
+      // Loop-safe "random" levels: integer-frequency sines of the cycle.
+      final lvl = (0.5 +
+                  0.30 * math.sin(ph * 3 + i * 1.7) +
+                  0.20 * math.sin(ph * 5 + i * 0.9 + 1.3) +
+                  0.15 * math.sin(ph * 2 - i * 2.3))
+              .clamp(0.0, 1.0)
+              .toDouble();
+      final h = room * (0.10 + 0.90 * lvl * energy);
+      final a = (i / _n + turn) * 2 * math.pi - math.pi / 2;
+      final dir = Offset(math.cos(a), math.sin(a));
+      final start = ctr + dir * (r0 + p.strokeWidth * 0.6);
+      p.color = Color.lerp(accent, hot, lvl * energy)!
+          .withValues(alpha: 0.45 + 0.5 * (energy * lvl + (1 - energy) * 0.2));
+      c.drawLine(start, start + dir * h, p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _EqRingPainter o) =>
+      o.time != time ||
+      o.turn != turn ||
+      o.energy != energy ||
       o.accent != accent ||
       o.innerFrac != innerFrac;
 }

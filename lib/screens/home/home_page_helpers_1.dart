@@ -788,6 +788,9 @@ extension _HomePageHelpers1 on HomePageState {
       return;
     }
     final pos = playbackBus.currentPositionMs?.call() ?? 0;
+    // What comes after this song in MY player, so the session keeps my
+    // rhythm instead of stopping when the first song ends.
+    final upNext = _myUpNext(path, 5);
     svc.reply(from, accept: true);
     // The session carries the music on from here — no double playback.
     playbackBus.onPause?.call();
@@ -803,6 +806,52 @@ extension _HomePageHelpers1 on HomePageState {
         startPositionMs: pos,
       ),
     ));
+    _carryUpNext(upNext);
+  }
+
+  /// My next [n] songs after the one playing (title + byte loader) — device
+  /// playlist on Android / Windows, the web queue on web.
+  List<({String title, Future<List<int>> Function() load})> _myUpNext(
+      String? path, int n) {
+    if (kIsWeb || path == null || path.isEmpty) {
+      final q = playbackBus.webQueue?.call() ?? const [];
+      final at = playbackBus.webCurrentIndex?.call() ?? -1;
+      if (at < 0) return const [];
+      return [
+        for (final t in q.skip(at + 1).take(n))
+          (title: t.title, load: () async => t.load()),
+      ];
+    }
+    final list = playlistNotifier.value;
+    final at = list.indexOf(path);
+    if (at < 0) return const [];
+    return [
+      for (final p in list.skip(at + 1).take(n))
+        (
+          title: metadataStore.title(
+              p, p.replaceAll('\\', '/').split('/').last.replaceAll(RegExp(r'\.[^.]+$'), '')),
+          load: () => readFileBytes(p),
+        ),
+    ];
+  }
+
+  /// Queue [next] into the session once it's up (it's created by the screen
+  /// I just opened). Best-effort: a song that can't be read is skipped.
+  Future<void> _carryUpNext(
+      List<({String title, Future<List<int>> Function() load})> next) async {
+    if (next.isEmpty) return;
+    for (var i = 0; i < 60 && activeLiveSession == null; i++) {
+      await Future.delayed(const Duration(milliseconds: 250));
+    }
+    final c = activeLiveSession?.controller;
+    if (c == null) return;
+    for (final t in next) {
+      try {
+        final b = await t.load();
+        if (b.isEmpty || activeLiveSession?.controller != c) continue;
+        await c.addTrack(LiveTrack(bytes: Uint8List.fromList(b), title: t.title));
+      } catch (_) {}
+    }
   }
 
   /// Host side: a friend declined our Listen Together invite. Let the host

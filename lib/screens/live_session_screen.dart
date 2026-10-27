@@ -24,6 +24,7 @@ import 'relationship_space_page.dart'
     show pickDiaryReaction, resolveAvatarUrl;
 import '../utils/marquee_text.dart';
 import '../widgets/animated_reaction.dart';
+import '../widgets/tap_chip.dart';
 import '../widgets/aluta_composer_field.dart';
 import '../services/track_title.dart' show displayTitleForPath;
 import '../utils/readable.dart';
@@ -222,6 +223,8 @@ void _finalizeMinimizedEnd() {
 class _LiveSessionScreenState extends State<LiveSessionScreen>
     with SingleTickerProviderStateMixin {
   late LiveSessionController _c;
+  // Up-next list scroll (host + guest views) — for "find the playing song".
+  final ScrollController _queueCtrl = ScrollController();
   // Song-picker hints: a track's content fingerprint cached by file path (so we
   // only ever read+hash a given file once per session), and whether the partner
   // can already play it instantly. Populated by a bounded background pass when
@@ -1100,6 +1103,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
 
   @override
   void dispose() {
+    _queueCtrl.dispose();
     _awayTimer?.cancel();
     _discSpin.dispose();
     _stagePlaying.dispose();
@@ -2342,6 +2346,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       );
     }
     return ListView.builder(
+      controller: _queueCtrl,
       shrinkWrap: true,
       padding: const EdgeInsets.only(bottom: 4),
       itemCount: titles.length,
@@ -2452,33 +2457,48 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
           const Spacer(),
           // Host of a room: toggle whether guests may add songs (Stage C).
           if (widget.isRoom && _isHost) _guestToggle(scheme),
+          // Same tactile chips as the player's playlist / Up next.
+          if (count > 1)
+            AlutaTapChip(
+              icon: Icons.my_location_rounded,
+              tooltip: 'Find the playing song',
+              size: 32,
+              onTap: _locateQueueNow,
+            ),
           // Only the host can add to their own queue directly.
           if (_isHost)
-            TextButton.icon(
-              onPressed: _addSongToQueue,
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Add song'),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                minimumSize: const Size(0, 32),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
+            AlutaTapChip(
+              icon: Icons.add_rounded,
+              tooltip: 'Add a song',
+              size: 32,
+              onTap: _addSongToQueue,
             ),
           // Guest in a room where the host opened contributions → add a song.
           if (!_isHost && _c.remoteContribAllowed)
-            TextButton.icon(
-              onPressed: _contributeSong,
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Add a song'),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                minimumSize: const Size(0, 32),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
+            AlutaTapChip(
+              icon: Icons.add_rounded,
+              tooltip: 'Add a song',
+              size: 32,
+              onTap: _contributeSong,
             ),
+          const SizedBox(width: 4),
         ],
       ),
     );
+  }
+
+  /// Scroll the Up next list so the playing song sits mid-view.
+  void _locateQueueNow() {
+    final count = _isHost ? _c.queue.length : _c.remoteQueueTitles.length;
+    final idx = _isHost ? _c.currentIndex : _c.remoteIndex;
+    if (count == 0 || idx < 0 || !_queueCtrl.hasClients) return;
+    final pos = _queueCtrl.position;
+    final per = (pos.maxScrollExtent + pos.viewportDimension) / count;
+    final target = (per * idx - pos.viewportDimension / 2 + per / 2)
+        .clamp(0.0, pos.maxScrollExtent);
+    _queueCtrl.animateTo(target,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic);
   }
 
   /// HOST (room): a compact switch for "let guests add songs to the queue".
@@ -2512,6 +2532,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     return ListView.builder(
       // Fills the space the parent Flexible gives it; scrolls independently as
       // the queue grows. shrinkWrap keeps it small when the queue is short.
+      controller: _queueCtrl,
       shrinkWrap: true,
       padding: const EdgeInsets.only(bottom: 4),
       itemCount: q.length,

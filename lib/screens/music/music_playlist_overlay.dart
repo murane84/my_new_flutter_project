@@ -1388,12 +1388,19 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                _iconBtn(scheme, Icons.add_rounded, 'Add music', widget.onAdd),
-                _iconBtn(
-                  scheme,
-                  _favOnly ? Icons.favorite : Icons.favorite_border,
-                  'Favourites',
-                  () {
+                const SizedBox(width: 6),
+                AlutaTapChip(
+                    icon: Icons.add_rounded,
+                    tooltip: 'Add music',
+                    onTap: widget.onAdd),
+                AlutaTapChip(
+                  icon: _favOnly
+                      ? Icons.favorite_rounded
+                      : Icons.favorite_border_rounded,
+                  tooltip: _favOnly ? 'Showing favourites' : 'Favourites',
+                  active: _favOnly,
+                  activeColor: Colors.pinkAccent,
+                  onTap: () {
                     setState(() {
                       _favOnly = !_favOnly;
                       if (_favOnly) {
@@ -1403,43 +1410,50 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                     });
                     _persistFilters();
                   },
-                  color: _favOnly ? Colors.pinkAccent : null,
                 ),
-                _iconBtn(scheme, Icons.checklist_rounded, 'Select', () {
-                  if (widget.playlist.isNotEmpty) {
-                    setState(() {
-                      _selecting = true;
-                      _selected.clear();
-                    });
-                  }
-                }),
+                AlutaTapChip(
+                  icon: Icons.checklist_rounded,
+                  tooltip: 'Select songs',
+                  onTap: widget.playlist.isEmpty
+                      ? null
+                      : () => setState(() {
+                            _selecting = true;
+                            _selected.clear();
+                          }),
+                ),
+                // Shuffle everything currently shown (respects the filter).
+                AlutaTapChip(
+                  icon: Icons.shuffle_rounded,
+                  tooltip: 'Shuffle these',
+                  onTap: widget.playlist.isEmpty
+                      ? null
+                      : () {
+                          final paths =
+                              _displayed().map((e) => e.value).toList();
+                          if (paths.isNotEmpty) {
+                            widget.onPlayScope(paths, 0, true);
+                          }
+                        },
+                ),
+                // Scroll to the song that's playing.
+                if (widget.hasTrack)
+                  AlutaTapChip(
+                    icon: Icons.my_location_rounded,
+                    tooltip: 'Find the playing song',
+                    onTap: _locateNow,
+                  ),
               ],
             ),
           ),
           if (!widget.fullPage) ...[
             const SizedBox(width: 6),
-            GestureDetector(
+            // Drawer: collapse back to the right edge; sheet: close.
+            AlutaTapChip(
+              icon: widget.drawer
+                  ? Icons.chevron_right_rounded
+                  : Icons.keyboard_arrow_down_rounded,
+              tooltip: widget.drawer ? 'Collapse' : 'Close',
               onTap: widget.onClose,
-              child: Tooltip(
-                // In drawer mode this collapses the panel back to the right edge
-                // (a right chevron reads as "push it away"); the sheet just
-                // closes.
-                message: widget.drawer ? 'Collapse' : 'Close',
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: scheme.primary.withAlpha(28),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: scheme.primary.withAlpha(70)),
-                  ),
-                  child: Icon(
-                      widget.drawer
-                          ? Icons.chevron_right_rounded
-                          : Icons.keyboard_arrow_down_rounded,
-                      size: 22,
-                      color: scheme.primary),
-                ),
-              ),
             ),
           ],
         ],
@@ -1448,23 +1462,36 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     );
   }
 
-  // A circular back arrow shown in full-page mode; returns to Now Playing.
+  // Back to Now Playing (full-page mode) — the same tactile chip as the rest.
   Widget _backBtn(ColorScheme scheme) {
-    return GestureDetector(
+    return AlutaTapChip(
+      icon: Icons.arrow_back_rounded,
+      tooltip: 'Back to Now Playing',
       onTap: widget.onClose,
-      child: Tooltip(
-        message: 'Back to Now Playing',
-        child: Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: scheme.primary.withAlpha(28),
-            shape: BoxShape.circle,
-            border: Border.all(color: scheme.primary.withAlpha(70)),
-          ),
-          child: Icon(Icons.arrow_back_rounded, size: 20, color: scheme.primary),
-        ),
-      ),
     );
+  }
+
+  /// Scroll the list so the playing song sits mid-view (and flash it). If the
+  /// current filter hides it, say so instead of jumping nowhere.
+  void _locateNow() {
+    final d = _displayed();
+    final i = d.indexWhere((e) => e.key == widget.currentIndex);
+    if (i < 0) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
+        content: Text('The playing song is hidden by the current filter'),
+        duration: Duration(seconds: 2),
+      ));
+      return;
+    }
+    if (!_listCtrl.hasClients) return;
+    final pos = _listCtrl.position;
+    final total = pos.maxScrollExtent + pos.viewportDimension;
+    final per = d.isEmpty ? 0.0 : total / d.length;
+    final target = (per * i - pos.viewportDimension / 2 + per / 2)
+        .clamp(0.0, pos.maxScrollExtent);
+    _listCtrl.animateTo(target,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic);
   }
 
   Widget _selectionBar(ColorScheme scheme) {
@@ -1489,39 +1516,60 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           Text('${_selected.length} selected',
               style: const TextStyle(fontWeight: FontWeight.bold)),
           const Spacer(),
+          // Play just the picked songs, in list order.
+          AlutaTapChip(
+            icon: Icons.play_arrow_rounded,
+            tooltip: 'Play selected',
+            onTap: paths.isEmpty
+                ? null
+                : () {
+                    final ordered = _displayed()
+                        .map((e) => e.value)
+                        .where(_selected.contains)
+                        .toList();
+                    widget.onPlayScope(
+                        ordered.isEmpty ? paths : ordered, 0, false);
+                    _exitSelect();
+                  },
+          ),
           if (widget.onShareMany != null)
-            _iconBtn(scheme, Icons.send_rounded, 'Share to chats', () {
-              if (paths.isEmpty) return;
-              widget.onShareMany!(paths);
-              _exitSelect();
-            }, color: scheme.primary),
-          _iconBtn(scheme, Icons.playlist_add_rounded, 'Add to group', () {
-            if (paths.isNotEmpty) _bulkAddToGroup(context);
-          }),
-          _iconBtn(scheme, Icons.favorite, 'Favourite',
-              () => widget.onFavoriteMany(paths, true),
-              color: Colors.pinkAccent),
-          _iconBtn(scheme, Icons.delete_outline_rounded, 'Remove', () {
-            widget.onRemoveMany(paths);
-            _exitSelect();
-          }, color: scheme.error),
+            AlutaTapChip(
+              icon: Icons.send_rounded,
+              tooltip: 'Share to chats',
+              onTap: paths.isEmpty
+                  ? null
+                  : () {
+                      widget.onShareMany!(paths);
+                      _exitSelect();
+                    },
+            ),
+          AlutaTapChip(
+            icon: Icons.playlist_add_rounded,
+            tooltip: 'Add to group',
+            onTap: paths.isEmpty ? null : () => _bulkAddToGroup(context),
+          ),
+          AlutaTapChip(
+            icon: Icons.favorite_rounded,
+            tooltip: 'Favourite',
+            active: true,
+            activeColor: Colors.pinkAccent,
+            onTap: paths.isEmpty
+                ? null
+                : () => widget.onFavoriteMany(paths, true),
+          ),
+          AlutaTapChip(
+            icon: Icons.delete_outline_rounded,
+            tooltip: 'Remove',
+            active: true,
+            activeColor: scheme.error,
+            onTap: paths.isEmpty
+                ? null
+                : () {
+                    widget.onRemoveMany(paths);
+                    _exitSelect();
+                  },
+          ),
         ],
-      ),
-    );
-  }
-
-  Widget _iconBtn(ColorScheme scheme, IconData icon, String tip, VoidCallback? onTap,
-      {Color? color, bool active = false}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Tooltip(
-        message: tip,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          child: Icon(icon,
-              size: 20,
-              color: color ?? (active ? scheme.primary : scheme.onSurfaceVariant)),
-        ),
       ),
     );
   }

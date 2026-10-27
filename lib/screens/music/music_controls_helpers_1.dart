@@ -974,17 +974,31 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                           fontWeight: FontWeight.w600,
                           color: scheme.onSurfaceVariant)),
                 const Spacer(),
-                IconButton(
-                  // Side panel collapses toward its own edge (chevron) rather
-                  // than a close "X", which read as a duplicate of the desktop
-                  // window's close button sitting right above it.
-                  icon: Icon(
-                      sidePanel
-                          ? Icons.chevron_right_rounded
-                          : Icons.keyboard_arrow_down_rounded,
-                      color: scheme.onSurfaceVariant),
+                // Same tactile chips as the playlist header.
+                AlutaTapChip(
+                  icon: Icons.my_location_rounded,
+                  tooltip: 'Find the playing song',
+                  size: 34,
+                  onTap: total == 0 ? null : () => _scrollQueueToCurrent(),
+                ),
+                AlutaTapChip(
+                  icon: Icons.shuffle_rounded,
+                  tooltip: 'Shuffle what\'s up next',
+                  size: 34,
+                  onTap: total - (_currentIndex + 1) < 2
+                      ? null
+                      : () => _shuffleUpcoming(setFull),
+                ),
+                // Side panel collapses toward its own edge (chevron) rather
+                // than a close "X", which read as a duplicate of the desktop
+                // window's close button sitting right above it.
+                AlutaTapChip(
+                  icon: sidePanel
+                      ? Icons.chevron_right_rounded
+                      : Icons.keyboard_arrow_down_rounded,
                   tooltip: 'Hide queue',
-                  onPressed: onClose,
+                  size: 34,
+                  onTap: onClose,
                 ),
               ],
             ),

@@ -39,6 +39,7 @@ import 'api_service.dart';
 import 'chat/song_cache.dart';
 import 'music/song_identifier.dart' show showSongIdentifier;
 import '../widgets/genie_menu.dart';
+import '../widgets/tap_chip.dart';
 import '../widgets/song_feel_strip.dart';
 import '../utils/readable.dart';
 import '../services/contact_names.dart';
@@ -944,6 +945,21 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     });
     _publishPlaylist();
     setFull(() {});
+  }
+
+  /// Shuffle only the songs AFTER the one playing — what's playing and what
+  /// already played stay put.
+  void _shuffleUpcoming(StateSetter setFull) {
+    final start = _currentIndex + 1;
+    if (start < 1 || _playlist.length - start < 2) return;
+    setState(() {
+      final rest = _playlist.sublist(start)..shuffle();
+      _playlist.replaceRange(start, _playlist.length, rest);
+      _activeQueue = null;
+    });
+    _publishPlaylist();
+    setFull(() {});
+    _snack('Up next shuffled');
   }
 
   void _playNextInQueue(int i, StateSetter setFull) {

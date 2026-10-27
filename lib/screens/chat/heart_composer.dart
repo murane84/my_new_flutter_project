@@ -1059,6 +1059,8 @@ extension _ChatHeartComposer on _ChatPageState {
     final choice = await showModalBottomSheet<Object>(
       context: context,
       backgroundColor: Colors.transparent,
+      // No theme outline — this sheet draws its own card.
+      shape: const RoundedRectangleBorder(),
       builder: (ctx) => SafeArea(
         child: Container(
           margin: const EdgeInsets.all(10),

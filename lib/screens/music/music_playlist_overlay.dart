@@ -614,6 +614,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      // No theme outline — this sheet draws its own card.
+      shape: const RoundedRectangleBorder(),
       builder: (ctx) => Container(
         margin: const EdgeInsets.all(10),
         decoration: BoxDecoration(
@@ -856,6 +858,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      // No theme outline — this sheet draws its own card.
+      shape: const RoundedRectangleBorder(),
       builder: (ctx) => Container(
         margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
         padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
@@ -924,6 +928,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      // No theme outline — this sheet draws its own card.
+      shape: const RoundedRectangleBorder(),
       builder: (ctx) => Container(
         margin: const EdgeInsets.all(10),
         decoration: BoxDecoration(
@@ -1705,6 +1711,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      // No theme outline — this sheet draws its own card.
+      shape: const RoundedRectangleBorder(),
       builder: (ctx) => Container(
         margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
         padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),

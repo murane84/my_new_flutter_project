@@ -1715,6 +1715,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      // No theme outline — this sheet draws its own card.
+      shape: const RoundedRectangleBorder(),
       builder: (ctx) => Container(
         margin: const EdgeInsets.all(10),
         decoration: BoxDecoration(

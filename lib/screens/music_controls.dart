@@ -720,6 +720,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      // No theme outline — this sheet draws its own card.
+      shape: const RoundedRectangleBorder(),
       builder: (_) => _ShareSheet(
         paths: paths,
         library: _playlist,
@@ -1957,6 +1959,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      // No theme outline — this sheet draws its own card.
+      shape: const RoundedRectangleBorder(),
       builder: (_) => _DedicateSheet(
         friend: friend,
         name: _nameOf(friend),

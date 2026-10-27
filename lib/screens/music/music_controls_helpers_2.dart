@@ -171,6 +171,8 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
       context: ctx,
       useRootNavigator: true,
       backgroundColor: Colors.transparent,
+      // No theme outline — this sheet draws its own card.
+      shape: const RoundedRectangleBorder(),
       elevation: 0,
       barrierColor: Colors.black.withValues(alpha: 0.25),
       builder: (bctx) => SafeArea(

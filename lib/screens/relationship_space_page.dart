@@ -825,6 +825,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      // No theme outline — this sheet draws its own card.
+      shape: const RoundedRectangleBorder(),
       builder: (ctx) => Container(
         margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),

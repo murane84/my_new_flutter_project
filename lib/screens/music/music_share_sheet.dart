@@ -7,6 +7,11 @@ part of '../music_controls.dart';
 // the server (purged once that recipient caches them), so recipients never
 // share one upload that the first one's download would purge.
 
+/// The song the player is actually playing right now.
+bool _isPlayingNow(String path) =>
+    (playbackBus.isPlaying?.call() ?? false) &&
+    playbackBus.currentPath?.call() == path;
+
 class _ShareSheet extends StatefulWidget {
   /// Songs to start with (usually the one playing / long-pressed).
   final List<String> paths;
@@ -282,8 +287,12 @@ class _ShareSheetState extends State<_ShareSheet> {
                         Padding(
                           padding: const EdgeInsets.only(right: 6, top: 4),
                           child: InputChip(
-                            avatar: Icon(Icons.music_note_rounded,
-                                size: 16, color: scheme.primary),
+                            // The one playing now shows the dancing bars.
+                            avatar: _isPlayingNow(p)
+                                ? PlayingBars(
+                                    color: scheme.primary, scale: 0.6)
+                                : Icon(Icons.music_note_rounded,
+                                    size: 16, color: scheme.primary),
                             label: ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 170),
                               child: Text(_label(p),
@@ -488,8 +497,15 @@ class _SongPickSheetState extends State<_SongPickSheet> {
                   final on = _picked.contains(p);
                   return ListTile(
                     dense: true,
-                    leading: Icon(Icons.music_note_rounded,
-                        color: on ? scheme.primary : scheme.onSurfaceVariant),
+                    leading: SizedBox(
+                      width: 24,
+                      child: _isPlayingNow(p)
+                          ? PlayingBars(color: scheme.primary, scale: 0.65)
+                          : Icon(Icons.music_note_rounded,
+                              color: on
+                                  ? scheme.primary
+                                  : scheme.onSurfaceVariant),
+                    ),
                     title: Text(widget.labelOf(p),
                         maxLines: 1, overflow: TextOverflow.ellipsis),
                     trailing: Icon(

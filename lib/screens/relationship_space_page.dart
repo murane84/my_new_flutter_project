@@ -44,6 +44,7 @@ import '../utils/readable.dart';
 import 'chat/song_cache.dart';
 import '../widgets/listen_presence_gate.dart';
 import '../widgets/tune_in_ask.dart';
+import '../widgets/playing_bars.dart';
 import '../utils/marquee_text.dart';
 import '../services/contact_names.dart';
 import '../widgets/keepsake_photo.dart';
@@ -832,6 +833,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   Future<String?> _pickSong() async {
     final paths = List<String>.from(playlistNotifier.value);
+    final curPath = playbackBus.currentPath?.call();
     if (paths.isEmpty) {
       showToast(context, 'Open the music player and load some songs first.',
           type: ToastType.info);
@@ -909,6 +911,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                     itemCount: paths.length,
                     itemBuilder: (c, i) {
                       final t = _songTitle(paths[i]);
+                      final isNow = paths[i] == curPath &&
+                          (playbackBus.isPlaying?.call() ?? false);
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 3),
                         child: Material(
@@ -927,11 +931,17 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                                   height: 40,
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
-                                    color: _accent.withValues(alpha: 0.12),
+                                    color: isNow
+                                        ? _accent
+                                        : _accent.withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(11),
                                   ),
-                                  child: Icon(Icons.music_note_rounded,
-                                      color: _accent, size: 19),
+                                  // The song playing right now dances.
+                                  child: isNow
+                                      ? const PlayingBars(
+                                          color: Colors.white, scale: 0.75)
+                                      : Icon(Icons.music_note_rounded,
+                                          color: _accent, size: 19),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(

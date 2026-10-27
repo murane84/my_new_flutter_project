@@ -2747,8 +2747,14 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                 shrinkWrap: true,
                 itemCount: items.length,
                 itemBuilder: (_, i) => ListTile(
-                  leading:
-                      Icon(Icons.music_note_rounded, color: scheme.primary),
+                  leading: SizedBox(
+                    width: 24,
+                    child: i == (playbackBus.webCurrentIndex?.call() ?? -1) &&
+                            (playbackBus.isPlaying?.call() ?? false)
+                        ? PlayingBars(color: scheme.primary, scale: 0.65)
+                        : Icon(Icons.music_note_rounded,
+                            color: scheme.primary),
+                  ),
                   title: Text(items[i].title,
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                   onTap: () => Navigator.of(ctx).pop(items[i]),
@@ -2803,9 +2809,16 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                     itemBuilder: (_, i) {
                       final p = loaded[i];
                       final instant = _instantPaths.contains(p);
+                      final now = p == playbackBus.currentPath?.call() &&
+                          (playbackBus.isPlaying?.call() ?? false);
                       return ListTile(
-                        leading: Icon(Icons.music_note_rounded,
-                            color: scheme.primary),
+                        leading: SizedBox(
+                          width: 24,
+                          child: now
+                              ? PlayingBars(color: scheme.primary, scale: 0.65)
+                              : Icon(Icons.music_note_rounded,
+                                  color: scheme.primary),
+                        ),
                         title: Text(_titleFromPath(p),
                             maxLines: 1, overflow: TextOverflow.ellipsis),
                         trailing: instant

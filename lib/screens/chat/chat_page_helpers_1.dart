@@ -1078,15 +1078,12 @@ extension _ChatPageHelpers1 on _ChatPageState {
                             backgroundColor: isNow
                                 ? scheme.primary
                                 : scheme.primaryContainer,
-                            child: Icon(
-                              isNow
-                                  ? Icons.graphic_eq_rounded
-                                  : Icons.music_note_rounded,
-                              size: 17,
-                              color: isNow
-                                  ? Colors.white
-                                  : scheme.onPrimaryContainer,
-                            ),
+                            child: isNow
+                                ? const PlayingBars(
+                                    color: Colors.white, scale: 0.7)
+                                : Icon(Icons.music_note_rounded,
+                                    size: 17,
+                                    color: scheme.onPrimaryContainer),
                           ),
                           title: MarqueeText(
                             text: _titleFromPath(p),

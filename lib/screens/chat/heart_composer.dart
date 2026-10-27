@@ -341,9 +341,16 @@ extension _ChatHeartComposer on _ChatPageState {
                     itemBuilder: (_, i) {
                       final s = shown[i];
                       final artist = (s.artist as String?) ?? '';
+                      final now = (playbackBus.isPlaying?.call() ?? false) &&
+                          playbackBus.currentPath?.call() == (s.data as String?);
                       return ListTile(
                         dense: true,
-                        leading: Icon(Icons.music_note_rounded, color: tint),
+                        leading: SizedBox(
+                          width: 24,
+                          child: now
+                              ? PlayingBars(color: tint, scale: 0.65)
+                              : Icon(Icons.music_note_rounded, color: tint),
+                        ),
                         title: Text((s.title as String?) ?? 'Song',
                             maxLines: 1, overflow: TextOverflow.ellipsis),
                         subtitle: artist.isEmpty || artist == '<unknown>'

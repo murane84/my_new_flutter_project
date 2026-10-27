@@ -165,32 +165,27 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
   }
 
   /// Now Playing's speed picker — the same card as the music page (presets +
-  /// fine slider), floating above the bottom edge instead of a plain list.
+  /// fine slider). It genies out of the tapped button like the Sleep timer
+  /// (and every other popup), so the two pickers feel like one family.
   Future<void> _showSpeedSheet(BuildContext ctx) {
-    return showModalBottomSheet<void>(
-      context: ctx,
-      useRootNavigator: true,
-      backgroundColor: Colors.transparent,
-      // No theme outline — this sheet draws its own card.
-      shape: const RoundedRectangleBorder(),
-      elevation: 0,
-      barrierColor: Colors.black.withValues(alpha: 0.25),
-      builder: (bctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-          child: Center(
-            heightFactor: 1,
-            child: _SpeedPanel(
-              width: (MediaQuery.sizeOf(bctx).width - 24).clamp(260.0, 380.0),
-              currentSpeed: _speed,
-              onSelect: (sp) {
-                _setSpeed(sp);
-                Navigator.of(bctx).pop();
-              },
-              onChanged: _setSpeed,
-              onClose: () => Navigator.of(bctx).pop(),
-            ),
-          ),
+    return showGeniePopup<void>(
+      ctx,
+      barrierColor: Colors.black.withAlpha(120),
+      builder: (bctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        // The panel draws its own card — no theme border around it.
+        shape: const RoundedRectangleBorder(),
+        child: _SpeedPanel(
+          width: (MediaQuery.sizeOf(bctx).width - 48).clamp(260.0, 340.0),
+          currentSpeed: _speed,
+          onSelect: (sp) {
+            _setSpeed(sp);
+            Navigator.of(bctx).pop();
+          },
+          onChanged: _setSpeed,
+          onClose: () => Navigator.of(bctx).pop(),
         ),
       ),
     );

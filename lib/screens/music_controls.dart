@@ -1516,14 +1516,15 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       barrierColor: Colors.black.withAlpha(120),
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         // This dialog draws its own (inner) card border — drop the app-wide
         // dialogTheme border so it isn't doubled.
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(22)),
         ),
+        // Same width as the Speed card, so the two pickers match.
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 300),
+          constraints: const BoxConstraints(maxWidth: 340),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(

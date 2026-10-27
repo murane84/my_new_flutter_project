@@ -451,63 +451,12 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                     tooltip: 'Back 10s',
                   ),
                   const SizedBox(width: 14),
-                  Tactile(child: GestureDetector(
+                  _PlayKey(
+                    playing: isPlaying,
+                    buffering: buffering,
+                    accent: accent,
                     onTap: _transportPlayPause,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: 68,
-                      height: 68,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        // Glossy red gradient gives the transport a lively,
-                        // "spark" feel instead of a flat maroon disc.
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Color.lerp(accent, Colors.white, 0.22)!,
-                            accent,
-                            Color.lerp(accent, Colors.black, 0.14)!,
-                          ],
-                          stops: const [0.0, 0.55, 1.0],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(
-                                alpha: isDark ? 0.5 : 0.18),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                          BoxShadow(
-                            color: accent
-                                .withAlpha(isPlaying ? 150 : 70),
-                            blurRadius: isPlaying ? 24 : 12,
-                            spreadRadius: 2,
-                          ),
-                          BoxShadow(
-                            color: Colors.white
-                                .withValues(alpha: isDark ? 0.12 : 0.85),
-                            blurRadius: 3,
-                            offset: const Offset(-1.5, -2),
-                          ),
-                        ],
-                      ),
-                      child: buffering
-                          ? const Padding(
-                              padding: EdgeInsets.all(18),
-                              child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2.5),
-                            )
-                          : Icon(
-                              isPlaying
-                                  ? Icons.pause_rounded
-                                  : Icons.play_arrow_rounded,
-                              size: 40,
-                              color: Colors.white,
-                            ),
-                    ),
-                  )),
+                  ),
                   const SizedBox(width: 14),
                   _CtrlBtn(
                     icon: Icons.forward_10_rounded,
@@ -1791,10 +1740,7 @@ Column(
                   color: active ? color.withAlpha(38) : null,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: active
-                        ? color.withAlpha(150)
-                        : scheme.primary.withAlpha(
-                            scheme.brightness == Brightness.dark ? 80 : 60),
+                    color: active ? color.withAlpha(150) : _keyEdge(scheme),
                   ),
                   boxShadow: _glassLift(
                       scheme, active ? color : scheme.primary,
@@ -1803,11 +1749,12 @@ Column(
                 child: Icon(
                   icon,
                   size: compact ? 19 : 21,
+                  // Full-strength icons (no wash): crisp in HD.
                   color: active
                       ? color
                       : Color.alphaBlend(
-                          scheme.primary.withAlpha(80),
-                          onSurface.withAlpha(200),
+                          scheme.primary.withAlpha(40),
+                          onSurface.withAlpha(245),
                         ),
                 ),
               ),

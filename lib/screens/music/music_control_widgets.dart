@@ -11,45 +11,227 @@ part of '../music_controls.dart';
 /// catch-light on the top-left rim where the glass meets the key.
 List<BoxShadow> _glassLift(ColorScheme scheme, Color tint,
     {bool active = false}) {
+  // Crisp, not foggy: one tight contact shadow grounds the key; only an
+  // ACTIVE key gets a small, close accent glow. (The old wide tinted glow and
+  // blurred white highlight hazed the icons, most visibly in dark mode.)
   final dark = scheme.brightness == Brightness.dark;
   return [
     BoxShadow(
-      color: Colors.black.withValues(alpha: dark ? 0.48 : 0.17),
-      blurRadius: 6,
-      spreadRadius: -1,
-      offset: const Offset(0, 3.5),
-    ),
-    BoxShadow(
-      color: tint.withValues(
-          alpha: active ? 0.40 : (dark ? 0.24 : 0.20)),
-      blurRadius: active ? 14 : 10,
-      offset: const Offset(0, 5),
-    ),
-    BoxShadow(
-      color: Colors.white.withValues(alpha: dark ? 0.11 : 0.9),
+      color: Colors.black.withValues(alpha: dark ? 0.55 : 0.16),
       blurRadius: 3,
-      offset: const Offset(-1.2, -1.8),
+      offset: const Offset(0, 2),
     ),
+    if (active)
+      BoxShadow(
+        color: tint.withValues(alpha: dark ? 0.38 : 0.30),
+        blurRadius: 8,
+        spreadRadius: -1,
+        offset: const Offset(0, 2),
+      ),
   ];
 }
 
-/// Top-lit fill for a raised key: bright where the light lands, deeper at
-/// the base, faintly tinted so it belongs to the glass around it.
+/// Top-lit fill for a raised key: a clean surface gradient (light on top,
+/// a shade deeper at the base) with only a whisper of the accent.
 LinearGradient _keyFill(ColorScheme scheme, Color tint) {
   final dark = scheme.brightness == Brightness.dark;
   return LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [
-      Color.alphaBlend(tint.withValues(alpha: dark ? 0.16 : 0.06),
-          Color.lerp(scheme.surface, Colors.white, dark ? 0.10 : 0.75)!),
-      Color.alphaBlend(tint.withValues(alpha: dark ? 0.20 : 0.12),
-          scheme.surface),
-      Color.alphaBlend(tint.withValues(alpha: dark ? 0.26 : 0.20),
-          scheme.surfaceContainerHighest),
-    ],
-    stops: const [0.0, 0.5, 1.0],
+    colors: dark
+        ? [
+            Color.alphaBlend(tint.withValues(alpha: 0.07),
+                Color.lerp(scheme.surface, Colors.white, 0.12)!),
+            Color.alphaBlend(tint.withValues(alpha: 0.05),
+                Color.lerp(scheme.surface, Colors.black, 0.20)!),
+          ]
+        : [
+            Colors.white,
+            Color.alphaBlend(tint.withValues(alpha: 0.07),
+                scheme.surfaceContainerHighest),
+          ],
   );
+}
+
+/// The crisp 1 px key edge: a light rim that reads as a lit bevel.
+Color _keyEdge(ColorScheme scheme) => scheme.brightness == Brightness.dark
+    ? Colors.white.withValues(alpha: 0.14)
+    : Colors.black.withValues(alpha: 0.08);
+
+/// The big play / pause key. Idle: a clean glossy disc with a crisp rim.
+/// Playing: a thin light ring orbits it (like a turning record) and the disc
+/// breathes very slightly; the icon morphs play ↔ pause with a quick turn.
+class _PlayKey extends StatefulWidget {
+  const _PlayKey({
+    required this.playing,
+    required this.buffering,
+    required this.accent,
+    required this.onTap,
+    this.size = 68,
+  });
+  final bool playing, buffering;
+  final Color accent;
+  final VoidCallback onTap;
+  final double size;
+
+  @override
+  State<_PlayKey> createState() => _PlayKeyState();
+}
+
+class _PlayKeyState extends State<_PlayKey>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _orbit = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 5200));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.playing) _orbit.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PlayKey old) {
+    super.didUpdateWidget(old);
+    if (widget.playing && !_orbit.isAnimating) {
+      _orbit.repeat();
+    } else if (!widget.playing && _orbit.isAnimating) {
+      _orbit.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _orbit.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final a = widget.accent;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final s = widget.size;
+    return Tactile(
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: SizedBox(
+          width: s + 12,
+          height: s + 12,
+          child: AnimatedBuilder(
+            animation: _orbit,
+            builder: (context, child) {
+              final t = _orbit.value;
+              // A slow, barely-there breath while playing.
+              final breath = widget.playing
+                  ? 1 + 0.025 * (0.5 - (t * 2 % 1 - 0.5).abs()) * 2
+                  : 1.0;
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  // The orbit ring (only while playing).
+                  AnimatedOpacity(
+                    duration: const Duration(milliseconds: 250),
+                    opacity: widget.playing ? 1 : 0,
+                    child: Transform.rotate(
+                      angle: t * 6.283185307179586,
+                      child: CustomPaint(
+                        size: Size(s + 12, s + 12),
+                        painter: _OrbitPainter(a),
+                      ),
+                    ),
+                  ),
+                  Transform.scale(scale: breath, child: child),
+                ],
+              );
+            },
+            child: Container(
+              width: s,
+              height: s,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color.lerp(a, Colors.white, 0.28)!,
+                    a,
+                    Color.lerp(a, Colors.black, 0.22)!,
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
+                ),
+                // Crisp rim + a tight, close glow (no fog).
+                border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.35), width: 1.2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: dark ? 0.55 : 0.2),
+                    blurRadius: 5,
+                    offset: const Offset(0, 3),
+                  ),
+                  BoxShadow(
+                    color: a.withValues(alpha: widget.playing ? 0.55 : 0.32),
+                    blurRadius: widget.playing ? 12 : 8,
+                    spreadRadius: -2,
+                  ),
+                ],
+              ),
+              child: widget.buffering
+                  ? const Padding(
+                      padding: EdgeInsets.all(18),
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2.5),
+                    )
+                  : AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      transitionBuilder: (c, an) => RotationTransition(
+                        turns: Tween(begin: 0.75, end: 1.0).animate(an),
+                        child: ScaleTransition(scale: an, child: c),
+                      ),
+                      child: Icon(
+                        widget.playing
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        key: ValueKey(widget.playing),
+                        size: s * 0.58,
+                        color: Colors.white,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            blurRadius: 2,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A thin comet of light that orbits the play key while music plays.
+class _OrbitPainter extends CustomPainter {
+  _OrbitPainter(this.accent);
+  final Color accent;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = (Offset.zero & size).deflate(2);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round
+      ..shader = SweepGradient(colors: [
+        accent.withValues(alpha: 0),
+        accent.withValues(alpha: 0.15),
+        Color.lerp(accent, Colors.white, 0.45)!,
+      ], stops: const [0.0, 0.55, 1.0]).createShader(rect);
+    canvas.drawArc(rect, 0, 6.283185307179586 * 0.92, false, paint);
+  }
+
+  @override
+  bool shouldRepaint(_OrbitPainter old) => old.accent != accent;
 }
 
 class _CtrlBtn extends StatelessWidget {
@@ -70,7 +252,6 @@ class _CtrlBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final isDark = scheme.brightness == Brightness.dark;
     final enabled = onTap != null;
     return Tactile(enabled: enabled, child: Tooltip(
       message: tooltip,
@@ -90,7 +271,7 @@ class _CtrlBtn extends StatelessWidget {
                 : scheme.surfaceContainerHighest.withValues(alpha: 0.30),
             border: Border.all(
               color: enabled
-                  ? scheme.primary.withValues(alpha: isDark ? 0.30 : 0.22)
+                  ? _keyEdge(scheme)
                   : scheme.outlineVariant.withValues(alpha: 0.30),
               width: 1,
             ),
@@ -212,7 +393,6 @@ class _CtrlChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final isDark = scheme.brightness == Brightness.dark;
     return Tactile(child: Tooltip(
       message: tooltip,
       child: GestureDetector(
@@ -239,7 +419,7 @@ class _CtrlChip extends StatelessWidget {
             border: Border.all(
               color: active
                   ? activeColor.withValues(alpha: 0.85)
-                  : scheme.primary.withValues(alpha: isDark ? 0.32 : 0.24),
+                  : _keyEdge(scheme),
               width: active ? 1.6 : 1,
             ),
             boxShadow: _glassLift(
@@ -249,11 +429,12 @@ class _CtrlChip extends StatelessWidget {
           child: Icon(
             icon,
             size: 20,
+            // Full-strength icons: crisp on any background.
             color: active
                 ? activeColor
                 : Color.alphaBlend(
-                    scheme.primary.withValues(alpha: 0.35),
-                    scheme.onSurface.withValues(alpha: 0.78),
+                    scheme.primary.withValues(alpha: 0.18),
+                    scheme.onSurface.withValues(alpha: 0.95),
                   ),
           ),
         ),

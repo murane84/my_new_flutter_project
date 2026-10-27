@@ -520,31 +520,51 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                 if to is not None:
                     try:
                         target = int(to)
-                        if etype == "tune_in_request" and not connected_users.get(target):
-                            await notify_user(int(user_id), {
-                                "type": "tune_in_unreachable",
-                                "from": target,
-                            })
-                        else:
-                            from database import SessionLocal
-                            db = SessionLocal()
+                        from database import SessionLocal
+                        db = SessionLocal()
+                        try:
+                            # Friends only — a stranger can't knock.
+                            me_id = int(user_id)
+                            is_friend = db.query(Friend).filter(
+                                ((Friend.user_id == me_id) & (Friend.friend_id == target))
+                                | ((Friend.user_id == target) & (Friend.friend_id == me_id))
+                            ).first() is not None
+                            me = (db.query(User)
+                                  .filter(User.id == me_id).first())
+                            name = (me.username or "") if me else ""
+                            phone = (me.phone or "") if me else ""
+                        finally:
+                            db.close()
+                        if not is_friend:
+                            raise ValueError("not friends")
+                        online = bool(connected_users.get(target))
+                        if etype == "tune_in_request" and not online:
+                            # App closed → ask by push (with Let them in /
+                            # Not now buttons); tell the asker it went out.
                             try:
-                                # Friends only — a stranger can't knock.
-                                me_id = int(user_id)
-                                is_friend = db.query(Friend).filter(
-                                    ((Friend.user_id == me_id) & (Friend.friend_id == target))
-                                    | ((Friend.user_id == target) & (Friend.friend_id == me_id))
-                                ).first() is not None
-                                me = (db.query(User)
-                                      .filter(User.id == me_id).first())
-                                name = (me.username or "") if me else ""
-                                phone = (me.phone or "") if me else ""
-                            finally:
-                                db.close()
-                            if not is_friend:
-                                raise ValueError("not friends")
+                                has_token = len(_tokens_for(target)) > 0
+                            except Exception:
+                                has_token = False
+                            if has_token:
+                                await asyncio.to_thread(send_push_to_user, target, {
+                                    "type": "tune_in_request",
+                                    "from": str(me_id),
+                                    "from_name": name,
+                                    "sender_phone": phone,
+                                    "title": str(data.get("title") or "")[:120],
+                                })
+                                await notify_user(me_id, {
+                                    "type": "tune_in_pushed",
+                                    "from": target,
+                                })
+                            else:
+                                await notify_user(me_id, {
+                                    "type": "tune_in_unreachable",
+                                    "from": target,
+                                })
+                        else:
                             payload = {k: v for k, v in data.items() if k != "to"}
-                            payload["from"] = int(user_id)
+                            payload["from"] = me_id
                             payload["name"] = name
                             payload["phone"] = phone
                             await notify_user(target, payload)

@@ -98,6 +98,160 @@ set onMessageTap(void Function(Map<String, dynamic> payload)? fn) {
 /// Inline "Reply" action on message notifications (type a reply in the shade).
 const String kMsgReply = 'msg_reply';
 
+// ── Aluta notifications (everything that isn't a chat message or a call) ────
+// Listen Together invites, tune-in requests, Our Space moments, reactions and
+// Aluta-team replies. Each lives on its own channel (so it can be muted on
+// its own in Android settings), can carry action buttons, and taps route to
+// the home screen through [onAlutaTap] (or [consumeAlutaLaunchAction] on a
+// cold start). Payload: {'type': 'aluta', 'kind': ..., ...}.
+const String kLiveJoin = 'live_join';
+const String kLiveLater = 'live_later';
+const String kTuneLet = 'tune_let';
+const String kTuneNo = 'tune_no';
+const String kOpen = 'open';
+
+const String alutaListenChannel = 'aluta_listen';
+const String alutaSpaceChannel = 'aluta_space';
+const String alutaReactionChannel = 'aluta_reactions';
+const String alutaTeamChannel = 'aluta_team';
+
+void Function(String? actionId, Map<String, dynamic> payload)? _onAlutaTap;
+({String? a, Map<String, dynamic> p})? _pendingAlutaTap;
+set onAlutaTap(void Function(String? actionId, Map<String, dynamic> p)? fn) {
+  _onAlutaTap = fn;
+  final pend = _pendingAlutaTap;
+  if (fn != null && pend != null) {
+    _pendingAlutaTap = null;
+    fn(pend.a, pend.p);
+  }
+}
+
+/// The per-person bundle key: everything from one friend (messages, invites,
+/// reactions, Our Space) stacks under their name in the shade.
+String personGroupKey(String personKey) => 'aluta_p_$personKey';
+
+Future<void> _showPersonSummary(
+    String personKey, String personName, String channel) async {
+  try {
+    await _fln.show(
+      id: 950000 + (personKey.hashCode.abs() % 40000),
+      title: personName,
+      body: 'New from $personName',
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          channel,
+          _channelNames[channel] ?? 'Aluta',
+          icon: '@mipmap/launcher_icon',
+          groupKey: personGroupKey(personKey),
+          setAsGroupSummary: true,
+          onlyAlertOnce: true,
+        ),
+      ),
+    );
+  } catch (_) {}
+}
+
+const Map<String, String> _channelNames = {
+  'aluta_messages': 'Messages',
+  alutaListenChannel: 'Listen Together',
+  alutaSpaceChannel: 'Our Space',
+  alutaReactionChannel: 'Reactions',
+  alutaTeamChannel: 'Aluta team',
+};
+
+/// Show an Aluta notification (see the block comment above).
+Future<void> showAlutaNotification({
+  required String channel,
+  required String title,
+  required String body,
+  required int id,
+  required Map<String, dynamic> payload,
+  List<(String id, String label)> actions = const [],
+  Uint8List? picture,
+  List<String>? lines,
+  String? personKey,
+  String? personName,
+  bool silent = false,
+}) async {
+  if (kIsWeb) return;
+  try {
+    if (!_ready) await initNotifications();
+    final p = {'type': 'aluta', ...payload};
+    final group =
+        personKey == null ? _msgGroupKey : personGroupKey(personKey);
+    await _fln.show(
+      id: id,
+      title: title,
+      body: body,
+      payload: jsonEncode(p),
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          channel,
+          _channelNames[channel] ?? 'Aluta',
+          importance: silent ? Importance.low : Importance.high,
+          priority: silent ? Priority.low : Priority.high,
+          icon: '@mipmap/launcher_icon',
+          groupKey: group,
+          styleInformation: picture != null
+              ? BigPictureStyleInformation(
+                  ByteArrayAndroidBitmap(picture),
+                  contentTitle: title,
+                  summaryText: body,
+                  hideExpandedLargeIcon: true,
+                )
+              : (lines != null && lines.length > 1
+                  ? InboxStyleInformation(lines,
+                      contentTitle: title,
+                      summaryText: '${lines.length} reactions')
+                  : BigTextStyleInformation(body)),
+          largeIcon: picture != null ? ByteArrayAndroidBitmap(picture) : null,
+          actions: [
+            for (final a in actions)
+              AndroidNotificationAction(
+                a.$1,
+                a.$2,
+                // "Not now" style answers don't need the app open.
+                showsUserInterface: a.$1 != kLiveLater && a.$1 != kTuneNo,
+                cancelNotification: true,
+              ),
+          ],
+        ),
+      ),
+    );
+    if (personKey != null && personName != null) {
+      await _showPersonSummary(personKey, personName, channel);
+    }
+  } catch (_) {/* best-effort */}
+}
+
+Future<void> cancelAlutaNotification(int id) async {
+  if (kIsWeb) return;
+  try {
+    if (!_ready) await initNotifications();
+    await _fln.cancel(id: id);
+  } catch (_) {}
+}
+
+/// Stable slots: one per (kind, person) so a newer one replaces the older.
+int alutaNotifId(String kind, String key) =>
+    4000000 + ('$kind:$key'.hashCode.abs() % 900000);
+
+/// Cold start from an Aluta notification (or one of its buttons).
+Future<({String? actionId, Map<String, dynamic> payload})?>
+    consumeAlutaLaunchAction() async {
+  if (kIsWeb) return null;
+  try {
+    final details = await _fln.getNotificationAppLaunchDetails();
+    if (details == null || !details.didNotificationLaunchApp) return null;
+    final r = details.notificationResponse;
+    final p = _decodePayload(r?.payload);
+    if (p['type'] != 'aluta') return null;
+    return (actionId: r?.actionId, payload: p);
+  } catch (_) {
+    return null;
+  }
+}
+
 Map<String, dynamic> _decodePayload(String? raw) {
   if (raw == null || raw.isEmpty) return const {};
   try {
@@ -120,6 +274,21 @@ void _onNotifResponse(NotificationResponse r) {
   // Inline reply typed in the notification → send it, no app needed.
   if (a == kMsgReply) {
     _sendInlineReply(p, r.input);
+    return;
+  }
+  // Listen Together / tune-in / Our Space / team → home routes it.
+  if (p['type'] == 'aluta') {
+    if (a == kLiveLater) {
+      _declineLiveFromShade(p);
+      return;
+    }
+    if (a == kTuneNo) return; // the asker's wait simply times out
+    final fn = _onAlutaTap;
+    if (fn != null) {
+      fn(a, p);
+    } else {
+      _pendingAlutaTap = (a: a, p: p);
+    }
     return;
   }
   // Tapping a message notification's body → open that thread.
@@ -181,6 +350,15 @@ Future<void> _sendInlineReply(Map<String, dynamic> p, String? input) async {
   } catch (_) {/* best-effort */}
 }
 
+/// "Not now" on a Listen Together invite: tell the host, without opening Aluta.
+Future<void> _declineLiveFromShade(Map<String, dynamic> p) async {
+  final sid = (p['session_id'] ?? '').toString();
+  if (sid.isEmpty) return;
+  try {
+    await ApiService().declineLiveSession(sid);
+  } catch (_) {}
+}
+
 /// Background isolate tap handler (app killed). Must be a top-level, AOT entry.
 /// We can't touch app state here; declining just lets the notification cancel
 /// itself (cancelNotification: true) and the caller times out. Accept is picked
@@ -188,7 +366,15 @@ Future<void> _sendInlineReply(Map<String, dynamic> p, String? input) async {
 @pragma('vm:entry-point')
 Future<void> _onNotifBgResponse(NotificationResponse r) async {
   // Calls: intentionally nothing (see above). An inline message reply typed
-  // while the app is closed is sent from here.
+  // while the app is closed is sent from here, and so is "Not now" on a
+  // Listen Together invite.
+  if (r.actionId == kLiveLater) {
+    try {
+      DartPluginRegistrant.ensureInitialized();
+    } catch (_) {}
+    await _declineLiveFromShade(_decodePayload(r.payload));
+    return;
+  }
   if (r.actionId != kMsgReply) return;
   try {
     DartPluginRegistrant.ensureInitialized(); // secure storage + prefs here
@@ -306,6 +492,22 @@ Future<void> initNotifications() async {
             Int64List.fromList(<int>[0, 1000, 800, 1000, 800, 1000]),
       ),
     );
+    // One channel per kind of Aluta alert, so each can be muted on its own.
+    for (final ch in const [
+      (alutaListenChannel, 'Listen Together',
+          'Invites to listen together and tune-in requests', Importance.high),
+      (alutaSpaceChannel, 'Our Space',
+          'Moments, dedications and notes from your partner', Importance.high),
+      (alutaReactionChannel, 'Reactions',
+          'Emoji reactions to your messages', Importance.defaultImportance),
+      (alutaTeamChannel, 'Aluta team',
+          'Replies to your feedback and help requests',
+          Importance.defaultImportance),
+    ]) {
+      await android_?.createNotificationChannel(AndroidNotificationChannel(
+          ch.$1, ch.$2,
+          description: ch.$3, importance: ch.$4));
+    }
     // Gentle, low-key channel for Our Diary plan reminders (a warm nudge, not a
     // ring). Default importance so it lands quietly in the shade.
     await android_?.createNotificationChannel(
@@ -485,6 +687,11 @@ Future<void> showMessageNotification({
     final notifId = (hasGroup || hasSender)
         ? messageNotifId(senderId: senderId, conversationId: conversationId)
         : id;
+    // One bundle per person / group: their messages, invites, reactions and
+    // Our Space alerts stack under one name instead of a pile of "Aluta".
+    final personKey = hasGroup
+        ? 'c$conversationId'
+        : (hasSender ? 's$senderId' : null);
     await _fln.show(
       id: notifId,
       title: title,
@@ -497,9 +704,10 @@ Future<void> showMessageNotification({
           importance: Importance.high,
           priority: Priority.high,
           icon: '@mipmap/launcher_icon',
-          // Grouped so Android bundles multiple chats into one stack in the
-          // shade; the per-conversation id keeps one banner per sender.
-          groupKey: _msgGroupKey,
+          // Bundled per person (see personKey); the per-conversation id keeps
+          // one banner per sender.
+          groupKey:
+              personKey == null ? _msgGroupKey : personGroupKey(personKey),
           // A chat banner gets an inline Reply box (answer without opening).
           actions: payload == null
               ? null
@@ -517,6 +725,10 @@ Future<void> showMessageNotification({
         ),
       ),
     );
+    if (personKey != null) {
+      await _showPersonSummary(personKey,
+          (hasGroup ? groupTitle : senderName) ?? title, _channelId);
+    }
   } catch (_) {/* best-effort */}
 }
 

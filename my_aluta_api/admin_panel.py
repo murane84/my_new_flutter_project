@@ -1240,17 +1240,24 @@ def admin_feedback_update(feedback_id: int, payload: FeedbackUpdateIn,
     f.updated_at = _now()
     # Let the person know their voice was heard (a reply, or it's planned/done).
     tell = None
+    what = {"idea": "idea", "problem": "problem report", "praise": "note",
+            "help": "help request"}.get(f.kind or "", "feedback")
+    snippet = ""
     if payload.reply and payload.reply.strip():
-        tell = "The Aluta team replied to your feedback 💬"
+        tell = f"💬 The Aluta team replied to your {what}"
+        snippet = payload.reply.strip()[:140]
     elif payload.status in ("planned", "done"):
-        tell = ("Your idea is planned 🛠️" if payload.status == "planned"
-                else "Your feedback is done ✅")
+        tell = (f"🛠️ Your {what} is planned" if payload.status == "planned"
+                else f"✅ Your {what} is done")
+        snippet = (f.message or "")[:100]
     if tell:
-        def _push(uid=f.user_id, body=tell):
+        def _push(uid=f.user_id, title=tell, body=snippet, fid=f.id):
             try:
                 from push import send_push_to_user
                 send_push_to_user(uid, {"type": "feedback_update",
-                                        "title": "Aluta", "body": body})
+                                        "title": title,
+                                        "body": body or "Tap to see it",
+                                        "feedback_id": str(fid)})
             except Exception as e:  # noqa: BLE001
                 print(f"[feedback] user push failed: {e}")
         bg.add_task(_push)

@@ -514,11 +514,31 @@ def _notify_partner_moment(db: Session, space: RelationshipSpace,
         pass
     if send_push_to_user is not None:
         try:
+            # What it IS, so the phone can say it well (and show the photo):
+            # never a heart's words.
+            song = ""
+            photo = ""
+            if moment.kind in ("dedication", "song"):
+                try:
+                    import json as _json
+                    d = _json.loads(moment.ref or "{}")
+                    song = str(d.get("title") or "") if isinstance(d, dict) else ""
+                except Exception:
+                    song = ""
+            elif moment.kind == "photo":
+                photo = str(moment.ref or "")
             send_push_to_user(partner, {
                 "type": "space_moment",
                 "title": "Our Space 💛",
                 "body": line,
                 "from_id": str(current_user.id),  # → phone-book name on the phone
+                "from_name": who,
+                "space_id": str(space.id),
+                "moment_id": str(moment.id),
+                "kind": moment.kind,
+                "caption": (moment.caption or "")[:140],
+                "song": song[:120],
+                "photo": photo[:300],
             })
         except Exception:
             pass

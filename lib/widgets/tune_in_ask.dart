@@ -58,12 +58,14 @@ class _TuneInWaitingState extends State<_TuneInWaiting> {
     super.initState();
     _svc.pending.addListener(_onChange);
     _svc.accepted.addListener(_onChange);
+    _svc.pushedTo.addListener(_onChange);
   }
 
   @override
   void dispose() {
     _svc.pending.removeListener(_onChange);
     _svc.accepted.removeListener(_onChange);
+    _svc.pushedTo.removeListener(_onChange);
     super.dispose();
   }
 
@@ -150,7 +152,9 @@ class _TuneInWaitingState extends State<_TuneInWaiting> {
                             Text(
                                 yes
                                     ? 'Joining their song…'
-                                    : 'You\'ll join their song right where they are',
+                                    : (_svc.pushedTo.value == widget.friendId
+                                        ? 'Sent to their phone — waiting for them'
+                                        : 'You\'ll join their song right where they are'),
                                 style: TextStyle(
                                     fontSize: 12,
                                     color: scheme.onSurfaceVariant)),

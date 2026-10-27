@@ -124,6 +124,9 @@ def send_message(message: schemas.MessageCreate, background: BackgroundTasks, db
                 "sender_name": current_user.username or "New message",
                 "message_id": str(db_message.id),
                 "body": crud.list_preview(db_message),
+                # Lets the phone treat call / Listen Together logs specially
+                # (e.g. a missed invite replaces the invite banner).
+                "message_type": (db_message.message_type or "text"),
             },
         )
 

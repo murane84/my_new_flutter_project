@@ -1,9 +1,57 @@
 import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'contact_names.dart';
 import 'notif_service.dart';
 import '../screens/api_service.dart';
+import '../screens/token_helper.dart' show getToken;
+import '../utils/app_config.dart';
+
+/// A small picture for an Our Space photo alert (best-effort, ~3 s).
+Future<Uint8List?> _fetchPicture(String ref) async {
+  if (ref.isEmpty) return null;
+  try {
+    final url = ref.startsWith('http') ? ref : '${await AppConfig.baseUrl}$ref';
+    final token = await getToken();
+    final r = await http.get(Uri.parse(url), headers: {
+      if (token != null) 'Authorization': 'Bearer $token',
+    }).timeout(const Duration(seconds: 3));
+    if (r.statusCode == 200 && r.bodyBytes.isNotEmpty &&
+        r.bodyBytes.length < 4 * 1024 * 1024) {
+      return r.bodyBytes;
+    }
+  } catch (_) {}
+  return null;
+}
+
+/// Reactions on one chat collapse into one notification: the last few lines
+/// are kept on the device (fresh within 6 h) and shown as a list.
+Future<List<String>> _reactionLines(String key, String line) async {
+  try {
+    final p = await SharedPreferences.getInstance();
+    final raw = p.getString('rx_lines_$key');
+    var lines = <String>[];
+    if (raw != null) {
+      final d = jsonDecode(raw);
+      if (d is Map &&
+          DateTime.now().millisecondsSinceEpoch - ((d['at'] as num?) ?? 0) <
+              6 * 3600 * 1000) {
+        lines = [for (final x in (d['lines'] as List? ?? const [])) '$x'];
+      }
+    }
+    lines = [line, ...lines].take(6).toList();
+    await p.setString('rx_lines_$key',
+        jsonEncode({'at': DateTime.now().millisecondsSinceEpoch, 'lines': lines}));
+    return lines;
+  } catch (_) {
+    return [line];
+  }
+}
 
 /// Whether Firebase Cloud Messaging is supported on this platform. FCM only has
 /// an Android/iOS implementation in this app — on web / Windows / Linux every
@@ -120,18 +168,107 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       // "Listen together" invite while the app was closed/backgrounded. Show a
       // heads-up so the user opens the app; on open, the notification socket
       // reconnects and the server re-delivers the invite → the prompt appears.
+      // App open: the socket already shows the invite prompt.
+      if (foreground) return;
       final host = mine((data['host_username'] ?? 'Someone').toString());
       final song = (data['track_title'] ?? '').toString().trim();
-      final hostId = int.tryParse((data['host_id'] ?? '').toString()) ?? 0;
-      await showMessageNotification(
+      final hostId = (data['host_id'] ?? '').toString();
+      await showAlutaNotification(
+        channel: alutaListenChannel,
         title: '🎧 $host wants to listen with you',
         body: song.isEmpty
-            ? 'Tap to join — you\'ll hear the same song, in sync'
-            : '$song · tap to join, in sync',
-        // One slot per host: a newer invite replaces the old one.
-        id: 7500 + hostId % 1000,
-        senderId: hostId == 0 ? null : '$hostId',
-        senderName: host,
+            ? 'You\'ll hear the same song, in sync'
+            : '$song · you\'ll hear it in sync',
+        // One slot per host: a newer invite (or the "missed" note) replaces it.
+        id: alutaNotifId('live', hostId),
+        payload: {
+          'kind': 'live_invite',
+          'session_id': data['session_id'],
+          'host_id': hostId,
+          'host_name': host,
+          'track_title': song,
+        },
+        actions: const [(kLiveJoin, 'Join'), (kLiveLater, 'Not now')],
+        personKey: hostId.isEmpty ? null : 's$hostId',
+        personName: host,
+      );
+    } else if (type == 'tune_in_request') {
+      // A friend asks to listen along to MY song while Aluta was closed.
+      final from = (data['from'] ?? '').toString();
+      final who = mine((data['from_name'] ?? 'Your friend').toString());
+      final song = (data['title'] ?? '').toString().trim();
+      await showAlutaNotification(
+        channel: alutaListenChannel,
+        title: '🎧 $who wants to tune in',
+        body: song.isEmpty
+            ? 'Listen along to your song — they join right where you are'
+            : 'Listen along to "$song" — they join right where you are',
+        id: alutaNotifId('tune', from),
+        payload: {
+          'kind': 'tune_in',
+          'from': from,
+          'from_name': who,
+          'title': song,
+        },
+        actions: const [(kTuneLet, 'Let them in'), (kTuneNo, 'Not now')],
+        personKey: from.isEmpty ? null : 's$from',
+        personName: who,
+      );
+    } else if (type == 'feedback_update') {
+      final fid = (data['feedback_id'] ?? '').toString();
+      await showAlutaNotification(
+        channel: alutaTeamChannel,
+        title: (data['title'] ?? 'Aluta team').toString(),
+        body: (data['body'] ?? 'Tap to see it').toString(),
+        id: alutaNotifId('feedback', fid),
+        payload: {'kind': 'feedback', 'feedback_id': fid},
+        actions: const [(kOpen, 'Open')],
+      );
+    } else if (type == 'space_moment') {
+      final from = (data['from_id'] ?? '').toString();
+      final who = mine((data['from_name'] ?? 'Your partner').toString());
+      final kind = (data['kind'] ?? '').toString();
+      final caption = (data['caption'] ?? '').toString().trim();
+      final song = (data['song'] ?? '').toString().trim();
+      final pic = kind == 'photo'
+          ? await _fetchPicture((data['photo'] ?? '').toString())
+          : null;
+      final (String title, String body) = switch (kind) {
+        'song' || 'dedication' => (
+            song.isEmpty
+                ? '🎵 $who dedicated a song to you'
+                : '🎵 $who dedicated "$song" to you',
+            caption.isEmpty ? 'Tap to listen 💛' : caption,
+          ),
+        'photo' => (
+            '💛 $who pinned a moment',
+            caption.isEmpty ? 'A new photo of the two of you' : caption,
+          ),
+        'note' => ('💛 $who left you a note',
+            caption.isEmpty ? 'Tap to read it' : caption),
+        'heart' => ('💌 $who kept a heart in Our Space', 'Tap to see it'),
+        'voice' => ('🎤 $who pinned a voice note',
+            caption.isEmpty ? 'Tap to listen' : caption),
+        _ => ('💛 $who pinned a moment for you',
+            caption.isEmpty ? 'Tap to see it' : caption),
+      };
+      await showAlutaNotification(
+        channel: alutaSpaceChannel,
+        title: title,
+        body: body,
+        id: alutaNotifId('moment', (data['moment_id'] ?? from).toString()),
+        payload: {
+          'kind': 'space',
+          'from': from,
+          'space_id': data['space_id'],
+          'moment_id': data['moment_id'],
+        },
+        actions: [
+          (kOpen, (kind == 'song' || kind == 'dedication') ? 'Listen' : 'Open'),
+        ],
+        picture: pic,
+        personKey: from.isEmpty ? null : 's$from',
+        personName: who,
       );
     } else if (type == 'heartbeat_tap') {
       // Partner's wordless "thinking of you" (server spaces.py). In the
@@ -180,18 +317,29 @@ Future<void> handleFcmData(Map<String, dynamic> data,
           ? 'your message'
           : '“${preview.length > 60 ? '${preview.substring(0, 60)}…' : preview}”';
       final isGroup = convId.isNotEmpty;
-      await showMessageNotification(
+      // One collapsing alert per chat: "Ozilane reacted ❤️ to … (+2 more)".
+      final chatKey = isGroup ? 'c$convId' : 's$senderId';
+      final line = '$who reacted $emoji to $quoted';
+      final lines = await _reactionLines(chatKey, line);
+      await showAlutaNotification(
+        channel: alutaReactionChannel,
         title: isGroup && groupTitle.isNotEmpty ? groupTitle : who,
-        body: isGroup
-            ? '$who reacted $emoji to $quoted'
-            : 'Reacted $emoji to $quoted',
-        // Its own slot per message, so it never replaces a real message.
-        id: 7600 + (int.tryParse(messageId) ?? 0) % 1000,
-        senderId: senderId.isEmpty ? null : senderId,
-        senderName: who,
-        conversationId: convId.isEmpty ? null : convId,
-        groupTitle: groupTitle.isEmpty ? null : groupTitle,
-        messageId: messageId.isEmpty ? null : messageId,
+        body: lines.length > 1
+            ? '$line  (+${lines.length - 1} more)'
+            : line,
+        lines: lines,
+        id: alutaNotifId('react', chatKey),
+        payload: {
+          'kind': 'reaction',
+          'friend_id': senderId,
+          'sender_name': who,
+          if (isGroup) 'conversation_id': convId,
+          if (isGroup) 'group_title': groupTitle,
+          'message_id': messageId,
+        },
+        personKey: chatKey,
+        personName: isGroup && groupTitle.isNotEmpty ? groupTitle : who,
+        silent: true,
       );
     } else if (type == 'heart_opened' && foreground) {
       // App open: the in-app heart pill already shows it — no second banner.
@@ -232,6 +380,29 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       await showMessageNotification(
         title: mine(data['title'].toString()),
         body: mine((data['body'] ?? '').toString()),
+      );
+    } else if (data['message_type'] == 'live') {
+      // A Listen Together log: the invite banner becomes "You missed…" (or
+      // just goes, once you've listened).
+      final sender = mine((data['sender_name'] ?? 'Someone').toString());
+      final senderId = (data['sender_id'] ?? '').toString();
+      final body = (data['body'] ?? '').toString();
+      final missed = body.contains('Missed');
+      final slot = alutaNotifId('live', senderId);
+      if (!missed) {
+        await cancelAlutaNotification(slot);
+        return;
+      }
+      await showAlutaNotification(
+        channel: alutaListenChannel,
+        title: "🎧 You missed $sender's Listen Together",
+        body: 'Tap to say hi — or start one together',
+        id: slot,
+        payload: {'kind': 'live_missed', 'friend_id': senderId,
+            'sender_name': sender},
+        personKey: senderId.isEmpty ? null : 's$senderId',
+        personName: sender,
+        silent: true,
       );
     } else {
       final sender = mine((data['sender_name'] ?? 'New message').toString());

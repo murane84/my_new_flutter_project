@@ -428,6 +428,8 @@ extension _HomePageHelpers1 on HomePageState {
     onCallAction = _handleCallNotificationAction;
     // Tapping a message notification (app alive/backgrounded) → open that thread.
     onMessageTap = _handleMessageTap;
+    // Listen Together / tune-in / Our Space / reactions / team replies.
+    onAlutaTap = _handleAlutaTap;
     // If the app was launched cold by tapping Accept on a call notification
     // (app was killed), pick that up once and reconnect the call — after the
     // first frame so the root navigator exists. Guarded so socket reconnects
@@ -438,7 +440,47 @@ extension _HomePageHelpers1 on HomePageState {
         _consumeCallLaunch();
         // …and if it was a message notification that launched us, open its thread.
         _consumeMessageLaunch();
+        _consumeAlutaLaunch();
       });
+    }
+  }
+
+  Future<void> _consumeAlutaLaunch() async {
+    final l = await consumeAlutaLaunchAction();
+    if (l != null) _handleAlutaTap(l.actionId, l.payload);
+  }
+
+  /// A tap on an Aluta notification (or one of its buttons).
+  void _handleAlutaTap(String? action, Map<String, dynamic> p) {
+    if (!mounted) return;
+    switch (p['kind']) {
+      case 'live_invite':
+        final sid = (p['session_id'] ?? '').toString();
+        final host = (p['host_name'] ?? 'Your friend').toString();
+        if (action == kLiveJoin && sid.isNotEmpty) {
+          _joinLive(sid, {'title': (p['track_title'] ?? '').toString()}, host);
+        } else {
+          // Their chat; the invite prompt re-appears there if still open.
+          _handleMessageTap({
+            'type': 'message',
+            'friend_id': p['host_id'],
+            'sender_name': host,
+          });
+        }
+      case 'tune_in':
+        final from = int.tryParse('${p['from']}');
+        if (from == null) return;
+        _answerTuneIn(from, (p['from_name'] ?? 'Your friend').toString(),
+            p['title']?.toString(),
+            preApproved: action == kTuneLet);
+      case 'feedback':
+        showAppPopup(context, const FeedbackScreen());
+      case 'space':
+        final from = int.tryParse('${p['from']}');
+        final space = from == null ? null : _spaceWithFriend(from);
+        if (space != null) _openSpace(space);
+      case 'reaction' || 'live_missed':
+        _handleMessageTap({...p, 'type': 'message'});
     }
   }
 
@@ -620,7 +662,15 @@ extension _HomePageHelpers1 on HomePageState {
       }
       return;
     }
+    // The banner for this invite has done its job.
+    cancelAlutaNotification(alutaNotifId('live', '${data['host_id']}'));
+    await _joinLive(sessionId, track, hostName);
+  }
 
+  /// Join a Listen Together session as a listener (from the invite prompt
+  /// or the notification's Join button).
+  Future<void> _joinLive(
+      String sessionId, Map<String, dynamic> track, String hostName) async {
     final token = await getToken();
     final myUserId = _myUserId;
     if (token == null || myUserId == null || !mounted) return;
@@ -697,6 +747,10 @@ extension _HomePageHelpers1 on HomePageState {
             },
             type: ToastType.info);
         return;
+      case 'tune_in_pushed':
+        // They weren't in Aluta — the ask went to their phone instead.
+        if (svc.pending.value == from) svc.pushedTo.value = from;
+        return;
       case 'tune_in_unreachable':
         if (svc.pending.value != from) return;
         svc.answered(from, accepted: false);
@@ -713,8 +767,15 @@ extension _HomePageHelpers1 on HomePageState {
 
   /// Someone asked to listen along to MY song. Yes → I host what I'm playing,
   /// from where I am, and invite them; my music never changes.
-  Future<void> _answerTuneIn(int from, String name, String? askedTitle) async {
+  Future<void> _answerTuneIn(int from, String name, String? askedTitle,
+      {bool preApproved = false}) async {
     final svc = TuneInService.instance;
+    cancelAlutaNotification(alutaNotifId('tune', '$from'));
+    // Opened from the notification: the socket may still be connecting.
+    for (var i = 0; i < 40 && !svc.canSend; i++) {
+      await Future.delayed(const Duration(milliseconds: 250));
+    }
+    if (!mounted) return;
     if (activeLiveSession != null) {
       svc.reply(from, accept: false, reason: 'busy');
       return;
@@ -730,7 +791,7 @@ extension _HomePageHelpers1 on HomePageState {
         (f) => (f['id'] as num?)?.toInt() == from,
         orElse: () => const <String, dynamic>{})['avatar_url'] as String?;
     svc.cancelledBy.value = null;
-    final accept = await showGeneralDialog<bool>(
+    final accept = preApproved ? true : await showGeneralDialog<bool>(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Dismiss',

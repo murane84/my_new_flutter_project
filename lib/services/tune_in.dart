@@ -36,6 +36,9 @@ class TuneInService {
   /// in?" prompt for them closes itself).
   final ValueNotifier<int?> cancelledBy = ValueNotifier<int?>(null);
 
+  /// The friend whose phone got the ask by push (Aluta was closed there).
+  final ValueNotifier<int?> pushedTo = ValueNotifier<int?>(null);
+
   /// The friend who just said yes (their invite is on its way).
   final ValueNotifier<int?> accepted = ValueNotifier<int?>(null);
 
@@ -104,6 +107,7 @@ class TuneInService {
 
   void _clear() {
     accepted.value = null;
+    pushedTo.value = null;
     _timer?.cancel();
     _timer = null;
     _pendingAt = null;

@@ -1076,7 +1076,13 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       return;
     }
     setState(() => _nudging = true);
-    final ok = await ApiService().nudgePartner(_id);
+    var ok = await ApiService().nudgePartner(_id);
+    // One quiet retry: a blip (server restarting after a deploy, a flaky
+    // connection) shouldn't cost the gesture.
+    if (!ok && mounted) {
+      await Future.delayed(const Duration(milliseconds: 1200));
+      if (mounted) ok = await ApiService().nudgePartner(_id);
+    }
     if (!mounted) return;
     setState(() => _nudging = false);
     showToast(

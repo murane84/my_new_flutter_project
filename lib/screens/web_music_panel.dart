@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -23,6 +24,7 @@ import 'listening_audience_sheet.dart' show PresenceShareButton;
 import '../widgets/genie_menu.dart';
 import '../utils/readable.dart';
 import '../widgets/controls_glass.dart';
+import '../utils/typing_guard.dart';
 
 /// Web-only replacement for the native [MusicControls] panel.
 ///
@@ -86,9 +88,13 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   // Ticks whenever the queue or current track changes, so the in-chat queue
   // sheet can mirror this player and stay live.
   final ValueNotifier<int> _queueRev = ValueNotifier<int>(0);
-  // Playlist tile collapses/expands the inline queue (native has the list
-  // behind its Playlist button).
-  bool _queueCollapsed = false;
+  // The full-height queue card that slides up over the player (Playlist
+  // tile / the expand button on the inline queue): far more room to scroll
+  // and reorder than the one or two rows left under the controls.
+  bool _sheetOpen = false;
+  String _sheetQuery = '';
+  final ScrollController _sheetScroll = ScrollController();
+  static const double _rowExtent = 60;
 
   @override
   void initState() {
@@ -158,6 +164,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
 
   @override
   void dispose() {
+    _sheetScroll.dispose();
     _psSub?.cancel();
     _sleepTimer?.cancel();
     _volumeHideTimer?.cancel();
@@ -476,10 +483,13 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    if (_queue.isEmpty) return _emptyState(theme);
+    if (_queue.isEmpty) {
+      _sheetOpen = false; // nothing to show — don't reopen on the next load
+      return _emptyState(theme);
+    }
     // Active: controls pinned at the top, queue fills the rest (scrolls inside),
     // so everything is reachable without scrolling the whole panel.
-    return Column(
+    final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
@@ -515,16 +525,312 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                 ),
               ),
               const SizedBox(height: 8),
-              if (!_queueCollapsed) _fitNarrow(_queueHeader(theme), 370),
+              _fitNarrow(_queueHeader(theme), 370),
             ],
           ),
         ),
-        if (!_queueCollapsed) ...[
-          Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.4)),
-          Expanded(child: _queueBody(theme)),
-        ] else
-          const Spacer(),
+        Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.4)),
+        Expanded(child: _queueBody(theme)),
       ],
+    );
+    return TypingSafeShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): _closeSheet,
+      },
+      child: Stack(
+        children: [
+          body,
+          // Scrim — tap outside the card to put it away.
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: !_sheetOpen,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 220),
+                opacity: _sheetOpen ? 1 : 0,
+                child: GestureDetector(
+                  onTap: _closeSheet,
+                  child: ColoredBox(
+                      color: Colors.black.withValues(alpha: 0.18)),
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: !_sheetOpen,
+              child: AnimatedSlide(
+                duration: const Duration(milliseconds: 320),
+                curve: _sheetOpen ? Curves.easeOutCubic : Curves.easeInCubic,
+                offset: _sheetOpen ? Offset.zero : const Offset(0, 1.05),
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 200),
+                  opacity: _sheetOpen ? 1 : 0,
+                  child: _queueSheet(theme),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openSheet() {
+    if (_queue.isEmpty) return;
+    setState(() {
+      _sheetOpen = true;
+      _sheetQuery = '';
+    });
+    // Open already looking at the playing song.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _sheetToCurrent());
+  }
+
+  void _closeSheet() {
+    if (!_sheetOpen) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _sheetOpen = false);
+  }
+
+  void _sheetToCurrent({bool animate = false}) {
+    if (!_sheetScroll.hasClients || _index < 0) return;
+    final pos = _sheetScroll.position;
+    final target = (_index * _rowExtent - pos.viewportDimension / 2 + _rowExtent)
+        .clamp(0.0, pos.maxScrollExtent);
+    animate
+        ? _sheetScroll.animateTo(target,
+            duration: const Duration(milliseconds: 380),
+            curve: Curves.easeOutCubic)
+        : _sheetScroll.jumpTo(target);
+  }
+
+  /// The full-height queue card: header with the queue tools, the song
+  /// playing now, a search box, and the whole list (drag to reorder).
+  Widget _queueSheet(ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final accent = scheme.primary;
+    final q = _sheetQuery;
+    final hits = <int>[
+      for (var i = 0; i < _queue.length; i++)
+        if (q.isEmpty || _cleanTitle(_queue[i].name).toLowerCase().contains(q))
+          i,
+    ];
+    final now = (_index >= 0 && _index < _queue.length)
+        ? splitTitleArtist(_cleanTitle(_queue[_index].name))
+        : null;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark
+              ? Color.alphaBlend(
+                  Colors.white.withValues(alpha: 0.05), scheme.surface)
+              : scheme.surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+              color: accent.withValues(alpha: isDark ? 0.30 : 0.18)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.16),
+              blurRadius: 24,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Grabber — drag down (or tap) to put the card away.
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _closeSheet,
+              onVerticalDragEnd: (d) {
+                if ((d.primaryVelocity ?? 0) > 200) _closeSheet();
+              },
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 2),
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: scheme.onSurfaceVariant.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 6, 6, 4),
+                    child: Row(
+                      children: [
+                        Icon(Icons.queue_music_rounded,
+                            size: 20, color: accent),
+                        const SizedBox(width: 8),
+                        Text('Queue',
+                            style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: widget.textColor)),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                              _index >= 0
+                                  ? '${_index + 1} / ${_queue.length}'
+                                  : '${_queue.length}',
+                              style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: accent)),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          tooltip: 'Find the playing song',
+                          iconSize: 19,
+                          color: accent,
+                          onPressed: q.isEmpty
+                              ? () => _sheetToCurrent(animate: true)
+                              : null,
+                          icon: const Icon(Icons.my_location_rounded),
+                        ),
+                        IconButton(
+                          tooltip: 'Add songs',
+                          iconSize: 19,
+                          color: accent,
+                          onPressed: _loading ? null : _openFiles,
+                          icon: const Icon(Icons.library_add_rounded),
+                        ),
+                        if (folderPickSupported)
+                          IconButton(
+                            tooltip: 'Load a folder',
+                            iconSize: 19,
+                            color: accent,
+                            onPressed: _loading ? null : _openFolder,
+                            icon: const Icon(Icons.folder_copy_outlined),
+                          ),
+                        IconButton(
+                          tooltip: 'Hide queue',
+                          iconSize: 22,
+                          color: theme.hintColor,
+                          onPressed: _closeSheet,
+                          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Now playing strip.
+            if (now != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 12, 8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [
+                      accent.withValues(alpha: isDark ? 0.22 : 0.14),
+                      accent.withValues(alpha: isDark ? 0.08 : 0.04),
+                    ]),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      _queueAvatar(theme, true),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('NOW PLAYING',
+                                style: TextStyle(
+                                    fontSize: 9.5,
+                                    letterSpacing: 1,
+                                    fontWeight: FontWeight.w800,
+                                    color: accent)),
+                            Text(now.$1,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: widget.textColor)),
+                            if ((now.$2 ?? '').isNotEmpty)
+                              Text(now.$2!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: theme.hintColor)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            // Search.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+              child: SizedBox(
+                height: 38,
+                child: TextField(
+                  onChanged: (v) =>
+                      setState(() => _sheetQuery = v.trim().toLowerCase()),
+                  style: const TextStyle(fontSize: 13.5),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: 'Search the queue',
+                    prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                    filled: true,
+                    fillColor: scheme.surfaceContainerHighest
+                        .withValues(alpha: isDark ? 0.5 : 0.7),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.4)),
+            Expanded(
+              child: hits.isEmpty
+                  ? Center(
+                      child: Text('No song matches “$q”',
+                          style: TextStyle(color: theme.hintColor)),
+                    )
+                  : q.isEmpty
+                      // Whole queue: drag ≡ to reorder.
+                      ? ReorderableListView.builder(
+                          scrollController: _sheetScroll,
+                          buildDefaultDragHandles: false,
+                          padding: const EdgeInsets.fromLTRB(4, 4, 4, 16),
+                          itemCount: _queue.length,
+                          // ignore: deprecated_member_use
+                          onReorder: _reorder,
+                          itemBuilder: (_, i) => _queueRow(theme, i),
+                        )
+                      // Searching: matches only (no reordering a filtered list).
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(4, 4, 4, 16),
+                          itemCount: hits.length,
+                          itemBuilder: (_, k) =>
+                              _queueRow(theme, hits[k], reorderable: false),
+                        ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1246,9 +1552,9 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           theme,
           icon: Icons.queue_music_rounded,
           label: 'Playlist',
-          active: !_queueCollapsed,
+          active: _sheetOpen,
           badge: _queue.isNotEmpty ? '${_queue.length}' : null,
-          onTap: () => setState(() => _queueCollapsed = !_queueCollapsed),
+          onTap: () => _sheetOpen ? _closeSheet() : _openSheet(),
         ),
         _featureTile(
           theme,
@@ -1614,9 +1920,25 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
         Icon(Icons.queue_music_rounded,
             size: 18, color: theme.colorScheme.primary),
         const SizedBox(width: 6),
-        Text('Queue (${_queue.length})',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+        // Tap the title (or the expand button) for the full-height queue.
+        InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: _openSheet,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+            child: Text('Queue (${_queue.length})',
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          ),
+        ),
         const Spacer(),
+        IconButton(
+          tooltip: 'Open the full queue',
+          iconSize: 18,
+          color: theme.colorScheme.primary,
+          onPressed: _openSheet,
+          icon: const Icon(Icons.open_in_full_rounded),
+        ),
         // Add songs / folder folded in here (like the native playlist), plus
         // the "about this player" popover.
         IconButton(
@@ -1663,7 +1985,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   // One queue row, styled like the native playlist: a raised circular avatar
   // (an animated equalizer while this row is the one playing, else a music
   // note), a two-line clean title / artist, and remove + drag affordances.
-  Widget _queueRow(ThemeData theme, int i) {
+  Widget _queueRow(ThemeData theme, int i, {bool reorderable = true}) {
     final scheme = theme.colorScheme;
     final isDark = scheme.brightness == Brightness.dark;
     final accent = scheme.primary;
@@ -1730,14 +2052,15 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                   color: theme.hintColor,
                   icon: const Icon(Icons.close_rounded),
                 ),
-                ReorderableDragStartListener(
-                  index: i,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 2, right: 2),
-                    child: Icon(Icons.drag_handle_rounded,
-                        size: 18, color: theme.hintColor),
+                if (reorderable)
+                  ReorderableDragStartListener(
+                    index: i,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 2, right: 2),
+                      child: Icon(Icons.drag_handle_rounded,
+                          size: 18, color: theme.hintColor),
+                    ),
                   ),
-                ),
               ],
             ),
           ),

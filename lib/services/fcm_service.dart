@@ -121,9 +121,17 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       // heads-up so the user opens the app; on open, the notification socket
       // reconnects and the server re-delivers the invite → the prompt appears.
       final host = mine((data['host_username'] ?? 'Someone').toString());
+      final song = (data['track_title'] ?? '').toString().trim();
+      final hostId = int.tryParse((data['host_id'] ?? '').toString()) ?? 0;
       await showMessageNotification(
-        title: '$host · Listen together',
-        body: 'wants to listen to music with you',
+        title: '🎧 $host wants to listen with you',
+        body: song.isEmpty
+            ? 'Tap to join — you\'ll hear the same song, in sync'
+            : '$song · tap to join, in sync',
+        // One slot per host: a newer invite replaces the old one.
+        id: 7500 + hostId % 1000,
+        senderId: hostId == 0 ? null : '$hostId',
+        senderName: host,
       );
     } else if (type == 'heartbeat_tap') {
       // Partner's wordless "thinking of you" (server spaces.py). In the

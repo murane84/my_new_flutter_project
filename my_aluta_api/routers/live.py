@@ -122,6 +122,8 @@ def create_session(
             "host_username": current_user.username or "Someone",
             "host_id": str(current_user.id),
             "session_id": session_id,
+            # So the banner can say WHICH song, not just "music".
+            "track_title": str((track or {}).get("title") or "")[:120],
         })
     except Exception:
         pass

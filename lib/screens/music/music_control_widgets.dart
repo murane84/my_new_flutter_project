@@ -555,29 +555,46 @@ class _SpeedPanelState extends State<_SpeedPanel> {
                     ],
                   ),
                 ),
+                // The current speed as a tinted value pill (the "×" reads as
+                // part of a number there, never as a second close button).
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 160),
                   transitionBuilder: (c, a) =>
                       ScaleTransition(scale: a, child: c),
-                  child: Text(
-                    _speedLabel(_v),
+                  child: Container(
                     key: ValueKey(_speedLabel(_v)),
-                    style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: scheme.primary),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                          color: scheme.primary.withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      _speedLabel(_v).replaceAll('×', ' ×'),
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          color: scheme.primary),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 4),
-                InkWell(
-                  onTap: widget.onClose,
-                  borderRadius: BorderRadius.circular(20),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(Icons.close_rounded,
-                        size: 18, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 12),
+                  // Close: a separate round grey key, clearly not the value.
+                  Material(
+                    color: scheme.surfaceContainerHighest,
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: widget.onClose,
+                      child: Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Icon(Icons.close_rounded,
+                            size: 16, color: scheme.onSurfaceVariant),
+                      ),
+                    ),
                   ),
-                ),
               ],
             ),
             const SizedBox(height: 14),

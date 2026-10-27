@@ -35,6 +35,7 @@ import 'listening_audience_sheet.dart';
 import '../services/audio_handler.dart';
 import '../services/metadata_overrides.dart';
 import '../utils/marquee_text.dart';
+import '../utils/typing_guard.dart';
 import 'api_service.dart';
 import 'chat/song_cache.dart';
 import 'music/song_identifier.dart' show showSongIdentifier;
@@ -2157,6 +2158,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       autofocus: false,
       onKeyEvent: (e) {
         if (e is! KeyDownEvent) return;
+        // Keys typed into a field (playlist search, rename…) are text, not
+        // player controls.
+        if (isTypingInTextField()) return;
         if (e.logicalKey == LogicalKeyboardKey.space) _togglePlayPause();
         if (e.logicalKey == LogicalKeyboardKey.arrowRight) _next();
         if (e.logicalKey == LogicalKeyboardKey.arrowLeft) _previous();

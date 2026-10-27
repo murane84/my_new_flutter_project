@@ -13,6 +13,7 @@ import 'story_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/aluta_composer_field.dart';
 import '../../utils/readable.dart';
+import '../../utils/typing_guard.dart';
 import '../../utils/emoji_field.dart' show inlineEmojiPicker;
 import '../gif_picker.dart';
 
@@ -738,17 +739,21 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
             ),
           ),
         );
-    return CallbackShortcuts(
+    // Typing-safe: while the reply box has focus, Space / arrows type and
+    // move the cursor instead of pausing / skipping the story.
+    return TypingSafeShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.arrowRight): () {
-          if (!_replyFocus.hasFocus) _next();
+        const SingleActivator(LogicalKeyboardKey.arrowRight): _next,
+        const SingleActivator(LogicalKeyboardKey.arrowLeft): _prev,
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          // Esc in the reply box just leaves the box; otherwise closes.
+          if (_replyFocus.hasFocus || isTypingInTextField()) {
+            FocusManager.instance.primaryFocus?.unfocus();
+          } else {
+            _close();
+          }
         },
-        const SingleActivator(LogicalKeyboardKey.arrowLeft): () {
-          if (!_replyFocus.hasFocus) _prev();
-        },
-        const SingleActivator(LogicalKeyboardKey.escape): _close,
         const SingleActivator(LogicalKeyboardKey.space): () {
-          if (_replyFocus.hasFocus) return;
           _paused ? _resume() : _pause();
         },
       },

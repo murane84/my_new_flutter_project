@@ -1390,7 +1390,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
       );
     }
 
-    return CallbackShortcuts(
+    return TypingSafeShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.arrowLeft): () => goPrev?.call(),
         const SingleActivator(LogicalKeyboardKey.arrowRight): () =>

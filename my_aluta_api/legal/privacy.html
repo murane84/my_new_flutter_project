@@ -53,153 +53,268 @@
   <header>
     <div class="brand"><span class="dot"></span><strong>Aluta</strong></div>
     <h1>Privacy Policy</h1>
-    <div class="meta">Effective date: 13 August 2026 · Version 0.1 (development)</div>
-    <span class="badge">Development / Beta build</span>
+    <div class="meta">Effective date: 27 October 2026 · Version 0.3 (beta)</div>
+    <span class="badge">Beta build</span>
   </header>
 
   <div class="note">
-    <strong>Please read this first.</strong> Aluta is an app in active development. It is
-    provided for early testing and evaluation, features and data practices change
-    frequently, and it is <strong>not yet intended for public production use</strong>.
-    This document describes how the current build handles your information. It is a
-    good-faith draft written by the developer, <em>not legal advice</em>, and should be
-    reviewed by a qualified professional before any public launch, app-store submission,
-    or processing of other people's data at scale.
+    <strong>In short:</strong> Aluta keeps what it needs to connect you with the
+    people you care about — your account, your conversations, what you share in
+    Our Space — and no more. We don't sell your information or show ads based on
+    it. Most shared files leave our server within about 24 hours once they've been
+    delivered. Messages are <strong>not end-to-end encrypted</strong> in this beta.
+    This policy is a good-faith description written by the developer, not legal
+    advice.
   </div>
 
   <section>
     <h2>1. Who we are</h2>
-    <p>“Aluta”, “we”, “us” and “our” refer to the developer who operates the Aluta
-    application and its backend service. Aluta is a social app that combines chat,
-    voice calling, a music player with shared “listen together” sessions, ephemeral
-    Stories, and presence.</p>
-    <p class="muted">Contact for privacy questions: <a href="mailto:support@ozilane.com">support@ozilane.com</a>.</p>
+    <p>Aluta is a social app for chats, calls, Stories and music with the people you
+    love. It is built and run by <strong>Ozilane</strong>, based in Dar es Salaam,
+    Tanzania (“Aluta”, “we”, “us”). We are responsible for the personal information
+    described here.</p>
+    <p>Privacy questions and requests: <a href="mailto:support@ozilane.com">support@ozilane.com</a>,
+    or <strong>Menu → Send feedback</strong> in the app.</p>
   </section>
 
   <section>
     <h2>2. Information we collect</h2>
-    <p>We collect only what the app needs to work. What we hold depends on the features you use.</p>
+    <p>What we hold depends on the features you use.</p>
 
-    <h3>Account information</h3>
+    <h3>Your account</h3>
     <ul>
-      <li>Your <strong>username</strong> and <strong>email address</strong>.</li>
-      <li>Your <strong>password</strong>, stored only as a secure one-way hash (we never store it in plain text).</li>
-      <li>Optional <strong>phone number</strong> and <strong>profile picture (avatar)</strong>.</li>
-      <li>If you enable two-factor authentication, a TOTP secret used to verify codes.</li>
-      <li>Presence signals such as <strong>online status</strong> and <strong>last-seen time</strong>.</li>
+      <li>Username, email address and, if you add them, your phone number and profile picture.</li>
+      <li>Your password — stored only as a one-way hash, never in plain text.</li>
+      <li>Security settings: a two-factor (authenticator) secret if you turn it on, and,
+      if you link <strong>Ozilane Key</strong>, a random identifier for your account
+      (never your name or email).</li>
+      <li>Which version of these documents you accepted, and when; your plan (free or
+      “Aluta Together”).</li>
+      <li>When your account was created, when you last signed in and were last active.</li>
     </ul>
 
-    <h3>Messages &amp; shared media</h3>
+    <h3>Messages, calls and what you share</h3>
     <ul>
-      <li>The content of messages you send and receive — <strong>text, photos, files, voice notes and GIFs</strong> — together with metadata such as timestamps, read/delivery status, reactions and replies.</li>
-      <li>Media you share is stored on our server so it can be delivered to the recipient. <strong>Messages and media are not end-to-end encrypted</strong> in this build; they are transmitted over encrypted connections (HTTPS/WSS) and stored server-side, and are served only to authorised participants.</li>
-      <li>Location you choose to share, and contact cards you choose to share, appear as messages and are stored like any other message content.</li>
-      <li>Ephemeral <strong>Stories</strong> you post (photo, short video, text or a “now playing” moment) and a list of which friends have viewed them. Stories are set to expire about <strong>24 hours</strong> after posting.</li>
+      <li>Messages you send and receive — text, photos, videos, voice notes, files,
+      songs, GIFs, polls, locations and contact cards you choose to share — with
+      details like time, delivery/read status, replies, reactions, edits and pins.</li>
+      <li><strong>Secret hearts:</strong> the note, any photo, clip or song inside, its
+      mood and, for timed hearts, when it opens and when it was opened. A sealed heart's
+      content is withheld by the server until its time.</li>
+      <li>Messages you schedule to arrive at a friend's morning, and your time-zone
+      offset so “their morning” can be worked out.</li>
+      <li><strong>Calls</strong> connect your devices directly (peer-to-peer). We never
+      record or store call audio; we keep a call log entry (who, when, how long, outcome).</li>
+      <li><strong>Listen Together</strong> sends the song directly between the people in
+      the session (peer-to-peer). Our server only passes the small “play / pause /
+      position” signals and does not keep the audio.</li>
+      <li><strong>Stories</strong> you post and who viewed them; they expire after about
+      24 hours.</li>
+    </ul>
+
+    <h3>Our Space and Our Diary</h3>
+    <ul>
+      <li>Everything you add to a Space you share with someone — pinned moments, the shared
+      playlist, diary entries and comments, love capsules, dedications, daily-question
+      answers, streaks and kept hearts. <strong>Both members of a Space can see all of
+      it.</strong></li>
+    </ul>
+
+    <h3>Presence and status</h3>
+    <ul>
+      <li>Whether you're online, when you were last seen, a quick status you set
+      (e.g. “Busy”), and “tell me when they're online” requests you make.</li>
+      <li>What you're listening to right now, shown to friends — or only the people you
+      choose — while you play music.</li>
+    </ul>
+
+    <h3>Music</h3>
+    <ul>
+      <li>Your music files stay on your device; we don't upload your library.</li>
+      <li>So they follow you to a new phone, we keep on your account: song details you
+      edit (title, artist…), your listening history and music insights (for example
+      your week in music and top songs), and the songs you share.</li>
+      <li>If you're bonded with someone in Our Space, your weekly top songs can be shown
+      to that person in your shared recap, unless you've turned off sharing what you
+      listen to.</li>
+      <li>“Identify a song” sends a short audio sample to a song-recognition provider,
+      only when you use it.</li>
     </ul>
 
     <h3>Contacts (only if you allow it)</h3>
     <ul>
-      <li>To help you find friends, the app can read your phone's address book and check which numbers belong to registered Aluta users. This only happens with your permission.</li>
-      <li>The name-labels you have saved for contacts may be uploaded to your account so your own saved names show correctly when you sign in on another device (e.g. desktop). This map is private to your account.</li>
+      <li>To find friends, the app sends the phone numbers in your address book to our
+      server to check which belong to Aluta users. People it finds are added to your
+      circle. We don't keep the full list of numbers for any other purpose.</li>
+      <li>Your saved names for those contacts can be stored on your account, privately,
+      so they show on your other devices.</li>
     </ul>
 
-    <h3>Device &amp; technical data</h3>
+    <h3>Your settings</h3>
     <ul>
-      <li>A <strong>push-notification token</strong> (Firebase Cloud Messaging) so we can wake your device for new messages and calls.</li>
-      <li>Information about <strong>linked devices</strong> (e.g. a computer you link by QR), so you can review and sign them out.</li>
-      <li><strong>Diagnostics &amp; crash reports</strong> collected via Sentry to help us fix errors and stability problems.</li>
+      <li>App preferences that follow your account — theme, chat wallpaper, equalizer,
+      pinned chats, notification and Gallery choices — so a reinstall keeps them.</li>
     </ul>
 
-    <h3>Voice &amp; group calls</h3>
+    <h3>Device and technical information</h3>
     <ul>
-      <li>Calls use a direct peer-to-peer connection (WebRTC). <strong>We do not record or store call audio.</strong> Our server only relays the small signaling messages needed to connect a call, and a call log entry (duration/outcome) is saved to the conversation like a message.</li>
+      <li>A push-notification token, so we can tell your phone about new messages and calls.</li>
+      <li>The kind of device and app you use: platform (Android, Windows or web, and for
+      the web whether it's a phone or computer), operating-system version, app version
+      and a random install identifier. We use this to support each device and decide
+      which ones to build for.</li>
+      <li>Devices you've linked (for example a computer you linked by QR).</li>
+      <li>Network information such as IP address, in server logs and for security
+      (for example to warn you about a new sign-in).</li>
+      <li>Crash and error reports, to fix problems.</li>
     </ul>
 
-    <h3>Music &amp; “Listen Together”</h3>
+    <h3>Feedback you send</h3>
     <ul>
-      <li>Your music library is played locally from your device. Song details you edit and playback preferences may be backed up to your account so they survive a reinstall.</li>
-      <li>During a “Listen Together” session, audio is streamed between participants; in the current build this is relayed through our server for synchronisation. If you use the “identify a song” feature, a short audio sample is sent to a third-party recognition service (see §4).</li>
+      <li>What you write in <strong>Send feedback</strong>, your optional rating, the part
+      of the app it's about, and your app version and device type, so we can act on it
+      and reply.</li>
     </ul>
 
-    <h3>On-device only</h3>
+    <h3>Kept only on your device</h3>
     <ul>
-      <li><strong>Biometric unlock</strong> (fingerprint/face) is handled entirely by your device's operating system. Aluta never receives or stores your biometric data.</li>
+      <li>Fingerprint/face unlock is handled by your phone; we never receive biometric data.</li>
+      <li>Copies the app saves to your phone — chat history, songs from hearts, and photos
+      it saves to your Gallery if you turn on <strong>Save to Gallery</strong>. Once saved
+      there, they are outside Aluta's control.</li>
     </ul>
   </section>
 
   <section>
-    <h2>3. How we use your information</h2>
+    <h2>3. How we use it</h2>
     <ul>
-      <li>To provide the core features: deliver messages and media, place calls, sync music, post and view Stories, and show presence.</li>
-      <li>To authenticate you, keep your account secure, and support account recovery and device linking.</li>
-      <li>To send push notifications for messages and incoming calls.</li>
-      <li>To match your contacts to friends (only with your permission).</li>
-      <li>To diagnose crashes and improve reliability and performance.</li>
+      <li>To run Aluta: deliver messages and media, connect calls and Listen Together,
+      show Stories, presence and Our Space, and sync your account across devices.</li>
+      <li>To keep your account safe: sign-in, two-step verification, recovery, alerts
+      about new devices and sign-ins.</li>
+      <li>To send notifications you'd expect: new messages, calls, reactions, hearts,
+      friends coming online, replies to your feedback.</li>
+      <li>To show you insights about your own listening, and gentle reminders you can
+      turn off in settings.</li>
+      <li>To understand how Aluta is used overall (for example how many people are active
+      and on which devices), fix bugs and decide what to improve — including from your
+      feedback.</li>
     </ul>
-    <p class="muted">We do <strong>not</strong> sell your personal information, and we do not use your messages to serve advertising.</p>
+    <p><strong>We do not sell your personal information, and we don't use your messages
+    for advertising.</strong></p>
   </section>
 
   <section>
-    <h2>4. Third-party services</h2>
-    <p>Aluta relies on a small number of third parties to function. Your use of these features means limited data is shared with them, subject to their own privacy policies:</p>
+    <h2>4. Who can see your information</h2>
+    <ul>
+      <li><strong>People you talk to:</strong> whatever you send or share reaches the people
+      in that chat, group, call, Story or Space — and they may save, screenshot or forward it.</li>
+      <li><strong>Friends:</strong> your profile, presence, status and (if allowed) what
+      you're listening to.</li>
+      <li><strong>The Aluta team:</strong> a small admin panel, available only to the owner
+      on specially approved devices and with every action recorded, shows overall figures
+      (sign-ups, active users, device types, storage), who is online, and the feedback
+      people send. It is used to run and improve the service, help with account problems
+      you raise, and act on abuse. It does not include a way to browse your messages.</li>
+      <li><strong>Service providers</strong> listed below, only for what they do for us.</li>
+      <li><strong>Authorities</strong>, only where Tanzanian law requires it.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>5. Services we rely on</h2>
     <table>
-      <tr><th>Service</th><th>Purpose</th><th>What is shared</th></tr>
-      <tr><td>Google Firebase (Cloud Messaging)</td><td>Push notifications</td><td>Device push token; message/call trigger data</td></tr>
-      <tr><td>GIPHY</td><td>GIF &amp; sticker search</td><td>Your search terms; requests for GIFs you view/pick</td></tr>
-      <tr><td>Sentry</td><td>Crash &amp; error reporting</td><td>Diagnostic/crash data, device &amp; app info</td></tr>
-      <tr><td>AudD (song recognition)</td><td>“Identify a song”</td><td>A short audio sample, only when you use the feature</td></tr>
-      <tr><td>TURN/STUN relays (e.g. Open Relay, Google STUN)</td><td>Connecting calls behind firewalls/NAT</td><td>Network connection data to route call media</td></tr>
+      <tr><th>Service</th><th>What for</th><th>What they receive</th></tr>
+      <tr><td>Railway</td><td>Hosting our servers and database</td><td>The data we store, as our host</td></tr>
+      <tr><td>Google Firebase Cloud Messaging</td><td>Push notifications</td><td>Device push token; the notification (sender name and a short preview)</td></tr>
+      <tr><td>Zoho ZeptoMail</td><td>Email — password-reset codes and security alerts</td><td>Your email address and the email itself</td></tr>
+      <tr><td>Sentry</td><td>Crash and error reports</td><td>Error details, device and app information</td></tr>
+      <tr><td>GIPHY</td><td>GIF and sticker search</td><td>Your search words and the GIFs you open</td></tr>
+      <tr><td>AudD</td><td>“Identify a song”</td><td>A short audio sample, only when you use it</td></tr>
+      <tr><td>STUN/TURN relays</td><td>Connecting calls and Listen Together through firewalls</td><td>Network connection data</td></tr>
+      <tr><td>Ozilane Key (auth.ozilane.com)</td><td>Optional phone approval for sign-in</td><td>A random account identifier, and the sign-in's IP address and browser/device</td></tr>
     </table>
-    <p>We also share information with <strong>other users</strong> as an inherent part of the product — e.g. the people you message, call, or share a Story with will receive that content, and friends may see your presence and (where enabled) what you're listening to.</p>
   </section>
 
   <section>
-    <h2>5. How long we keep information</h2>
+    <h2>6. How long we keep it</h2>
     <ul>
-      <li><strong>Messages and shared media</strong> are retained so your conversation history is available across devices, until you or the other participant delete them, or you delete your account.</li>
-      <li><strong>Stories</strong> are ephemeral and set to expire ~24 hours after posting; expired stories are removed on the server.</li>
-      <li>Certain shared-media bytes are treated as short-lived and purged from the server after delivery/caching, keeping only a reference.</li>
-      <li>Diagnostic/crash data is retained by Sentry according to its retention settings.</li>
+      <li><strong>Chat files, large videos and shared songs</strong> leave our server about
+      24 hours after they're sent, or soon after the recipient's phone has downloaded them.
+      Voice notes and small videos are removed about 24 hours after everyone in the chat
+      has them. After that, your devices keep their own copies; if a copy is lost, ask the
+      sender to resend.</li>
+      <li><strong>Message text and photos</strong> stay so your history works across
+      devices, until deleted or your account is deleted.</li>
+      <li><strong>Our Space</strong> keeps one copy of what you add, up to the Space's
+      storage limit (currently 150 MB per couple), until a member deletes it or the
+      Space is removed.</li>
+      <li><strong>Stories</strong> expire after about 24 hours.</li>
+      <li><strong>Feedback</strong> is kept while it's useful for improving Aluta; ask us
+      and we'll delete it.</li>
+      <li><strong>Security records</strong> (sign-in and admin activity logs) are kept as
+      long as needed to protect accounts.</li>
+      <li>When you delete your account, we delete your account and its data within 30
+      days, except what the law requires us to keep. Messages you sent remain with the
+      people who received them on their devices.</li>
     </ul>
   </section>
 
   <section>
-    <h2>6. Security</h2>
-    <p>We use encrypted connections (HTTPS/WSS) for data in transit, store passwords only as hashes, and serve media through authenticated, participant-checked endpoints. However, <strong>no method of transmission or storage is completely secure</strong>, and because this is a development build you should not share highly sensitive information through it. Messages are readable on our server (not end-to-end encrypted); end-to-end encryption is a planned future improvement.</p>
+    <h2>7. Security</h2>
+    <p>Everything travels over encrypted connections (HTTPS/WSS). Passwords and one-time
+    codes are stored only as hashes, files are served only to the people they were sent
+    to, and the admin panel needs both the owner's password and an approved device,
+    with alerts and a one-tap lock. Still, no system is perfectly secure, and because
+    messages are <strong>not end-to-end encrypted</strong> in this beta, please don't use
+    Aluta for highly sensitive information. End-to-end encryption is planned.</p>
   </section>
 
   <section>
-    <h2>7. Your choices &amp; rights</h2>
+    <h2>8. Your choices and rights</h2>
+    <p>Under Tanzania's Personal Data Protection Act, 2022, and similar laws where you
+    live, you can ask to <strong>see</strong>, <strong>correct</strong>,
+    <strong>delete</strong> or <strong>get a copy</strong> of your personal information,
+    and object to how we use it.</p>
     <ul>
-      <li><strong>Permissions:</strong> you control camera, microphone, contacts, location and notification permissions through your device settings, and can revoke them at any time (some features won't work without them).</li>
-      <li><strong>Linked devices:</strong> you can review and sign out linked devices.</li>
-      <li><strong>Delete content or your account:</strong> you can delete messages, and you may request deletion of your account and associated data by contacting us.</li>
-      <li>Depending on where you live, you may have rights to access, correct, export or delete your personal data. Contact us to exercise them.</li>
+      <li><strong>In the app:</strong> edit your profile; delete messages; leave or delete
+      Spaces; sign out linked devices; turn off contacts, location, notifications or
+      Save to Gallery in settings; choose who sees what you're listening to.</li>
+      <li><strong>Delete your account:</strong> email
+      <a href="mailto:support@ozilane.com">support@ozilane.com</a> from your account's email
+      (an in-app option is coming). We'll confirm and complete it within 30 days.</li>
+      <li>You can also complain to Tanzania's Personal Data Protection Commission.</li>
     </ul>
   </section>
 
   <section>
-    <h2>8. Children</h2>
-    <p>Aluta is not directed to children. You must be at least the age of digital consent in your country (and at least 13) to use it. We do not knowingly collect personal information from children below that age; if you believe a child has provided us information, contact us and we will remove it.</p>
+    <h2>9. Children</h2>
+    <p>Aluta is not meant for children. You must be at least 13, and old enough to
+    agree to this policy where you live. If you believe a child has an account, tell us
+    and we'll remove it.</p>
   </section>
 
   <section>
-    <h2>9. International use</h2>
-    <p>Aluta is operated from Tanzania and your information may be processed on servers in other countries where our infrastructure or third-party providers operate. By using the app you consent to such processing where permitted by law.</p>
+    <h2>10. Where your information is processed</h2>
+    <p>Aluta is run from Tanzania, but our hosting and service providers may process
+    information in other countries. We use providers that protect it, and only for the
+    purposes in this policy.</p>
   </section>
 
   <section>
-    <h2>10. Changes to this policy</h2>
-    <p>Because Aluta is evolving quickly, we may update this policy. Material changes will be reflected by updating the “Effective date” above and, where appropriate, an in-app notice. Continued use after an update means you accept the revised policy.</p>
+    <h2>11. Changes</h2>
+    <p>When this policy changes in a way that matters, we update the date above and ask
+    you to review and accept it in the app before continuing.</p>
   </section>
 
   <section>
-    <h2>11. Contact</h2>
-    <p>Questions or requests about privacy: <a href="mailto:support@ozilane.com">support@ozilane.com</a>.</p>
+    <h2>12. Contact</h2>
+    <p><a href="mailto:support@ozilane.com">support@ozilane.com</a> · Ozilane, Dar es Salaam,
+    Tanzania · or <strong>Menu → Send feedback</strong> in the app.</p>
   </section>
 
   <footer>
-    Aluta — Privacy Policy · Development build · This is a draft, not legal advice.
+    Aluta — Privacy Policy · Version 0.3 · 27 October 2026 · Written in good faith, not legal advice.
   </footer>
 </div>
 </body>

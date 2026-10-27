@@ -68,6 +68,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   // A sticker / song art that didn't finish within its wait: the timer then
   // starts the moment the image's first frame is actually painted.
   bool _awaitArt = false;
+  // This status's own copy of its GIF, so it always plays from frame 0.
+  ImageProvider? _artProvider;
   int _gen = 0;
   File? _photoFile;
 
@@ -441,6 +443,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     _photoFile = null;
     _loading = false;
     _awaitArt = false;
+    _artProvider = null;
     _progress.duration = _photoDuration;
 
     // Mark seen (not for my own stories — the backend ignores self-views).
@@ -526,6 +529,21 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           return;
         }
         _loading = false;
+        // A GIF / sticker: show it from frame 0 and start the bar on its
+        // first painted frame, so bar and animation run together.
+        final art = item.musicArtUrl;
+        if ((item.isSticker || item.isMusic) &&
+            art != null &&
+            AnimArt.loopOf(art) != null) {
+          _artProvider = AnimArt.freshImage(art);
+          if (_artProvider != null) {
+            _awaitArt = true;
+            setState(() {});
+            Future.delayed(const Duration(seconds: 4), () => _artReady(gen));
+            _prefetchNext();
+            return;
+          }
+        }
       }
       _syncToArt(item);
       _barTick = _progress;
@@ -637,21 +655,27 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   /// Sticker / song art that reports its first painted frame, so a status
   /// still waiting on it ([_awaitArt]) starts its timer exactly then.
-  Widget _artImage(String art) => Image(
-        // Same bytes the timer measured (falls back to the network).
-        image: AnimArt.bytesOf(art) != null
-            ? MemoryImage(AnimArt.bytesOf(art)!)
-            : NetworkImage(art),
-        fit: BoxFit.contain,
-        gaplessPlayback: true,
-        frameBuilder: (ctx, child, frame, sync) {
-          if (frame != null && _awaitArt) {
-            final g = _gen;
-            WidgetsBinding.instance
-                .addPostFrameCallback((_) => _artReady(g));
-          }
-          return child;
-        },
+  /// The GIF also freezes while the status is paused (hold / Space), so it
+  /// never drifts ahead of the bar.
+  Widget _artImage(String art) => TickerMode(
+        enabled: !_paused,
+        child: Image(
+          // Same bytes the timer measured (falls back to the network).
+          image: _artProvider ??
+              (AnimArt.bytesOf(art) != null
+                  ? MemoryImage(AnimArt.bytesOf(art)!)
+                  : NetworkImage(art)),
+          fit: BoxFit.contain,
+          gaplessPlayback: true,
+          frameBuilder: (ctx, child, frame, sync) {
+            if (frame != null && _awaitArt) {
+              final g = _gen;
+              WidgetsBinding.instance
+                  .addPostFrameCallback((_) => _artReady(g));
+            }
+            return child;
+          },
+        ),
       );
 
   void _onVideoTick() {
@@ -706,13 +730,16 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     _paused = true;
     _progress.stop();
     _video?.pause();
+    if (mounted) setState(() {}); // freeze the GIF too
   }
 
   void _resume() {
     if (!_paused) return;
     _paused = false;
-    // Still loading: the load itself starts the timer when it's ready.
-    if (_loading) return;
+    if (mounted) setState(() {}); // GIF resumes with the bar
+    // Still loading / waiting for the GIF's first frame: that starts the
+    // timer when it's ready.
+    if (_loading || _awaitArt) return;
     if (_video != null) {
       _video!.play();
     } else {

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/painting.dart';
 import 'package:http/http.dart' as http;
 
 /// Animated stickers / GIF art: downloads the bytes once (shared by the
@@ -19,6 +20,14 @@ class AnimArt {
 
   /// Bytes already downloaded for [url] (null until [load] finishes).
   static Uint8List? bytesOf(String url) => _bytes[url];
+
+  /// A NEW image of the downloaded bytes (a fresh view, no copy): Flutter
+  /// shares one animation per provider, so a fresh one always starts at
+  /// frame 0 — the status timer and the GIF begin together every time.
+  static MemoryImage? freshImage(String url) {
+    final b = _bytes[url];
+    return b == null ? null : MemoryImage(Uint8List.sublistView(b));
+  }
 
   /// One loop of [url]'s animation, if known and animated.
   static Duration? loopOf(String url) => _loop[url];

@@ -357,6 +357,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // Known song lengths (ms) by path — for the queue's "min left".
   final Map<String, int> _durMs = {};
   bool _durLoaded = false;
+  // Bumps on "shuffle up next" so the reshuffled rows deal in like cards.
+  int _shuffleTick = 0;
+  DateTime? _shuffleAt;
   Timer? _sleepTick;
 
   // True while the app-wide playlist drawer is open. The drawer itself is
@@ -1030,7 +1033,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       final rest = _playlist.sublist(start)..shuffle();
       _playlist.replaceRange(start, _playlist.length, rest);
       _activeQueue = null;
+      _shuffleTick++;
+      _shuffleAt = DateTime.now();
     });
+    HapticFeedback.mediumImpact();
     _publishPlaylist();
     setFull(() {});
     _snack('Up next shuffled');

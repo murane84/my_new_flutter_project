@@ -373,8 +373,20 @@ class _VoiceNotePlayer extends StatefulWidget {
 class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
   static const _speeds = [1.0, 1.5, 2.0];
   // Shared: the next note keeps your speed, and every pill on screen follows.
+  // Remembered across launches, separately from the music player's speed.
   static final ValueNotifier<double> _speedN = ValueNotifier<double>(1.0);
+  static bool _speedLoaded = false;
+  static const _kVoiceSpeed = 'voice_note_speed';
   double get _speed => _speedN.value;
+  static Future<void> _loadSpeed() async {
+    if (_speedLoaded) return;
+    _speedLoaded = true;
+    try {
+      final p = await SharedPreferences.getInstance();
+      final v = p.getDouble(_kVoiceSpeed);
+      if (v != null && _speeds.contains(v)) _speedN.value = v;
+    } catch (_) {}
+  }
   void _onSpeed() {
     if (mounted) setState(() {});
   }
@@ -417,6 +429,7 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
     super.initState();
     _dur = Duration(milliseconds: widget.durationMs);
     _speedN.addListener(_onSpeed);
+    _loadSpeed();
     _posSub = _player.positionStream.listen((p) {
       if (mounted && _dragFrac == null) setState(() => _pos = p);
     });
@@ -505,6 +518,9 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
     final i = _speeds.indexOf(_speed);
     final next = _speeds[(i + 1) % _speeds.length];
     _speedN.value = next;
+    SharedPreferences.getInstance()
+        .then((p) => p.setDouble(_kVoiceSpeed, next))
+        .ignore();
     if (_prepared) await _player.setSpeed(next);
   }
 

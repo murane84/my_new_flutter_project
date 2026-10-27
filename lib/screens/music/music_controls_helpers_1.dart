@@ -1239,10 +1239,40 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
         ),
       ),
     );
+    // After "shuffle up next" every upcoming row deals back in like a card
+    // (a short, staggered slide + fade); a new key replays it per shuffle.
+    final upcoming = i > _currentIndex;
+    // Only right after a shuffle (rows scrolled in later just appear).
+    final fresh = _shuffleAt != null &&
+        DateTime.now().difference(_shuffleAt!) <
+            const Duration(milliseconds: 900);
+    final dealt = upcoming && fresh
+        ? TweenAnimationBuilder<double>(
+            key: ValueKey('deal_$_shuffleTick'),
+            tween: Tween(begin: 0, end: 1),
+            duration: Duration(
+                milliseconds:
+                    260 + ((i - _currentIndex - 1).clamp(0, 10) * 45)),
+            curve: Curves.easeOutBack,
+            builder: (_, v, child) {
+              final lag = ((i - _currentIndex - 1).clamp(0, 10)) / 12;
+              final t = ((v - lag) / (1 - lag)).clamp(0.0, 1.0);
+              return Opacity(
+                opacity: t.clamp(0.0, 1.0),
+                child: Transform.translate(
+                  offset: Offset((1 - t) * 60, 0),
+                  child: Transform.rotate(
+                      angle: (1 - t) * 0.06, child: child),
+                ),
+              );
+            },
+            child: row,
+          )
+        : row;
     // ReorderableListView needs a stable key on each item.
     return KeyedSubtree(
       key: ValueKey('q_$path'),
-      child: isNow ? KeyedSubtree(key: _nowQueueRowKey, child: row) : row,
+      child: isNow ? KeyedSubtree(key: _nowQueueRowKey, child: row) : dealt,
     );
   }
 

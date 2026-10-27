@@ -286,6 +286,25 @@ def list_preview(msg) -> str:
     mtype = (msg.message_type or "text").lower()
     mime = (msg.media_mime or "").lower()
     name = (msg.media_name or "").strip()
+    # Call / Listen Together logs keep a bare outcome token as content
+    # ("noanswer") — never show the token itself (list or push).
+    if mtype in ("live", "call"):
+        token = content.lower()
+        if mtype == "live":
+            return {
+                "listened": "🎧 Listened together",
+                "noanswer": "🎧 Missed a Listen Together invite",
+                "declined": "🎧 Listen Together declined",
+            }.get(token, "🎧 Listen Together")
+        return {
+            "noanswer": "📞 Missed call",
+            "missed": "📞 Missed call",
+            "busy": "📞 Line busy",
+            "declined": "📞 Call declined",
+            "cancelled": "📞 Missed call",
+            "unreachable": "📞 Call didn't go through",
+            "failed": "📞 Call didn't go through",
+        }.get(token, "📞 Call")
     if mtype == "poll":
         return f"📊 {content}" if content else "📊 Poll"
     # Media with a caption / title: label + text, so a song or voice note

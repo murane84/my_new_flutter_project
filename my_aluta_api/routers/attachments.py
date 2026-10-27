@@ -332,7 +332,12 @@ def _can_access(
             bond_pair_keys.add(pk)
     for (pk,) in (
         db.query(PlaylistTrack.pair_key)
-        .filter(PlaylistTrack.ref.contains(fragment, autoescape=True))
+        .filter(
+            # The shared song copy lives in audio_url (ref is the adder's
+            # local path) — both must authorize the partner.
+            PlaylistTrack.ref.contains(fragment, autoescape=True)
+            | PlaylistTrack.audio_url.contains(fragment, autoescape=True)
+        )
         .all()
     ):
         if pk:

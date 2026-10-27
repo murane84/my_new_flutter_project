@@ -39,6 +39,18 @@ class TuneInService {
   /// The friend whose phone got the ask by push (Aluta was closed there).
   final ValueNotifier<int?> pushedTo = ValueNotifier<int?>(null);
 
+  /// The ask went out as a push: give them longer to pick up their phone.
+  void markPushed(int friendId) {
+    if (pending.value != friendId) return;
+    pushedTo.value = friendId;
+    _timer?.cancel();
+    _timer = Timer(const Duration(minutes: 2), () {
+      if (pending.value != friendId) return;
+      cancel();
+      onTimeout?.call(friendId);
+    });
+  }
+
   /// The friend who just said yes (their invite is on its way).
   final ValueNotifier<int?> accepted = ValueNotifier<int?>(null);
 

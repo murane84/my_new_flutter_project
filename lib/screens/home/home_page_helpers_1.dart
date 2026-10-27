@@ -5,6 +5,11 @@ part of '../home_page.dart';
 // private extension. A library `part`, so it shares the page's imports
 // and reaches every private field and method.
 
+// The Listen Together session we're joining right now (so a re-delivered
+// invite for it doesn't prompt again).
+String? _joiningLiveSession;
+DateTime? _joiningLiveAt;
+
 extension _HomePageHelpers1 on HomePageState {
   GlobalKey _spaceTileKey(int id) =>
       _spaceTileKeys.putIfAbsent(id, () => GlobalKey());
@@ -620,6 +625,17 @@ extension _HomePageHelpers1 on HomePageState {
     if (sessionId == null) return;
     final track =
         (data['track'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+    // Already joining / in this very session (e.g. Join tapped on the
+    // notification, then the socket re-delivered the invite) → no prompt.
+    final justJoined = sessionId == _joiningLiveSession &&
+        _joiningLiveAt != null &&
+        DateTime.now().difference(_joiningLiveAt!) <
+            const Duration(seconds: 30);
+    if (justJoined) return;
+    if (activeLiveSession?.controller.sessionId == sessionId) {
+      _reopenLiveSession(); // a re-invite for the room we're in
+      return;
+    }
     final rawHostName = data['host_username']?.toString() ?? 'Someone';
     // Show the host by the name the user has for them in their friend list /
     // phone book (saved contact name), falling back to the app username — so the
@@ -671,6 +687,8 @@ extension _HomePageHelpers1 on HomePageState {
   /// or the notification's Join button).
   Future<void> _joinLive(
       String sessionId, Map<String, dynamic> track, String hostName) async {
+    _joiningLiveSession = sessionId;
+    _joiningLiveAt = DateTime.now();
     final token = await getToken();
     final myUserId = _myUserId;
     if (token == null || myUserId == null || !mounted) return;
@@ -749,7 +767,7 @@ extension _HomePageHelpers1 on HomePageState {
         return;
       case 'tune_in_pushed':
         // They weren't in Aluta — the ask went to their phone instead.
-        if (svc.pending.value == from) svc.pushedTo.value = from;
+        svc.markPushed(from);
         return;
       case 'tune_in_unreachable':
         if (svc.pending.value != from) return;

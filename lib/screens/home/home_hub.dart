@@ -206,7 +206,16 @@ extension _HomeHub on HomePageState {
     final active = _friendLayer == key;
     // Tight phones: the inactive pills drop their label (icon only).
     final showLabel = !compact || active;
-    return Material(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Inactive pills read as real, tappable buttons too: a soft raised chip
+    // with a brand-tinted hairline and an accent icon (not a faint outline).
+    final idleBg = isDark
+        ? scheme.surfaceContainerHigh
+        : Color.alphaBlend(scheme.primary.withValues(alpha: 0.05), Colors.white);
+    final idleFg = scheme.primary.withValues(alpha: isDark ? 0.85 : 0.78);
+    return Tooltip(
+      message: label,
+      child: Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap ?? () => _setFriendLayer(key),
@@ -222,15 +231,15 @@ extension _HomeHub on HomePageState {
               padding: EdgeInsets.symmetric(
                   horizontal: showLabel ? 12 : 9, vertical: 7),
               decoration: BoxDecoration(
-                color:
-                    active ? scheme.primary.withAlpha(30) : Colors.transparent,
+                color: active ? scheme.primary.withAlpha(30) : idleBg,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: active
                       ? scheme.primary.withAlpha(130)
-                      : scheme.outlineVariant.withAlpha(80),
+                      : scheme.primary.withValues(alpha: isDark ? 0.40 : 0.30),
+                  width: active ? 1 : 1.2,
                 ),
-                // The active pill lifts slightly with a soft accent glow.
+                // Active lifts with an accent glow; idle sits on a soft shadow.
                 boxShadow: active
                     ? [
                         BoxShadow(
@@ -239,15 +248,21 @@ extension _HomeHub on HomePageState {
                           offset: const Offset(0, 3),
                         ),
                       ]
-                    : null,
+                    : [
+                        BoxShadow(
+                          color: Colors.black
+                              .withValues(alpha: isDark ? 0.30 : 0.08),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(icon,
-                      size: 15,
-                      color:
-                          active ? scheme.primary : scheme.onSurfaceVariant),
+                      size: showLabel ? 15 : 17,
+                      color: active ? scheme.primary : idleFg),
                   if (showLabel) ...[
                   const SizedBox(width: 6),
                   Text(
@@ -255,8 +270,7 @@ extension _HomeHub on HomePageState {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: active ? FontWeight.w800 : FontWeight.w600,
-                      color:
-                          active ? scheme.onSurface : scheme.onSurfaceVariant,
+                      color: active ? scheme.onSurface : idleFg,
                     ),
                   ),
                   ],
@@ -271,6 +285,7 @@ extension _HomeHub on HomePageState {
               ),
           ],
         ),
+      ),
       ),
     );
   }

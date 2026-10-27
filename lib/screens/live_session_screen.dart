@@ -836,6 +836,17 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   }
 
   // Send whatever is in the composer as a chat line, and echo it locally.
+  /// DJ → room: a warm thank-you for a song a guest dropped in (posted in
+  /// Chat & reactions, with a floating heart).
+  void _thankContributor(LiveTrack t) {
+    final who = t.contributor;
+    if (who == null) return;
+    final line = '💛 Thanks $who for “${t.title}”';
+    _c.sendComment(line);
+    _logComment(line, widget.myUserId, mine: true);
+    _spawnReaction('💛', mine: true);
+  }
+
   void _sendComment() {
     final t = _commentCtrl.text.trim();
     if (t.isEmpty) return;
@@ -2666,13 +2677,27 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                       style: TextStyle(
                           fontSize: 10.5, color: scheme.onSurfaceVariant))
                   : null),
-          trailing: upcoming
-              ? IconButton(
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // A guest added this one → the DJ can say thanks in the room.
+              if (t.contributor != null)
+                IconButton(
+                  icon: Icon(Icons.favorite_border_rounded,
+                      size: 18, color: scheme.primary),
+                  tooltip: 'Thank ${t.contributor}',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _thankContributor(t),
+                ),
+              if (upcoming)
+                IconButton(
                   icon: const Icon(Icons.close_rounded, size: 18),
                   tooltip: 'Remove from queue',
+                  visualDensity: VisualDensity.compact,
                   onPressed: () => _c.removeUpcoming(i),
-                )
-              : null,
+                ),
+            ],
+          ),
           onTap: isCurrent ? null : () => _c.playIndex(i),
         );
       },

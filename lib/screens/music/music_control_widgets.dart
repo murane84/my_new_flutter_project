@@ -67,12 +67,11 @@ class _PlayKey extends StatefulWidget {
     required this.buffering,
     required this.accent,
     required this.onTap,
-    this.size = 68,
   });
   final bool playing, buffering;
   final Color accent;
   final VoidCallback onTap;
-  final double size;
+  static const double size = 68;
 
   @override
   State<_PlayKey> createState() => _PlayKeyState();
@@ -109,7 +108,7 @@ class _PlayKeyState extends State<_PlayKey>
   Widget build(BuildContext context) {
     final a = widget.accent;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final s = widget.size;
+    const s = _PlayKey.size;
     return Tactile(
       child: GestureDetector(
         onTap: widget.onTap,

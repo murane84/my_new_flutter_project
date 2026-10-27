@@ -407,6 +407,7 @@ Widget _genieRow(
   required VoidCallback onTap,
   bool active = false,
   bool nested = false,
+  bool recent = false,
   ValueChanged<bool>? onHover,
 }) {
   final scheme = Theme.of(context).colorScheme;
@@ -439,6 +440,15 @@ Widget _genieRow(
                           color: textColor)),
                 ),
                 if (e.trailing != null) e.trailing!,
+                // The submenu used last time wears a small accent dot.
+                if (recent && e.children != null)
+                  Container(
+                    width: 6,
+                    height: 6,
+                    margin: const EdgeInsets.only(right: 4),
+                    decoration:
+                        BoxDecoration(color: accent, shape: BoxShape.circle),
+                  ),
                 if (e.children != null)
                   Icon(Icons.chevron_right_rounded,
                       size: 20,
@@ -476,9 +486,13 @@ class _GenieMenuListState extends State<_GenieMenuList> {
   // Narrow screens: the submenu currently slid in (null = main list).
   GenieMenuEntry? _page;
 
+  // The submenu opened most recently (by label), app-wide.
+  static String? _lastSub;
+
   void _tap(BuildContext rowCtx, GenieMenuEntry e) {
     if (!e.enabled) return;
     if (e.children != null) {
+      _lastSub = e.label;
       if (widget.flyout) {
         identical(widget.activeFlyout, e)
             ? widget.onCloseFlyout()
@@ -497,6 +511,7 @@ class _GenieMenuListState extends State<_GenieMenuList> {
   void _hover(BuildContext rowCtx, GenieMenuEntry e, bool inside) {
     if (!widget.flyout || !inside || !e.enabled) return;
     if (e.children != null) {
+      _lastSub = e.label;
       widget.onFlyout(e, _rectOf(rowCtx));
     } else if (!e.isDivider) {
       widget.onCloseFlyout();
@@ -528,6 +543,7 @@ class _GenieMenuListState extends State<_GenieMenuList> {
                 rowCtx,
                 e,
                 active: widget.flyout && identical(widget.activeFlyout, e),
+                recent: e.label.isNotEmpty && e.label == _lastSub,
                 onTap: () => _tap(rowCtx, e),
                 onHover: (h) => _hover(rowCtx, e, h),
               ),

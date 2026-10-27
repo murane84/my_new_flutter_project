@@ -494,6 +494,7 @@ extension _ChatHeartComposer on _ChatPageState {
     showPhotoViewer(
       context,
       authNetworkImageProvider(url, mediaAuthHeaders(url)),
+      caption: (msg['content'] ?? '').toString(),
       actions: [
         if (maySave)
           IconButton(

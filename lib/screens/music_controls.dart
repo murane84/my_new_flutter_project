@@ -1494,6 +1494,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       '30 min': const Duration(minutes: 30),
       '45 min': const Duration(minutes: 45),
       '60 min': const Duration(minutes: 60),
+      '90 min': const Duration(minutes: 90),
+      // Stops when this song ends (resolved to what's left of it).
+      'Song end': const Duration(seconds: -1),
     };
     final scheme = Theme.of(context).colorScheme;
     // How many whole minutes are currently armed (null/0 => Off) so we can
@@ -1618,14 +1621,17 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                                             label: entries[r + c].key,
                                             active: entries[r + c].value == null
                                                 ? activeMin == null
-                                                : activeMin ==
-                                                    entries[r + c]
+                                                : !entries[r + c]
                                                         .value!
-                                                        .inMinutes,
+                                                        .isNegative &&
+                                                    activeMin ==
+                                                        entries[r + c]
+                                                            .value!
+                                                            .inMinutes,
                                             onTap: () {
                                               Navigator.pop(ctx);
-                                              _setSleepTimer(
-                                                  entries[r + c].value);
+                                              _setSleepTimer(_resolveSleep(
+                                                  entries[r + c].value));
                                             },
                                           )
                                         : const SizedBox.shrink(),
@@ -1644,6 +1650,15 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         ),
       ),
     );
+  }
+
+  /// "Song end" → whatever is left of the current song (null if unknown).
+  Duration? _resolveSleep(Duration? d) {
+    if (d == null || !d.isNegative) return d;
+    final dur = _player.duration;
+    if (dur == null || dur <= Duration.zero) return null;
+    final left = dur - _player.position;
+    return left > const Duration(seconds: 2) ? left : null;
   }
 
   void _setSleepTimer(Duration? d) {
@@ -1875,6 +1890,19 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       onFavorite: _toggleFavorite,
       onShare: _shareSong,
       onShareMany: _shareSongs,
+      onSendToPartner: _sendSongToPartner,
+      onDedicate: (p) => showSongDedicate(
+        context,
+        fileName: p.replaceAll('\\', '/').split('/').last,
+        title: metadataStore.title(p, _nameFromPath(p)),
+        artist: metadataStore.artist(p, ''),
+        loadBytes: () => File(p).readAsBytes(),
+        durationMs: p == (_currentIndex >= 0 && _currentIndex < _playlist.length
+                ? _playlist[_currentIndex]
+                : null)
+            ? _player.duration?.inMilliseconds
+            : null,
+      ),
       onAdd: _pickMusic,
       onCreateGroup: _createGroup,
       onDeleteGroup: _deleteGroup,

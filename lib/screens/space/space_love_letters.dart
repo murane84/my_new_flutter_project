@@ -256,6 +256,7 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
       return (w) => ClipRRect(
             borderRadius: BorderRadius.circular(14),
             child: CompactPhoto(
+              caption: (l['content'] ?? '').toString(),
               image: authNetworkImageProvider(url, mediaAuthHeaders(url)),
               width: w,
               maxHeight: (MediaQuery.sizeOf(context).height * 0.34)
@@ -464,6 +465,8 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
       sub: [
         if (sent != null) 'sent ${DateFormat('d MMM · h:mm a').format(sent)}',
         inside,
+        // Its letter now lives in Our Space too — safe even if the chat goes.
+        if (ref['snap'] is Map) '🔒 kept safe',
       ].join('  ·  '),
       onOpen: () =>
           _openKeptHeart(mid: (ref['mid'] as num?)?.toInt(), moment: m),

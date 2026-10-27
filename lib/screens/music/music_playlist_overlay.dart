@@ -39,6 +39,12 @@ class _PlaylistOverlay extends StatefulWidget {
 
   /// Share the selected songs (several at once) to one or more chats.
   final void Function(List<String> paths)? onShareMany;
+
+  /// Dedicate a song to a friend (a heart with the song sealed inside).
+  final void Function(String path)? onDedicate;
+
+  /// Send straight to the Glow partner (shown only when bonded).
+  final void Function(String path)? onSendToPartner;
   final VoidCallback onClose;
   final VoidCallback onAdd;
 
@@ -87,6 +93,8 @@ class _PlaylistOverlay extends StatefulWidget {
     required this.onFavorite,
     required this.onShare,
     this.onShareMany,
+    this.onDedicate,
+    this.onSendToPartner,
     required this.onClose,
     required this.onAdd,
     required this.onCreateGroup,
@@ -981,10 +989,23 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 Navigator.pop(ctx);
                 _showAddToGroups(context, path);
               }),
+              if (widget.onSendToPartner != null &&
+                  SongBridge.instance.partnerId?.call() != null)
+                _optionTile(
+                    scheme, Icons.favorite_rounded, 'Send to my partner', () {
+                  Navigator.pop(ctx);
+                  widget.onSendToPartner!(path);
+                }, iconColor: scheme.primary),
               _optionTile(scheme, Icons.share_rounded, 'Share to chat', () {
                 Navigator.pop(ctx);
                 widget.onShare(path);
               }),
+              if (widget.onDedicate != null)
+                _optionTile(scheme, Icons.volunteer_activism_rounded,
+                    'Dedicate to…', () {
+                  Navigator.pop(ctx);
+                  widget.onDedicate!(path);
+                }),
               _optionTile(scheme, Icons.edit_rounded, 'Edit details', () {
                 // Close the options sheet and open the edit sheet in the SAME
                 // frame so they cross-fade (options slides down as edit slides

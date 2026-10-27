@@ -792,32 +792,24 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
     );
   }
 
+  /// Full-size view of a kept photo — swipe left/right through every photo
+  /// in Pinned moments (with its note), down / back arrow to close.
   void _openMomentPhoto(String url) {
-    showDialog<void>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.92),
-      builder: (dctx) => GestureDetector(
-        onTap: () => Navigator.pop(dctx),
-        child: Stack(
-          children: [
-            Center(
-              child: InteractiveViewer(
-                minScale: 0.8,
-                maxScale: 4,
-                child: KeepsakePhoto(url: url, fit: BoxFit.contain),
-              ),
-            ),
-            Positioned(
-              top: 40,
-              right: 16,
-              child: IconButton(
-                icon: const Icon(Icons.close_rounded, color: Colors.white),
-                onPressed: () => Navigator.pop(dctx),
-              ),
-            ),
-          ],
-        ),
-      ),
+    final photos = [
+      for (final m in ((_space['moments'] as List?) ?? const []).whereType<Map>())
+        if (m['kind'] == 'photo' && _full(m['ref']) != null) m,
+    ];
+    final urls = [for (final m in photos) _full(m['ref'])!];
+    final at = urls.indexOf(url);
+    ImageProvider prov(String u) => authNetworkImageProvider(u, mediaAuthHeaders(u));
+    showPhotoViewer(
+      context,
+      prov(url),
+      gallery: at < 0 ? null : [for (final u in urls) prov(u)],
+      captions: at < 0
+          ? null
+          : [for (final m in photos) (m['caption'] ?? '').toString()],
+      initialIndex: at < 0 ? 0 : at,
     );
   }
 

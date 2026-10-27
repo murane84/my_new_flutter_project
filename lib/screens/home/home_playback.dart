@@ -61,6 +61,8 @@ class PlaybackBus {
   void Function(int index)? webShareAt;
   void Function(int index)? webDedicateAt;
   void Function(int index)? webSendToPartnerAt;
+  // Send a queue song straight to one friend (drag a song onto their chat).
+  void Function(int index, int friendId)? webSendAtTo;
   // Toggle "favourite" on the currently-playing track (driven by the bar heart).
   VoidCallback? onToggleFavorite;
   // Share the currently-playing track to a chat (the quick action that used to
@@ -124,3 +126,10 @@ final ValueNotifier<double> playProgressNotifier = ValueNotifier<double>(0.0);
 // songs instead of the file browser — can read it without owning the player.
 final ValueNotifier<List<String>> playlistNotifier =
     ValueNotifier<List<String>>(<String>[]);
+
+/// What a web queue song carries while it's dragged onto a chat.
+class WebSongDrag {
+  const WebSongDrag(this.index, this.title);
+  final int index;
+  final String title;
+}

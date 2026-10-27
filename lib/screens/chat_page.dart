@@ -57,7 +57,7 @@ import '../widgets/chat_wallpaper_sheet.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'user_profile_sheet.dart';
-import 'home_page.dart' show playlistNotifier, playbackBus;
+import 'home_page.dart' show playlistNotifier, playbackBus, WebSongDrag;
 import '../state/playback_state.dart' show providerContainer, nowPlayingProvider;
 import 'relationship_space_page.dart' show spaceEventBus;
 import 'dart:io';
@@ -6956,7 +6956,9 @@ class _ChatPageState extends State<ChatPage>
       ],
     );
 
-    if (!widget.showAppBar) return _wrapViewerBack(_pasteWrapper(body));
+    if (!widget.showAppBar) {
+      return _wrapViewerBack(_songDropTarget(_pasteWrapper(body)));
+    }
 
     final String headerTitle = _isGroup ? widget.groupTitle : widget.friendName;
     final String headerAvatar = _isGroup ? widget.groupAvatar : _friendAvatar;
@@ -7071,7 +7073,7 @@ class _ChatPageState extends State<ChatPage>
           ),
         ],
       ),
-      body: _wrapViewerBack(_pasteWrapper(body)),
+      body: _wrapViewerBack(_songDropTarget(_pasteWrapper(body))),
     );
   }
 }

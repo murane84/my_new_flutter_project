@@ -10,7 +10,7 @@ import '../services/live_session_service.dart' show BytesAudioSource;
 import '../services/now_playing_presence.dart';
 import '../services/song_insights.dart';
 import '../widgets/song_feel_strip.dart';
-import 'home_page.dart' show playbackBus;
+import 'home_page.dart' show playbackBus, WebSongDrag;
 import 'web_fs/music_folder.dart';
 import 'web_fs/blob_url.dart';
 import '../utils/app_config.dart';
@@ -148,6 +148,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     playbackBus.webDedicateAt = _dedicateAt;
     playbackBus.webSendToPartnerAt =
         (i) => _shareAt(i, sendTo: SongBridge.instance.partnerId?.call());
+    playbackBus.webSendAtTo = (i, friendId) => _shareAt(i, sendTo: friendId);
   }
 
   // ── Per-track actions (same as the native playlist's) ────────────────────
@@ -211,6 +212,40 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     // Reorder semantics (target before removal): right after the current.
     _reorder(i, _index + 1);
     showToast(context, 'Plays next', type: ToastType.info);
+  }
+
+  Widget _dragPill(ThemeData theme, String title) {
+    final accent = theme.colorScheme.primary;
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 8, 14, 8),
+        decoration: BoxDecoration(
+          color: accent,
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: [
+            BoxShadow(
+                color: accent.withValues(alpha: 0.45),
+                blurRadius: 16,
+                offset: const Offset(0, 6)),
+          ],
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.music_note_rounded, size: 16, color: Colors.white),
+          const SizedBox(width: 6),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 220),
+            child: Text(title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ]),
+      ),
+    );
   }
 
   Widget _trackMenu(ThemeData theme, int i) {
@@ -313,6 +348,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     playbackBus.webShareAt = null;
     playbackBus.webDedicateAt = null;
     playbackBus.webSendToPartnerAt = null;
+    playbackBus.webSendAtTo = null;
     _queueRev.dispose();
     _abSub?.cancel();
     _player.dispose();
@@ -2133,7 +2169,22 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             child: Row(
               children: [
-                _queueAvatar(theme, current),
+                // Grab the disc and drop it on a chat to send the song there.
+                Tooltip(
+                  message: 'Drag onto a chat to send',
+                  waitDuration: const Duration(milliseconds: 700),
+                  child: Draggable<WebSongDrag>(
+                    data: WebSongDrag(i, title),
+                    dragAnchorStrategy: pointerDragAnchorStrategy,
+                    feedback: _dragPill(theme, title),
+                    childWhenDragging: Opacity(
+                        opacity: 0.4, child: _queueAvatar(theme, current)),
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.grab,
+                      child: _queueAvatar(theme, current),
+                    ),
+                  ),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(

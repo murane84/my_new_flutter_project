@@ -1182,6 +1182,77 @@ extension _ChatPageHelpers2 on _ChatPageState {
   // the composer's preview + caption flow. Text paste, undo (Ctrl+Z), redo and
   // the other standard field shortcuts are Flutter defaults and keep working —
   // this only adds image paste on top.
+  /// Web: drop a song dragged from the music player's queue onto this chat
+  /// → it's sent here (a DM sends straight away; a group opens the share
+  /// sheet). A soft card says what will happen while hovering.
+  Widget _songDropTarget(Widget child) {
+    if (!kIsWeb) return child;
+    return DragTarget<WebSongDrag>(
+      onWillAcceptWithDetails: (_) => playbackBus.webShareAt != null,
+      onAcceptWithDetails: (d) {
+        final i = d.data.index;
+        if (!_isGroup &&
+            widget.friendId > 0 &&
+            playbackBus.webSendAtTo != null) {
+          playbackBus.webSendAtTo!(i, widget.friendId);
+        } else {
+          playbackBus.webShareAt?.call(i);
+        }
+      },
+      builder: (ctx, cand, _) {
+        final scheme = Theme.of(ctx).colorScheme;
+        final song = cand.isEmpty ? null : cand.first;
+        return Stack(children: [
+          child,
+          if (song != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Container(
+                  margin: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: scheme.primary, width: 2),
+                  ),
+                  alignment: Alignment.center,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: scheme.surface,
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.15),
+                            blurRadius: 18,
+                            offset: const Offset(0, 6)),
+                      ],
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.send_rounded, color: scheme.primary),
+                      const SizedBox(width: 10),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 280),
+                        child: Text(
+                            _isGroup
+                                ? 'Drop to share “${song.title}”'
+                                : 'Drop to send “${song.title}” here',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: scheme.onSurface)),
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+        ]);
+      },
+    );
+  }
+
   Widget _pasteWrapper(Widget child) {
     return Focus(
       canRequestFocus: false,

@@ -73,6 +73,18 @@ class DeviceReport {
     }
   }
 
+  /// Platform + app version, e.g. for a feedback report.
+  static Future<({String platform, String? version, String? os})>
+      info() async {
+    String? version;
+    try {
+      final p = await PackageInfo.fromPlatform();
+      version =
+          p.buildNumber.isEmpty ? p.version : '${p.version}+${p.buildNumber}';
+    } catch (_) {}
+    return (platform: _platform(), version: version, os: await _osVersion());
+  }
+
   /// Send once per app run. Safe to call from every sign-in path.
   static Future<void> send() async {
     if (_sent) return;

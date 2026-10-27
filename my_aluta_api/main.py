@@ -31,6 +31,7 @@ from routers import plan as plan_router
 from routers import wallpapers as wallpapers_router
 from routers import ozilane as ozilane_router
 import admin_panel
+from routers import feedback as feedback_router
 from websocket_routes import router as websocket_router
 import websocket_manager
 from sqlalchemy import text
@@ -135,6 +136,8 @@ app.include_router(wallpapers_router.router)
 app.include_router(ozilane_router.router)
 # Aluta Admin (backoffice) API — device-authorized, signed requests only.
 app.include_router(admin_panel.router)
+# "Send feedback" from the app (worked through in the admin panel).
+app.include_router(feedback_router.router)
 app.include_router(websocket_router)
 
 

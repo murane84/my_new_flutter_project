@@ -1242,3 +1242,26 @@ class AdminAuditLog(Base):
     detail = Column(Text, nullable=True)
     ip = Column(String, nullable=True)
     ok = Column(Boolean, nullable=False, default=True)
+
+
+class Feedback(Base):
+    """What people think of Aluta — ideas, problems, praise — sent from the
+    app's "Send feedback" page and worked through in the admin panel.
+    Auto-created by create_all; no ALTER."""
+    __tablename__ = "feedback"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=False)
+    kind = Column(String, nullable=False, default="idea")   # idea|problem|praise|other
+    area = Column(String, nullable=True)       # chat|music|spaces|calls|stories|other
+    rating = Column(Integer, nullable=True)    # 1..5, optional
+    message = Column(Text, nullable=False)
+    platform = Column(String, nullable=True)
+    app_version = Column(String, nullable=True)
+    # new | seen | planned | done | wontfix
+    status = Column(String, nullable=False, default="new", index=True)
+    admin_note = Column(Text, nullable=True)   # shown to the person as "Our reply"
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+        index=True)
+    updated_at = Column(DateTime(timezone=True), nullable=True)

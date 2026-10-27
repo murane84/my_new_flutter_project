@@ -715,11 +715,14 @@ def admin_me(ctx: AdminCtx = Depends(admin_ctx), db: Session = Depends(get_db)):
     left = db.query(AdminRecoveryCode).filter(
         AdminRecoveryCode.user_id == ctx.user.id,
         AdminRecoveryCode.used_at.is_(None)).count()
+    from models import Feedback
+    new_fb = db.query(Feedback).filter(Feedback.status == "new").count()
     return {"owner": {"id": ctx.user.id, "username": ctx.user.username,
                       "email": ctx.user.email},
             "device": _device_out(ctx.device, ctx.device.id),
             "pending_requests": pending,
-            "recovery_codes_left": left}
+            "recovery_codes_left": left,
+            "new_feedback": new_fb}
 
 
 @router.post("/logout")
@@ -1162,3 +1165,96 @@ def metrics_activity(days: int = 14, ctx: AdminCtx = Depends(admin_ctx),
         "voice_notes": _daily(db, "messages", "timestamp", days,
                               "message_type = 'audio'"),
     }
+
+
+# ── Feedback (from the app's "Send feedback" page) ──────────────────────────
+
+class FeedbackUpdateIn(BaseModel):
+    status: Optional[str] = None     # new | seen | planned | done | wontfix
+    reply: Optional[str] = None      # shown to the person in the app
+
+
+_FB_STATUSES = {"new", "seen", "planned", "done", "wontfix"}
+
+
+@router.get("/feedback")
+def admin_feedback(status: Optional[str] = None, kind: Optional[str] = None,
+                   limit: int = 50, before_id: Optional[int] = None,
+                   ctx: AdminCtx = Depends(admin_ctx),
+                   db: Session = Depends(get_db)):
+    from models import Feedback, UserDevice
+    q = db.query(Feedback)
+    if status in _FB_STATUSES:
+        q = q.filter(Feedback.status == status)
+    if kind:
+        q = q.filter(Feedback.kind == kind)
+    if before_id:
+        q = q.filter(Feedback.id < before_id)
+    rows = q.order_by(Feedback.id.desc()).limit(max(1, min(limit, 100))).all()
+    uids = {r.user_id for r in rows}
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(uids)).all()} \
+        if uids else {}
+    counts = {s: 0 for s in _FB_STATUSES}
+    for st, n in db.query(Feedback.status, sa_func.count(Feedback.id)).group_by(
+            Feedback.status).all():
+        counts[st] = int(n)
+    avg = db.query(sa_func.avg(Feedback.rating)).filter(
+        Feedback.rating.isnot(None)).scalar()
+    from routers.feedback import out as fb_out
+    entries = []
+    for r in rows:
+        u = users.get(r.user_id)
+        e = fb_out(r)
+        e.update({
+            "user_id": r.user_id,
+            "username": u.username if u else None,
+            "platform": r.platform,
+            "app_version": r.app_version,
+        })
+        entries.append(e)
+    return {"entries": entries, "counts": counts,
+            "average_rating": round(float(avg), 2) if avg is not None else None}
+
+
+@router.post("/feedback/{feedback_id}")
+def admin_feedback_update(feedback_id: int, payload: FeedbackUpdateIn,
+                          bg: BackgroundTasks,
+                          ctx: AdminCtx = Depends(admin_ctx),
+                          db: Session = Depends(get_db)):
+    require_full(ctx)
+    from models import Feedback
+    from routers.feedback import out as fb_out
+    f = db.query(Feedback).filter(Feedback.id == feedback_id).first()
+    if not f:
+        raise HTTPException(404, "No such feedback")
+    changes = {}
+    if payload.status is not None:
+        if payload.status not in _FB_STATUSES:
+            raise HTTPException(400, "Unknown status")
+        changes["status"] = [f.status, payload.status]
+        f.status = payload.status
+    if payload.reply is not None:
+        reply = payload.reply.strip()[:2000]
+        changes["reply"] = bool(reply)
+        f.admin_note = reply or None
+    f.updated_at = _now()
+    # Let the person know their voice was heard (a reply, or it's planned/done).
+    tell = None
+    if payload.reply and payload.reply.strip():
+        tell = "The Aluta team replied to your feedback 💬"
+    elif payload.status in ("planned", "done"):
+        tell = ("Your idea is planned 🛠️" if payload.status == "planned"
+                else "Your feedback is done ✅")
+    if tell:
+        def _push(uid=f.user_id, body=tell):
+            try:
+                from push import send_push_to_user
+                send_push_to_user(uid, {"type": "feedback_update",
+                                        "title": "Aluta", "body": body})
+            except Exception as e:  # noqa: BLE001
+                print(f"[feedback] user push failed: {e}")
+        bg.add_task(_push)
+    _audit(db, "feedback_updated", user_id=ctx.user.id, device_id=ctx.device.id,
+           target=f.id, ip=ctx.ip, detail=changes)
+    db.commit()
+    return fb_out(f)

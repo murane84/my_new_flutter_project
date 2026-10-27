@@ -897,6 +897,67 @@ class ApiService {
     }
   }
 
+  // ── Feedback ("Send feedback" page → admin panel) ───────────────────────────
+
+  /// Send a piece of feedback. Returns null on success, else a message to show.
+  Future<String?> sendFeedback({
+    required String message,
+    required String kind,
+    String? area,
+    int? rating,
+    String? platform,
+    String? appVersion,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return 'Please sign in again';
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/feedback'),
+        headers: _authHeaders(token),
+        body: jsonEncode({
+          'message': message,
+          'kind': kind,
+          'area': ?area,
+          'rating': ?rating,
+          'platform': ?platform,
+          'app_version': ?appVersion,
+        }),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) return null;
+      final d = _tryDecode(resp.body);
+      final detail = d?['detail'];
+      return detail is String ? detail : 'Could not send — try again';
+    } catch (e) {
+      _logger.e('sendFeedback exception: $e');
+      return 'No connection — try again';
+    }
+  }
+
+  /// What I've sent before, newest first (with status + any team reply).
+  Future<List<Map<String, dynamic>>> myFeedback() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return const [];
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/feedback/mine'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode == 200) {
+        final d = _tryDecode(resp.body);
+        final l = d?['feedback'];
+        if (l is List) {
+          return l
+              .whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList();
+        }
+      }
+    } catch (e) {
+      _logger.e('myFeedback exception: $e');
+    }
+    return const [];
+  }
+
   // LOGOUT
   Future<void> logoutUser() async {
     // If biometric quick-unlock is enrolled, KEEP the enrollment + refresh token

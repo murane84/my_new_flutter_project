@@ -6,6 +6,7 @@ import '../widgets/genie_menu.dart';
 
 import 'admin_api.dart';
 import 'admin_devices.dart';
+import 'admin_feedback.dart';
 import 'admin_install.dart';
 import 'admin_overview.dart';
 import 'admin_widgets.dart';
@@ -115,9 +116,11 @@ class _AdminShellState extends State<AdminShell> {
     final owner = (widget.session['owner'] as Map?)?.cast<String, dynamic>();
     final probation = _device['on_probation'] == true;
     final pending = (_me?['pending_requests'] as num?)?.toInt() ?? 0;
+    final newFeedback = (_me?['new_feedback'] as num?)?.toInt() ?? 0;
     final pages = <Widget>[
       AdminOverview(onOpenDevices: () => setState(() => _tab = 1)),
       AdminDevicesPage(onChanged: _loadMe),
+      AdminFeedbackPage(onChanged: _loadMe),
       const AdminAuditPage(),
     ];
     final wide = MediaQuery.sizeOf(context).width >= 840;
@@ -247,9 +250,16 @@ class _AdminShellState extends State<AdminShell> {
                 onTap: () => setState(() => _tab = 1),
               ),
               GenieMenuEntry(
+                icon: Icons.rate_review_rounded,
+                label: newFeedback > 0
+                    ? 'Feedback · $newFeedback new'
+                    : 'Feedback',
+                onTap: () => setState(() => _tab = 2),
+              ),
+              GenieMenuEntry(
                 icon: Icons.receipt_long_rounded,
                 label: 'Activity log',
-                onTap: () => setState(() => _tab = 2),
+                onTap: () => setState(() => _tab = 3),
               ),
               const GenieMenuEntry.divider(),
               GenieMenuEntry(
@@ -297,6 +307,12 @@ class _AdminShellState extends State<AdminShell> {
                           selectedIcon:
                               navIcon(Icons.devices_rounded, badge: pending),
                           label: const Text('Devices')),
+                      NavigationRailDestination(
+                          icon: navIcon(Icons.rate_review_outlined,
+                              badge: newFeedback),
+                          selectedIcon: navIcon(Icons.rate_review_rounded,
+                              badge: newFeedback),
+                          label: const Text('Feedback')),
                       const NavigationRailDestination(
                           icon: Icon(Icons.receipt_long_outlined),
                           selectedIcon: Icon(Icons.receipt_long_rounded),
@@ -322,6 +338,12 @@ class _AdminShellState extends State<AdminShell> {
                     icon: navIcon(Icons.devices_outlined, badge: pending),
                     selectedIcon: navIcon(Icons.devices_rounded, badge: pending),
                     label: 'Devices'),
+                NavigationDestination(
+                    icon: navIcon(Icons.rate_review_outlined,
+                        badge: newFeedback),
+                    selectedIcon:
+                        navIcon(Icons.rate_review_rounded, badge: newFeedback),
+                    label: 'Feedback'),
                 const NavigationDestination(
                     icon: Icon(Icons.receipt_long_outlined),
                     selectedIcon: Icon(Icons.receipt_long_rounded),

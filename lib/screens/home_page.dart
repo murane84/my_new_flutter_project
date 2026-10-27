@@ -37,6 +37,7 @@ import 'device_link.dart';
 import 'call_reliability_screen.dart';
 import 'music/song_identifier.dart' show showSongIdentifier;
 import 'profile_screen.dart';
+import 'feedback_screen.dart';
 import '../utils/popup_shell.dart';
 import '../utils/bounce_tap.dart';
 import '../utils/brand_theme.dart';

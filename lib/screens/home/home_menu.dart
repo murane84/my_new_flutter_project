@@ -159,6 +159,11 @@ extension _HomeMenu on HomePageState {
                 onTap: () => showLegalMenu(context)),
           ],
         ),
+        // Its own top-level entry, so sharing a view is always one tap away.
+        GenieMenuEntry(
+            icon: Icons.rate_review_rounded,
+            label: 'Send feedback',
+            onTap: () => showAppPopup(context, const FeedbackScreen())),
         const GenieMenuEntry.divider(),
         GenieMenuEntry(
             icon: Icons.logout_rounded,

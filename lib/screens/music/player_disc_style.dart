@@ -1028,10 +1028,19 @@ class _ClassicVinylState extends State<_ClassicVinyl>
               angle: -_lift.value * 1.25,
               alignment: const Alignment(0.78, -0.84),
               child: CustomPaint(
+                // Light mode: darker brushed steel so the arm reads against a
+                // pale page; dark mode keeps the bright chrome.
                 painter: _TonearmPainter(
-                  metal: const Color(0xFFEAEBF1),
-                  joint: const Color(0xFF9A9CA8),
+                  metal: isDark
+                      ? const Color(0xFFEAEBF1)
+                      : const Color(0xFF9EA1AD),
+                  joint: isDark
+                      ? const Color(0xFF9A9CA8)
+                      : const Color(0xFF5E616C),
                   accent: accent,
+                  edge: isDark
+                      ? Colors.black.withValues(alpha: 0.35)
+                      : const Color(0xFF3F424C).withValues(alpha: 0.55),
                 ),
               ),
             ),
@@ -1102,11 +1111,17 @@ class _ReelPainter extends CustomPainter {
 }
 
 class _TonearmPainter extends CustomPainter {
-  _TonearmPainter(
-      {required this.metal, required this.joint, required this.accent});
+  _TonearmPainter({
+    required this.metal,
+    required this.joint,
+    required this.accent,
+    this.edge = const Color(0x59000000),
+  });
   final Color metal;
   final Color joint;
   final Color accent;
+  // Outline + soft cast shadow so the arm stands out on any background.
+  final Color edge;
 
   @override
   void paint(Canvas c, Size s) {
@@ -1117,6 +1132,23 @@ class _TonearmPainter extends CustomPainter {
     final len = d.distance;
     final u = len == 0 ? const Offset(0, 0) : d / len;
 
+    // Cast shadow, then a thin dark outline under every metal part.
+    final sh = Offset(side * 0.012, side * 0.022);
+    final shadow = Paint()
+      ..color = edge.withValues(alpha: edge.a * 0.5)
+      ..strokeWidth = side * 0.04
+      ..strokeCap = StrokeCap.round
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, side * 0.012);
+    c.drawLine(pivot + sh, head + sh, shadow);
+    c.drawCircle(pivot + sh, side * 0.085, shadow..style = PaintingStyle.fill);
+    final rim = side * 0.012;
+    final outline = Paint()
+      ..color = edge
+      ..strokeWidth = side * 0.035 + rim
+      ..strokeCap = StrokeCap.round;
+    c.drawLine(pivot, head, outline);
+    c.drawCircle(pivot, side * 0.085 + rim / 2, Paint()..color = edge);
+    c.drawCircle(head, side * 0.042 + rim / 2, Paint()..color = edge);
     // Arm shaft.
     c.drawLine(
       pivot,
@@ -1147,6 +1179,14 @@ class _TonearmPainter extends CustomPainter {
       head + perp * (side * 0.045),
       head - perp * (side * 0.045),
       Paint()
+        ..color = edge
+        ..strokeWidth = side * 0.03 + rim
+        ..strokeCap = StrokeCap.round,
+    );
+    c.drawLine(
+      head + perp * (side * 0.045),
+      head - perp * (side * 0.045),
+      Paint()
         ..color = metal
         ..strokeWidth = side * 0.03
         ..strokeCap = StrokeCap.round,
@@ -1155,7 +1195,10 @@ class _TonearmPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _TonearmPainter o) =>
-      o.metal != metal || o.joint != joint || o.accent != accent;
+      o.metal != metal ||
+      o.joint != joint ||
+      o.accent != accent ||
+      o.edge != edge;
 }
 
 /// Pulse: a calm centre coin with sonar rings that emanate only while playing.

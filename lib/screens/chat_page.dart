@@ -596,7 +596,12 @@ class _ChatPageState extends State<ChatPage>
   // them to react to privately. The destination is the user's bond, never this
   // chat's partner; when this chat IS a bonded partner's DM that space is the
   // natural default in the picker.
-  List<Map<String, dynamic>> _mySpaces = const [];
+  // Seeded from the last load (app-wide) so the bond-only bits — e.g. the
+  // keepsake button beside a bubble — are there on the FIRST frame. Loading
+  // them late squeezed every bubble a few px a second after opening a chat
+  // (the "shake" on landing).
+  static List<Map<String, dynamic>> _spacesMemo = const [];
+  List<Map<String, dynamic>> _mySpaces = _spacesMemo;
   bool get _canHarmony => _mySpaces.isNotEmpty;
   // This DM is with one of my bonded partners (wallpaper's smart default).
   bool get _bondedHere => !_isGroup && _defaultKeepSpaceId != null;
@@ -617,6 +622,7 @@ class _ChatPageState extends State<ChatPage>
       final bonds = spaces
           .where((s) => (s['status'] ?? 'active').toString() == 'active')
           .toList();
+      _spacesMemo = bonds;
       if (mounted) setState(() => _mySpaces = bonds);
       // Remember whether this DM is with my bonded partner, so its wallpaper
       // (Motif by default) paints right on the first frame next time.

@@ -646,7 +646,34 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: widget.textColor),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+          // Load right from here — so "load songs to play here" is one tap.
+          Builder(builder: (ctx) {
+            void pick(Future<void> Function() action) {
+              Navigator.of(ctx).maybePop();
+              action();
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                FilledButton.icon(
+                  onPressed: _loading ? null : () => pick(_openFiles),
+                  icon: const Icon(Icons.library_add_rounded, size: 18),
+                  label: const Text('Choose songs'),
+                ),
+                if (folderPickSupported) ...[
+                  const SizedBox(height: 6),
+                  OutlinedButton.icon(
+                    onPressed: _loading ? null : () => pick(_openFolder),
+                    icon: const Icon(Icons.folder_copy_outlined, size: 18),
+                    label: const Text('Load a music folder'),
+                  ),
+                ],
+              ],
+            );
+          }),
+          const SizedBox(height: 14),
           Text('Get the full app',
               style: theme.textTheme.labelMedium
                   ?.copyWith(fontWeight: FontWeight.bold)),

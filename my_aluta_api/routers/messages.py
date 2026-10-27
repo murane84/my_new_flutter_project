@@ -398,6 +398,7 @@ def delete_single_message(message_id: int, delete_for_all: bool = Query(False), 
 @router.post("/{message_id}/react")
 def react_to_message(
     message_id: int,
+    background: BackgroundTasks,
     emoji: str = Query(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -417,7 +418,8 @@ def react_to_message(
         reactions = {}
     key = str(current_user.id)
     # Same emoji again = remove (toggle); a different one replaces it.
-    if reactions.get(key) == emoji:
+    added = reactions.get(key) != emoji
+    if not added:
         reactions.pop(key, None)
     else:
         reactions[key] = emoji
@@ -428,6 +430,36 @@ def react_to_message(
         "type": "message_reaction",
         "data": {"message_id": message_id, "reactions": message.reactions},
     })
+
+    # Tell the AUTHOR someone reacted (WhatsApp-style) — only when a reaction
+    # is added (not removed), never for reacting to your own message, and not
+    # while they're looking at that very chat (the bubble updates live).
+    try:
+        author = int(message.sender_id)
+        if added and author != current_user.id:
+            from websocket_manager import is_viewing
+            from models import Conversation
+            conv = None
+            if getattr(message, "conversation_id", None):
+                conv = db.query(Conversation).filter(
+                    Conversation.id == message.conversation_id).first()
+            is_group = bool(conv and conv.is_group)
+            where = (f"grp:{conv.id}" if is_group
+                     else f"dm:{current_user.id}")
+            if not is_viewing(author, where):
+                background.add_task(send_push_to_user, author, {
+                    "type": "reaction",
+                    "sender_id": str(current_user.id),
+                    "sender_name": current_user.username or "Someone",
+                    "conversation_id": str(conv.id) if is_group else "",
+                    "group_title": (conv.title or "") if is_group else "",
+                    "message_id": str(message.id),
+                    "emoji": emoji,
+                    # Hearts stay secret; media shows its label.
+                    "body": crud.list_preview(message)[:120],
+                })
+    except Exception as e:  # noqa: BLE001
+        print(f"[react] push skipped: {e}")
     return {"message_id": message_id, "reactions": message.reactions}
 
 

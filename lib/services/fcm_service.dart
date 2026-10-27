@@ -154,6 +154,37 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         senderId: fid.isEmpty ? null : fid,
         senderName: who,
       );
+    } else if (type == 'reaction') {
+      // Someone reacted to MY message (server messages.py). Open chat → the
+      // bubble already shows it live, so no banner for that thread.
+      final who = mine((data['sender_name'] ?? 'Someone').toString());
+      final senderId = (data['sender_id'] ?? '').toString();
+      final convId = (data['conversation_id'] ?? '').toString();
+      final groupTitle = (data['group_title'] ?? '').toString();
+      final messageId = (data['message_id'] ?? '').toString();
+      if (foreground &&
+          ActiveChat.instance.suppresses(senderId: senderId, convId: convId)) {
+        return;
+      }
+      final emoji = (data['emoji'] ?? '❤️').toString();
+      final preview = (data['body'] ?? '').toString().trim();
+      final quoted = preview.isEmpty
+          ? 'your message'
+          : '“${preview.length > 60 ? '${preview.substring(0, 60)}…' : preview}”';
+      final isGroup = convId.isNotEmpty;
+      await showMessageNotification(
+        title: isGroup && groupTitle.isNotEmpty ? groupTitle : who,
+        body: isGroup
+            ? '$who reacted $emoji to $quoted'
+            : 'Reacted $emoji to $quoted',
+        // Its own slot per message, so it never replaces a real message.
+        id: 7600 + (int.tryParse(messageId) ?? 0) % 1000,
+        senderId: senderId.isEmpty ? null : senderId,
+        senderName: who,
+        conversationId: convId.isEmpty ? null : convId,
+        groupTitle: groupTitle.isEmpty ? null : groupTitle,
+        messageId: messageId.isEmpty ? null : messageId,
+      );
     } else if (type == 'heart_opened' && foreground) {
       // App open: the in-app heart pill already shows it — no second banner.
       return;

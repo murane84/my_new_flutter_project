@@ -2178,13 +2178,17 @@ class _HeartGenieState extends State<_HeartGenie>
                     // reactions, buttons and reseal line always stay in view.
                     if (widget.media != null) ...[
                       Flexible(
-                        flex: 3,
+                        // Words share the room; with none, the photo may use it.
+                        flex: (title != null || body.isNotEmpty) ? 3 : 1,
                         child: Opacity(
                           opacity: words,
                           child: ConstrainedBox(
+                            // Screen-aware: up to ~40% of the screen on tall
+                            // ones, and it keeps shrinking (no fixed floor) on
+                            // short windows so nothing below is ever cut off.
                             constraints: BoxConstraints(
-                                maxHeight: (size.height * 0.34)
-                                    .clamp(140.0, 340.0)),
+                                maxHeight: (size.height * 0.40)
+                                    .clamp(60.0, 460.0)),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(16),
                               child: widget.media!(width - 48),
@@ -2196,6 +2200,7 @@ class _HeartGenieState extends State<_HeartGenie>
                         const SizedBox(height: 14),
                     ],
                     // The words — calm and readable; long notes scroll.
+                    if (title != null || body.isNotEmpty)
                     Flexible(
                       flex: 2,
                       child: Opacity(

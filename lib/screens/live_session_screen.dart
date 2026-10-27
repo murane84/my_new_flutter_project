@@ -31,6 +31,7 @@ import '../services/track_title.dart' show displayTitleForPath;
 import '../utils/readable.dart';
 import '../services/contact_names.dart';
 import '../widgets/concert_stage.dart';
+import '../widgets/playing_bars.dart';
 import '../services/online_watch.dart';
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
@@ -2455,11 +2456,12 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                   borderRadius: BorderRadius.circular(10))
               : null,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-          leading: Icon(
-            isCurrent ? Icons.graphic_eq_rounded : Icons.music_note_rounded,
-            size: 18,
-            color: isCurrent ? scheme.primary : scheme.onSurfaceVariant,
-          ),
+          leading: isCurrent
+              ? SizedBox(
+                  width: 18,
+                  child: PlayingBars(color: scheme.primary, scale: 0.6))
+              : Icon(Icons.music_note_rounded,
+                  size: 18, color: scheme.onSurfaceVariant),
           title: MarqueeText(
             text: titles[i],
             height: 18,
@@ -2641,11 +2643,12 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                   borderRadius: BorderRadius.circular(10))
               : null,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-          leading: Icon(
-            isCurrent ? Icons.graphic_eq_rounded : Icons.music_note_rounded,
-            size: 18,
-            color: isCurrent ? scheme.primary : scheme.onSurfaceVariant,
-          ),
+          leading: isCurrent
+              ? SizedBox(
+                  width: 18,
+                  child: PlayingBars(color: scheme.primary, scale: 0.6))
+              : Icon(Icons.music_note_rounded,
+                  size: 18, color: scheme.onSurfaceVariant),
           title: MarqueeText(
             text: t.title,
             height: 18,

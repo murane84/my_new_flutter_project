@@ -23,6 +23,7 @@ import 'listening_audience_sheet.dart' show PresenceShareButton;
 import '../widgets/genie_menu.dart';
 import '../utils/readable.dart';
 import '../widgets/controls_glass.dart';
+import '../widgets/playing_bars.dart';
 import '../utils/typing_guard.dart';
 
 /// Web-only replacement for the native [MusicControls] panel.
@@ -2100,7 +2101,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
             ),
           ],
         ),
-        child: const Center(child: _WebMiniEq(color: Colors.white)),
+        child: const Center(child: PlayingBars(color: Colors.white)),
       );
     }
     return Container(
@@ -2382,60 +2383,3 @@ class _WebWavePainter extends CustomPainter {
       old.heights != heights;
 }
 
-// ─── Mini equalizer (web) ─────────────────────────────────────────────────────
-// A compact 4-bar equalizer that gently dances — used inside the now-playing
-// queue avatar, mirroring the native playlist's "this is playing" indicator.
-class _WebMiniEq extends StatefulWidget {
-  final Color color;
-  const _WebMiniEq({required this.color});
-
-  @override
-  State<_WebMiniEq> createState() => _WebMiniEqState();
-}
-
-class _WebMiniEqState extends State<_WebMiniEq>
-    with SingleTickerProviderStateMixin {
-  static const int _n = 4;
-  static const List<double> _phase = [0.0, 0.55, 0.25, 0.8];
-  late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 900))
-    ..repeat();
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  // Triangle wave 0..1 (no dart:math needed).
-  double _wave(double x) {
-    x = x - x.floorToDouble();
-    return x < 0.5 ? x * 2 : (1 - x) * 2;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _c,
-      builder: (context, _) {
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            for (int i = 0; i < _n; i++) ...[
-              Container(
-                width: 3,
-                height: 6.0 + _wave(_c.value + _phase[i]) * 13.0,
-                decoration: BoxDecoration(
-                  color: widget.color,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              if (i < _n - 1) const SizedBox(width: 2.5),
-            ],
-          ],
-        );
-      },
-    );
-  }
-}

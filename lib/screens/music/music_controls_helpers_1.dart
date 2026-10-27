@@ -1131,14 +1131,12 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
               ]
             : null,
       ),
-      child: Icon(
-        isNow ? Icons.equalizer_rounded : Icons.music_note_rounded,
-        size: 16,
-        color: isNow
-            ? scheme.onPrimary
-            : Color.alphaBlend(
-                accent.withValues(alpha: 0.5), scheme.onSurfaceVariant),
-      ),
+      child: isNow
+          ? PlayingBars(color: scheme.onPrimary, scale: 0.72)
+          : Icon(Icons.music_note_rounded,
+              size: 16,
+              color: Color.alphaBlend(
+                  accent.withValues(alpha: 0.5), scheme.onSurfaceVariant)),
     );
     final row = Material(
       color: isNow

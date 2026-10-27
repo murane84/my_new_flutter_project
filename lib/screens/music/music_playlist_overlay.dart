@@ -312,8 +312,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             ),
           ],
         ),
-        child:
-            Icon(Icons.equalizer_rounded, size: 15, color: scheme.onPrimary),
+        child: PlayingBars(color: scheme.onPrimary, scale: 0.62),
       );
     }
     // Inactive tracks get a faint accent-tinted disc (not flat grey) so the

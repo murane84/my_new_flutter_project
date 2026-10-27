@@ -212,6 +212,7 @@ flutter_native_splash:
   color: "#000000"
   android: true
   ios: true
+  web: false   # web/index.html has its own (indexable) loading screen
   fullscreen: true
 
 flutter:

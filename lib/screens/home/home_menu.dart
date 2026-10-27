@@ -162,7 +162,7 @@ extension _HomeMenu on HomePageState {
         // Its own top-level entry, so sharing a view is always one tap away.
         GenieMenuEntry(
             icon: Icons.rate_review_rounded,
-            label: 'Send feedback',
+            label: 'Help & feedback',
             onTap: () => showAppPopup(context, const FeedbackScreen())),
         const GenieMenuEntry.divider(),
         GenieMenuEntry(

@@ -22,7 +22,7 @@ from models import Feedback, User
 
 router = APIRouter(tags=["Feedback"])
 
-KINDS = {"idea", "problem", "praise", "other"}
+KINDS = {"help", "idea", "problem", "praise", "other"}
 AREAS = {"chat", "music", "spaces", "calls", "stories", "glow", "account",
          "other"}
 DAILY_LIMIT = 10
@@ -106,7 +106,7 @@ def send_feedback(payload: FeedbackIn, bg: BackgroundTasks,
     db.add(f)
     db.commit()
     db.refresh(f)
-    icon = {"idea": "💡", "problem": "🐞", "praise": "💖"}.get(kind, "💬")
+    icon = {"help": "🛟", "idea": "💡", "problem": "🐞", "praise": "💖"}.get(kind, "💬")
     stars = f" {'★' * rating}" if rating else ""
     bg.add_task(_notify_owner,
                 f"{icon}{stars} @{current_user.username}: {msg[:90]}")

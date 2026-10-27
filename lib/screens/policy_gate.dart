@@ -3,6 +3,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'api_service.dart';
 import 'legal_screen.dart';
+import 'feedback_screen.dart';
+import '../utils/popup_shell.dart';
 import '../utils/readable.dart';
 
 /// A blocking "read & agree" consent gate for the Privacy Policy + Terms of Use.
@@ -54,6 +56,11 @@ class _PolicyGateDialogState extends State<_PolicyGateDialog> {
       await launchUrl(Uri(scheme: 'mailto', path: 'support@ozilane.com'));
     } catch (_) {/* no mail app — non-fatal */}
   }
+
+  /// Questions go to the Aluta team in-app first (replies come back here);
+  /// email stays as the fallback.
+  void _help() =>
+      showAppPopup(context, const FeedbackScreen(initialKind: 'help'));
 
   Future<void> _accept() async {
     if (!_agreed || _busy) return;
@@ -233,14 +240,15 @@ class _PolicyGateDialogState extends State<_PolicyGateDialog> {
                 ),
                 Center(
                   child: TextButton(
-                    onPressed: _busy ? null : _mail,
+                    onPressed: _busy ? null : _help,
+                    onLongPress: _busy ? null : _mail,
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 2),
                       minimumSize: const Size(0, 0),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     child: Text(
-                      'Questions? support@ozilane.com',
+                      'Questions? Ask us here · or support@ozilane.com',
                       style: TextStyle(
                         fontSize: 12.5,
                         color: scheme.primary,

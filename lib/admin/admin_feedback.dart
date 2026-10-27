@@ -39,6 +39,8 @@ class _AdminFeedbackPageState extends State<AdminFeedbackPage> {
         'praise' => (const Color(0xFFE91E63), Icons.favorite_rounded,
             'Love it'),
         'idea' => (const Color(0xFFFF9100), Icons.lightbulb_rounded, 'Idea'),
+        'help' => (const Color(0xFF00897B), Icons.support_agent_rounded,
+            'Help request'),
         _ => (const Color(0xFF78909C), Icons.chat_bubble_rounded, 'Other'),
       };
 

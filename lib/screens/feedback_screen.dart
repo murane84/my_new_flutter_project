@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/device_report.dart';
 import '../utils/popup_shell.dart';
@@ -9,7 +10,10 @@ import 'api_service.dart';
 /// you'd like next. Goes straight to the owner's admin panel; replies and
 /// status ("Planned", "Done") come back here.
 class FeedbackScreen extends StatefulWidget {
-  const FeedbackScreen({super.key});
+  const FeedbackScreen({super.key, this.initialKind = 'idea'});
+
+  /// Open on a kind — 'help' for "Get help" (support), else 'idea'.
+  final String initialKind;
 
   @override
   State<FeedbackScreen> createState() => _FeedbackScreenState();
@@ -17,7 +21,7 @@ class FeedbackScreen extends StatefulWidget {
 
 class _FeedbackScreenState extends State<FeedbackScreen> {
   final _msg = TextEditingController();
-  String _kind = 'idea';
+  late String _kind = widget.initialKind;
   String? _area;
   int? _rating;
   bool _sending = false;
@@ -25,6 +29,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   bool _loadingMine = true;
 
   static const _kinds = [
+    ('help', '🛟', 'Get help'),
     ('idea', '💡', 'Idea'),
     ('problem', '🐞', 'Problem'),
     ('praise', '💖', 'Love it'),
@@ -64,6 +69,9 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   }
 
   String get _hint => switch (_kind) {
+        'help' =>
+          'What do you need help with? We reply right here (and you get a '
+              'notification).',
         'problem' =>
           'What happened, and what did you expect? Steps help us fix it fast.',
         'praise' => 'What do you love? It tells us what to protect.',
@@ -165,7 +173,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     final scheme = Theme.of(context).colorScheme;
     final isDark = scheme.brightness == Brightness.dark;
     return AppPopupShell(
-      title: 'Send feedback',
+      title: 'Help & feedback',
       icon: Icons.rate_review_rounded,
       desktopMaxWidth: 640,
       builder: (context, isWide) => SingleChildScrollView(
@@ -246,7 +254,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
             const SizedBox(height: 18),
             _label(scheme, 'What is it about?'),
             LayoutBuilder(builder: (context, c) {
-              final cols = c.maxWidth >= 460 ? 4 : 2;
+              final cols = c.maxWidth >= 520 ? 5 : (c.maxWidth >= 360 ? 3 : 2);
               const gap = 10.0;
               final w = (c.maxWidth - gap * (cols - 1)) / cols;
               return Wrap(
@@ -347,7 +355,18 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 26),
+            const SizedBox(height: 10),
+            // Email stays as the fallback (no account / can't send here).
+            Center(
+              child: TextButton.icon(
+                onPressed: () => launchUrl(
+                    Uri(scheme: 'mailto', path: 'support@ozilane.com')),
+                icon: const Icon(Icons.mail_outline_rounded, size: 16),
+                label: const Text('Prefer email? support@ozilane.com',
+                    style: TextStyle(fontSize: 12)),
+              ),
+            ),
+            const SizedBox(height: 16),
             Row(children: [
               Icon(Icons.history_rounded,
                   size: 16, color: scheme.onSurfaceVariant),

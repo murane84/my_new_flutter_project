@@ -548,7 +548,8 @@ reflected by updating the date shown above and, where appropriate, an in-app
 notice.
 
 10. Contact
-For any privacy questions or requests, contact us at: support@ozilane.com
+For any privacy questions or requests, use Help & feedback in the app menu
+(choose "Get help") — we reply right there. Or email support@ozilane.com.
 ''';
 
 const String _terms = '''
@@ -634,7 +635,7 @@ applies to you provides otherwise.
 11. Changes and contact
 We may update these Terms; when we do we will change the date shown above, and
 continued use means you accept the updated Terms. Questions about these Terms:
-support@ozilane.com
+Help & feedback in the app ("Get help"), or email support@ozilane.com.
 ''';
 
 const String _about = '''
@@ -673,6 +674,7 @@ How to use these features in more detail, and the rules for using them, are in t
 Terms of Service. How your information is handled is in the Privacy Policy.
 
 Powered by Ozilane
-Questions or feedback: support@ozilane.com
+Questions, help or feedback: Help & feedback in the app menu — or email
+support@ozilane.com.
 © 2026 Aluta. All rights reserved.
 ''';

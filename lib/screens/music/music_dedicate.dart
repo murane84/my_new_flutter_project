@@ -144,8 +144,11 @@ class _DedicateSheet extends StatefulWidget {
     required this.artist,
     required this.durationMs,
     required this.accent,
+    this.loadBytes,
   });
 
+  /// The song's bytes when it isn't a file here (web queue); null = [path].
+  final Future<List<int>> Function()? loadBytes;
   final Map<String, dynamic> friend;
   final String name;
   final String? avatarUrl;
@@ -186,9 +189,11 @@ class _DedicateSheetState extends State<_DedicateSheet> {
     if (id == null) return;
     setState(() => _sending = true);
     try {
-      final file = File(widget.path);
-      final len = await file.length();
-      if (len > _maxBytes) {
+      final loader = widget.loadBytes;
+      final file = loader == null ? File(widget.path) : null;
+      final List<int> bytes =
+          loader != null ? await loader() : await file!.readAsBytes();
+      if (bytes.length > _maxBytes) {
         if (mounted) {
           showToast(context, 'That song is too big for a heart (max 40 MB)',
               type: ToastType.error);
@@ -196,7 +201,6 @@ class _DedicateSheetState extends State<_DedicateSheet> {
         }
         return;
       }
-      final bytes = await file.readAsBytes();
       final base = widget.path.replaceAll('\\', '/').split('/').last;
       final ext = base.contains('.') ? base.split('.').last.toLowerCase() : 'mp3';
       final a = widget.artist.trim();
@@ -438,6 +442,263 @@ class _BreatheState extends State<_Breathe>
       scale: Tween(begin: 1.0, end: 1.04)
           .animate(CurvedAnimation(parent: _c, curve: Curves.easeInOut)),
       child: widget.child,
+    );
+  }
+}
+
+// ─── Share / dedicate for songs that aren't files here (web queue) ─────────
+
+/// Open the same share-to-friends sheet the native player uses, for songs
+/// identified by [keys] whose bytes come from [bytesOf] (web queue). A key's
+/// last path segment is used as the file name, so keep the real extension.
+void showSongShareSheet(
+  BuildContext context, {
+  required List<String> keys,
+  required List<String> library,
+  required String Function(String key) titleOf,
+  required String Function(String key) artistOf,
+  required Future<List<int>> Function(String key) bytesOf,
+  int? sendTo,
+}) {
+  if (keys.isEmpty) return;
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    // No theme outline — this sheet draws its own card.
+    shape: const RoundedRectangleBorder(),
+    builder: (_) => _ShareSheet(
+      paths: keys,
+      library: library,
+      titleOf: titleOf,
+      artistOf: artistOf,
+      bytesOf: bytesOf,
+      sendTo: sendTo,
+    ),
+  );
+}
+
+/// "Dedicate to…": pick a friend, then the usual dedicate sheet (note +
+/// the song sealed in a heart). For songs whose bytes come from [loadBytes].
+Future<void> showSongDedicate(
+  BuildContext context, {
+  required String fileName,
+  required String title,
+  required String artist,
+  required Future<List<int>> Function() loadBytes,
+  int? durationMs,
+}) async {
+  final accent = Theme.of(context).colorScheme.primary;
+  final friend = await showModalBottomSheet<Map<String, dynamic>>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    // No theme outline — this sheet draws its own card.
+    shape: const RoundedRectangleBorder(),
+    builder: (_) => _DedicateFriendPicker(title: title),
+  );
+  if (friend == null || !context.mounted) return;
+  final name = ContactNames.instance.displayName(
+      of: friend, registered: (friend['username'] ?? 'friend').toString());
+  final raw = (friend['avatar_url'] ?? '').toString();
+  final base = raw.isEmpty || raw.startsWith('http')
+      ? ''
+      : await AppConfig.baseUrl;
+  if (!context.mounted) return;
+  final avatar =
+      raw.isEmpty ? null : (raw.startsWith('http') ? raw : '$base$raw');
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    // No theme outline — this sheet draws its own card.
+    shape: const RoundedRectangleBorder(),
+    builder: (_) => _DedicateSheet(
+      friend: friend,
+      name: name,
+      avatarUrl: avatar,
+      path: fileName,
+      title: title,
+      artist: artist,
+      durationMs: durationMs,
+      accent: accent,
+      loadBytes: loadBytes,
+    ),
+  );
+}
+
+/// Who is this song for? A short card of your friends (real photos).
+class _DedicateFriendPicker extends StatefulWidget {
+  const _DedicateFriendPicker({required this.title});
+  final String title;
+
+  @override
+  State<_DedicateFriendPicker> createState() => _DedicateFriendPickerState();
+}
+
+class _DedicateFriendPickerState extends State<_DedicateFriendPicker> {
+  late final Future<List<Map<String, dynamic>>> _friends =
+      ApiService().getFriends();
+  String _q = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final media = MediaQuery.of(context);
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(12, 0, 12, media.viewInsets.bottom + 12),
+        child: Center(
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+                maxWidth: 440, maxHeight: media.size.height * 0.7),
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Color.alphaBlend(
+                        Colors.white.withValues(alpha: 0.05), scheme.surface)
+                    : scheme.surface,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                    color: scheme.primary
+                        .withValues(alpha: isDark ? 0.30 : 0.18)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.14),
+                    blurRadius: 24,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.favorite_rounded,
+                            color: scheme.primary, size: 22),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Dedicate to…',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 15.5,
+                                      color: scheme.onSurface)),
+                              Text(widget.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: scheme.onSurfaceVariant)),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Close',
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: Icon(Icons.close_rounded,
+                              size: 20, color: scheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                    child: SizedBox(
+                      height: 38,
+                      child: TextField(
+                        onChanged: (v) =>
+                            setState(() => _q = v.trim().toLowerCase()),
+                        style: const TextStyle(fontSize: 13.5),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          hintText: 'Search friends',
+                          prefixIcon:
+                              const Icon(Icons.search_rounded, size: 18),
+                          filled: true,
+                          fillColor: scheme.surfaceContainerHighest
+                              .withValues(alpha: isDark ? 0.5 : 0.7),
+                          contentPadding:
+                              const EdgeInsets.symmetric(vertical: 8),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Flexible(
+                    child: FutureBuilder<List<Map<String, dynamic>>>(
+                      future: _friends,
+                      builder: (context, snap) {
+                        if (!snap.hasData) {
+                          return const Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Center(child: CircularProgressIndicator()),
+                          );
+                        }
+                        String nameOf(Map<String, dynamic> f) =>
+                            ContactNames.instance.displayName(
+                                of: f,
+                                registered:
+                                    (f['username'] ?? '').toString());
+                        final list = snap.data!
+                            .where((f) =>
+                                _q.isEmpty ||
+                                nameOf(f).toLowerCase().contains(_q))
+                            .toList();
+                        if (list.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Text('No friends found',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: scheme.onSurfaceVariant)),
+                          );
+                        }
+                        return ListView.builder(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+                          itemCount: list.length,
+                          itemBuilder: (_, i) {
+                            final f = list[i];
+                            final n = nameOf(f);
+                            return ListTile(
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14)),
+                              leading: PersonAvatar(
+                                name: n,
+                                avatar: f['avatar_url'] as String?,
+                                radius: 18,
+                              ),
+                              title: Text(n.isEmpty ? 'Friend' : n,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis),
+                              trailing: Icon(Icons.favorite_border_rounded,
+                                  color: scheme.primary, size: 20),
+                              onTap: () => Navigator.of(context).pop(f),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

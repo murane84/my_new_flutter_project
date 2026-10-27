@@ -24,6 +24,7 @@ import '../widgets/genie_menu.dart';
 import '../utils/readable.dart';
 import '../widgets/controls_glass.dart';
 import '../widgets/playing_bars.dart';
+import 'music_controls.dart' show showSongShareSheet, showSongDedicate;
 import '../utils/typing_guard.dart';
 
 /// Web-only replacement for the native [MusicControls] panel.
@@ -142,6 +143,121 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     playbackBus.onToggleRepeat = _toggleRepeat;
     playbackBus.webAddSongs = () => _openFiles();
     playbackBus.webRemoveAt = _removeAt;
+    playbackBus.webPlayNextAt = _playNextAt;
+    playbackBus.webShareAt = (i) => _shareAt(i);
+    playbackBus.webDedicateAt = _dedicateAt;
+    playbackBus.webSendToPartnerAt =
+        (i) => _shareAt(i, sendTo: SongBridge.instance.partnerId?.call());
+  }
+
+  // ── Per-track actions (same as the native playlist's) ────────────────────
+
+  // Keys the share sheet uses for queue songs: the last segment is the real
+  // file name (extension → mime / name in the chat).
+  String _keyOf(int i) => 'webq/$i/${_queue[i].name}';
+  int? _indexOfKey(String k) {
+    final parts = k.split('/');
+    return parts.length >= 3 ? int.tryParse(parts[1]) : null;
+  }
+
+  /// Share one queue song with friends (multi-pick), or straight to [sendTo].
+  void _shareAt(int i, {int? sendTo}) {
+    if (i < 0 || i >= _queue.length) return;
+    String title(String k) {
+      final j = _indexOfKey(k);
+      if (j == null || j >= _queue.length) return 'Song';
+      return splitTitleArtist(_cleanTitle(_queue[j].name)).$1;
+    }
+
+    String artist(String k) {
+      final j = _indexOfKey(k);
+      if (j == null || j >= _queue.length) return '';
+      return splitTitleArtist(_cleanTitle(_queue[j].name)).$2 ?? '';
+    }
+
+    showSongShareSheet(
+      context,
+      keys: [_keyOf(i)],
+      library: [for (var j = 0; j < _queue.length; j++) _keyOf(j)],
+      titleOf: title,
+      artistOf: artist,
+      bytesOf: (k) async {
+        final j = _indexOfKey(k);
+        if (j == null || j >= _queue.length) return const <int>[];
+        return _queue[j].load();
+      },
+      sendTo: sendTo,
+    );
+  }
+
+  /// "Dedicate to…" a friend: the song sealed in a heart, with a note.
+  void _dedicateAt(int i) {
+    if (i < 0 || i >= _queue.length) return;
+    final t = _queue[i];
+    final ta = splitTitleArtist(_cleanTitle(t.name));
+    showSongDedicate(
+      context,
+      fileName: t.name,
+      title: ta.$1,
+      artist: ta.$2 ?? '',
+      loadBytes: () => t.load(),
+      durationMs: i == _index ? _player.duration?.inMilliseconds : null,
+    );
+  }
+
+  /// Move a song to play right after the current one.
+  void _playNextAt(int i) {
+    if (i < 0 || i >= _queue.length || i == _index || i == _index + 1) return;
+    // Reorder semantics (target before removal): right after the current.
+    _reorder(i, _index + 1);
+    showToast(context, 'Plays next', type: ToastType.info);
+  }
+
+  Widget _trackMenu(ThemeData theme, int i) {
+    final partner = SongBridge.instance.partnerId?.call() != null;
+    final current = i == _index;
+    PopupMenuItem<String> item(String v, IconData icon, String label,
+            {Color? color}) =>
+        PopupMenuItem<String>(
+          value: v,
+          child: Row(children: [
+            Icon(icon, size: 19, color: color ?? theme.hintColor),
+            const SizedBox(width: 12),
+            Text(label),
+          ]),
+        );
+    return GeniePopupMenuButton<String>(
+      tooltip: 'Track options',
+      padding: EdgeInsets.zero,
+      icon: Icon(Icons.more_vert_rounded, size: 19, color: theme.hintColor),
+      onSelected: (v) {
+        switch (v) {
+          case 'play':
+            _playAt(i);
+          case 'next':
+            _playNextAt(i);
+          case 'share':
+            _shareAt(i);
+          case 'partner':
+            _shareAt(i, sendTo: SongBridge.instance.partnerId?.call());
+          case 'dedicate':
+            _dedicateAt(i);
+          case 'remove':
+            _removeAt(i);
+        }
+      },
+      itemBuilder: (_) => [
+        if (!current) item('play', Icons.play_arrow_rounded, 'Play'),
+        if (!current && i != _index + 1)
+          item('next', Icons.playlist_play_rounded, 'Play next'),
+        if (partner)
+          item('partner', Icons.favorite_rounded, 'Send to my partner',
+              color: theme.colorScheme.primary),
+        item('share', Icons.send_rounded, 'Share with friends'),
+        item('dedicate', Icons.volunteer_activism_rounded, 'Dedicate to…'),
+        item('remove', Icons.close_rounded, 'Remove from queue'),
+      ],
+    );
   }
 
   void _onPlayerState(PlayerState st) {
@@ -193,6 +309,10 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     playbackBus.onToggleRepeat = null;
     playbackBus.webAddSongs = null;
     playbackBus.webRemoveAt = null;
+    playbackBus.webPlayNextAt = null;
+    playbackBus.webShareAt = null;
+    playbackBus.webDedicateAt = null;
+    playbackBus.webSendToPartnerAt = null;
     _queueRev.dispose();
     _abSub?.cancel();
     _player.dispose();
@@ -2004,6 +2124,11 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
           onTap: current ? null : () => _playAt(i),
+          // Hold a song to share it with friends (as on Android / Windows).
+          onLongPress: () {
+            HapticFeedback.mediumImpact();
+            _shareAt(i);
+          },
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             child: Row(
@@ -2044,14 +2169,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                   ),
                 ),
                 const SizedBox(width: 4),
-                IconButton(
-                  iconSize: 17,
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Remove',
-                  onPressed: () => _removeAt(i),
-                  color: theme.hintColor,
-                  icon: const Icon(Icons.close_rounded),
-                ),
+                _trackMenu(theme, i),
                 if (reorderable)
                   ReorderableDragStartListener(
                     index: i,

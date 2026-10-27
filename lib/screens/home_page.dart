@@ -4910,35 +4910,66 @@ class _WebQueueSheetState extends State<_WebQueueSheet> {
                               )
                             : null,
                         onTap: () => playbackBus.webPlayAt?.call(i),
+                        // Hold a song to share it (as on Android / Windows).
+                        onLongPress: playbackBus.webShareAt == null
+                            ? null
+                            : () {
+                                HapticFeedback.mediumImpact();
+                                playbackBus.webShareAt?.call(i);
+                              },
                         trailing: GeniePopupMenuButton<String>(
                           tooltip: 'More',
                           icon: Icon(Icons.more_vert_rounded,
                               color: scheme.onSurfaceVariant),
                           onSelected: (v) {
-                            if (v == 'play') {
-                              playbackBus.webPlayAt?.call(i);
-                            } else if (v == 'remove') {
-                              playbackBus.webRemoveAt?.call(i);
+                            switch (v) {
+                              case 'play':
+                                playbackBus.webPlayAt?.call(i);
+                              case 'next':
+                                playbackBus.webPlayNextAt?.call(i);
+                              case 'partner':
+                                playbackBus.webSendToPartnerAt?.call(i);
+                              case 'share':
+                                playbackBus.webShareAt?.call(i);
+                              case 'dedicate':
+                                playbackBus.webDedicateAt?.call(i);
+                              case 'remove':
+                                playbackBus.webRemoveAt?.call(i);
                             }
                           },
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(
-                              value: 'play',
-                              child: Row(children: [
-                                Icon(Icons.play_arrow_rounded, size: 20),
-                                SizedBox(width: 10),
-                                Text('Play'),
-                              ]),
-                            ),
-                            PopupMenuItem(
-                              value: 'remove',
-                              child: Row(children: [
-                                Icon(Icons.close_rounded, size: 20),
-                                SizedBox(width: 10),
-                                Text('Remove from queue'),
-                              ]),
-                            ),
-                          ],
+                          itemBuilder: (_) {
+                            PopupMenuItem<String> row(
+                                    String v, IconData icon, String label,
+                                    {Color? color}) =>
+                                PopupMenuItem<String>(
+                                  value: v,
+                                  child: Row(children: [
+                                    Icon(icon, size: 20, color: color),
+                                    const SizedBox(width: 10),
+                                    Text(label),
+                                  ]),
+                                );
+                            final partner =
+                                SongBridge.instance.partnerId?.call() != null;
+                            return [
+                              if (!isNow)
+                                row('play', Icons.play_arrow_rounded, 'Play'),
+                              if (!isNow && i != current + 1)
+                                row('next', Icons.playlist_play_rounded,
+                                    'Play next'),
+                              if (partner)
+                                row('partner', Icons.favorite_rounded,
+                                    'Send to my partner',
+                                    color: accent),
+                              row('share', Icons.send_rounded,
+                                  'Share with friends'),
+                              row('dedicate',
+                                  Icons.volunteer_activism_rounded,
+                                  'Dedicate to…'),
+                              row('remove', Icons.close_rounded,
+                                  'Remove from queue'),
+                            ];
+                          },
                         ),
                       );
                     },

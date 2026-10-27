@@ -55,6 +55,12 @@ class PlaybackBus {
   VoidCallback? onToggleRepeat;
   VoidCallback? webAddSongs; // open the file picker to add tracks
   void Function(int index)? webRemoveAt; // drop a track from the queue
+  // Per-track actions on the web queue (the in-chat Playlist sheet calls
+  // these): play next, share to friends, dedicate, send to my partner.
+  void Function(int index)? webPlayNextAt;
+  void Function(int index)? webShareAt;
+  void Function(int index)? webDedicateAt;
+  void Function(int index)? webSendToPartnerAt;
   // Toggle "favourite" on the currently-playing track (driven by the bar heart).
   VoidCallback? onToggleFavorite;
   // Share the currently-playing track to a chat (the quick action that used to

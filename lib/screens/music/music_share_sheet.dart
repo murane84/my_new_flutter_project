@@ -21,6 +21,10 @@ class _ShareSheet extends StatefulWidget {
   final String Function(String path) titleOf;
   final String Function(String path) artistOf;
 
+  /// Where a song's bytes come from when it isn't a file on this device
+  /// (the web player's queue). null = read [paths] as files.
+  final Future<List<int>> Function(String key)? bytesOf;
+
   /// Send straight to this friend (the Glow partner) without picking — the
   /// sheet just shows progress and closes. Falls back to the normal picker
   /// if that friend isn't in the list.
@@ -32,6 +36,7 @@ class _ShareSheet extends StatefulWidget {
     required this.titleOf,
     required this.artistOf,
     this.sendTo,
+    this.bytesOf,
   });
 
   @override
@@ -119,14 +124,24 @@ class _ShareSheetState extends State<_ShareSheet> {
       for (final path in _songs) {
         List<int>? bytes;
         if (_asFile) {
-          final file = File(path);
-          final len = await file.length();
-          if (len > _maxBytes) {
-            tooBig++;
-            step += targets.length;
-            continue;
+          final loader = widget.bytesOf;
+          if (loader != null) {
+            bytes = await loader(path);
+            if (bytes.length > _maxBytes) {
+              tooBig++;
+              step += targets.length;
+              continue;
+            }
+          } else {
+            final file = File(path);
+            final len = await file.length();
+            if (len > _maxBytes) {
+              tooBig++;
+              step += targets.length;
+              continue;
+            }
+            bytes = await file.readAsBytes();
           }
-          bytes = await file.readAsBytes();
         }
         for (final f in targets) {
           if (!mounted) return;

@@ -9,8 +9,10 @@ import '../services/app_busy.dart';
 // One menu motion for the whole app: a menu GROWS out of the button that
 // opened it (scaling from that corner with a soft overshoot, fading in, its
 // rows drifting in one after another) and folds back INTO it on dismiss.
-// Submenus open inline (accordion) with the same easing instead of popping a
-// second floating card. Back / tap-outside / Esc all close it.
+// Submenus never make the menu taller: on wide windows they open as a flyout
+// card beside it (hover or click), on phones they slide in inside the same
+// card with a "‹ Back" header. Back / Esc step out one level; tap-outside
+// closes everything.
 //
 //  • [showGenieMenu] + [GenieMenuEntry] — build a menu from entries.
 //  • [GenieMenuButton] — an icon button that opens one.
@@ -136,7 +138,12 @@ class _GenieMenuRoute extends PopupRoute<void> {
   }
 }
 
-class _GenieMenuSurface extends StatelessWidget {
+/// Wide windows (desktop / web / tablets) open submenus as a flyout card
+/// beside the menu; narrower screens slide the submenu in, inside the same
+/// card. Either way the menu never grows taller when a submenu opens.
+const double _kFlyoutMinWidth = 720;
+
+class _GenieMenuSurface extends StatefulWidget {
   const _GenieMenuSurface({
     required this.anchor,
     required this.entries,
@@ -152,17 +159,45 @@ class _GenieMenuSurface extends StatelessWidget {
   final Color? color;
 
   @override
+  State<_GenieMenuSurface> createState() => _GenieMenuSurfaceState();
+}
+
+class _GenieMenuSurfaceState extends State<_GenieMenuSurface> {
+  // The open flyout (wide only): its entry and the row it grew from.
+  GenieMenuEntry? _fly;
+  Rect? _flyFrom;
+
+  void _openFlyout(GenieMenuEntry e, Rect row) {
+    if (identical(_fly, e)) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      _fly = e;
+      _flyFrom = row;
+    });
+  }
+
+  void _closeFlyout() {
+    if (_fly == null) return;
+    setState(() {
+      _fly = null;
+      _flyFrom = null;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final size = media.size;
     final pad = media.padding;
     final scheme = Theme.of(context).colorScheme;
     final isDark = scheme.brightness == Brightness.dark;
+    final anchor = widget.anchor;
+    final wide = size.width >= _kFlyoutMinWidth;
 
     // Place the card beside the opener: right-aligned to it when the button
     // is on the right half, left-aligned otherwise; below it when there's
     // room, else above. The card grows from the corner nearest the button.
-    final w = math.min(width, size.width - 16);
+    final w = math.min(widget.width, size.width - 16);
     final onRight = anchor.center.dx > size.width / 2;
     final left = (onRight ? anchor.right - w : anchor.left)
         .clamp(8.0, size.width - w - 8);
@@ -181,214 +216,209 @@ class _GenieMenuSurface extends StatelessWidget {
       (tailX / w) * 2 - 1,
       openDown ? -1 : 1,
     );
-    final fill = color ??
+    final fill = widget.color ??
         (isDark
             ? Color.alphaBlend(
                 Colors.white.withValues(alpha: 0.05), scheme.surface)
             : scheme.surface);
+    final edge = BorderSide(
+        color: scheme.primary.withValues(alpha: isDark ? 0.30 : 0.22));
+    final shadow = [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.16),
+        blurRadius: 24,
+        offset: const Offset(0, 10),
+      ),
+    ];
 
-    return Stack(
-      children: [
-        Positioned(
-          left: left,
-          width: w,
-          top: openDown ? below : null,
-          bottom: openDown ? null : size.height - anchor.top + gap,
-          child: AnimatedBuilder(
-            animation: animation,
-            builder: (context, child) {
-              final v = animation.value;
-              final reverse = animation.status == AnimationStatus.reverse;
-              // Genie: width leads with a little overshoot, height follows,
-              // the whole card fades in. Folding back is quicker and flatter.
-              final sx = reverse
-                  ? Curves.easeIn.transform(v)
-                  : Curves.easeOutBack.transform(v);
-              final sy = reverse
-                  ? Curves.easeIn.transform(v)
-                  : Curves.easeOutCubic
-                      .transform(((v - 0.05) / 0.95).clamp(0.0, 1.0));
-              final fade = Curves.easeOut.transform((v * 1.6).clamp(0.0, 1.0));
-              return Opacity(
-                opacity: fade,
-                child: Transform(
-                  alignment: origin,
-                  transform: Matrix4.diagonal3Values(
-                      (0.35 + 0.65 * sx).clamp(0.0, 1.06),
-                      (0.15 + 0.85 * sy).clamp(0.0, 1.06),
-                      1),
-                  child: child,
+    // Flyout placement: toward the roomier side of the menu (left when the
+    // menu hugs the right edge), its first row level with the parent row.
+    Widget? flyout;
+    final fly = _fly;
+    final from = _flyFrom;
+    if (wide && fly != null && from != null) {
+      const fw = 236.0;
+      const fgap = 6.0;
+      final toLeft = onRight || left + w + fgap + fw > size.width - 8;
+      final fx = toLeft ? left - fgap - fw : left + w + fgap;
+      final kids = fly.children ?? const <GenieMenuEntry>[];
+      // Rough height so the card can be lifted to stay on-screen.
+      final estH = 12.0 +
+          kids.fold<double>(0, (s, c) => s + (c.isDivider ? 10 : 44));
+      final top = (from.top - 6)
+          .clamp(pad.top + 8, math.max(pad.top + 8, size.height - pad.bottom - 8 - estH))
+          .toDouble();
+      flyout = Positioned(
+        key: ValueKey(fly),
+        left: fx.clamp(8.0, size.width - fw - 8),
+        top: top,
+        width: fw,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          builder: (_, v, child) => Opacity(
+            opacity: v,
+            child: Transform(
+              alignment:
+                  toLeft ? Alignment.topRight : Alignment.topLeft,
+              transform: Matrix4.diagonal3Values(
+                  0.85 + 0.15 * v, 0.9 + 0.1 * v, 1),
+              child: child,
+            ),
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+                maxHeight: size.height - pad.vertical - 16),
+            child: Material(
+              type: MaterialType.transparency,
+              child: Container(
+                decoration: ShapeDecoration(
+                  color: fill,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16), side: edge),
+                  shadows: shadow,
                 ),
-              );
-            },
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: maxH.clamp(120.0, 640.0)),
-              child: Material(
-                type: MaterialType.transparency,
-                child: Container(
-                  // One continuous outline: rounded card + a soft tail
-                  // pointing at the opener. Fill, border and shadow all
-                  // follow it, so the tail is part of the card, not a
-                  // triangle stuck on its edge.
-                  decoration: ShapeDecoration(
-                    color: fill,
-                    shape: _TailedCardBorder(
-                      tipX: tailX,
-                      up: openDown,
-                      side: BorderSide(
-                          color: scheme.primary
-                              .withValues(alpha: isDark ? 0.30 : 0.22)),
-                    ),
-                    shadows: [
-                      BoxShadow(
-                        color: Colors.black
-                            .withValues(alpha: isDark ? 0.5 : 0.16),
-                        blurRadius: 24,
-                        offset: const Offset(0, 10),
-                      ),
+                clipBehavior: Clip.antiAlias,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final c in kids)
+                        c.isDivider
+                            ? Divider(
+                                height: 10,
+                                indent: 14,
+                                endIndent: 14,
+                                color: scheme.outlineVariant
+                                    .withValues(alpha: 0.5))
+                            : _genieRow(context, c,
+                                onTap: () => _genieRunAndClose(context, c)),
                     ],
                   ),
-                  clipBehavior: Clip.antiAlias,
-                  child: _GenieMenuList(
-                    entries: entries,
-                    animation: animation,
-                  ),
                 ),
               ),
             ),
           ),
         ),
-      ],
-    );
-  }
-}
-
-class _GenieMenuList extends StatefulWidget {
-  const _GenieMenuList({required this.entries, required this.animation});
-  final List<GenieMenuEntry> entries;
-  final Animation<double> animation;
-
-  @override
-  State<_GenieMenuList> createState() => _GenieMenuListState();
-}
-
-class _GenieMenuListState extends State<_GenieMenuList> {
-  int? _open; // index of the expanded submenu
-
-  void _run(GenieMenuEntry e) {
-    if (!e.enabled) return;
-    if (e.children != null) {
-      HapticFeedback.selectionClick();
-      setState(() => _open = _open == widget.entries.indexOf(e)
-          ? null
-          : widget.entries.indexOf(e));
-      return;
-    }
-    Navigator.of(context).pop();
-    // Run after the fold-back starts so the menu doesn't linger over the
-    // next screen.
-    Future.microtask(() => e.onTap?.call());
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final rows = <Widget>[];
-    final n = widget.entries.length;
-    for (var i = 0; i < n; i++) {
-      final e = widget.entries[i];
-      // Rows drift in one after another (a short stagger, ~25ms apart).
-      final start = (0.15 + i * 0.05).clamp(0.0, 0.7);
-      final anim = CurvedAnimation(
-        parent: widget.animation,
-        curve: Interval(start, (start + 0.4).clamp(0.0, 1.0),
-            curve: Curves.easeOutCubic),
-        reverseCurve: Curves.easeIn,
       );
-      Widget row;
-      if (e.isDivider) {
-        row = Divider(
-            height: 10,
-            indent: 14,
-            endIndent: 14,
-            color: scheme.outlineVariant.withValues(alpha: 0.5));
-      } else {
-        final open = _open == i;
-        row = Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _row(context, e, open: open),
-            if (e.children != null)
-              AnimatedSize(
-                duration: const Duration(milliseconds: 240),
-                curve: Curves.easeOutCubic,
-                alignment: Alignment.topCenter,
-                child: open
-                    ? Container(
-                        margin: const EdgeInsets.fromLTRB(10, 0, 10, 4),
-                        decoration: BoxDecoration(
-                          color: scheme.primary.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            for (final c in e.children!)
-                              c.isDivider
-                                  ? const Divider(height: 8)
-                                  : _row(context, c, nested: true),
-                          ],
-                        ),
-                      )
-                    : const SizedBox(width: double.infinity),
-              ),
-          ],
-        );
-      }
-      rows.add(FadeTransition(
-        opacity: anim,
-        child: SlideTransition(
-          position: Tween(begin: const Offset(0, -0.25), end: Offset.zero)
-              .animate(anim),
-          child: row,
-        ),
-      ));
     }
-    return Shortcuts(
-      shortcuts: const {
-        SingleActivator(LogicalKeyboardKey.escape): DismissIntent(),
+
+    return PopScope(
+      // Back / Esc closes an open flyout first, then the menu.
+      canPop: _fly == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _closeFlyout();
       },
-      child: Actions(
-        actions: {
-          DismissIntent: CallbackAction<DismissIntent>(
-              onInvoke: (_) => Navigator.of(context).maybePop()),
-        },
-        child: Focus(
-          autofocus: true,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: rows,
+      child: Stack(
+        children: [
+          // Tap anywhere outside closes the whole menu (flyout included).
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.of(context).pop(),
             ),
           ),
-        ),
+          Positioned(
+            left: left,
+            width: w,
+            top: openDown ? below : null,
+            bottom: openDown ? null : size.height - anchor.top + gap,
+            child: AnimatedBuilder(
+              animation: widget.animation,
+              builder: (context, child) {
+                final v = widget.animation.value;
+                final reverse =
+                    widget.animation.status == AnimationStatus.reverse;
+                // Genie: width leads with a little overshoot, height follows,
+                // the whole card fades in. Folding back is quicker and flatter.
+                final sx = reverse
+                    ? Curves.easeIn.transform(v)
+                    : Curves.easeOutBack.transform(v);
+                final sy = reverse
+                    ? Curves.easeIn.transform(v)
+                    : Curves.easeOutCubic
+                        .transform(((v - 0.05) / 0.95).clamp(0.0, 1.0));
+                final fade =
+                    Curves.easeOut.transform((v * 1.6).clamp(0.0, 1.0));
+                return Opacity(
+                  opacity: fade,
+                  child: Transform(
+                    alignment: origin,
+                    transform: Matrix4.diagonal3Values(
+                        (0.35 + 0.65 * sx).clamp(0.0, 1.06),
+                        (0.15 + 0.85 * sy).clamp(0.0, 1.06),
+                        1),
+                    child: child,
+                  ),
+                );
+              },
+              child: ConstrainedBox(
+                constraints:
+                    BoxConstraints(maxHeight: maxH.clamp(120.0, 640.0)),
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: Container(
+                    // One continuous outline: rounded card + a soft tail
+                    // pointing at the opener. Fill, border and shadow all
+                    // follow it, so the tail is part of the card, not a
+                    // triangle stuck on its edge.
+                    decoration: ShapeDecoration(
+                      color: fill,
+                      shape: _TailedCardBorder(
+                          tipX: tailX, up: openDown, side: edge),
+                      shadows: shadow,
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: _GenieMenuList(
+                      entries: widget.entries,
+                      animation: widget.animation,
+                      flyout: wide,
+                      activeFlyout: _fly,
+                      onFlyout: _openFlyout,
+                      onCloseFlyout: _closeFlyout,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          ?flyout,
+        ],
       ),
     );
   }
+}
 
-  Widget _row(BuildContext context, GenieMenuEntry e,
-      {bool open = false, bool nested = false}) {
-    final scheme = Theme.of(context).colorScheme;
-    final accent = e.destructive ? scheme.error : scheme.primary;
-    final textColor = !e.enabled
-        ? scheme.onSurface.withValues(alpha: 0.38)
-        : (e.destructive ? scheme.error : scheme.onSurface);
-    return InkWell(
-      onTap: e.enabled ? () => _run(e) : null,
+/// Close the menu, then run the row's action (after the fold-back starts, so
+/// the menu doesn't linger over the next screen).
+void _genieRunAndClose(BuildContext context, GenieMenuEntry e) {
+  if (!e.enabled) return;
+  Navigator.of(context).pop();
+  Future.microtask(() => e.onTap?.call());
+}
+
+/// One menu row — shared by the main list, the slide-in page and the flyout.
+Widget _genieRow(
+  BuildContext context,
+  GenieMenuEntry e, {
+  required VoidCallback onTap,
+  bool active = false,
+  bool nested = false,
+  ValueChanged<bool>? onHover,
+}) {
+  final scheme = Theme.of(context).colorScheme;
+  final accent = e.destructive ? scheme.error : scheme.primary;
+  final textColor = !e.enabled
+      ? scheme.onSurface.withValues(alpha: 0.38)
+      : (e.destructive ? scheme.error : scheme.onSurface);
+  return Material(
+    color: active ? scheme.primary.withValues(alpha: 0.08) : Colors.transparent,
+    child: InkWell(
+      onTap: e.enabled ? onTap : null,
+      onHover: onHover,
       child: Padding(
         padding: EdgeInsets.symmetric(
             horizontal: nested ? 12 : 14, vertical: e.custom != null ? 4 : 11),
@@ -405,20 +435,231 @@ class _GenieMenuListState extends State<_GenieMenuList> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                           fontSize: nested ? 13.5 : 14.5,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: active ? FontWeight.w600 : FontWeight.w500,
                           color: textColor)),
                 ),
                 if (e.trailing != null) e.trailing!,
                 if (e.children != null)
-                  AnimatedRotation(
-                    turns: open ? 0.25 : 0,
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeOutCubic,
-                    child: Icon(Icons.chevron_right_rounded,
-                        size: 20, color: scheme.onSurfaceVariant),
-                  ),
+                  Icon(Icons.chevron_right_rounded,
+                      size: 20,
+                      color: active ? accent : scheme.onSurfaceVariant),
               ],
             ),
+      ),
+    ),
+  );
+}
+
+class _GenieMenuList extends StatefulWidget {
+  const _GenieMenuList({
+    required this.entries,
+    required this.animation,
+    required this.flyout,
+    required this.onFlyout,
+    required this.onCloseFlyout,
+    this.activeFlyout,
+  });
+  final List<GenieMenuEntry> entries;
+  final Animation<double> animation;
+
+  /// true: submenus open as a flyout card (wide); false: slide-in page.
+  final bool flyout;
+  final GenieMenuEntry? activeFlyout;
+  final void Function(GenieMenuEntry e, Rect row) onFlyout;
+  final VoidCallback onCloseFlyout;
+
+  @override
+  State<_GenieMenuList> createState() => _GenieMenuListState();
+}
+
+class _GenieMenuListState extends State<_GenieMenuList> {
+  // Narrow screens: the submenu currently slid in (null = main list).
+  GenieMenuEntry? _page;
+
+  void _tap(BuildContext rowCtx, GenieMenuEntry e) {
+    if (!e.enabled) return;
+    if (e.children != null) {
+      if (widget.flyout) {
+        identical(widget.activeFlyout, e)
+            ? widget.onCloseFlyout()
+            : widget.onFlyout(e, _rectOf(rowCtx));
+      } else {
+        HapticFeedback.selectionClick();
+        setState(() => _page = e);
+      }
+      return;
+    }
+    _genieRunAndClose(context, e);
+  }
+
+  // Desktop hover: resting on a submenu row opens its flyout; moving onto a
+  // plain row closes it.
+  void _hover(BuildContext rowCtx, GenieMenuEntry e, bool inside) {
+    if (!widget.flyout || !inside || !e.enabled) return;
+    if (e.children != null) {
+      widget.onFlyout(e, _rectOf(rowCtx));
+    } else if (!e.isDivider) {
+      widget.onCloseFlyout();
+    }
+  }
+
+  Widget _mainList(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final rows = <Widget>[];
+    final n = widget.entries.length;
+    for (var i = 0; i < n; i++) {
+      final e = widget.entries[i];
+      // Rows drift in one after another (a short stagger, ~25ms apart).
+      final start = (0.15 + i * 0.05).clamp(0.0, 0.7);
+      final anim = CurvedAnimation(
+        parent: widget.animation,
+        curve: Interval(start, (start + 0.4).clamp(0.0, 1.0),
+            curve: Curves.easeOutCubic),
+        reverseCurve: Curves.easeIn,
+      );
+      final Widget row = e.isDivider
+          ? Divider(
+              height: 10,
+              indent: 14,
+              endIndent: 14,
+              color: scheme.outlineVariant.withValues(alpha: 0.5))
+          : Builder(
+              builder: (rowCtx) => _genieRow(
+                rowCtx,
+                e,
+                active: widget.flyout && identical(widget.activeFlyout, e),
+                onTap: () => _tap(rowCtx, e),
+                onHover: (h) => _hover(rowCtx, e, h),
+              ),
+            );
+      rows.add(FadeTransition(
+        opacity: anim,
+        child: SlideTransition(
+          position: Tween(begin: const Offset(0, -0.25), end: Offset.zero)
+              .animate(anim),
+          child: row,
+        ),
+      ));
+    }
+    return SingleChildScrollView(
+      key: const ValueKey('genie-main'),
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: rows,
+      ),
+    );
+  }
+
+  // The slid-in submenu: "‹ Account" header, then its rows.
+  Widget _subPage(BuildContext context, GenieMenuEntry p) {
+    final scheme = Theme.of(context).colorScheme;
+    return SingleChildScrollView(
+      key: ValueKey(p),
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _page = null),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 12, 14, 10),
+              child: Row(
+                children: [
+                  Icon(Icons.chevron_left_rounded,
+                      size: 24, color: scheme.primary),
+                  const SizedBox(width: 4),
+                  if (p.icon != null) ...[
+                    Icon(p.icon, size: 18, color: scheme.primary),
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    child: Text(p.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w800,
+                            color: scheme.onSurface)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Divider(
+              height: 1,
+              indent: 14,
+              endIndent: 14,
+              color: scheme.outlineVariant.withValues(alpha: 0.5)),
+          const SizedBox(height: 4),
+          for (final c in p.children ?? const <GenieMenuEntry>[])
+            c.isDivider
+                ? Divider(
+                    height: 10,
+                    indent: 14,
+                    endIndent: 14,
+                    color: scheme.outlineVariant.withValues(alpha: 0.5))
+                : _genieRow(context, c,
+                    onTap: () => _genieRunAndClose(context, c)),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final page = _page;
+    return PopScope(
+      // Back / Esc on a slid-in submenu returns to the main list first.
+      canPop: page == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _page != null) setState(() => _page = null);
+      },
+      child: Shortcuts(
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.escape): DismissIntent(),
+        },
+        child: Actions(
+          actions: {
+            DismissIntent: CallbackAction<DismissIntent>(
+                onInvoke: (_) => Navigator.of(context).maybePop()),
+          },
+          child: Focus(
+            autofocus: true,
+            child: AnimatedSize(
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 240),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                layoutBuilder: (cur, prev) => Stack(
+                  alignment: Alignment.topCenter,
+                  children: [...prev, ?cur],
+                ),
+                // The submenu slides in from the right; the main list comes
+                // back from the left.
+                transitionBuilder: (child, anim) {
+                  final isSub = child.key != const ValueKey('genie-main');
+                  return FadeTransition(
+                    opacity: anim,
+                    child: SlideTransition(
+                      position: Tween(
+                              begin: Offset(isSub ? 0.35 : -0.35, 0),
+                              end: Offset.zero)
+                          .animate(anim),
+                      child: child,
+                    ),
+                  );
+                },
+                child: page == null ? _mainList(context) : _subPage(context, page),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

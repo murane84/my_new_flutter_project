@@ -283,13 +283,27 @@ def list_preview(msg) -> str:
     if (getattr(msg, "message_type", None) or "").lower() == "heart":
         return "❤️ Secret message"
     content = (msg.content or "").strip()
-    if (getattr(msg, "message_type", None) or "").lower() == "poll":
-        return f"📊 {content}" if content else "📊 Poll"
-    if content:
-        return content
     mtype = (msg.message_type or "text").lower()
     mime = (msg.media_mime or "").lower()
     name = (msg.media_name or "").strip()
+    if mtype == "poll":
+        return f"📊 {content}" if content else "📊 Poll"
+    # Media with a caption / title: label + text, so a song or voice note
+    # never previews as bare text (or not at all).
+    if mtype == "song":
+        if content:
+            return f"🎵 {content}"
+        if name:
+            return "🎵 " + (name.rsplit(".", 1)[0] if "." in name else name)
+        return "🎵 Song"
+    if content and mtype == "audio":
+        return f"🎤 Voice note · {content}"
+    if content and mtype == "image":
+        return f"{'🎞️ GIF' if 'gif' in mime else '📷 Photo'} · {content}"
+    if content and mtype == "video":
+        return f"🎬 Video · {content}"
+    if content:
+        return content
     if mtype == "image":
         # GIFs (incl. GIPHY) are sent as image/gif; plain photos are jpg/png.
         return "🎞️ GIF" if "gif" in mime else "📷 Photo"

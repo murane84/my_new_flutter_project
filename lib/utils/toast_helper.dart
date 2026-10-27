@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'net.dart' show NetStatus;
+
 // ── Toast types ───────────────────────────────────────────────────────────────
 enum ToastType { info, error, success }
 
@@ -14,6 +16,19 @@ void showToast(
   Duration duration = const Duration(milliseconds: 2000),
 }) {
   if (!context.mounted) return;
+  // An error toast says WHY when a request just failed (offline, timed out,
+  // server busy, session expired…) — unless the message already says it.
+  String? why;
+  if (type == ToastType.error) {
+    final r = NetStatus.recentReason();
+    if (r != null && !_alreadyExplains(message, r)) {
+      why = r[0].toUpperCase() + r.substring(1);
+      message = _dropTryAgain(message);
+      if (duration < const Duration(milliseconds: 3600)) {
+        duration = const Duration(milliseconds: 3600);
+      }
+    }
+  }
   final theme = Theme.of(context);
   final isDark = theme.brightness == Brightness.dark;
   final primary = theme.colorScheme.primary;
@@ -21,6 +36,7 @@ void showToast(
   entry = OverlayEntry(
     builder: (_) => _ToastOverlay(
       message: message,
+      detail: why,
       type: type,
       duration: duration,
       isDark: isDark,
@@ -35,10 +51,32 @@ void showToast(
   Overlay.of(context).insert(entry);
 }
 
+bool _alreadyExplains(String message, String reason) {
+  final m = message.toLowerCase();
+  if (m.contains(reason.toLowerCase())) return true;
+  const hints = [
+    'internet', 'offline', 'connection', 'timed out', 'sign in', 'session',
+    'busy', 'too large', 'too big', 'wait a moment', 'no longer', 'not found',
+    "isn't on the server", 'access',
+  ];
+  return hints.any(m.contains);
+}
+
+// "Could not send — try again" + a reason line reads better as just
+// "Could not send"; the reason says whether trying again will help.
+String _dropTryAgain(String message) {
+  final s = message.replaceFirst(
+      RegExp(r'\s*[—–\-,.]\s*(please\s+)?try again\.?\s*$',
+          caseSensitive: false),
+      '');
+  return s.isEmpty ? message : s;
+}
+
 // ── Overlay widget ────────────────────────────────────────────────────────────
 
 class _ToastOverlay extends StatefulWidget {
   final String message;
+  final String? detail;
   final ToastType type;
   final Duration duration;
   final bool isDark;
@@ -47,6 +85,7 @@ class _ToastOverlay extends StatefulWidget {
 
   const _ToastOverlay({
     required this.message,
+    this.detail,
     required this.type,
     required this.duration,
     required this.isDark,
@@ -183,15 +222,35 @@ class _ToastOverlayState extends State<_ToastOverlay>
                       const SizedBox(width: 10),
                     ],
                     Flexible(
-                      child: Text(
-                        widget.message,
-                        style: TextStyle(
-                          color: textColor,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          height: 1.25,
-                          decoration: TextDecoration.none,
-                        ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.message,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              height: 1.25,
+                              decoration: TextDecoration.none,
+                            ),
+                          ),
+                          if (widget.detail != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                widget.detail!,
+                                style: TextStyle(
+                                  color: textColor.withValues(alpha: 0.72),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w400,
+                                  height: 1.25,
+                                  decoration: TextDecoration.none,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ],

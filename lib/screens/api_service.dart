@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import '../utils/net.dart' as http;
 import 'package:http_parser/http_parser.dart' show MediaType;
 import 'package:logger/logger.dart';
 import 'package:flutter/foundation.dart';
@@ -3281,7 +3281,7 @@ class ApiService {
           contentType: MediaType.parse(mime),
         ));
       final streamed = await req.send();
-      final resp = await http.Response.fromStream(streamed);
+      final resp = await http.responseFrom(streamed);
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final data = jsonDecode(resp.body);
         if (data is Map<String, dynamic>) return data;
@@ -3293,6 +3293,7 @@ class ApiService {
       return null;
     } catch (e) {
       _logger.e('recognizeSong exception: $e');
+      http.noteNetError(e);
       return null;
     }
   }
@@ -3459,7 +3460,7 @@ class ApiService {
         );
         streamed = await http.Client().send(sreq);
       }
-      final resp = await http.Response.fromStream(streamed);
+      final resp = await http.responseFrom(streamed);
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final data = jsonDecode(resp.body);
         if (data is Map<String, dynamic>) return data;
@@ -3468,6 +3469,7 @@ class ApiService {
       return null;
     } catch (e) {
       _logger.e('Upload media exception: $e');
+      http.noteNetError(e);
       return null;
     }
   }
@@ -3490,7 +3492,7 @@ class ApiService {
           contentType: MediaType.parse(mime.isNotEmpty ? mime : 'image/jpeg'),
         ));
       final streamed = await req.send();
-      final resp = await http.Response.fromStream(streamed);
+      final resp = await http.responseFrom(streamed);
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final data = jsonDecode(resp.body);
         if (data is Map<String, dynamic>) return data;
@@ -3498,6 +3500,7 @@ class ApiService {
       _logger.w('Space background upload failed: ${resp.statusCode}');
     } catch (e) {
       _logger.e('uploadSpaceBackground exception: $e');
+      http.noteNetError(e);
     }
     return null;
   }

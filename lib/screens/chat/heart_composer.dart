@@ -490,45 +490,20 @@ extension _ChatHeartComposer on _ChatPageState {
   /// thread's gallery), with Save only when the sender allowed it.
   void _openHeartPhoto(String url, Map<String, dynamic> msg) {
     final maySave = _heartMaySave(msg);
-    showDialog<void>(
-      context: context,
-      barrierColor: Colors.black,
-      builder: (dctx) => Stack(
-        fit: StackFit.expand,
-        children: [
-          InteractiveViewer(
-            maxScale: 5,
-            child: Center(
-              child: authNetworkImage(
-                  url: url,
-                  headers: mediaAuthHeaders(url),
-                  fit: BoxFit.contain),
-            ),
+    // Full screen: zoom (pinch / double-tap / wheel), back arrow, swipe away.
+    showPhotoViewer(
+      context,
+      authNetworkImageProvider(url, mediaAuthHeaders(url)),
+      actions: [
+        if (maySave)
+          IconButton(
+            tooltip: 'Save to device',
+            style: IconButton.styleFrom(
+                backgroundColor: Colors.black.withValues(alpha: 0.35)),
+            icon: const Icon(Icons.download_rounded, color: Colors.white),
+            onPressed: () => _saveMediaToDevice(msg),
           ),
-          SafeArea(
-            child: Align(
-              alignment: Alignment.topRight,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (maySave)
-                    IconButton(
-                      tooltip: 'Save to device',
-                      icon: const Icon(Icons.download_rounded,
-                          color: Colors.white),
-                      onPressed: () => _saveMediaToDevice(msg),
-                    ),
-                  IconButton(
-                    tooltip: 'Close',
-                    icon: const Icon(Icons.close_rounded, color: Colors.white),
-                    onPressed: () => Navigator.of(dctx).pop(),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -573,7 +548,12 @@ extension _ChatHeartComposer on _ChatPageState {
         // The WHOLE photo, portrait or landscape (no crop).
         return (w) => withSave(GestureDetector(
               onTap: () => _openHeartPhoto(url, msg),
-              child: _HeartFitMedia(url: url, width: w),
+              child: _HeartFitMedia(
+                url: url,
+                width: w,
+                overlayCorner: const Icon(Icons.open_in_full_rounded,
+                    size: 16, color: Colors.white),
+              ),
             ));
       case 'video':
         return (w) => withSave(GestureDetector(
@@ -1196,12 +1176,15 @@ class _HeartFitMedia extends StatefulWidget {
     required this.width,
     this.placeholderAspect = 0.8,
     this.overlay,
+    this.overlayCorner,
   });
 
   final String url;
   final double width;
   final double placeholderAspect; // width / height before the size is known
   final Widget? overlay;
+  // A small badge in the bottom-right corner (e.g. "open full size").
+  final Widget? overlayCorner;
 
   @override
   State<_HeartFitMedia> createState() => _HeartFitMediaState();
@@ -1298,6 +1281,19 @@ class _HeartFitMediaState extends State<_HeartFitMedia> {
               ColoredBox(
                 color: Colors.black.withValues(alpha: 0.25),
                 child: Center(child: widget.overlay),
+              ),
+            if (widget.overlayCorner != null)
+              Positioned(
+                right: 6,
+                bottom: 6,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black.withValues(alpha: 0.38),
+                  ),
+                  child: widget.overlayCorner,
+                ),
               ),
           ],
         ),

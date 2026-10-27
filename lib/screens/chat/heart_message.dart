@@ -2170,6 +2170,26 @@ class _HeartGenieState extends State<_HeartGenie>
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 16),
+                    // What was sealed inside (photo / clip / song / voice) sits
+                    // ABOVE the words, never inside their scroll, and is
+                    // capped in height — so the note is always in view; a
+                    // photo opens full size on double-tap / its expand button.
+                    if (widget.media != null) ...[
+                      Opacity(
+                        opacity: words,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                              maxHeight: (size.height * 0.34)
+                                  .clamp(140.0, 340.0)),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: widget.media!(width - 48),
+                          ),
+                        ),
+                      ),
+                      if (title != null || body.isNotEmpty)
+                        const SizedBox(height: 14),
+                    ],
                     // The words — calm and readable; long notes scroll.
                     Flexible(
                       child: Opacity(
@@ -2179,16 +2199,6 @@ class _HeartGenieState extends State<_HeartGenie>
                           child: SingleChildScrollView(
                             child: Column(
                               children: [
-                                // What was sealed inside: photo, video clip
-                                // or voice clip, above the words.
-                                if (widget.media != null) ...[
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(16),
-                                    child: widget.media!(width - 48),
-                                  ),
-                                  if (title != null || body.isNotEmpty)
-                                    const SizedBox(height: 14),
-                                ],
                                 if (title != null) ...[
                                   Text(
                                     title,

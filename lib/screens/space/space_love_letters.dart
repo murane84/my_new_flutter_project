@@ -251,13 +251,15 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
     final mime = (l['media_mime'] ?? '').toString().toLowerCase();
     final name = (l['media_name'] ?? '').toString();
     if (mime.startsWith('image/')) {
+      // Whole photo, fitted to the letter (the words stay in view); double-
+      // tap or the corner button opens it full size.
       return (w) => ClipRRect(
             borderRadius: BorderRadius.circular(14),
-            child: Image(
+            child: CompactPhoto(
               image: authNetworkImageProvider(url, mediaAuthHeaders(url)),
               width: w,
-              fit: BoxFit.contain,
-              errorBuilder: (_, _, _) => const SizedBox(height: 40),
+              maxHeight: (MediaQuery.sizeOf(context).height * 0.34)
+                  .clamp(140.0, 340.0),
             ),
           );
     }

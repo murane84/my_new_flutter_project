@@ -445,7 +445,7 @@ List<Widget> _legalBody(BuildContext context, String raw) {
 // the backend CURRENT_POLICY_VERSION is bumped), update this content too.
 const String _privacy = '''
 Aluta — Privacy Policy
-Development / Beta build · Last updated: 26 September 2026
+Development / Beta build · Last updated: 27 October 2026
 
 Aluta is an app in active development, provided for early testing. Features and
 data practices change frequently, and it is not yet intended for public
@@ -553,7 +553,7 @@ For any privacy questions or requests, contact us at: support@ozilane.com
 
 const String _terms = '''
 Aluta — Terms of Service
-Development / Beta build · Last updated: 26 September 2026
+Development / Beta build · Last updated: 27 October 2026
 
 Aluta is in active development, provided for early testing. Features change
 frequently, data may be reset, and the service may be unavailable or contain
@@ -639,7 +639,7 @@ support@ozilane.com
 
 const String _about = '''
 About Aluta
-Development / Beta build · Last updated: 26 September 2026
+Development / Beta build · Last updated: 27 October 2026
 
 Aluta is a social app that brings your conversations and your music into one
 place — private and group chat, voice and group calls, ephemeral Stories, a

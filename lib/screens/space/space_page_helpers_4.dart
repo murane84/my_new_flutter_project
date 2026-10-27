@@ -608,7 +608,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
             ] else if (kind == 'note' &&
                 _legacyHeartCard(scheme, caption) != null) ...[
               const SizedBox(height: 12),
-              _legacyHeartCard(scheme, caption)!,
+              _legacyHeartCard(scheme, caption, m)!,
             ] else
             // Non-media captions (note / song / voice) read beneath the content.
             if (caption.isNotEmpty &&

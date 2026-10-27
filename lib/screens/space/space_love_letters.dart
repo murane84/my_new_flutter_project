@@ -6,6 +6,11 @@ part of '../relationship_space_page.dart';
 // "Lock secret hearts" is on). Timed hearts that haven't opened yet show when
 // they will. Server: GET /messages/hearts/{peer} (my_aluta_api/hearts.py).
 
+// Kept hearts healed (made self-contained) this app run — once each.
+final Set<int> _heartHealTried = <int>{};
+// Which kept hearts can't be opened, per set of moments (scanned once).
+final Map<String, Future<List<int>>> _brokenScans = {};
+
 extension _SpaceLoveLetters on _RelationshipSpacePageState {
   Widget _loveLettersSection(ColorScheme scheme, {VoidCallback? onMenu}) {
     final pid = _partnerId;
@@ -281,30 +286,134 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
     return null;
   }
 
+  /// Find a kept heart: the server's love-letter shelf first, then this
+  /// device's own chat cache (it may still hold a heart the chat cleared).
+  Map<String, dynamic>? _findHeartIn(
+      List<Map<String, dynamic>> letters, int? mid, String? stamp) {
+    for (final l in letters) {
+      if (mid != null && (l['id'] as num?)?.toInt() == mid) return l;
+      if (mid == null && stamp != null) {
+        final t = parseLocal(l['timestamp']);
+        if (t != null && DateFormat('d MMM, h:mm a').format(t) == stamp) {
+          return l;
+        }
+      }
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> _localHeart(int? mid, String? stamp) async {
+    final pid = _partnerId;
+    final me = widget.myUserId;
+    if (pid == null || me == null) return null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('chat_cache_${me}_$pid');
+      if (raw == null) return null;
+      final list = jsonDecode(raw);
+      if (list is! List) return null;
+      final hearts = [
+        for (final x in list)
+          if (x is Map && x['message_type'] == 'heart' && x['is_deleted'] != true)
+            Map<String, dynamic>.from(x),
+      ];
+      return _findHeartIn(hearts, mid, stamp);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// A kept heart's private snapshot as a letter map (null = none yet).
+  Map<String, dynamic>? _snapLetter(Map<String, dynamic> ref) {
+    final s = ref['snap'];
+    if (s is! Map) return null;
+    return {
+      'id': ref['mid'],
+      'content': (s['note'] ?? '').toString(),
+      'heart_mood': ref['mood'],
+      'sender_id': ref['from'],
+      'timestamp': ref['ts'],
+      'media_url': s['media_url'],
+      'media_mime': s['media_mime'],
+      'media_name': s['media_name'],
+    };
+  }
+
+  Map<String, dynamic> _refOf(Map<String, dynamic> m) {
+    try {
+      final d = jsonDecode((m['ref'] ?? '').toString());
+      if (d is Map) return Map<String, dynamic>.from(d);
+    } catch (_) {}
+    return <String, dynamic>{};
+  }
+
+  /// Self-heal: write the letter's words + a durable copy of what it carried
+  /// into the moment, so it opens forever (on any device, chat or no chat).
+  /// Runs once per moment per app run; either partner's device can do it.
+  Future<void> _healKeptHeart(
+      Map<String, dynamic> m, Map<String, dynamic> letter) async {
+    final id = (m['id'] as num?)?.toInt();
+    if (id == null || !_heartHealTried.add(id)) return;
+    final unlock = parseLocal(letter['unlock_at']);
+    if (unlock != null && DateTime.now().isBefore(unlock)) return; // sealed
+    final ref = _refOf(m);
+    if (ref['snap'] is Map) return;
+    final rel = (letter['media_url'] ?? '').toString();
+    final mime = (letter['media_mime'] ?? '').toString();
+    final name = (letter['media_name'] ?? '').toString();
+    String? media;
+    if (rel.isNotEmpty) {
+      media = rel;
+      try {
+        final url = _full(rel)!;
+        List<int>? bytes;
+        if (!kIsWeb) {
+          final f = await MediaStore.instance.getFile(url, mediaAuthHeaders(url));
+          if (f != null) bytes = await f.readAsBytes();
+        }
+        if (bytes != null && bytes.isNotEmpty) {
+          final up = await ApiService().uploadMedia(
+              bytes: bytes,
+              filename: name.isEmpty ? 'keepsake' : name,
+              mime: mime.isEmpty ? 'application/octet-stream' : mime,
+              ephemeral: false);
+          final u = (up?['url'] as String?) ?? '';
+          if (u.isNotEmpty) media = u;
+        }
+      } catch (_) {}
+    }
+    ref['mid'] ??= letter['id'];
+    ref['ts'] ??= letter['timestamp'];
+    ref['mood'] ??= letter['heart_mood'] ?? 'love';
+    ref['from'] ??= letter['sender_id'];
+    ref['snap'] = {
+      'note': (letter['content'] ?? '').toString(),
+      'media_url': ?media,
+      if (media != null) 'media_mime': mime,
+      if (media != null) 'media_name': name,
+    };
+    final ok = await ApiService().healMomentRef(_id, id, jsonEncode(ref));
+    if (ok) m['ref'] = jsonEncode(ref);
+  }
+
   /// Reopen a kept heart from Our Space. [mid] = its message id (new keeps);
   /// [stamp] = the "d MMM, h:mm a" label older keeps carried in their text.
-  Future<void> _openKeptHeart({int? mid, String? stamp}) async {
+  /// [moment] = the pinned moment (for its snapshot / healing).
+  Future<void> _openKeptHeart(
+      {int? mid, String? stamp, Map<String, dynamic>? moment}) async {
     final pid = _partnerId;
     if (pid == null) return;
     final letters = await (_lettersFuture ??= ApiService().loveLetters(pid));
     if (!mounted) return;
-    Map<String, dynamic>? hit;
-    for (final l in letters) {
-      if (mid != null && (l['id'] as num?)?.toInt() == mid) {
-        hit = l;
-        break;
-      }
-      if (mid == null && stamp != null) {
-        final t = parseLocal(l['timestamp']);
-        if (t != null && DateFormat('d MMM, h:mm a').format(t) == stamp) {
-          hit = l;
-          break;
-        }
-      }
+    var hit = _findHeartIn(letters, mid, stamp) ?? await _localHeart(mid, stamp);
+    if (!mounted) return;
+    final ref = moment == null ? const <String, dynamic>{} : _refOf(moment);
+    if (hit != null && moment != null && ref['snap'] is! Map) {
+      _healKeptHeart(moment, hit); // make it self-contained for next time
     }
+    hit ??= _snapLetter(ref);
     if (hit == null) {
-      showToast(context, "That heart isn't on this device's list anymore",
-          type: ToastType.info);
+      await _heartGoneSheet(moment);
       return;
     }
     final unlock = parseLocal(hit['unlock_at']);
@@ -354,13 +463,230 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
         if (sent != null) 'sent ${DateFormat('d MMM · h:mm a').format(sent)}',
         inside,
       ].join('  ·  '),
-      onOpen: () => _openKeptHeart(mid: (ref['mid'] as num?)?.toInt()),
+      onOpen: () =>
+          _openKeptHeart(mid: (ref['mid'] as num?)?.toInt(), moment: m),
+      // Known gone (no snapshot, not on the shelf) → the card says so.
+      brokenCheck: ref['snap'] is Map
+          ? null
+          : () => _isHeartGone(m, (ref['mid'] as num?)?.toInt(), null),
     );
+  }
+
+  /// true when a kept heart can't be opened anywhere we can see. Also heals
+  /// it on the spot when the letter IS available (shelf or local cache).
+  Future<bool> _isHeartGone(
+      Map<String, dynamic> m, int? mid, String? stamp) async {
+    final pid = _partnerId;
+    if (pid == null) return false;
+    final letters = await (_lettersFuture ??= ApiService().loveLetters(pid));
+    final hit = _findHeartIn(letters, mid, stamp) ?? await _localHeart(mid, stamp);
+    if (hit != null) {
+      if (m.isNotEmpty) _healKeptHeart(m, hit);
+      return false;
+    }
+    return _snapLetter(_refOf(m)) == null;
+  }
+
+  /// A quiet line over Pinned moments when some kept hearts can't be opened
+  /// anywhere (and heals the rest as it checks). "Tidy up" unpins those, after
+  /// asking. Nothing is removed without a tap.
+  Widget _brokenHeartsBanner(
+      ColorScheme scheme, List<Map<String, dynamic>> moments) {
+    final legacy = RegExp(r'^❤️ Secret heart · (.+)$');
+    final hearts = [
+      for (final m in moments)
+        if (m['kind'] == 'heart' ||
+            (m['kind'] == 'note' &&
+                legacy.hasMatch((m['caption'] ?? '').toString().trim())))
+          m,
+    ];
+    if (hearts.isEmpty) return const SizedBox.shrink();
+    final key = [for (final m in hearts) '${m['id']}:${(m['ref'] ?? '').toString().length}']
+        .join(',');
+    final scan = _brokenScans[key] ??= () async {
+      final out = <int>[];
+      for (final m in hearts) {
+        final ref = _refOf(m);
+        final stamp = m['kind'] == 'note'
+            ? legacy.firstMatch((m['caption'] ?? '').toString().trim())?.group(1)
+            : null;
+        final gone = await _isHeartGone(
+            m, (ref['mid'] as num?)?.toInt(), stamp);
+        final id = (m['id'] as num?)?.toInt();
+        if (gone && id != null) out.add(id);
+      }
+      return out;
+    }();
+    return FutureBuilder<List<int>>(
+      future: scan,
+      builder: (_, snap) {
+        final broken = snap.data ?? const <int>[];
+        if (broken.isEmpty) return const SizedBox.shrink();
+        final n = broken.length;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.6)),
+            ),
+            child: Row(children: [
+              Icon(Icons.heart_broken_rounded,
+                  size: 18, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                    n == 1
+                        ? "1 kept heart can't be opened here"
+                        : "$n kept hearts can't be opened here",
+                    style: TextStyle(
+                        fontSize: 12.5, color: scheme.onSurfaceVariant)),
+              ),
+              TextButton(
+                onPressed: () => _tidyBrokenHearts(broken),
+                child: const Text('Tidy up'),
+              ),
+            ]),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _tidyBrokenHearts(List<int> ids) async {
+    final n = ids.length;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(n == 1 ? 'Unpin this heart?' : 'Unpin $n hearts?'),
+        content: const Text(
+            "Their letters were cleared from the chat, so they can't be "
+            'opened anymore. Everything else in Pinned stays.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Unpin')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    var failed = 0;
+    for (final id in ids) {
+      if (!await ApiService().deleteMoment(_id, id)) failed++;
+    }
+    if (!mounted) return;
+    _brokenScans.clear();
+    _load();
+    if (failed > 0) {
+      showToast(context, "Couldn't unpin $failed — try again",
+          type: ToastType.error);
+    }
+  }
+
+  /// The original heart is gone (the chat was cleared on both sides).
+  /// Explain, and offer the honest ways out — never a dead-end toast.
+  Future<void> _heartGoneSheet(Map<String, dynamic>? moment) async {
+    final scheme = Theme.of(context).colorScheme;
+    final partner = _others.isNotEmpty
+        ? ContactNames.instance.displayName(
+            of: _others.first,
+            registered: (_others.first['username'] ?? '').toString())
+        : 'your partner';
+    final id = (moment?['id'] as num?)?.toInt();
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      // No theme outline — this sheet draws its own card.
+      shape: const RoundedRectangleBorder(),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          child: Center(
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  borderRadius: BorderRadius.circular(24),
+                  border:
+                      Border.all(color: _accent.withValues(alpha: 0.25)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.18),
+                      blurRadius: 24,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Icon(Icons.heart_broken_rounded,
+                          color: _accent, size: 24),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text("This heart can't be opened",
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                                color: scheme.onSurface)),
+                      ),
+                    ]),
+                    const SizedBox(height: 10),
+                    Text(
+                        'Its letter was cleared from your chat before it was '
+                        'saved here. If $partner\'s phone still has it, it '
+                        'comes back by itself the next time they open Pinned '
+                        'moments — and then it stays for good.',
+                        style: TextStyle(
+                            fontSize: 13,
+                            height: 1.4,
+                            color: scheme.onSurfaceVariant)),
+                    const SizedBox(height: 14),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (id != null)
+                          TextButton.icon(
+                            onPressed: () => Navigator.pop(ctx, 'unpin'),
+                            icon: const Icon(Icons.push_pin_outlined,
+                                size: 18),
+                            label: const Text('Unpin'),
+                          ),
+                        const SizedBox(width: 6),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Keep it'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (choice == 'unpin' && id != null && mounted) {
+      await _confirmDeleteMoment(id);
+    }
   }
 
   /// Older keeps were saved as a note "❤️ Secret heart · 24 Oct, 9:25 PM" —
   /// found by that time and reopened the same way.
-  Widget? _legacyHeartCard(ColorScheme scheme, String caption) {
+  Widget? _legacyHeartCard(ColorScheme scheme, String caption,
+      [Map<String, dynamic>? moment]) {
     final m = RegExp(r'^❤️ Secret heart · (.+)$').firstMatch(caption.trim());
     if (m == null) return null;
     return _keptHeartPanel(
@@ -369,7 +695,9 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
       icon: Icons.favorite_rounded,
       title: 'A secret heart',
       sub: 'sent ${m.group(1)}',
-      onOpen: () => _openKeptHeart(stamp: m.group(1)),
+      onOpen: () => _openKeptHeart(stamp: m.group(1), moment: moment),
+      brokenCheck: () =>
+          _isHeartGone(moment ?? const {}, null, m.group(1)),
     );
   }
 
@@ -378,7 +706,23 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
       required IconData icon,
       required String title,
       required String sub,
-      required VoidCallback onOpen}) {
+      required VoidCallback onOpen,
+      Future<bool> Function()? brokenCheck}) {
+    // A heart we know can't be opened reads as such (faded, honest line),
+    // and a tap explains what happened instead of a dead-end toast.
+    if (brokenCheck != null) {
+      return FutureBuilder<bool>(
+        future: brokenCheck(),
+        builder: (_, snap) => _keptHeartPanel(scheme,
+            tint: snap.data == true ? scheme.outline : tint,
+            icon: snap.data == true ? Icons.heart_broken_rounded : icon,
+            title: title,
+            sub: snap.data == true
+                ? 'Cleared from the chat · tap for options'
+                : sub,
+            onOpen: onOpen),
+      );
+    }
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -518,17 +862,38 @@ class _HeartAudioPlayerState extends State<_HeartAudioPlayer> {
             aid, widget.url, mediaAuthHeaders(widget.url),
             filename: widget.fileName, mime: widget.mime);
       }
-      final d = path != null
-          ? await _p.setFilePath(path)
-          : await _p.setUrl(widget.url, headers: mediaAuthHeaders(widget.url));
+      Duration? d;
+      try {
+        d = path != null
+            ? await _p.setFilePath(path)
+            : await _p.setUrl(widget.url,
+                headers: mediaAuthHeaders(widget.url));
+      } catch (_) {
+        // Streaming with headers isn't supported everywhere (desktop):
+        // fetch the file once and play it from disk instead.
+        if (kIsWeb) rethrow;
+        final f = await MediaStore.instance
+            .getFile(widget.url, mediaAuthHeaders(widget.url));
+        if (f == null) rethrow;
+        d = await _p.setFilePath(f.path);
+      }
       if (!mounted) return;
       setState(() {
         _ready = true;
+        _failed = false;
         _dur = d ?? Duration.zero;
       });
     } catch (_) {
       if (mounted) setState(() => _failed = true);
     }
+  }
+
+  void _retry() {
+    setState(() {
+      _failed = false;
+      _ready = false;
+    });
+    _load();
   }
 
   @override
@@ -550,10 +915,13 @@ class _HeartAudioPlayerState extends State<_HeartAudioPlayer> {
       ),
       child: Row(children: [
         IconButton(
-          onPressed: !_ready ? null : () => _playing ? _p.pause() : _p.play(),
+          tooltip: _failed ? 'Try again' : null,
+          onPressed: _failed
+              ? _retry
+              : (!_ready ? null : () => _playing ? _p.pause() : _p.play()),
           icon: Icon(
               _failed
-                  ? Icons.music_off_rounded
+                  ? Icons.refresh_rounded
                   : (_playing
                       ? Icons.pause_circle_filled_rounded
                       : Icons.play_circle_fill_rounded),
@@ -575,7 +943,7 @@ class _HeartAudioPlayerState extends State<_HeartAudioPlayer> {
                       fontSize: 14)),
               const SizedBox(height: 6),
               _failed
-                  ? Text("Couldn't load it on this device",
+                  ? Text("Couldn't load it here · tap ↻ to try again",
                       style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.7),
                           fontSize: 11.5))

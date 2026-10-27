@@ -1068,6 +1068,8 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
               ? _momentsEmpty(scheme)
               : Column(
                   children: [
+                    // "2 hearts can't be opened here — tidy up?"
+                    _brokenHeartsBanner(scheme, moments),
                     for (final item in feed)
                       item['_t'] == 'dedication'
                           ? _dedicationCard(

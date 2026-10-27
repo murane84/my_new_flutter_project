@@ -2163,6 +2163,24 @@ class ApiService {
     }
   }
 
+  /// Self-heal a kept moment's [ref] (e.g. a heart's snapshot once the chat
+  /// message is gone). Either partner may. true on success.
+  Future<bool> healMomentRef(int spaceId, int momentId, String ref) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http.patch(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/moments/$momentId/ref'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'ref': ref}),
+      );
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.w('healMomentRef failed: $e');
+      return false;
+    }
+  }
+
   /// React to a moment with an emoji (a heart). Sending the same one again — or
   /// an empty string — toggles it off. Returns the server's `my_reaction`
   /// (emoji or null) on success, or null on failure.

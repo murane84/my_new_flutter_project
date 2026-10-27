@@ -2994,6 +2994,39 @@ def edit_diary_comment(
     return _comment_dict(db, comment, current_user.id)
 
 
+class _MomentRefBody(BaseModel):
+    ref: str
+
+
+@router.patch("/{space_id}/moments/{moment_id}/ref")
+def heal_moment_ref(
+    space_id: int,
+    moment_id: int,
+    payload: _MomentRefBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Self-heal a kept moment: replace its `ref` with a self-contained copy
+    (e.g. a kept heart's snapshot once the original chat message is gone).
+    Either partner may heal — moments are shared across the bond — but only
+    the ref changes; kind / author / caption stay as they were."""
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    ids = _bond_space_ids(db, space, current_user.id)
+    moment = db.query(PinnedMoment).filter(
+        PinnedMoment.id == moment_id,
+        PinnedMoment.space_id.in_(ids),
+    ).first()
+    if moment is None:
+        raise HTTPException(status_code=404, detail="Moment not found")
+    ref = (payload.ref or "").strip()
+    if not ref or len(ref) > 20000:
+        raise HTTPException(status_code=400, detail="Bad ref")
+    moment.ref = ref
+    db.commit()
+    db.refresh(moment)
+    return _moment_dict(db, moment, current_user.id)
+
+
 @router.delete("/{space_id}/moments/{moment_id}")
 def delete_moment(
     space_id: int,

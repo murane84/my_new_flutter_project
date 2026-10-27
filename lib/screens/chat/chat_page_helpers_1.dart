@@ -261,6 +261,19 @@ extension _ChatPageHelpers1 on _ChatPageState {
                         ? (hName.startsWith('heart_voice') ? 'voice' : 'song')
                         : null;
         kind = 'heart';
+        // A private snapshot travels with the keep (shown only when the
+        // letter is opened, never on the card), with its own durable copy of
+        // the photo / song — so the pin still opens after the chat is cleared.
+        // A still-sealed heart has no words yet: it falls back to the letter.
+        final unlockAt = DateTime.tryParse('${msg['unlock_at'] ?? ''}');
+        final sealed =
+            unlockAt != null && DateTime.now().toUtc().isBefore(unlockAt.toUtc());
+        final note = (msg['content'] as String?) ?? '';
+        String? snapMedia;
+        if (!sealed && rel.isNotEmpty) {
+          snapMedia = await _durableMediaRef(rel, hMime);
+          if (!mounted) return;
+        }
         ref = jsonEncode({
           'mid': hid,
           'ts': msg['timestamp'],
@@ -271,6 +284,13 @@ extension _ChatPageHelpers1 on _ChatPageState {
             'title': hName.contains('.')
                 ? hName.substring(0, hName.lastIndexOf('.'))
                 : hName,
+          if (!sealed)
+            'snap': {
+              'note': note,
+              'media_url': ?snapMedia,
+              if (snapMedia != null) 'media_mime': hMime,
+              if (snapMedia != null) 'media_name': hName,
+            },
         });
         break;
       default:

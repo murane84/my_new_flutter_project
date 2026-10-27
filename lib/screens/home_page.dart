@@ -65,6 +65,7 @@ import '../services/track_title.dart' show splitTitleArtist;
 import 'listening_audience_sheet.dart' show PresenceShareButton;
 import '../services/tune_in.dart';
 import '../widgets/tune_in_ask.dart';
+import '../widgets/playing_bars.dart';
 import '../services/app_busy.dart';
 import '../utils/net_image.dart';
 import 'token_helper.dart';
@@ -4775,7 +4776,7 @@ class _WebQueueSheetState extends State<_WebQueueSheet> {
                 spreadRadius: 1),
           ],
         ),
-        child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 20),
+        child: const Center(child: PlayingBars(color: Colors.white, scale: 0.85)),
       );
     }
     return Container(

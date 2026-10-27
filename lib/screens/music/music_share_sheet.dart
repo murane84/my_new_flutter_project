@@ -16,11 +16,17 @@ class _ShareSheet extends StatefulWidget {
   final String Function(String path) titleOf;
   final String Function(String path) artistOf;
 
+  /// Send straight to this friend (the Glow partner) without picking — the
+  /// sheet just shows progress and closes. Falls back to the normal picker
+  /// if that friend isn't in the list.
+  final int? sendTo;
+
   const _ShareSheet({
     required this.paths,
     required this.library,
     required this.titleOf,
     required this.artistOf,
+    this.sendTo,
   });
 
   @override
@@ -42,6 +48,19 @@ class _ShareSheetState extends State<_ShareSheet> {
     super.initState();
     _songs = [...widget.paths];
     _friends = ApiService().getFriends();
+    final to = widget.sendTo;
+    if (to != null) {
+      _to.add(to);
+      _friends.then((fr) {
+        if (!mounted) return;
+        if (fr.any((f) => (f['id'] as num?)?.toInt() == to)) {
+          _sendAll(fr);
+        } else {
+          setState(() => _to.clear());
+          showToast(context, 'Pick who to send it to');
+        }
+      }).catchError((_) {});
+    }
   }
 
   String _mimeOf(String path) {

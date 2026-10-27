@@ -87,7 +87,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
 
   Widget _fsUtil(ColorScheme scheme, IconData icon, String label,
       VoidCallback onTap,
-      {bool active = false, required Color accent}) {
+      {bool active = false, required Color accent, String? badge}) {
     final isDark = scheme.brightness == Brightness.dark;
     final c = active ? accent : scheme.onSurfaceVariant;
     return Tactile(child: GestureDetector(
@@ -115,6 +115,36 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
             child: Icon(icon, size: 21, color: c),
           ),
           const SizedBox(height: 6),
+          // Live value (speed / sleep minutes) as a small gradient pill in
+          // place of the label — only while it's set, so the row stays calm.
+          if (badge != null)
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              child: Container(
+                key: ValueKey(badge),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  gradient: LinearGradient(colors: [
+                    Color.lerp(accent, Colors.white, 0.15)!,
+                    Color.lerp(accent, Colors.black, 0.15)!,
+                  ]),
+                  boxShadow: [
+                    BoxShadow(
+                        color: accent.withValues(alpha: 0.35),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2)),
+                  ],
+                ),
+                child: Text(badge,
+                    style: const TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white)),
+              ),
+            )
+          else
           SizedBox(
             width: 62,
             child: Text(

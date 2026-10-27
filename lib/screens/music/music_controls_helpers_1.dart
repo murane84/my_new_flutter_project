@@ -686,26 +686,35 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                               _fsUtil(
                                 scheme,
                                 Icons.speed_rounded,
-                                _speedLabel(_speed),
+                                'Speed',
                                 () async {
                                   await _showSpeedSheet(context);
                                   if (mounted) setFull(() {});
                                 },
                                 accent: accent,
                                 active: _speed != 1.0,
+                                badge: _speed != 1.0
+                                    ? _speedLabel(_speed)
+                                    : null,
                               ),
-                              _fsUtil(
-                                scheme,
-                                Icons.bedtime_rounded,
-                                _sleepRemaining != null
-                                    ? _fmtSleep(_sleepRemaining!)
-                                    : 'Sleep',
-                                () {
-                                  _showSleepTimerDialog();
-                                  setFull(() {});
-                                },
-                                accent: accent,
-                                active: _sleepRemaining != null,
+                              ValueListenableBuilder<Duration?>(
+                                valueListenable: _sleepVN,
+                                builder: (_, left, _) => _fsUtil(
+                                  scheme,
+                                  Icons.bedtime_rounded,
+                                  'Sleep',
+                                  () {
+                                    _showSleepTimerDialog();
+                                    setFull(() {});
+                                  },
+                                  accent: accent,
+                                  active: left != null,
+                                  badge: left == null
+                                      ? null
+                                      : (left.inSeconds < 60
+                                          ? '${left.inSeconds}s'
+                                          : '${(left.inSeconds / 60).ceil()} min'),
+                                ),
                               ),
                               _fsUtil(scheme, Icons.lyrics_rounded, 'Lyrics',
                                   _openLyrics,
@@ -968,11 +977,20 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                         color: scheme.onSurface)),
                 const SizedBox(width: 8),
                 if (total > 0)
-                  Text('$pos / $total',
-                      style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: scheme.onSurfaceVariant)),
+                  Flexible(
+                    child: Builder(builder: (_) {
+                      _loadQueueDurations(setFull);
+                      final left = _queueTimeLeft();
+                      return Text(
+                          left == null ? '$pos / $total' : '$pos / $total · $left',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.onSurfaceVariant));
+                    }),
+                  ),
                 const Spacer(),
                 // Same tactile chips as the playlist header.
                 AlutaTapChip(
@@ -1186,6 +1204,8 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                     _playNextInQueue(i, setFull);
                   } else if (v == 'share') {
                     _shareSong(path);
+                  } else if (v == 'partner') {
+                    _sendSongToPartner(path);
                   } else if (v == 'remove') {
                     _removeFromQueue(i, setFull);
                   }
@@ -1194,9 +1214,12 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                   if (!isNow && i != _currentIndex + 1)
                     _queueMenuItem('next', Icons.playlist_play_rounded,
                         'Play next', scheme),
-                  _queueMenuItem('share', Icons.favorite_rounded,
-                      'Share with friends', scheme,
-                      color: accent),
+                  if (_partnerId != null)
+                    _queueMenuItem('partner', Icons.favorite_rounded,
+                        'Send to my partner', scheme,
+                        color: accent),
+                  _queueMenuItem('share', Icons.send_rounded,
+                      'Share with friends', scheme),
                   if (!isNow)
                     _queueMenuItem('remove', Icons.remove_circle_outline_rounded,
                         'Remove from queue', scheme),

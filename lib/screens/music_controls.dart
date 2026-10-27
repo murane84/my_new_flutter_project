@@ -349,6 +349,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   Timer? _sleepTimer;
   Duration? _sleepRemaining;
+  // Ticks with the sleep countdown so the Now Playing page (its own route,
+  // not rebuilt by setState here) can show the minutes live.
+  final ValueNotifier<Duration?> _sleepVN = ValueNotifier<Duration?>(null);
+  // Known song lengths (ms) by path — for the queue's "min left".
+  final Map<String, int> _durMs = {};
+  bool _durLoaded = false;
   Timer? _sleepTick;
 
   // True while the app-wide playlist drawer is open. The drawer itself is
@@ -502,6 +508,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   @override
   void dispose() {
+    _sleepVN.dispose();
     AccountPrefs.offRestore(_eqRestore);
     _setHostingBusy(false);
     // Only clear the bus if we're still the registered owner.
@@ -650,7 +657,63 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   void _shareSong(String path) => _shareSongs([path]);
 
-  void _shareSongs(List<String> paths) {
+  /// The Glow partner, when bonded — null otherwise.
+  int? get _partnerId => SongBridge.instance.partnerId?.call();
+
+  /// Fill [_durMs] once from the device library (mobile has lengths there);
+  /// songs played elsewhere get theirs as they load.
+  Future<void> _loadQueueDurations(StateSetter setFull) async {
+    if (_durLoaded) return;
+    _durLoaded = true;
+    try {
+      final songs = await SongLibrary.songs();
+      for (final s in songs) {
+        final d = s.duration;
+        if (d != null && d > 0) _durMs[s.data] = d;
+      }
+      if (mounted) setFull(() {});
+    } catch (_) {}
+  }
+
+  /// "· 48 min left" for the queue header — the rest of this song plus every
+  /// song after it. Estimated (~) when some lengths are unknown; null when
+  /// none are known.
+  String? _queueTimeLeft() {
+    if (_currentIndex < 0 || _currentIndex >= _playlist.length) return null;
+    final cur = _playlist[_currentIndex];
+    final pd = _player.duration;
+    if (pd != null && pd.inMilliseconds > 0) _durMs[cur] = pd.inMilliseconds;
+    var ms = 0, known = 0, n = 0;
+    for (var i = _currentIndex + 1; i < _playlist.length; i++) {
+      n++;
+      final d = _durMs[_playlist[i]];
+      if (d != null) {
+        ms += d;
+        known++;
+      }
+    }
+    if (n > 0 && known == 0) return null;
+    if (known < n) ms = (ms * n / known).round();
+    final curMs = _durMs[cur];
+    if (curMs != null) {
+      ms += (curMs - _player.position.inMilliseconds).clamp(0, curMs);
+    }
+    final min = (ms / 60000).round();
+    if (min < 1) return null;
+    final t = min >= 60
+        ? '${min ~/ 60} h ${min % 60} min'
+        : '$min min';
+    return '${known < n ? '~' : ''}$t left';
+  }
+
+  /// One-tap "Send to my partner": the share sheet sends straight away.
+  void _sendSongToPartner(String path) {
+    final id = _partnerId;
+    if (id == null) return _shareSong(path);
+    _shareSongs([path], sendTo: id);
+  }
+
+  void _shareSongs(List<String> paths, {int? sendTo}) {
     if (paths.isEmpty) return;
     showModalBottomSheet(
       context: context,
@@ -661,6 +724,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         library: _playlist,
         titleOf: (p) => metadataStore.title(p, _nameFromPath(p)),
         artistOf: (p) => metadataStore.artist(p, ''),
+        sendTo: sendTo,
       ),
     );
   }
@@ -1587,10 +1651,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       _sleepFade = 1.0;
       _applyVolume();
       setState(() => _sleepRemaining = null);
+      _sleepVN.value = null;
       _snack('Sleep timer off');
       return;
     }
     setState(() => _sleepRemaining = d);
+    _sleepVN.value = d;
     _snack('Sleep in ${d.inMinutes} min');
     _sleepTimer = Timer(d, () async {
       await _player.pause();
@@ -1598,6 +1664,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       _sleepFade = 1.0;
       _applyVolume();
       _sleepTick?.cancel();
+      _sleepVN.value = null;
       if (mounted) setState(() => _sleepRemaining = null);
     });
     _sleepTick = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -1607,6 +1674,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           _sleepRemaining = _sleepRemaining! - const Duration(seconds: 1);
         }
       });
+      _sleepVN.value = _sleepRemaining;
       // The last 30s: ease the music away instead of a sudden stop.
       final r = _sleepRemaining?.inSeconds ?? 99;
       final f = r >= 30 ? 1.0 : (r / 30).clamp(0.0, 1.0);

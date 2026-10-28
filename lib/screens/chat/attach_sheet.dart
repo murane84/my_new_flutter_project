@@ -229,6 +229,10 @@ class _AttachSheetState extends State<AttachSheet> {
           final cellW = c.maxWidth / cols;
           final aspect = cellW / contentH;
           return GridView.count(
+            // No automatic safe-area padding: on Android the grid otherwise
+            // adds the status-bar height above the first row (the gap under
+            // "Share" that web/Windows never showed).
+            padding: EdgeInsets.zero,
             crossAxisCount: cols,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),

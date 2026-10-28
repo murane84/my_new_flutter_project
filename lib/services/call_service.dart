@@ -4,6 +4,7 @@ import 'package:audioplayers/audioplayers.dart'
     show AssetSource, AudioPlayer, ReleaseMode;
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
+import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding;
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../screens/api_service.dart';
@@ -303,10 +304,19 @@ class CallService {
     // notification, so the two never double up.
     if (_androidApp) {
       final who = peerName.isEmpty ? 'Someone' : peerName;
+      final since = DateTime.now().millisecondsSinceEpoch;
       unawaited(showCallNotification(caller: who, callerId: '$from'));
       // …and keep bringing it back while it rings (Android tucks a banner
-      // away after a few seconds); stops on answer / decline / end.
-      unawaited(keepCallBannerUp(caller: who, callerId: '$from'));
+      // away after a few seconds); stops on answer / decline / end. Not while
+      // Aluta is on screen — the full call screen is already there.
+      unawaited(keepCallBannerUp(
+        caller: who,
+        callerId: '$from',
+        since: since,
+        quietWhile: () =>
+            WidgetsBinding.instance.lifecycleState ==
+            AppLifecycleState.resumed,
+      ));
     }
     // Mirror as a system incoming call so a car / BT device can ring + answer it.
     TelecomService.instance.reportIncoming(_telecomId, peerName);
@@ -552,18 +562,30 @@ class CallService {
         }
         break;
       case 'call_decline':
+        if (!_fromPeer(msg)) break;
         _finish(CallEndReason.declined);
         break;
       case 'call_busy':
+        if (!_fromPeer(msg)) break;
         _finish(CallEndReason.busy);
         break;
       case 'call_cancel':
+        if (!_fromPeer(msg)) break;
         _finish(CallEndReason.cancelled);
         break;
       case 'call_end':
+        if (!_fromPeer(msg)) break;
         _finish(CallEndReason.hangup);
         break;
     }
+  }
+
+  /// An end/decline/busy signal only counts from the person we're calling
+  /// with — a stray one (an old banner's Decline, a stale socket) must never
+  /// end a different call.
+  bool _fromPeer(Map<String, dynamic> msg) {
+    final f = _asInt(msg['from']);
+    return f == null || peerId == null || f == peerId;
   }
 
   // ── Controls ──────────────────────────────────────────────────────────────

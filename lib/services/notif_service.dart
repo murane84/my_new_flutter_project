@@ -867,14 +867,20 @@ int _callRingOver = 0;
 /// ringing the banner (with Accept / Decline) is posted again every 9 s —
 /// until it's answered, declined, cancelled by the caller, or 45 s pass.
 /// Safe to run from the push isolate of a closed app.
+///
+/// [since]: when this call started ringing (taken BEFORE the first banner),
+/// so an answer/cancel that lands in between is never missed. [quietWhile]:
+/// skip a re-post while it returns true (Aluta itself is on screen).
 Future<void> keepCallBannerUp({
   required String caller,
   String? callerId,
   bool isGroup = false,
   int? room,
+  int? since,
+  bool Function()? quietWhile,
 }) async {
   if (kIsWeb) return;
-  final started = DateTime.now().millisecondsSinceEpoch;
+  final started = since ?? DateTime.now().millisecondsSinceEpoch;
   for (var i = 0; i < 4; i++) {
     await Future<void>.delayed(const Duration(seconds: 9));
     if (_callRingOver >= started) return;
@@ -883,6 +889,7 @@ Future<void> keepCallBannerUp({
       await p.reload();
       if ((p.getInt(_kCallOverKey) ?? 0) >= started) return;
     } catch (_) {}
+    if (quietWhile?.call() ?? false) continue;
     await showCallNotification(
         caller: caller, callerId: callerId, isGroup: isGroup, room: room);
   }

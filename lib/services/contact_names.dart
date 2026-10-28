@@ -76,10 +76,10 @@ class ContactNames {
           .fetchContactNames()
           .timeout(const Duration(seconds: 3), onTimeout: () => {});
       if (remote.isNotEmpty && _byKey.isEmpty) {
+        // In memory only — NOT saved as this device's snapshot, so the
+        // address-book read (and, on a fresh install, its permission prompt)
+        // still runs later and replaces it with the phone's own truth.
         _byKey.addAll(remote);
-        // Keep _sig empty so the next phonebook check does a full read.
-        _sig = '';
-        _persist();
         revision.value++;
       }
     } catch (_) {}

@@ -149,6 +149,7 @@ Future<void> handleFcmData(Map<String, dynamic> data,
     final known = await _knownAs(data, registered);
     String mine(String text) => _swapName(text, registered, known);
     if (type == 'call_offer') {
+      final since = DateTime.now().millisecondsSinceEpoch;
       final caller = mine((data['caller_name'] ?? 'Someone').toString());
       final callerId = (data['caller_id'] ?? '').toString();
       await showCallNotification(
@@ -160,7 +161,9 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       // (App open: the call engine runs the same loop itself.)
       if (!foreground) {
         await keepCallBannerUp(
-            caller: caller, callerId: callerId.isEmpty ? null : callerId);
+            caller: caller,
+            callerId: callerId.isEmpty ? null : callerId,
+            since: since);
       }
     } else if (type == 'group_call') {
       final caller = mine((data['caller_name'] ?? 'Someone').toString());

@@ -110,7 +110,11 @@ class _SwipeActionTileState extends State<SwipeActionTile>
   Future<void> _animateTo(double to, Duration dur, Curve curve) async {
     if (!mounted) return;
     _ac.value = _dx;
-    await _ac.animateTo(to, duration: dur, curve: curve);
+    try {
+      await _ac.animateTo(to, duration: dur, curve: curve).orCancel;
+    } on TickerCanceled {
+      // The tile left the screen (the chat opened over it) — nothing to do.
+    }
   }
 
   @override

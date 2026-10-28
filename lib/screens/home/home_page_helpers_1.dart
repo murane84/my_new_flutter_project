@@ -419,6 +419,15 @@ extension _HomePageHelpers1 on HomePageState {
       navigatorKey.currentState
           ?.pushNamedAndRemoveUntil(LockScreen.routeName, (_) => false);
     };
+    // Safety net: if the call that opened us never got going (it ended
+    // before we connected, or the launch carried no caller), lock anyway.
+    if (lockBypassedForCall) {
+      Future<void>.delayed(const Duration(seconds: 60), () {
+        if (lockBypassedForCall && !CallService.instance.isActive) {
+          relockAfterCall?.call();
+        }
+      });
+    }
     TelecomService.instance.onAnswer = (id) {
       if (id.startsWith('grp_')) {
         GroupCallService.instance.accept();

@@ -1454,42 +1454,27 @@ extension _HomeFriendListView on HomePageState {
         decoration: _circleTileDecoration(scheme, isDark),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          child: Slidable(
+          // Samsung-style: swipe RIGHT → call, swipe LEFT → open the chat.
+          // The colour blooms across the tile and the action fires on its
+          // own a beat later (no second tap on an exposed button).
+          child: SwipeActionTile(
       key: ValueKey('friend-${f['id']}'),
-      // Swipe RIGHT (drag from the left edge) → Call.
-      startActionPane: ActionPane(
-        motion: const DrawerMotion(),
-        extentRatio: 0.26,
-        children: [
-          SlidableAction(
-            onPressed: (_) => _showCallChoice(
-              friendId: int.tryParse(f['id'].toString()) ?? -1,
-              name: name,
-              avatar: f['avatar_url'] as String?,
-              phone: f['phone'] as String?,
-            ),
-            backgroundColor: scheme.primary,
-            foregroundColor: scheme.onPrimary,
-            icon: Icons.call_rounded,
-            label: 'Call',
-          ),
-        ],
-      ),
-      // Swipe LEFT → open the message thread.
-      endActionPane: ActionPane(
-        motion: const DrawerMotion(),
-        extentRatio: 0.26,
-        children: [
-          SlidableAction(
-            onPressed: (_) =>
-                _isSharing ? _sendShareTo(friend: f) : openChat(f),
-            backgroundColor: scheme.secondaryContainer,
-            foregroundColor: scheme.onSecondaryContainer,
-            icon: Icons.chat_bubble_rounded,
-            label: 'Message',
-          ),
-        ],
-      ),
+      // Online → the Aluta call starts straight away (like a phone's swipe to
+      // dial). Offline → the Aluta / carrier choice, since Aluta can't ring.
+      onSwipeRight: _isSharing
+          ? null
+          : () {
+              final id = int.tryParse(f['id'].toString()) ?? -1;
+              final avatar = f['avatar_url'] as String?;
+              final phone = f['phone'] as String?;
+              if (ConnectionStatus.instance.isOnline) {
+                _startAlutaCall(id, name, avatar, phone);
+              } else {
+                _showCallChoice(
+                    friendId: id, name: name, avatar: avatar, phone: phone);
+              }
+            },
+      onSwipeLeft: () => _isSharing ? _sendShareTo(friend: f) : openChat(f),
       child: Material(
       color: Colors.transparent,
       child: InkWell(

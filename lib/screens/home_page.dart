@@ -103,7 +103,7 @@ import '../utils/time_utils.dart';
 // Prefixed: this file also imports package:provider, which exports colliding
 // names (Consumer, Provider, ChangeNotifierProvider). `rp.` keeps them distinct.
 import 'package:flutter_riverpod/flutter_riverpod.dart' as rp;
-import 'package:flutter_slidable/flutter_slidable.dart';
+import '../widgets/swipe_action_tile.dart';
 import '../state/playback_state.dart';
 import '../state/unread_state.dart';
 import '../state/presence_state.dart';

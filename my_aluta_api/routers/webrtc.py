@@ -151,3 +151,60 @@ def ice_servers(current_user: User = Depends(get_current_user)):
     """Return the ICE (STUN/TURN) servers the client should use for calls and
     Listen Together. Authenticated so credentials aren't handed to the world."""
     return {"iceServers": build_ice_servers()}
+
+
+# ── Relay health reports (shown on the admin Overview) ──────────────────────
+# The relay box POSTs a small JSON status every minute (turn-report on the
+# box, installed by install.sh). Signed with the SAME TURN_SHARED_SECRET the
+# relay and this API already share: X-Relay-Ts = unix seconds, X-Relay-Sig =
+# hex HMAC-SHA256(secret, "<ts>.<raw body>"). No admin session involved —
+# the signature is the auth, and a report older than 5 min is refused.
+from datetime import datetime, timezone  # noqa: E402
+
+from fastapi import HTTPException, Request  # noqa: E402
+from sqlalchemy.orm import Session  # noqa: E402
+
+from database import get_db  # noqa: E402
+from models import RelayStatus  # noqa: E402
+
+_REPORT_MAX_BYTES = 32 * 1024
+
+
+@router.post("/relay-report")
+async def relay_report(request: Request, db: Session = Depends(get_db)):
+    secret = os.getenv("TURN_SHARED_SECRET") or ""
+    if not secret:
+        raise HTTPException(503, "Relay reporting not configured")
+    raw = await request.body()
+    if len(raw) > _REPORT_MAX_BYTES:
+        raise HTTPException(413, "Report too large")
+    ts = request.headers.get("x-relay-ts") or ""
+    sig = (request.headers.get("x-relay-sig") or "").lower()
+    try:
+        ts_i = int(ts)
+    except ValueError:
+        raise HTTPException(401, "Bad timestamp")
+    if abs(time.time() - ts_i) > 300:
+        raise HTTPException(401, "Stale report")
+    want = hmac.new(secret.encode(), f"{ts}.".encode() + raw,
+                    hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(want, sig):
+        raise HTTPException(401, "Bad signature")
+    try:
+        import json as _json
+        data = _json.loads(raw.decode("utf-8") or "{}")
+        if not isinstance(data, dict):
+            raise ValueError
+    except Exception:
+        raise HTTPException(400, "Bad JSON")
+    name = str(data.get("name") or "turn")[:40]
+    row = db.query(RelayStatus).filter(RelayStatus.name == name).first()
+    now = datetime.now(timezone.utc)
+    body = raw.decode("utf-8")
+    if row is None:
+        db.add(RelayStatus(name=name, reported_at=now, payload=body))
+    else:
+        row.reported_at = now
+        row.payload = body
+    db.commit()
+    return {"ok": True}

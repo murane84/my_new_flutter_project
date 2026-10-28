@@ -1265,3 +1265,14 @@ class Feedback(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False,
         index=True)
     updated_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class RelayStatus(Base):
+    """Latest health report pushed by a TURN relay box (turn.ozilane.com) every
+    minute — signed with TURN_SHARED_SECRET — shown on the admin Overview.
+    One row per relay name. Auto-created by create_all; no ALTER."""
+    __tablename__ = "relay_status"
+
+    name = Column(String, primary_key=True)
+    reported_at = Column(DateTime(timezone=True), nullable=False)
+    payload = Column(Text, nullable=False, default="{}")

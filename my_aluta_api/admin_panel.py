@@ -1154,6 +1154,32 @@ def metrics_storage(ctx: AdminCtx = Depends(admin_ctx),
     return out
 
 
+@router.get("/metrics/relay")
+def metrics_relay(ctx: AdminCtx = Depends(admin_ctx),
+                  db: Session = Depends(get_db)):
+    """The call relay (turn.ozilane.com): the latest report its box pushed
+    (see webrtc.relay_report). Online = reported in the last 3 minutes."""
+    from models import RelayStatus
+    out = []
+    now = datetime.now(timezone.utc)
+    for r in db.query(RelayStatus).order_by(RelayStatus.name).all():
+        at = r.reported_at
+        if at is not None and at.tzinfo is None:
+            at = at.replace(tzinfo=timezone.utc)
+        age = int((now - at).total_seconds()) if at else None
+        try:
+            data = json.loads(r.payload or "{}")
+        except Exception:
+            data = {}
+        out.append({"name": r.name,
+                    "reported_at": at.isoformat() if at else None,
+                    "age_s": age,
+                    "online": age is not None and age < 180,
+                    "data": data})
+    return {"configured": bool(os.getenv("TURN_SHARED_SECRET")),
+            "relays": out}
+
+
 @router.get("/metrics/activity")
 def metrics_activity(days: int = 14, ctx: AdminCtx = Depends(admin_ctx),
                      db: Session = Depends(get_db)):

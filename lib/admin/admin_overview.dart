@@ -23,6 +23,7 @@ class _AdminOverviewState extends State<AdminOverview> {
   Map<String, dynamic>? _storage;
   Map<String, dynamic>? _activity;
   Map<String, dynamic>? _online;
+  Map<String, dynamic>? _relay;
   String? _error;
   bool _loading = false;
   DateTime? _loadedAt;
@@ -68,6 +69,7 @@ class _AdminOverviewState extends State<AdminOverview> {
       _try('/admin/api/metrics/storage'),
       _try('/admin/api/metrics/activity'),
       _try('/admin/api/metrics/online'),
+      _try('/admin/api/metrics/relay'),
     ]);
     if (!mounted) return;
     setState(() {
@@ -77,6 +79,7 @@ class _AdminOverviewState extends State<AdminOverview> {
       _storage = r[3] ?? _storage;
       _activity = r[4] ?? _activity;
       _online = r[5] ?? _online;
+      _relay = r[6] ?? _relay;
       _loading = false;
       _loadedAt = DateTime.now();
     });
@@ -153,6 +156,10 @@ class _AdminOverviewState extends State<AdminOverview> {
           if (_storage != null) ...[
             const SizedBox(height: 14),
             _storageBlock(p),
+          ],
+          if (_relay != null) ...[
+            const SizedBox(height: 14),
+            _relayBlock(p),
           ],
           const SizedBox(height: 24),
               ],
@@ -432,6 +439,139 @@ class _AdminOverviewState extends State<AdminOverview> {
           const SizedBox(height: 6),
           AdminDailyBars(
               days: hearts, height: 70, color: const Color(0xFFE91E63)),
+        ],
+      ),
+    );
+  }
+
+  /// The call relay (turn.ozilane.com): pushed by the relay box every minute.
+  Widget _relayBlock(AdminPalette p) {
+    final relays = ((_relay?['relays'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => e.cast<String, dynamic>())
+        .toList();
+    const color = Color(0xFF2979FF);
+    if (relays.isEmpty) {
+      return AdminSection(
+        title: 'Call relay',
+        icon: Icons.settings_input_antenna_rounded,
+        color: color,
+        subtitle: 'turn.ozilane.com',
+        child: Text(
+          _relay?['configured'] == true
+              ? 'No report from the relay yet. On the relay run: '
+                  'bash /root/ozilane-turn/add-reporter.sh'
+              : 'TURN_SHARED_SECRET is not set on the API.',
+          style: TextStyle(color: p.muted, fontSize: 13),
+        ),
+      );
+    }
+    final r = relays.first;
+    final d = (r['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final online = r['online'] == true && d['active'] == true;
+    final t = (d['traffic'] as Map?)?.cast<String, dynamic>() ?? const {};
+    num both(String k) {
+      final m = (t[k] as Map?)?.cast<String, dynamic>();
+      return ((m?['rx'] as num?) ?? 0) + ((m?['tx'] as num?) ?? 0);
+    }
+
+    final certDays = (d['cert_days'] as num?)?.toInt();
+    final errs = (d['errors_1h'] as num?)?.toInt() ?? 0;
+    final recent = ((d['recent_errors'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .toList();
+    final memTotal = (d['mem_total'] as num?) ?? 0;
+    final memAvail = (d['mem_avail'] as num?) ?? 0;
+    final memPct =
+        memTotal > 0 ? ((1 - memAvail / memTotal) * 100).round() : null;
+    final diskTotal = (d['disk_total'] as num?) ?? 0;
+    final diskFree = (d['disk_free'] as num?) ?? 0;
+    final diskPct =
+        diskTotal > 0 ? ((1 - diskFree / diskTotal) * 100).round() : null;
+    return AdminSection(
+      title: 'Call relay',
+      icon: Icons.settings_input_antenna_rounded,
+      color: color,
+      subtitle: '${d['host'] ?? 'turn.ozilane.com'} · '
+          '${online ? 'online' : 'NOT REPORTING'} · '
+          'last report ${fmtAgo(r['reported_at'] as String?)}',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AdminStatGrid(children: [
+            AdminStat(
+              label: 'Status',
+              value: online ? 'Online' : 'Offline',
+              icon: online
+                  ? Icons.check_circle_rounded
+                  : Icons.error_rounded,
+              accent: online
+                  ? const Color(0xFF00C853)
+                  : const Color(0xFFE53935),
+              hint: online ? 'coturn running' : 'No report in 3 min',
+            ),
+            AdminStat(
+              label: 'Live relays',
+              value: fmtInt(d['relays'] as num?),
+              icon: Icons.call_rounded,
+              accent: color,
+              hint: 'Calls / sessions going through it now',
+            ),
+            AdminStat(
+              label: 'Traffic today',
+              value: fmtBytes(both('today')),
+              icon: Icons.swap_vert_rounded,
+              accent: const Color(0xFF7C4DFF),
+            ),
+            AdminStat(
+              label: 'This month',
+              value: fmtBytes(both('month')),
+              icon: Icons.calendar_month_rounded,
+              accent: const Color(0xFFAB47BC),
+              hint: 'Vultr plan includes plenty — watch this',
+            ),
+            AdminStat(
+              label: 'Certificate',
+              value: certDays == null ? '—' : '$certDays days',
+              icon: Icons.lock_rounded,
+              accent: (certDays ?? 99) < 14
+                  ? const Color(0xFFE53935)
+                  : const Color(0xFF00BFA5),
+              hint: 'Renews itself',
+            ),
+            AdminStat(
+              label: 'Errors (1 h)',
+              value: fmtInt(errs),
+              icon: Icons.report_rounded,
+              accent: errs > 0
+                  ? const Color(0xFFFF6D00)
+                  : const Color(0xFF78909C),
+              hint: '${fmtInt(d['denied_private_1h'] as num?)} private '
+                  'addresses refused (normal)',
+            ),
+          ]),
+          const SizedBox(height: 8),
+          Text(
+            'Load ${d['load1'] ?? '—'}'
+            '${memPct == null ? '' : ' · memory $memPct%'}'
+            '${diskPct == null ? '' : ' · disk $diskPct%'}',
+            style: TextStyle(color: p.faint, fontSize: 11),
+          ),
+          if (recent.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text('Recent errors',
+                style: TextStyle(color: p.text, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            for (final e in recent)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Text(e,
+                    style: TextStyle(
+                        color: p.muted,
+                        fontSize: 11,
+                        fontFamily: 'monospace')),
+              ),
+          ],
         ],
       ),
     );

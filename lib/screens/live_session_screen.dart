@@ -313,9 +313,6 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   // open it takes over those callbacks (so its own buttons rebuild on a synced
   // change) but CHAINS the panel's, and restores them on minimise so the
   // persistent panel keeps working underneath.
-  VoidCallback? _prevRepeatCb;
-  VoidCallback? _prevShuffleCb;
-  VoidCallback? _prevContribCb;
   bool _flagCbsBound = false;
 
   bool get _isHost => widget.role == LiveRole.host;
@@ -324,36 +321,23 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   // popup rebuilds when the SHARED mode changes — whether we set it or it was
   // synced from the peer. Scheduled post-frame so it runs after the music
   // panel has bound its own (microtask), letting the popup win while it's up.
+  // Repaint when repeat / shuffle / contributions change — set here or synced
+  // from the peer. A listener on the controller's shared signal, so the music
+  // panel (which has its own) can never take it over and freeze our buttons.
   void _bindFlagCallbacks() {
     if (_flagCbsBound) return;
     _flagCbsBound = true;
-    _prevRepeatCb = _c.onRepeatChanged;
-    _c.onRepeatChanged = () {
-      _prevRepeatCb?.call();
-      if (mounted) setState(() {});
-    };
-    _prevShuffleCb = _c.onShuffleChanged;
-    _c.onShuffleChanged = () {
-      _prevShuffleCb?.call();
-      if (mounted) setState(() {});
-    };
-    // Stage C: rebuild when guest-contribution availability changes (host
-    // toggled it, or a listener synced it from the host).
-    _prevContribCb = _c.onContribChanged;
-    _c.onContribChanged = () {
-      _prevContribCb?.call();
-      if (mounted) setState(() {});
-    };
+    _c.flagsRev.addListener(_onFlagsChanged);
   }
 
-  // Hand the repeat/shuffle callbacks back to whatever held them (the music
-  // panel) when the popup goes away, so the persistent panel keeps updating.
+  void _onFlagsChanged() {
+    if (mounted) setState(() {});
+  }
+
   void _restoreFlagCallbacks() {
     if (!_flagCbsBound) return;
     _flagCbsBound = false;
-    _c.onRepeatChanged = _prevRepeatCb;
-    _c.onShuffleChanged = _prevShuffleCb;
-    _c.onContribChanged = _prevContribCb;
+    _c.flagsRev.removeListener(_onFlagsChanged);
   }
 
   // Drives the now-playing-style disc rotation (one slow turn), running while

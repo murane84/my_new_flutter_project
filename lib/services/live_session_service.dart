@@ -4,7 +4,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart'
-    show kIsWeb, defaultTargetPlatform, TargetPlatform, debugPrint;
+    show kIsWeb, defaultTargetPlatform, TargetPlatform, debugPrint, ValueNotifier;
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../utils/net.dart' as http;
 import 'package:just_audio/just_audio.dart';
@@ -344,6 +344,13 @@ class LiveSessionController {
   /// synced it from the host), so the room UI refreshes.
   void Function()? onContribChanged;
 
+  /// Bumped whenever repeat / shuffle / contributions change (set here or
+  /// synced from the peer). A multi-listener signal, so EVERY screen showing
+  /// these buttons (the session popup AND the music panel) repaints — the
+  /// single callbacks above could be taken over by whichever bound last,
+  /// leaving the other's button stuck on a stale mode.
+  final ValueNotifier<int> flagsRev = ValueNotifier<int>(0);
+
   /// Sets the live title and keeps the global session title in sync so every
   /// surface (popup, music panel, banner) reflects the current song.
   void _setCurrentTitle(String? t) {
@@ -603,10 +610,20 @@ class LiveSessionController {
   /// Set the SESSION repeat mode from EITHER side. Applies locally at once (so
   /// the button feels instant) then syncs: the host broadcasts it to everyone;
   /// a listener asks the host, who applies + re-broadcasts to confirm.
+  // A listener's own tap waiting for the host's confirmation: host echoes of
+  // OLDER taps (quick double-taps) must not flip the button back meanwhile.
+  String? _pendingRepeat;
+  DateTime? _pendingRepeatAt;
+
   void setRepeatMode(String mode) {
     if (mode != 'off' && mode != 'one' && mode != 'all') mode = 'off';
+    if (role != LiveRole.host) {
+      _pendingRepeat = mode;
+      _pendingRepeatAt = DateTime.now();
+    }
     repeatMode = mode;
     onRepeatChanged?.call();
+    flagsRev.value++;
     if (role == LiveRole.host) {
       _sendControl({'type': 'repeat', 'mode': mode});
     } else {
@@ -620,6 +637,7 @@ class LiveSessionController {
   void setShuffle(bool on) {
     shuffle = on;
     onShuffleChanged?.call();
+    flagsRev.value++;
     if (role == LiveRole.host) {
       _sendControl({'type': 'shuffle', 'on': on});
     } else {
@@ -634,6 +652,7 @@ class LiveSessionController {
   void setAllowContributions(bool on) {
     allowContributions = on;
     onContribChanged?.call();
+    flagsRev.value++;
     _sendControl({'type': 'contrib', 'on': on});
   }
 
@@ -2079,19 +2098,31 @@ class LiveSessionController {
         // "Add a song" button appears/hides.
         remoteContribAllowed = msg['on'] == true;
         onContribChanged?.call();
+        flagsRev.value++;
         break;
       case 'repeat':
         // Host set the session repeat mode — mirror it so our button matches.
         final m = msg['mode'];
         if (m is String) {
+          final pend = _pendingRepeat;
+          final at = _pendingRepeatAt;
+          if (pend != null && at != null &&
+              DateTime.now().difference(at) < const Duration(seconds: 2)) {
+            // Still waiting for OUR latest tap: ignore an older echo; the
+            // matching one confirms it.
+            if (m != pend) break;
+            _pendingRepeat = null;
+          }
           repeatMode = m;
           onRepeatChanged?.call();
+          flagsRev.value++;
         }
         break;
       case 'shuffle':
         // Host set session shuffle — mirror it so our button matches.
         shuffle = msg['on'] == true;
         onShuffleChanged?.call();
+        flagsRev.value++;
         break;
       case 'eq':
         // Mirror the host's equalizer onto our live player.

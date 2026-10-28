@@ -1270,23 +1270,49 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
             groundInset: 70,
           ),
         ),
-        Column(
-      children: [
-        Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+        // When the centre is wide enough for the controls console, the console
+        // sits under the CENTRE only, so the chat column (left) and the queue
+        // (right) run all the way down — more room for the conversation. On a
+        // narrower window it keeps spanning the bottom as before.
+        LayoutBuilder(builder: (context, box) {
+          final centreW = box.maxWidth - 300 - 340 - 2;
+          if (centreW >= 500) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(width: 300, child: _peoplePanel(scheme)),
+                div,
+                Expanded(
+                  child: Column(
+                    children: [
+                      Expanded(child: _centerPlayer(theme, scheme)),
+                      _bottomControlsBar(scheme),
+                    ],
+                  ),
+                ),
+                div,
+                SizedBox(width: 340, child: _queueSection(scheme)),
+              ],
+            );
+          }
+          return Column(
             children: [
-              SizedBox(width: 300, child: _peoplePanel(scheme)),
-              div,
-              Expanded(child: _centerPlayer(theme, scheme)),
-              div,
-              SizedBox(width: 340, child: _queueSection(scheme)),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(width: 300, child: _peoplePanel(scheme)),
+                    div,
+                    Expanded(child: _centerPlayer(theme, scheme)),
+                    div,
+                    SizedBox(width: 340, child: _queueSection(scheme)),
+                  ],
+                ),
+              ),
+              _bottomControlsBar(scheme),
             ],
-          ),
-        ),
-        _bottomControlsBar(scheme),
-      ],
-        ),
+          );
+        }),
       ],
     );
   }

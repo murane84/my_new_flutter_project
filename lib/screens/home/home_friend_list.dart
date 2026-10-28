@@ -1658,6 +1658,17 @@ extension _HomeFriendListView on HomePageState {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+      // Same swipes as a friend's tile: RIGHT starts the group call, LEFT
+      // opens the group — the colour blooms across and it fires on its own.
+      child: ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: SwipeActionTile(
+      key: ValueKey('group-${g['id']}'),
+      rightIcon: Icons.groups_rounded,
+      rightLabel: 'Group call',
+      onSwipeRight: _isSharing ? null : () => _startGroupCall(g),
+      onSwipeLeft: () =>
+          _isSharing ? _sendShareTo(group: g) : openGroupInPanel(g),
       child: Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1813,7 +1824,7 @@ extension _HomeFriendListView on HomePageState {
       ),
       ),
       ),
-      ),
+      ))),
     );
   }
 

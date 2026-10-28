@@ -272,7 +272,11 @@ class CallService {
       _pendingAutoAccept = false;
       _rejoinTimer?.cancel();
       _ringTimeout?.cancel();
-      peerName = _knownAs(msg, from, (msg['caller_name'] ?? peerName).toString());
+      // Keep the name we already show (from the banner — my saved name)
+      // unless the offer resolves to a saved name of its own.
+      final reg = (msg['caller_name'] ?? peerName).toString();
+      final known = _knownAs(msg, from, reg);
+      if (known != reg || peerName.isEmpty) peerName = known;
       final av = (msg['caller_avatar'] as String?)?.trim();
       if (av != null && av.isNotEmpty) peerAvatar = av;
       _pendingOffer = RTCSessionDescription(msg['sdp'] as String?, 'offer');
@@ -337,12 +341,19 @@ class CallService {
   /// The user tapped "Accept" on the ringing notification while the app was
   /// KILLED, so we launched with no offer in memory. Show a connecting screen
   /// and ask the caller to re-send their offer; [_handleOffer] auto-answers it.
-  void prepareAcceptFromNotification(int callerId) {
+  void prepareAcceptFromNotification(int callerId, {String? callerName}) {
     if (isActive) return; // a live offer already arrived — nothing to recover
     _reset();
     // The ringing notification may still be up (some OEMs don't honour the
     // action's cancel) — clear it now that we're answering.
     cancelCallNotification();
+    // Show who it is while we connect (the banner's name — already my
+    // phone-book name), instead of "Aluta call" with a "?".
+    final n = (callerName ?? '').trim();
+    if (n.isNotEmpty) {
+      peerName =
+          ContactNames.instance.displayName(userId: callerId, registered: n);
+    }
     _beginAcceptViaReoffer(callerId);
   }
 
@@ -504,6 +515,16 @@ class CallService {
         // later retry, just re-send that same fresh offer (recovers a dropped
         // packet) — never rebuild again, or reply busy.
         if (isCaller && state == CallState.calling && peerId != null) {
+          // They tapped Accept and their app is starting up: don't let our
+          // 45 s "no answer" timer cut them off mid-connect — give the
+          // answer a fresh 30 s from now.
+          _ringTimeout?.cancel();
+          _ringTimeout = Timer(const Duration(seconds: 30), () {
+            if (state == CallState.calling) {
+              _signal({'type': 'call_cancel'});
+              _finish(CallEndReason.unanswered);
+            }
+          });
           if (!_reoffered) {
             _reoffered = true;
             outgoing = CallOutgoing.ringing;

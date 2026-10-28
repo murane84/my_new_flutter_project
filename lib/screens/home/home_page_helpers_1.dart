@@ -536,7 +536,8 @@ extension _HomePageHelpers1 on HomePageState {
     }
     _openCallScreen();
     if (action == kCallAccept) {
-      CallService.instance.prepareAcceptFromNotification(cid);
+      CallService.instance.prepareAcceptFromNotification(cid,
+          callerName: (launch.payload['caller_name'] ?? '').toString());
     } else {
       // Body tap → show the ring screen so the user can act on the call.
       CallService.instance.showIncomingFromNotification(

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
@@ -831,6 +832,14 @@ class SplashScreenState extends State<SplashScreen>
     // If the app was cold-launched from another app's Share sheet, grab the
     // shared image(s) now; HomePage presents the recipient picker once signed in.
     await consumeInitialSharedMedia();
+    // Opened by Accept / a tap on a ringing call: every second counts — the
+    // caller is waiting. Stop the banner from coming back, skip the brand
+    // moment and the preload, and go straight to Home (which answers).
+    final callLaunch = await consumeCallLaunchAction();
+    final forCall = callLaunch != null &&
+        callLaunch.actionId != kCallDecline &&
+        callLaunch.payload['group'] != true;
+    if (forCall) unawaited(cancelCallNotification());
     // Run the heavy service bootstrap WHILE this splash (a live, animating frame)
     // is on screen — not before runApp, where it froze the native launch image
     // on a cold first start. Wait for BOTH a short brand-minimum (no flash on
@@ -838,11 +847,11 @@ class SplashScreenState extends State<SplashScreen>
     // unreachable service can't pin the splash — it keeps finishing in the
     // background, and the pieces Home needs (auth + metadata) are quick + local.
     await Future.wait([
-      _bootstrapServices()
-          .timeout(const Duration(seconds: 8), onTimeout: () {}),
+      _bootstrapServices().timeout(Duration(seconds: forCall ? 4 : 8),
+          onTimeout: () {}),
       // Hold long enough for the whole entrance (heartbeat → burst → glide →
       // wordmark → tagline → field) to play before moving on.
-      Future.delayed(const Duration(milliseconds: 2400)),
+      if (!forCall) Future.delayed(const Duration(milliseconds: 2400)),
     ]);
     if (!mounted) return;
     final prefs = await SharedPreferences.getInstance();
@@ -853,27 +862,28 @@ class SplashScreenState extends State<SplashScreen>
     // Opened by an incoming call (Accept or a tap on the ringing banner):
     // answer first, like a phone's lock screen — the lock returns when the
     // call ends (see call_lock.dart). Decline stays behind the lock.
-    if (bioLocked) {
-      final launch = await consumeCallLaunchAction();
-      if (launch != null &&
-          launch.actionId != kCallDecline &&
-          launch.payload['group'] != true) {
-        bioLocked = false;
-        lockBypassedForCall = true;
-      }
+    if (bioLocked && forCall) {
+      bioLocked = false;
+      lockBypassedForCall = true;
     }
     if (!mounted) return;
     // Bow out first, so the next screen arrives on black instead of sliding
     // over the wordmark.
-    try {
-      await _exit.forward().orCancel;
-    } catch (_) {}
+    if (!forCall) {
+      try {
+        await _exit.forward().orCancel;
+      } catch (_) {}
+    }
     if (!mounted) return;
     Navigator.pushReplacementNamed(
       context,
       bioLocked
           ? LockScreen.routeName
-          : (isLoggedIn ? PreloadScreen.routeName : AuthPage.routeName),
+          : (isLoggedIn
+              // A call: straight to Home (it paints from cache and answers);
+              // the preload's network refresh would only keep them waiting.
+              ? (forCall ? HomePage.routeName : PreloadScreen.routeName)
+              : AuthPage.routeName),
     );
   }
 

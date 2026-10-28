@@ -648,14 +648,25 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
 
   bool _reconnecting = false;
 
-  /// Re-establish the room after a drop. Tries a few times on its own (2s, 5s,
-  /// 10s apart) — each attempt bounded so a dead network can never leave the
-  /// screen stuck on "Reconnecting…" — and only then offers the manual button.
+  /// Re-establish the room after a drop. Keeps trying on its own for about
+  /// 1½ minutes (a phone switching Wi-Fi ↔ data, a lift, a tunnel) — each
+  /// attempt bounded so a dead network can never leave the screen stuck on
+  /// "Reconnecting…" — and only then offers the manual button. The server
+  /// keeps the room open meanwhile, and on a listener's return the host
+  /// re-streams (or the listener plays its cached copy) from where they are.
   Future<void> _reconnect() async {
     if (_reconnecting) return;
     _reconnecting = true;
-    const waits = [Duration.zero, Duration(seconds: 2), Duration(seconds: 5),
-        Duration(seconds: 10)];
+    const waits = [
+      Duration.zero,
+      Duration(seconds: 2),
+      Duration(seconds: 5),
+      Duration(seconds: 8),
+      Duration(seconds: 12),
+      Duration(seconds: 15),
+      Duration(seconds: 20),
+      Duration(seconds: 25),
+    ];
     try {
       for (var i = 0; i < waits.length; i++) {
         if (!mounted || _leaving) return;

@@ -256,7 +256,10 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       case CallState.connecting:
         return 'Connecting…';
       case CallState.connected:
-        return _call.elapsedLabel;
+        // The path dropped (network switch) and is being re-established.
+        return _call.reconnecting
+            ? 'Reconnecting… ${_call.elapsedLabel}'
+            : _call.elapsedLabel;
       case CallState.ended:
         return _endedText();
       case CallState.idle:

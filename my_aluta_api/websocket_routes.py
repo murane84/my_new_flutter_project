@@ -82,6 +82,10 @@ _CALL_SIGNALS = {
     "call_end",       # either: hang up an ongoing/answered call
     "call_cancel",    # caller → callee: cancelled before it was answered
     "call_busy",      # callee → caller: already in another call
+    # Mid-call network drop recovery (ICE restart) — pure relay, no push:
+    "call_restart",   # callee → caller: my path broke, please re-offer
+    "call_reoffer",   # caller → callee: ICE-restart offer
+    "call_reanswer",  # callee → caller: answer to the ICE-restart offer
 }
 
 # "Tune in": ask a friend to let you listen along to what THEY are playing

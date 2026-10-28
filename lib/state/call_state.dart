@@ -23,6 +23,8 @@ class CallSnapshot {
   final bool speakerOn;
   // Caller-side outgoing progress (dialing → notified → ringing).
   final CallOutgoing outgoing;
+  // A connected call lost its network path and is re-establishing it.
+  final bool reconnecting;
 
   const CallSnapshot({
     this.state = CallState.idle,
@@ -30,6 +32,7 @@ class CallSnapshot {
     this.muted = false,
     this.speakerOn = false,
     this.outgoing = CallOutgoing.none,
+    this.reconnecting = false,
   });
 
   @override
@@ -39,11 +42,12 @@ class CallSnapshot {
       other.endReason == endReason &&
       other.muted == muted &&
       other.speakerOn == speakerOn &&
-      other.outgoing == outgoing;
+      other.outgoing == outgoing &&
+      other.reconnecting == reconnecting;
 
   @override
-  int get hashCode =>
-      Object.hash(state, endReason, muted, speakerOn, outgoing);
+  int get hashCode => Object.hash(
+      state, endReason, muted, speakerOn, outgoing, reconnecting);
 }
 
 class CallNotifier extends Notifier<CallSnapshot> {

@@ -71,6 +71,7 @@ class CallService {
           muted: muted,
           speakerOn: speakerOn,
           outgoing: outgoing,
+          reconnecting: reconnecting,
         ));
     _syncTone();
   }
@@ -139,6 +140,78 @@ class CallService {
   CallState state = CallState.idle;
   int? peerId;
   String peerName = '';
+
+  // ── Mid-call network drop recovery ────────────────────────────────────────
+  // A phone switching Wi-Fi ↔ data (or a blip) breaks the media path. Instead
+  // of ending the call we show "Reconnecting…" and run an ICE restart: the
+  // caller re-offers with fresh candidates/TURN every few seconds (the callee
+  // asks it to via call_restart), until the path is back or 30 s pass.
+  bool reconnecting = false;
+  Timer? _recoverTimer;
+  DateTime? _recoverSince;
+  static const Duration _recoverBudget = Duration(seconds: 30);
+
+  void _onPathLost(RTCPeerConnection pc) {
+    if (_pc != pc || state != CallState.connected) return;
+    if (!reconnecting) {
+      reconnecting = true;
+      _recoverSince = DateTime.now();
+      _publish();
+    }
+    _recoverTimer ??= Timer.periodic(const Duration(seconds: 4), (_) {
+      _recoverTick(pc);
+    });
+    _recoverTick(pc);
+  }
+
+  void _recoverTick(RTCPeerConnection pc) {
+    if (_pc != pc || !reconnecting || state != CallState.connected) {
+      _stopRecovery();
+      return;
+    }
+    final since = _recoverSince ?? DateTime.now();
+    if (DateTime.now().difference(since) > _recoverBudget) {
+      _stopRecovery();
+      _signal({'type': 'call_end'});
+      _finish(CallEndReason.failed);
+      return;
+    }
+    if (isCaller) {
+      unawaited(_iceRestartOffer(pc));
+    } else {
+      _signal({'type': 'call_restart'});
+    }
+  }
+
+  Future<void> _iceRestartOffer(RTCPeerConnection pc) async {
+    try {
+      IceConfig.instance.invalidate();
+      try {
+        await pc.setConfiguration(await _iceConfig);
+      } catch (_) {}
+      try {
+        await pc.restartIce();
+      } catch (_) {}
+      final offer = await pc.createOffer({
+        ..._offerAnswerConstraints,
+        'iceRestart': true,
+      });
+      await pc.setLocalDescription(offer);
+      _signal({'type': 'call_reoffer', 'sdp': offer.sdp});
+    } catch (_) {/* next tick retries */}
+  }
+
+  void _onPathBack() {
+    if (!reconnecting) return;
+    _stopRecovery();
+    reconnecting = false;
+    _publish();
+  }
+
+  void _stopRecovery() {
+    _recoverTimer?.cancel();
+    _recoverTimer = null;
+  }
   String? peerAvatar;
   bool isCaller = false;
   bool muted = false;
@@ -499,6 +572,45 @@ class CallService {
           }
         }
         break;
+      case 'call_restart':
+        // The callee lost its path — re-offer now (also covers us not
+        // having noticed the drop yet).
+        if (isCaller && _pc != null && state == CallState.connected &&
+            _fromPeer(msg)) {
+          if (!reconnecting) {
+            reconnecting = true;
+            _recoverSince = DateTime.now();
+            _publish();
+            final pc = _pc!;
+            _recoverTimer ??= Timer.periodic(
+                const Duration(seconds: 4), (_) => _recoverTick(pc));
+          }
+          unawaited(_iceRestartOffer(_pc!));
+        }
+        break;
+      case 'call_reoffer':
+        if (!isCaller && _pc != null && state == CallState.connected &&
+            _fromPeer(msg)) {
+          try {
+            final pc = _pc!;
+            await pc.setRemoteDescription(
+                RTCSessionDescription(msg['sdp'] as String?, 'offer'));
+            await _drainPendingCandidates();
+            final answer = await pc.createAnswer(_offerAnswerConstraints);
+            await pc.setLocalDescription(answer);
+            _signal({'type': 'call_reanswer', 'sdp': answer.sdp});
+          } catch (_) {/* the caller retries */}
+        }
+        break;
+      case 'call_reanswer':
+        if (isCaller && _pc != null && _fromPeer(msg)) {
+          try {
+            await _pc!.setRemoteDescription(
+                RTCSessionDescription(msg['sdp'] as String?, 'answer'));
+            await _drainPendingCandidates();
+          } catch (_) {}
+        }
+        break;
       case 'call_ringing':
         // The callee's device confirmed it's ringing — real ring, not a guess.
         if (isCaller && state == CallState.calling) {
@@ -685,16 +797,24 @@ class CallService {
           _publish();
           TelecomService.instance.setActive(_telecomId);
         }
+        _onPathBack();
       } else if (s == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
-        _finish(CallEndReason.failed);
+        // Before it ever connected: a real failure. Mid-call: try to bring
+        // the path back (network switch) before giving up.
+        if (state == CallState.connected) {
+          _onPathLost(pc);
+        } else {
+          _finish(CallEndReason.failed);
+        }
       } else if (s ==
           RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
-        // Give ICE a moment to recover before declaring the call dead.
-        Future.delayed(const Duration(seconds: 6), () {
+        // Give ICE a couple of seconds to recover by itself, then restart.
+        Future.delayed(const Duration(seconds: 2), () {
           if (_pc == pc &&
               state == CallState.connected &&
-              connectedAt != null) {
-            _finish(CallEndReason.failed);
+              pc.connectionState ==
+                  RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+            _onPathLost(pc);
           }
         });
       }
@@ -735,6 +855,8 @@ class CallService {
     cancelCallNotification(); // stop any ringing call notification
     endReason = reason;
     state = CallState.ended;
+    _stopRecovery();
+    reconnecting = false;
     _publish();
     TelecomService.instance.endCall(_telecomId);
     unawaited(_playEndTone());
@@ -836,6 +958,8 @@ class CallService {
   void _reset() {
     _ringTimeout?.cancel();
     _rejoinTimer?.cancel();
+    _stopRecovery();
+    reconnecting = false;
     _pendingAutoAccept = false;
     _reoffered = false;
     _pendingOffer = null;

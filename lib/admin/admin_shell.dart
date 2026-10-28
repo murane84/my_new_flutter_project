@@ -11,7 +11,16 @@ import 'admin_install.dart';
 import 'admin_overview.dart';
 import 'admin_widgets.dart';
 
-/// Signed-in frame: Overview · Devices · Activity log, plus the always-there
+/// Tab order in the rail / bottom bar / ⋮ menu.
+const int _kOverview = 0,
+    _kUsage = 1,
+    _kSystem = 2,
+    _kDevices = 3,
+    _kFeedback = 4,
+    _kLog = 5;
+
+/// Signed-in frame: Overview · Usage · System · Devices · Feedback ·
+/// Activity log, plus the always-there
 /// "Lock admin" (Not me), the dark/light switch and sign-out.
 class AdminShell extends StatefulWidget {
   const AdminShell({super.key, required this.session, required this.onSignOut});
@@ -118,7 +127,13 @@ class _AdminShellState extends State<AdminShell> {
     final pending = (_me?['pending_requests'] as num?)?.toInt() ?? 0;
     final newFeedback = (_me?['new_feedback'] as num?)?.toInt() ?? 0;
     final pages = <Widget>[
-      AdminOverview(onOpenDevices: () => setState(() => _tab = 1)),
+      AdminOverview(onOpenDevices: () => setState(() => _tab = _kDevices)),
+      AdminOverview(
+          view: AdminMetricsView.usage,
+          onOpenDevices: () => setState(() => _tab = _kDevices)),
+      AdminOverview(
+          view: AdminMetricsView.system,
+          onOpenDevices: () => setState(() => _tab = _kDevices)),
       AdminDevicesPage(onChanged: _loadMe),
       AdminFeedbackPage(onChanged: _loadMe),
       const AdminAuditPage(),
@@ -142,7 +157,7 @@ class _AdminShellState extends State<AdminShell> {
               ? 'A device is asking for admin access.'
               : '$pending devices are asking for admin access.',
           action: 'Review',
-          onAction: () => setState(() => _tab = 1),
+          onAction: () => setState(() => _tab = _kDevices),
         ),
     ];
 
@@ -242,24 +257,34 @@ class _AdminShellState extends State<AdminShell> {
               GenieMenuEntry(
                 icon: Icons.space_dashboard_rounded,
                 label: 'Overview',
-                onTap: () => setState(() => _tab = 0),
+                onTap: () => setState(() => _tab = _kOverview),
+              ),
+              GenieMenuEntry(
+                icon: Icons.insights_rounded,
+                label: 'Usage',
+                onTap: () => setState(() => _tab = _kUsage),
+              ),
+              GenieMenuEntry(
+                icon: Icons.dns_rounded,
+                label: 'System · storage & call relay',
+                onTap: () => setState(() => _tab = _kSystem),
               ),
               GenieMenuEntry(
                 icon: Icons.devices_rounded,
                 label: pending > 0 ? 'Devices · $pending waiting' : 'Devices',
-                onTap: () => setState(() => _tab = 1),
+                onTap: () => setState(() => _tab = _kDevices),
               ),
               GenieMenuEntry(
                 icon: Icons.rate_review_rounded,
                 label: newFeedback > 0
                     ? 'Feedback · $newFeedback new'
                     : 'Feedback',
-                onTap: () => setState(() => _tab = 2),
+                onTap: () => setState(() => _tab = _kFeedback),
               ),
               GenieMenuEntry(
                 icon: Icons.receipt_long_rounded,
                 label: 'Activity log',
-                onTap: () => setState(() => _tab = 3),
+                onTap: () => setState(() => _tab = _kLog),
               ),
               const GenieMenuEntry.divider(),
               GenieMenuEntry(
@@ -302,6 +327,14 @@ class _AdminShellState extends State<AdminShell> {
                           icon: Icon(Icons.space_dashboard_outlined),
                           selectedIcon: Icon(Icons.space_dashboard_rounded),
                           label: Text('Overview')),
+                      const NavigationRailDestination(
+                          icon: Icon(Icons.insights_outlined),
+                          selectedIcon: Icon(Icons.insights_rounded),
+                          label: Text('Usage')),
+                      const NavigationRailDestination(
+                          icon: Icon(Icons.dns_outlined),
+                          selectedIcon: Icon(Icons.dns_rounded),
+                          label: Text('System')),
                       NavigationRailDestination(
                           icon: navIcon(Icons.devices_outlined, badge: pending),
                           selectedIcon:
@@ -329,11 +362,22 @@ class _AdminShellState extends State<AdminShell> {
           : NavigationBar(
               selectedIndex: _tab,
               onDestinationSelected: (i) => setState(() => _tab = i),
+              // Six tabs: only the selected one shows its label on phones.
+              labelBehavior:
+                  NavigationDestinationLabelBehavior.onlyShowSelected,
               destinations: [
                 const NavigationDestination(
                     icon: Icon(Icons.space_dashboard_outlined),
                     selectedIcon: Icon(Icons.space_dashboard_rounded),
                     label: 'Overview'),
+                const NavigationDestination(
+                    icon: Icon(Icons.insights_outlined),
+                    selectedIcon: Icon(Icons.insights_rounded),
+                    label: 'Usage'),
+                const NavigationDestination(
+                    icon: Icon(Icons.dns_outlined),
+                    selectedIcon: Icon(Icons.dns_rounded),
+                    label: 'System'),
                 NavigationDestination(
                     icon: navIcon(Icons.devices_outlined, badge: pending),
                     selectedIcon: navIcon(Icons.devices_rounded, badge: pending),

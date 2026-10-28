@@ -5,11 +5,22 @@ import 'package:flutter/material.dart';
 import 'admin_api.dart';
 import 'admin_widgets.dart';
 
-/// Phase 1 — read-only metrics: users, online now, activity, device split,
-/// storage. Refreshes every minute while you're actually using the page.
+/// Which metrics page this is. Overview keeps the headline numbers (users,
+/// online, retention, sign-ups); the rest each get their own nav entry so
+/// nothing needs a long scroll.
+enum AdminMetricsView { overview, usage, system }
+
+/// Read-only metrics: users, online now, activity, device split, storage and
+/// the call relay — split across pages by [view]. Refreshes every minute while
+/// you're actually using the page, fetching only what that page shows.
 class AdminOverview extends StatefulWidget {
-  const AdminOverview({super.key, required this.onOpenDevices});
+  const AdminOverview({
+    super.key,
+    required this.onOpenDevices,
+    this.view = AdminMetricsView.overview,
+  });
   final VoidCallback onOpenDevices;
+  final AdminMetricsView view;
 
   @override
   State<AdminOverview> createState() => _AdminOverviewState();
@@ -62,14 +73,20 @@ class _AdminOverviewState extends State<AdminOverview> {
       if (!quiet) _error = null;
     });
     _error = null;
+    final v = widget.view;
+    Future<Map<String, dynamic>?> on(AdminMetricsView want, String path) =>
+        v == want ? _try(path) : Future.value(null);
+    const ov = AdminMetricsView.overview;
+    const us = AdminMetricsView.usage;
+    const sy = AdminMetricsView.system;
     final r = await Future.wait([
-      _try('/admin/api/metrics/overview'),
-      _try('/admin/api/metrics/signups?days=$_signupDays'),
-      _try('/admin/api/metrics/devices'),
-      _try('/admin/api/metrics/storage'),
-      _try('/admin/api/metrics/activity'),
-      _try('/admin/api/metrics/online'),
-      _try('/admin/api/metrics/relay'),
+      on(ov, '/admin/api/metrics/overview'),
+      on(ov, '/admin/api/metrics/signups?days=$_signupDays'),
+      on(us, '/admin/api/metrics/devices'),
+      on(sy, '/admin/api/metrics/storage'),
+      on(us, '/admin/api/metrics/activity'),
+      on(ov, '/admin/api/metrics/online'),
+      on(sy, '/admin/api/metrics/relay'),
     ]);
     if (!mounted) return;
     setState(() {
@@ -108,10 +125,23 @@ class _AdminOverviewState extends State<AdminOverview> {
             border: Border(bottom: BorderSide(color: context.adm.border)),
           ),
           child: AdminPageTitle(
-            icon: Icons.space_dashboard_rounded,
-            title: 'Overview',
+            icon: switch (widget.view) {
+              AdminMetricsView.overview => Icons.space_dashboard_rounded,
+              AdminMetricsView.usage => Icons.insights_rounded,
+              AdminMetricsView.system => Icons.dns_rounded,
+            },
+            title: switch (widget.view) {
+              AdminMetricsView.overview => 'Overview',
+              AdminMetricsView.usage => 'Usage',
+              AdminMetricsView.system => 'System',
+            },
             subtitle: _loadedAt == null
-                ? 'How Aluta is doing'
+                ? switch (widget.view) {
+                    AdminMetricsView.overview => 'How Aluta is doing',
+                    AdminMetricsView.usage =>
+                      'Platforms, app versions and daily activity',
+                    AdminMetricsView.system => 'Storage and the call relay',
+                  }
                 : 'Updated ${fmtAgo(_loadedAt!.toUtc().toIso8601String())}',
             trailing: IconButton.filledTonal(
               tooltip: 'Refresh',
@@ -135,7 +165,7 @@ class _AdminOverviewState extends State<AdminOverview> {
             AdminInline(text: _error!, error: true),
             const SizedBox(height: 12),
           ],
-          if (o == null && _loading)
+          if (_loadedAt == null && _loading)
             const Padding(
               padding: EdgeInsets.all(40),
               child: Center(child: CircularProgressIndicator()),
@@ -146,20 +176,20 @@ class _AdminOverviewState extends State<AdminOverview> {
             _signupsBlock(),
           ],
           if (_devices != null) ...[
-            const SizedBox(height: 14),
             _devicesBlock(p),
+            const SizedBox(height: 14),
           ],
           if (_activity != null) ...[
-            const SizedBox(height: 14),
             _activityBlock(p),
-          ],
-          if (_storage != null) ...[
             const SizedBox(height: 14),
-            _storageBlock(p),
           ],
           if (_relay != null) ...[
-            const SizedBox(height: 14),
             _relayBlock(p),
+            const SizedBox(height: 14),
+          ],
+          if (_storage != null) ...[
+            _storageBlock(p),
+            const SizedBox(height: 14),
           ],
           const SizedBox(height: 24),
               ],
@@ -364,8 +394,8 @@ class _AdminOverviewState extends State<AdminOverview> {
         .fold<int>(0, (a, x) => a + ((x['users'] as num?)?.toInt() ?? 0));
     final reporting = (m['users_reporting'] as num?)?.toInt() ?? 0;
     return AdminSection(
-      title: 'Devices',
-      icon: Icons.devices_rounded,
+      title: 'Platforms & versions',
+      icon: Icons.phone_android_rounded,
       color: const Color(0xFF7C4DFF),
       subtitle: '${fmtInt(reporting)} people active in the last '
           '${m['window_days']} days reported their device',

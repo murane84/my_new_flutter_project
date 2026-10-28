@@ -21,6 +21,8 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.FlutterInjector
 import android.media.SoundPool
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.media.AudioAttributes
 import android.content.ContentValues
 import android.os.Environment
@@ -59,6 +61,26 @@ class MainActivity : AudioServiceFragmentActivity() {
 
     // Channel for pushing telecom events (car/BT answer/end) up to Dart.
     private var telecomMc: MethodChannel? = null
+    // The caller's ringback ("tuuu… tuuu…") while the friend's phone rings —
+    // the phone's own standard tone on the call audio stream, like a real call.
+    private var ringback: ToneGenerator? = null
+
+    private fun setRingback(on: Boolean) {
+        try {
+            if (on) {
+                if (ringback == null) {
+                    ringback = ToneGenerator(AudioManager.STREAM_VOICE_CALL, 85)
+                }
+                ringback?.startTone(ToneGenerator.TONE_SUP_RINGTONE)
+            } else {
+                ringback?.stopTone()
+                ringback?.release()
+                ringback = null
+            }
+        } catch (e: Exception) {
+            ringback = null
+        }
+    }
 
     // OEM "Autostart" / "Auto-launch" screens. Component names differ per
     // manufacturer (and ROM version), so we try each until one resolves.
@@ -260,6 +282,7 @@ class MainActivity : AudioServiceFragmentActivity() {
     }
 
     override fun onDestroy() {
+        setRingback(false)
         keystrokeSoundPool?.release()
         keystrokeSoundPool = null
         super.onDestroy()
@@ -311,6 +334,10 @@ class MainActivity : AudioServiceFragmentActivity() {
                     call.argument<String>("name") ?: "Aluta"
                 )
             )
+            "ringback" -> {
+                setRingback(call.argument<Boolean>("on") == true)
+                result.success(true)
+            }
             "setActive" -> {
                 CallRegistry.get(call.argument<String>("callId") ?: "")?.setActive()
                 result.success(true)

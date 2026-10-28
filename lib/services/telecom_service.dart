@@ -69,6 +69,15 @@ class TelecomService {
     } catch (_) {}
   }
 
+  /// The caller's ringback tone (the phone's standard "ringing" tone on the
+  /// call audio stream). Works whether or not the Telecom account registered.
+  Future<void> ringback(bool on) async {
+    if (!_android) return;
+    try {
+      await _ch.invokeMethod('ringback', {'on': on});
+    } catch (_) {}
+  }
+
   Future<void> setActive(String callId) async {
     if (!_android || !_registered) return;
     try {

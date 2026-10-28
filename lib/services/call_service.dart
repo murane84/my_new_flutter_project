@@ -11,6 +11,7 @@ import '../state/call_state.dart';
 import '../state/playback_state.dart' show providerContainer;
 import 'ice_config.dart';
 import 'notif_service.dart';
+import 'call_lock.dart';
 import 'telecom_service.dart';
 
 /// High-level state of the single active Aluta voice call.
@@ -86,10 +87,9 @@ class CallService {
 
   void _syncTone() {
     String? want;
-    if (isCaller &&
-        state == CallState.calling &&
-        outgoing != CallOutgoing.dialing &&
-        outgoing != CallOutgoing.none) {
+    // From the moment Call is pressed until they answer (or it ends) — a
+    // silent "searching" call felt broken.
+    if (isCaller && state == CallState.calling) {
       want = 'ringback';
     } else if (!isCaller && state == CallState.ringing && !_androidApp) {
       want = 'ring';
@@ -100,6 +100,12 @@ class CallService {
   }
 
   Future<void> _applyTone(String? want) async {
+    // Android: the ringback is the phone's own tone on the CALL stream (plays
+    // alongside WebRTC's call audio mode, where a media player was muted).
+    if (_androidApp) {
+      await TelecomService.instance.ringback(want == 'ringback');
+      if (want == 'ringback') return;
+    }
     try {
       final p = _tonePlayer ??= AudioPlayer();
       await p.stop();
@@ -660,6 +666,13 @@ class CallService {
     TelecomService.instance.endCall(_telecomId);
     _teardownMedia();
     _maybeLogCall();
+    // Answered past the fingerprint lock → lock again once the "call ended"
+    // screen has had a moment.
+    if (lockBypassedForCall) {
+      Future<void>.delayed(const Duration(seconds: 3), () {
+        if (!isActive && lockBypassedForCall) relockAfterCall?.call();
+      });
+    }
     // NOTE: we stay in `ended` (not `idle`) so the call screen can show the
     // outcome — and, if the internet call couldn't connect, offer a phone
     // fallback. The screen calls reset() when it's dismissed. `ended` doesn't

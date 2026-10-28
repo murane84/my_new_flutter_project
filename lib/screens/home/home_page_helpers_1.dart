@@ -412,6 +412,13 @@ extension _HomePageHelpers1 on HomePageState {
     // answer & hang up (and route call audio over hands-free). Android-only and
     // fully additive — a system answer/end just drives the existing engine.
     TelecomService.instance.init();
+    // A call answered past the fingerprint lock (opened from the ringing
+    // notification) → back to the lock screen once it's over.
+    relockAfterCall = () {
+      lockBypassedForCall = false;
+      navigatorKey.currentState
+          ?.pushNamedAndRemoveUntil(LockScreen.routeName, (_) => false);
+    };
     TelecomService.instance.onAnswer = (id) {
       if (id.startsWith('grp_')) {
         GroupCallService.instance.accept();

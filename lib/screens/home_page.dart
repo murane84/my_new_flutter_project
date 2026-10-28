@@ -77,6 +77,8 @@ import '../utils/message_preview.dart';
 import '../utils/bubble_theme.dart';
 import '../services/biometric_service.dart';
 import '../services/call_service.dart';
+import '../services/call_lock.dart';
+import 'lock_screen.dart';
 import '../services/group_call_service.dart';
 import '../state/group_call_state.dart' show groupCallProvider;
 import '../state/call_state.dart' show callProvider, CallSnapshot;

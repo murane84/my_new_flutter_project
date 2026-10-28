@@ -32,6 +32,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'services/audio_handler.dart';
 import 'services/notif_service.dart';
+import 'services/call_lock.dart';
 import 'services/fcm_service.dart';
 import 'services/metadata_overrides.dart';
 import 'services/live_session_service.dart' show liveHostNotify;
@@ -839,7 +840,19 @@ class SplashScreenState extends State<SplashScreen>
     final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
     // Signed in + quick-unlock enrolled → gate entry behind the biometric lock
     // screen. Otherwise fall straight through to Home (or Auth if signed out).
-    final bioLocked = isLoggedIn && await BiometricService.instance.isEnabled();
+    var bioLocked = isLoggedIn && await BiometricService.instance.isEnabled();
+    // Opened by an incoming call (Accept or a tap on the ringing banner):
+    // answer first, like a phone's lock screen — the lock returns when the
+    // call ends (see call_lock.dart). Decline stays behind the lock.
+    if (bioLocked) {
+      final launch = await consumeCallLaunchAction();
+      if (launch != null &&
+          launch.actionId != kCallDecline &&
+          launch.payload['group'] != true) {
+        bioLocked = false;
+        lockBypassedForCall = true;
+      }
+    }
     if (!mounted) return;
     // Bow out first, so the next screen arrives on black instead of sliding
     // over the wordmark.

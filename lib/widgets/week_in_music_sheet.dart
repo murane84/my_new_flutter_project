@@ -134,9 +134,12 @@ Future<void> showWeekInMusic(
     );
   }
 
+  final scroll = ScrollController();
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    // Desktop / tablet: a centred sheet instead of an edge-to-edge one.
+    constraints: const BoxConstraints(maxWidth: 680),
     backgroundColor: scheme.surface,
     shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
@@ -153,54 +156,91 @@ Future<void> showWeekInMusic(
         child: ConstrainedBox(
           constraints:
               BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.9),
-          child: CustomScrollView(shrinkWrap: true, slivers: [
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            // Sticky header: title, close and the active mood filter stay put
+            // while the songs scroll; a hairline shows once content is under it.
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: scheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 10, 8, 8),
+              child: Row(children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(colors: [
+                      scheme.primary,
+                      Color.lerp(scheme.primary, Colors.white, 0.3)!,
+                    ]),
+                  ),
+                  child: const Icon(Icons.insights_rounded,
+                      color: Colors.white, size: 23),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Your week in music',
+                          style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              color: scheme.onSurface)),
+                      Text(headline.isEmpty
+                              ? 'The last 7 days, most played first'
+                              : headline,
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              color: scheme.onSurfaceVariant)),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.pop(ctx),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ]),
+            ),
+            if (filter != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 8, 4),
+                child: Row(children: [
+                  Text('Only ${filter!.emoji} ${filter!.label.toLowerCase()}',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface)),
+                  const Spacer(),
+                  TextButton(
+                      onPressed: () => setS(() => filter = null),
+                      child: const Text('Show all')),
+                ]),
+              ),
+            ListenableBuilder(
+              listenable: scroll,
+              builder: (_, _) => Divider(
+                height: 1,
+                thickness: 1,
+                color: scroll.hasClients && scroll.offset > 2
+                    ? scheme.outlineVariant.withValues(alpha: 0.6)
+                    : Colors.transparent,
+              ),
+            ),
+            Flexible(
+              child: CustomScrollView(
+                controller: scroll,
+                shrinkWrap: true,
+                slivers: [
             SliverToBoxAdapter(
               child: Column(children: [
-                const SizedBox(height: 8),
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                      color: scheme.outlineVariant,
-                      borderRadius: BorderRadius.circular(2)),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 4),
-                  child: Row(children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(colors: [
-                          scheme.primary,
-                          Color.lerp(scheme.primary, Colors.white, 0.3)!,
-                        ]),
-                      ),
-                      child: const Icon(Icons.insights_rounded,
-                          color: Colors.white, size: 23),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Your week in music',
-                              style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w900,
-                                  color: scheme.onSurface)),
-                          Text(headline.isEmpty
-                                  ? 'The last 7 days, most played first'
-                                  : headline,
-                              style: TextStyle(
-                                  fontSize: 12.5,
-                                  color: scheme.onSurfaceVariant)),
-                        ],
-                      ),
-                    ),
-                  ]),
-                ),
+                const SizedBox(height: 4),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
                   child: Row(children: [
@@ -394,20 +434,6 @@ Future<void> showWeekInMusic(
                       );
                     },
                   ),
-                if (filter != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                    child: Row(children: [
-                      Text('Only ${filter!.emoji} ${filter!.label.toLowerCase()}',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: scheme.onSurface)),
-                      const Spacer(),
-                      TextButton(
-                          onPressed: () => setS(() => filter = null),
-                          child: const Text('Show all')),
-                    ]),
-                  ),
                 const SizedBox(height: 6),
               ]),
             ),
@@ -522,10 +548,20 @@ Future<void> showWeekInMusic(
                   },
                 ),
               ),
+                ],
+              ),
+            ),
+            // Sticky footer: the send button is always one tap away.
             if (onSend != null && all.isNotEmpty)
-              SliverToBoxAdapter(
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  border: Border(
+                      top: BorderSide(
+                          color: scheme.outlineVariant.withValues(alpha: 0.6))),
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
                   child: FilledButton.icon(
                     onPressed: () {
                       Navigator.pop(ctx);
@@ -546,7 +582,9 @@ Future<void> showWeekInMusic(
         ),
       );
     }),
-  );
+  // Dispose after the close animation, once the list has let go of it.
+  ).whenComplete(() =>
+      Future.delayed(const Duration(seconds: 1), scroll.dispose));
 }
 
 /// A floating, dismissible card with everything Aluta learned about one song

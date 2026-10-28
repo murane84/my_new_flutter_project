@@ -1635,6 +1635,34 @@ class LiveSessionController {
     _listenerStarted = false;
     _listenerBaseMs = 0;
     await _openSocket(sessionId, myUserId, token);
+    _startResyncWatch();
+  }
+
+  // ── Listener join watchdog ────────────────────────────────────────────────
+  // A (re)joining listener must end up hearing the CURRENT song. Normally the
+  // host's peer_joined handling does that, but a race (old socket's cleanup,
+  // a lost offer on a flaky network) can leave the listener on a stale title
+  // at 00:00 forever. So: if no audio has started 6 s after joining, ask the
+  // host to welcome us again (title, queue, settings, fresh P2P) — up to 5
+  // times.
+  Timer? _resyncTimer;
+  int _resyncTries = 0;
+
+  void _startResyncWatch() {
+    _resyncTimer?.cancel();
+    _resyncTries = 0;
+    _resyncTimer = Timer.periodic(const Duration(seconds: 6), (t) {
+      if (role != LiveRole.listener || _channel == null || _listenerStarted ||
+          _resyncTries >= 5) {
+        t.cancel();
+        if (identical(_resyncTimer, t)) _resyncTimer = null;
+        return;
+      }
+      _resyncTries++;
+      _log('listener: no audio yet → resync #$_resyncTries');
+      IceConfig.instance.invalidate();
+      _sendControl({'type': 'ctl', 'action': 'resync', 'from_id': _myUserId});
+    });
   }
 
   /// Re-open the socket after a transport drop and rejoin the same session.
@@ -1666,6 +1694,7 @@ class LiveSessionController {
     role = LiveRole.listener;
     this.sessionId = sessionId;
     await _openSocket(sessionId, myUserId, token);
+    _startResyncWatch();
   }
 
   /// Re-open the socket after the HOST's transport dropped (a network glitch),
@@ -1814,6 +1843,44 @@ class LiveSessionController {
 
   void _log(String m) => debugPrint('[live] $m');
 
+  /// HOST: bring a (re)joining listener fully up to date — current title, EQ,
+  /// a fresh P2P audio channel (the current track streams / is offered by hash
+  /// when it opens), the queue, repeat / shuffle / contribution state, and
+  /// where we are in the song.
+  void _welcomePeer(int? peerId) {
+    // The title first, over the socket, so the listener screen updates and
+    // clears any "Connection lost" state; audio follows on the P2P channel.
+    final meta = _hostMeta;
+    if (meta != null) {
+      final track = meta['track'];
+      _sendControl({
+        'type': 'track_change',
+        'track': ?track,
+      });
+    }
+    // Re-send the equalizer settings so a late joiner hears the same shape.
+    final eq = _hostEq;
+    if (eq != null) _sendControl(eq);
+    if (peerId != null) {
+      // A genuine (re)join is a clean slate for ICE recovery.
+      _peerRecoverAttempts.remove(peerId);
+      unawaited(_hostConnectToPeer(peerId));
+    }
+    _broadcastQueue();
+    if (repeatMode != 'off') {
+      _sendControl({'type': 'repeat', 'mode': repeatMode});
+    }
+    if (shuffle) _sendControl({'type': 'shuffle', 'on': true});
+    if (allowContributions) _sendControl({'type': 'contrib', 'on': true});
+    // Where we are, so the listener's clock is right the moment audio lands
+    // ('position' only corrects a listener that has drifted — the others in
+    // the room don't skip).
+    _sendControl({
+      'type': 'position',
+      'position_ms': player.position.inMilliseconds,
+    });
+  }
+
   /// Await a teardown step but never let it hang a reconnect: closing a socket
   /// or peer connection on a half-dead network can wait forever for a close
   /// handshake that will never come.
@@ -1871,39 +1938,7 @@ class LiveSessionController {
           final name = activeLiveSession?.peerName ?? 'Your friend';
           liveHostNotify?.call('$name reconnected');
         }
-        // Announce the current track as a `track_change` over the socket so the
-        // listener screen updates its title and clears any "Connection lost"
-        // state. The actual buffer reset + audio now ride the P2P data channel
-        // (track_start → bytes → eos), set up just below.
-        final meta = _hostMeta;
-        if (meta != null) {
-          final track = meta['track'];
-          _sendControl({
-            'type': 'track_change',
-            'track': ?track,
-          });
-        }
-        // Re-send the equalizer settings so a late joiner hears the same shape.
-        final eq = _hostEq;
-        if (eq != null) _sendControl(eq);
-        // (Re)establish the peer-to-peer audio channel with this listener. When
-        // it opens, the current track is streamed over it. This replaces the
-        // old server-relayed byte stream and also covers reconnects (a fresh
-        // peer connection is negotiated each time).
-        final peerId = _asInt((msg['data'] as Map?)?['user_id']);
-        if (peerId != null) {
-          // A genuine (re)join is a clean slate for ICE recovery.
-          _peerRecoverAttempts.remove(peerId);
-          unawaited(_hostConnectToPeer(peerId));
-        }
-        // Send the current queue so the freshly-joined listener sees it.
-        _broadcastQueue();
-        // And the current repeat mode + shuffle, so their buttons match from
-        // the start.
-        if (repeatMode != 'off') _sendControl({'type': 'repeat', 'mode': repeatMode});
-        if (shuffle) _sendControl({'type': 'shuffle', 'on': true});
-        // Catch a late joiner up on whether guest contributions are open.
-        if (allowContributions) _sendControl({'type': 'contrib', 'on': true});
+        _welcomePeer(_asInt((msg['data'] as Map?)?['user_id']));
       } else if (type == 'ctl') {
         // A listener requested a transport action. The host executes it
         // authoritatively; the resulting play/pause/position/track_change
@@ -1945,6 +1980,16 @@ class LiveSessionController {
           case 'shuffle':
             // Listener toggled shuffle — apply authoritatively + re-broadcast.
             setShuffle(msg['on'] == true);
+            break;
+          case 'resync':
+            // A (re)joined listener still has no audio — welcome them again:
+            // current title, queue, settings and a fresh P2P channel.
+            final rid = _asInt(msg['from_id']);
+            if (rid != null) {
+              _log('host: listener $rid asked to resync');
+              IceConfig.instance.invalidate();
+              _welcomePeer(rid);
+            }
             break;
           case 'renegotiate':
             // A listener's media path died (likely a network switch) and it
@@ -2180,6 +2225,8 @@ class LiveSessionController {
   }
 
   Future<void> _teardown() async {
+    _resyncTimer?.cancel();
+    _resyncTimer = null;
     // Post the host's one-and-only history entry for this session (guarded).
     _logHostOutcome();
     await _posSub?.cancel();

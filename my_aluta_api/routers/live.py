@@ -475,7 +475,13 @@ def _update_state_from_control(session, text: str) -> None:
         if isinstance(pos, int):
             session.position_ms = pos
         session.is_playing = (mtype == "play")
-    elif mtype == "meta":
+    elif mtype == "position":
+        pos = msg.get("position_ms")
+        if isinstance(pos, int):
+            session.position_ms = pos
+    elif mtype in ("meta", "track_change"):
+        # Keep the CURRENT song for late joiners / rejoiners (their first
+        # session_state) — not the one the session started with.
         track = msg.get("track")
         if isinstance(track, dict):
             session.track = track

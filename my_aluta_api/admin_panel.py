@@ -363,6 +363,18 @@ def _device_out(d: AdminDevice, current_id: Optional[int] = None) -> dict:
     }
 
 
+@router.get("/setup-status")
+def admin_setup_status(db: Session = Depends(get_db)):
+    """Public: is first-device setup still possible? Lets the sign-in page hide
+    the setup-code option once an admin device exists. Says nothing about any
+    account — only whether the one-time door is still open."""
+    if not os.getenv("ADMIN_BOOTSTRAP_CODE", ""):
+        return {"setup_open": False}
+    used = db.query(AdminState).filter(AdminState.bootstrap_used.is_(True)).first()
+    trusted = db.query(AdminDevice).filter(AdminDevice.status == "trusted").first()
+    return {"setup_open": used is None and trusted is None}
+
+
 @router.post("/login")
 def admin_login(payload: LoginIn, request: Request, bg: BackgroundTasks,
                 db: Session = Depends(get_db)):

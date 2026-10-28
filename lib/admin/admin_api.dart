@@ -129,6 +129,19 @@ class AdminApi {
 
   // ── Sign-in ───────────────────────────────────────────────────────────────
 
+  /// Whether first-device setup (the bootstrap code) is still possible.
+  /// False once any admin device is trusted — or if the server can't be asked.
+  Future<bool> setupOpen() async {
+    try {
+      final r = await http
+          .get(Uri.parse('$origin/admin/api/setup-status'))
+          .timeout(const Duration(seconds: 10));
+      return _decode(r)['setup_open'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<Map<String, dynamic>> login({
     required String email,
     required String password,

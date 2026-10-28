@@ -70,6 +70,8 @@ class _AdminRootState extends State<_AdminRoot> {
   String? _error;
   String? _info;
   bool _showSetup = false;
+  // Hidden until the server says first-device setup is still open.
+  bool _setupOpen = false;
   bool _showRecovery = false;
   bool _obscure = true;
 
@@ -99,6 +101,11 @@ class _AdminRootState extends State<_AdminRoot> {
     if (!mounted) return;
     if (ok) await AdminKey.persist();
     if (!mounted) return;
+    if (ok) {
+      _api.setupOpen().then((open) {
+        if (mounted && open != _setupOpen) setState(() => _setupOpen = open);
+      });
+    }
     // Refreshed tab: pick the session back up if the server still accepts it
     // (one signed /me call — it fails without this device's key).
     final saved = ok ? _api.restore() : null;
@@ -791,29 +798,31 @@ class _AdminRootState extends State<_AdminRoot> {
             const SizedBox(height: 20),
             _pill('Sign in', _busy ? null : () => _submit(), busy: _busy),
             _orDivider(),
-            _option(
-              icon: Icons.vpn_key_rounded,
-              title: 'First device? Use the setup code',
-              subtitle: 'Your very first admin device — with the code from '
-                  'Railway (ADMIN_BOOTSTRAP_CODE).',
-              open: _showSetup,
-              highlight: true,
-              onTap: () => setState(() => _showSetup = !_showSetup),
-            ),
-            if (_showSetup) ...[
-              const SizedBox(height: 12),
-              _field(
-                controller: _bootstrap,
-                label: 'Setup code',
-                hint: 'ADMIN_BOOTSTRAP_CODE from Railway',
-                icon: Icons.vpn_key_outlined,
+            if (_setupOpen) ...[
+              _option(
+                icon: Icons.vpn_key_rounded,
+                title: 'First device? Use the setup code',
+                subtitle: 'Your very first admin device — with the code from '
+                    'Railway (ADMIN_BOOTSTRAP_CODE).',
+                open: _showSetup,
+                highlight: true,
+                onTap: () => setState(() => _showSetup = !_showSetup),
               ),
+              if (_showSetup) ...[
+                const SizedBox(height: 12),
+                _field(
+                  controller: _bootstrap,
+                  label: 'Setup code',
+                  hint: 'ADMIN_BOOTSTRAP_CODE from Railway',
+                  icon: Icons.vpn_key_outlined,
+                ),
+                const SizedBox(height: 10),
+                _pill('Set up this device',
+                    _busy ? null : () => _submit(setup: true),
+                    outline: true),
+              ],
               const SizedBox(height: 10),
-              _pill('Set up this device',
-                  _busy ? null : () => _submit(setup: true),
-                  outline: true),
             ],
-            const SizedBox(height: 10),
             _option(
               icon: Icons.restore_rounded,
               title: 'Lost every trusted device?',

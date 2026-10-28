@@ -684,6 +684,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       _bgSince ??= DateTime.now();
     }
     if (state == AppLifecycleState.resumed) {
+      _resumedAt = DateTime.now();
       // A banner tapped in the shade clears itself but not its person header.
       tidyNotificationBundles();
       final since = _bgSince;
@@ -1960,6 +1961,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
   }
 
   bool _callLaunchConsumed = false;
+  // When Aluta last came to the front — a call Accepted from the banner that
+  // just brought it forward still counts as "answered from the background".
+  DateTime? _resumedAt;
 
   /// Handle Accept/Decline tapped on the ringing notification while the app is
   /// alive (the offer is already in memory).
@@ -1971,6 +1975,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
         _openGroupCallScreen();
         GroupCallService.instance.accept();
       } else {
+        // Accepted from the banner while Aluta was in the background (or the
+        // tap is what just brought it forward): tuck away once connected.
+        final ra = _resumedAt;
+        final fromBackground = !_appForeground ||
+            (ra != null &&
+                DateTime.now().difference(ra) < const Duration(seconds: 3));
+        if (fromBackground) CallService.instance.tuckAwayOnConnect = true;
         _openCallScreen();
         CallService.instance.acceptCall();
       }

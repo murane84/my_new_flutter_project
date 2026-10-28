@@ -13,6 +13,10 @@
     <!-- Foreground service (audio playback) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- The ongoing-call service (AlutaCallFgService): the call and mic keep
+         working while Aluta is in the background. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <!-- "Identify song" → "from this phone": capture the device's own audio
          output via MediaProjection playback capture (Android 10+). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
@@ -208,6 +212,16 @@
             android:name=".AudioCaptureService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
+
+        <!-- "In call with … · 02:14" while a call is live (Mute / Speaker /
+             Hang up), so the call keeps going with Aluta in the background. -->
+        <service
+            android:name=".AlutaCallFgService"
+            android:exported="false"
+            android:foregroundServiceType="phoneCall|microphone" />
+        <receiver
+            android:name=".CallActionReceiver"
+            android:exported="false" />
 
         <!-- Self-managed telecom ConnectionService: the platform binds this to
              create a system-visible connection per Aluta call, so a car /

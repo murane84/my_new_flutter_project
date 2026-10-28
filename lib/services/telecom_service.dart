@@ -24,6 +24,10 @@ class TelecomService {
   /// The system asked to answer / end the active call (car or BT button).
   void Function(String callId)? onAnswer;
   void Function(String callId)? onDisconnect;
+  // Buttons / tap on the ongoing-call notification.
+  void Function()? onToggleMute;
+  void Function()? onToggleSpeaker;
+  void Function()? onOpenCall;
 
   bool get _android => !kIsWeb && Platform.isAndroid;
   bool get isReady => _registered;
@@ -51,6 +55,15 @@ class TelecomService {
       case 'reject':
         onDisconnect?.call(id);
         break;
+      case 'toggleMute':
+        onToggleMute?.call();
+        break;
+      case 'toggleSpeaker':
+        onToggleSpeaker?.call();
+        break;
+      case 'openCall':
+        onOpenCall?.call();
+        break;
       // 'mute' / 'unmute' arrive too, but the app manages mute itself.
     }
   }
@@ -75,6 +88,41 @@ class TelecomService {
     if (!_android) return;
     try {
       await _ch.invokeMethod('ringback', {'on': on});
+    } catch (_) {}
+  }
+
+  /// The ongoing-call notification + foreground service (Android): keeps the
+  /// call and microphone alive in the background, with Mute / Speaker / Hang
+  /// up. Same call to start or refresh it (after mute / speaker changes).
+  Future<void> ongoing({
+    required String name,
+    required int sinceMs,
+    required bool muted,
+    required bool speaker,
+  }) async {
+    if (!_android) return;
+    try {
+      await _ch.invokeMethod('ongoingStart', {
+        'name': name,
+        'since': sinceMs,
+        'muted': muted,
+        'speaker': speaker,
+      });
+    } catch (_) {}
+  }
+
+  Future<void> ongoingStop() async {
+    if (!_android) return;
+    try {
+      await _ch.invokeMethod('ongoingStop');
+    } catch (_) {}
+  }
+
+  /// Send Aluta to the background (the call keeps going).
+  Future<void> moveToBack() async {
+    if (!_android) return;
+    try {
+      await _ch.invokeMethod('moveToBack');
     } catch (_) {}
   }
 

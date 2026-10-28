@@ -435,6 +435,13 @@ extension _HomePageHelpers1 on HomePageState {
         CallService.instance.acceptCall();
       }
     };
+    // Ongoing-call notification buttons / tap.
+    TelecomService.instance.onToggleMute = CallService.instance.toggleMute;
+    TelecomService.instance.onToggleSpeaker =
+        () => CallService.instance.toggleSpeaker();
+    TelecomService.instance.onOpenCall = () {
+      if (CallService.instance.isActive) _openCallScreen();
+    };
     TelecomService.instance.onDisconnect = (id) {
       if (id.startsWith('grp_')) {
         GroupCallService.instance.leave();
@@ -536,6 +543,9 @@ extension _HomePageHelpers1 on HomePageState {
     }
     _openCallScreen();
     if (action == kCallAccept) {
+      // Answered from the banner with Aluta closed: once connected, go back
+      // to where they were — the call continues from the notification.
+      CallService.instance.tuckAwayOnConnect = true;
       CallService.instance.prepareAcceptFromNotification(cid,
           callerName: (launch.payload['caller_name'] ?? '').toString());
     } else {

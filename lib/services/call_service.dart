@@ -74,6 +74,7 @@ class CallService {
           reconnecting: reconnecting,
         ));
     _syncTone();
+    _syncOngoing();
   }
 
   // ── Call tones ────────────────────────────────────────────────────────────
@@ -147,6 +148,44 @@ class CallService {
   // caller re-offers with fresh candidates/TURN every few seconds (the callee
   // asks it to via call_restart), until the path is back or 30 s pass.
   bool reconnecting = false;
+
+  // ── Ongoing-call notification (Android) + answer-from-banner ─────────────
+  /// Set when the call was answered from the ringing banner while Aluta was
+  /// closed / in the background: once it connects, Aluta tucks itself away
+  /// and the call carries on from the "In call" notification (Option A).
+  bool tuckAwayOnConnect = false;
+  String _ongoingSig = '';
+
+  void _syncOngoing() {
+    if (!_androidApp) return;
+    if (state == CallState.connected && connectedAt != null) {
+      final sig = '$peerName|$muted|$speakerOn|${connectedAt!.millisecondsSinceEpoch}';
+      if (sig != _ongoingSig) {
+        _ongoingSig = sig;
+        unawaited(TelecomService.instance.ongoing(
+          name: peerName.isEmpty ? 'Aluta call' : peerName,
+          sinceMs: connectedAt!.millisecondsSinceEpoch,
+          muted: muted,
+          speaker: speakerOn,
+        ));
+      }
+      if (tuckAwayOnConnect) {
+        tuckAwayOnConnect = false;
+        // A beat so the connected screen paints and the service is up first.
+        Future<void>.delayed(const Duration(milliseconds: 700), () {
+          if (state == CallState.connected) {
+            unawaited(TelecomService.instance.moveToBack());
+          }
+        });
+      }
+    } else if (_ongoingSig.isNotEmpty) {
+      _ongoingSig = '';
+      unawaited(TelecomService.instance.ongoingStop());
+    }
+    if (state == CallState.ended || state == CallState.idle) {
+      tuckAwayOnConnect = false;
+    }
+  }
   Timer? _recoverTimer;
   DateTime? _recoverSince;
   static const Duration _recoverBudget = Duration(seconds: 30);

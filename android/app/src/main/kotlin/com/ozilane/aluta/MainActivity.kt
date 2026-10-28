@@ -307,6 +307,10 @@ class MainActivity : AudioServiceFragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        // Tap on the ongoing-call notification → show the call screen.
+        if (intent.action == "com.ozilane.aluta.OPEN_CALL") {
+            telecomMc?.invokeMethod("openCall", mapOf("callId" to "dm_ongoing"))
+        }
         // App already running → deliver straight to Dart.
         handleContactIntent(intent, deliver = true)
     }
@@ -357,6 +361,32 @@ class MainActivity : AudioServiceFragmentActivity() {
             "endTone" -> {
                 playEndTone()
                 result.success(true)
+            }
+            // Ongoing-call notification service (see AlutaCallFgService).
+            "ongoingStart", "ongoingUpdate" -> {
+                try {
+                    val i = Intent(this, AlutaCallFgService::class.java)
+                        .putExtra(AlutaCallFgService.EXTRA_NAME, call.argument<String>("name") ?: "Aluta call")
+                        .putExtra(AlutaCallFgService.EXTRA_SINCE,
+                            (call.argument<Number>("since") ?: System.currentTimeMillis()).toLong())
+                        .putExtra(AlutaCallFgService.EXTRA_MUTED, call.argument<Boolean>("muted") == true)
+                        .putExtra(AlutaCallFgService.EXTRA_SPEAKER, call.argument<Boolean>("speaker") == true)
+                    if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
+                    result.success(true)
+                } catch (e: Exception) {
+                    result.success(false)
+                }
+            }
+            "ongoingStop" -> {
+                try {
+                    stopService(Intent(this, AlutaCallFgService::class.java))
+                } catch (e: Exception) {
+                }
+                result.success(true)
+            }
+            // Answered from the banner: tuck Aluta away once the call is up.
+            "moveToBack" -> {
+                result.success(moveTaskToBack(true))
             }
             "setActive" -> {
                 CallRegistry.get(call.argument<String>("callId") ?: "")?.setActive()

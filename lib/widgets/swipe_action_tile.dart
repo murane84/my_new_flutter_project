@@ -188,8 +188,8 @@ class _StripClip extends CustomClipper<Rect> {
   final double dx;
   @override
   Rect getClip(Size s) => dx >= 0
-      ? Rect.fromLTWH(0, 0, dx.clamp(0, s.width), s.height)
-      : Rect.fromLTWH(s.width + dx, 0, -dx.clamp(-s.width, 0), s.height);
+      ? Rect.fromLTWH(0, 0, math.min(dx, s.width), s.height)
+      : Rect.fromLTWH(s.width + dx, 0, math.min(-dx, s.width), s.height);
   @override
   bool shouldReclip(covariant _StripClip o) => o.dx != dx;
 }

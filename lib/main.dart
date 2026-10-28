@@ -33,6 +33,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'services/audio_handler.dart';
 import 'services/notif_service.dart';
 import 'services/call_lock.dart';
+import 'services/contact_names.dart';
 import 'services/fcm_service.dart';
 import 'services/metadata_overrides.dart';
 import 'services/live_session_service.dart' show liveHostNotify;
@@ -205,6 +206,14 @@ Future<void> _bootstrapServices() {
     // Restore backed-up song-detail edits so custom titles/artists show at once.
     try {
       await metadataStore.load();
+    } catch (_) {}
+    // Phone-book names in memory before the chat list paints (no registered
+    // name first, then a snap to "My wife"). Snapshot first, account backup on
+    // a fresh install.
+    try {
+      await ContactNames.instance
+          .prime()
+          .timeout(const Duration(seconds: 4), onTimeout: () {});
     } catch (_) {}
     // Warm the in-memory auth caches (access token + API origin) so the first
     // protected avatar/image frame in Home can attach the auth header (otherwise

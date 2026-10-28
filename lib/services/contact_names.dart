@@ -56,6 +56,35 @@ class ContactNames {
     return _loading ??= _load(allowPrompt: allowPrompt);
   }
 
+  /// Startup, BEFORE the chat list paints: put the saved names in memory so
+  /// every tile shows "My wife" from the very first frame instead of the
+  /// registered name snapping over a few seconds later. Reads this device's
+  /// snapshot (survives app updates and restarts); on a fresh install or
+  /// cleared data it pulls the copy this account backed up on the server.
+  /// Never prompts, never reads the address book (that refresh still runs
+  /// later, in the background). Bounded so launch never waits on it.
+  Future<void> prime() async {
+    if (_byKey.isNotEmpty) return;
+    try {
+      final cached = await _loadPersisted();
+      if (cached != null && cached.isNotEmpty) {
+        _byKey.addAll(cached);
+        revision.value++;
+        return;
+      }
+      final remote = await ApiService()
+          .fetchContactNames()
+          .timeout(const Duration(seconds: 3), onTimeout: () => {});
+      if (remote.isNotEmpty && _byKey.isEmpty) {
+        _byKey.addAll(remote);
+        // Keep _sig empty so the next phonebook check does a full read.
+        _sig = '';
+        _persist();
+        revision.value++;
+      }
+    } catch (_) {}
+  }
+
   Future<void> _load({required bool allowPrompt}) async {
     // Instant: serve a saved snapshot from a previous run so startup never waits
     // on the address-book read; refresh from the source in the background. The

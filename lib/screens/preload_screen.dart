@@ -11,6 +11,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'home_page.dart';
 import 'api_service.dart';
 import '../services/connected_contacts_service.dart';
+import '../services/contact_names.dart';
 import '../services/aluta_mood.dart';
 import '../services/song_insights.dart';
 
@@ -164,6 +165,9 @@ class _PreloadScreenState extends State<PreloadScreen>
             _guard(api.fetchUsers()),
             _guard(api.listConversations()),
             _guard(api.listSpaces()),
+            // Saved phone-book names (this account's backup) before the
+            // list shows — right after a fresh sign-in too.
+            _guard(ContactNames.instance.prime(), seconds: 4),
           ]);
         }
         _bump(_wCircle, 'Syncing your circle…');

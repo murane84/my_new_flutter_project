@@ -99,6 +99,20 @@ class _AdminRootState extends State<_AdminRoot> {
     if (!mounted) return;
     if (ok) await AdminKey.persist();
     if (!mounted) return;
+    // Refreshed tab: pick the session back up if the server still accepts it
+    // (one signed /me call — it fails without this device's key).
+    final saved = ok ? _api.restore() : null;
+    if (saved != null) {
+      try {
+        await _api.get('/admin/api/me');
+        if (!mounted) return;
+        _enterHome(saved);
+        return;
+      } catch (_) {
+        _api.forget();
+        if (!mounted) return;
+      }
+    }
     setState(() => _stage = ok ? _Stage.signIn : _Stage.unsupported);
   }
 
@@ -202,6 +216,7 @@ class _AdminRootState extends State<_AdminRoot> {
   void _enterHome(Map<String, dynamic> session) {
     _poll?.cancel();
     _password.clear();
+    _api.remember(session);
     if (!mounted) return;
     setState(() {
       _session = session;

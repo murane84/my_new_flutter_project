@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -18,7 +20,10 @@ class AdminApiException implements Exception {
 /// Talks to /admin/api. Every call after sign-in carries the admin session
 /// token AND a signature from this device's key over
 /// METHOD\nPATH\nTS\nNONCE\nSHA256(BODY) — the server refuses anything else.
-/// The session token lives in memory only (a reload means signing in again).
+/// The session token is kept for THIS browser tab only (sessionStorage): a
+/// refresh keeps you signed in, closing the tab or the browser signs you out.
+/// A copied token is still useless without this device's non-extractable key,
+/// and the server's idle timeout, sign-out and "Lock admin" end it as before.
 class AdminApi {
   AdminApi._();
   static final AdminApi instance = AdminApi._();
@@ -31,6 +36,52 @@ class AdminApi {
 
   String? _token;
   bool get signedIn => _token != null;
+
+  // ── This-tab session (sessionStorage) ─────────────────────────────────────
+
+  static const String _kTab = 'aluta_admin_session_v1';
+
+  JSObject? get _tabStore {
+    try {
+      return globalContext.getProperty<JSObject?>('sessionStorage'.toJS);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Keeps the signed-in session for this tab (called on entering the admin).
+  void remember(Map<String, dynamic> session) {
+    final t = _token;
+    if (t == null) return;
+    try {
+      _tabStore?.callMethod<JSAny?>('setItem'.toJS, _kTab.toJS,
+          jsonEncode({'token': t, 'session': session}).toJS);
+    } catch (_) {}
+  }
+
+  /// The session saved for this tab, with its token loaded — or null.
+  Map<String, dynamic>? restore() {
+    try {
+      final raw = _tabStore?.callMethod<JSString?>('getItem'.toJS, _kTab.toJS);
+      if (raw == null) return null;
+      final m = jsonDecode(raw.toDart);
+      if (m is! Map) return null;
+      final t = m['token'];
+      final s = m['session'];
+      if (t is! String || t.isEmpty || s is! Map) return null;
+      _token = t;
+      touch();
+      return s.cast<String, dynamic>();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _dropTab() {
+    try {
+      _tabStore?.callMethod<JSAny?>('removeItem'.toJS, _kTab.toJS);
+    } catch (_) {}
+  }
 
   /// Fires when the server ends the session (idle, revoked, locked).
   final ValueNotifier<String?> sessionEnded = ValueNotifier<String?>(null);
@@ -149,6 +200,7 @@ class AdminApi {
     } on AdminApiException catch (e) {
       if (e.status == 401 || e.status == 423) {
         _token = null;
+        _dropTab();
         sessionEnded.value = e.message;
       }
       rethrow;
@@ -166,7 +218,11 @@ class AdminApi {
       await post('/admin/api/logout');
     } catch (_) {}
     _token = null;
+    _dropTab();
   }
 
-  void forget() => _token = null;
+  void forget() {
+    _token = null;
+    _dropTab();
+  }
 }

@@ -684,6 +684,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
       _bgSince ??= DateTime.now();
     }
     if (state == AppLifecycleState.resumed) {
+      // A banner tapped in the shade clears itself but not its person header.
+      tidyNotificationBundles();
       final since = _bgSince;
       _bgSince = null;
       if (since != null) {

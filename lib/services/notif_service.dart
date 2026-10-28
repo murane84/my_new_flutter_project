@@ -132,13 +132,21 @@ set onAlutaTap(void Function(String? actionId, Map<String, dynamic> p)? fn) {
 /// reactions, Our Space) stacks under their name in the shade.
 String personGroupKey(String personKey) => 'aluta_p_$personKey';
 
+int _personSummaryId(String personKey) =>
+    950000 + (personKey.hashCode.abs() % 40000);
+
+/// The bundle header for one person. Some phones (Xiaomi / HyperOS) show it as
+/// a card of its own, so it carries the LATEST line ("📞 Missed call", the last
+/// message) and the same tap target — never a vague "New from …".
 Future<void> _showPersonSummary(
-    String personKey, String personName, String channel) async {
+    String personKey, String personName, String channel,
+    {String? body, String? payload}) async {
   try {
     await _fln.show(
-      id: 950000 + (personKey.hashCode.abs() % 40000),
+      id: _personSummaryId(personKey),
       title: personName,
-      body: 'New from $personName',
+      body: (body == null || body.trim().isEmpty) ? personName : body,
+      payload: payload,
       notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           channel,
@@ -221,7 +229,8 @@ Future<void> showAlutaNotification({
       ),
     );
     if (personKey != null && personName != null) {
-      await _showPersonSummary(personKey, personName, channel);
+      await _showPersonSummary(personKey, personName, channel,
+          body: body, payload: jsonEncode(p));
     }
   } catch (_) {/* best-effort */}
 }
@@ -231,6 +240,38 @@ Future<void> cancelAlutaNotification(int id) async {
   try {
     if (!_ready) await initNotifications();
     await _fln.cancel(id: id);
+    await _tidyPersonSummaries();
+  } catch (_) {}
+}
+
+/// Public: tidy the shade's per-person headers (called when Aluta comes back
+/// to the front — a tapped banner auto-clears but its header would stay).
+Future<void> tidyNotificationBundles() async {
+  if (kIsWeb) return;
+  await _tidyPersonSummaries();
+}
+
+/// Drop any person bundle header whose notifications are all gone — the
+/// header otherwise lingers on its own (opened chat, answered call…).
+Future<void> _tidyPersonSummaries() async {
+  try {
+    final active = await _android?.getActiveNotifications();
+    if (active == null) return;
+    final summaryIds = <int, String>{};
+    final childGroups = <String>{};
+    for (final n in active) {
+      final g = n.groupKey;
+      if (g == null || !g.startsWith('aluta_p_')) continue;
+      final pk = g.substring('aluta_p_'.length);
+      if (n.id == _personSummaryId(pk)) {
+        summaryIds[n.id ?? 0] = g;
+      } else {
+        childGroups.add(g);
+      }
+    }
+    for (final e in summaryIds.entries) {
+      if (!childGroups.contains(e.value)) await _fln.cancel(id: e.key);
+    }
   } catch (_) {}
 }
 
@@ -331,6 +372,7 @@ Future<void> _sendInlineReply(Map<String, dynamic> p, String? input) async {
         await api.markMessagesAsReadPatch(fid);
       }
       await _fln.cancel(id: notifId);
+      await _tidyPersonSummaries();
     } else {
       await _fln.show(
         id: notifId,
@@ -667,6 +709,7 @@ Future<void> cancelConversationNotifications(
     if (!_ready) await initNotifications();
     await _fln.cancel(
         id: messageNotifId(senderId: senderId, conversationId: conversationId));
+    await _tidyPersonSummaries();
   } catch (_) {/* best-effort */}
 }
 
@@ -745,7 +788,8 @@ Future<void> showMessageNotification({
     );
     if (personKey != null) {
       await _showPersonSummary(personKey,
-          (hasGroup ? groupTitle : senderName) ?? title, _channelId);
+          (hasGroup ? groupTitle : senderName) ?? title, _channelId,
+          body: body, payload: payload);
     }
   } catch (_) {/* best-effort */}
 }

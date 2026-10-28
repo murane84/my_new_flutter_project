@@ -156,3 +156,21 @@ def report_device(
     row.last_seen = now
     db.commit()
     return {"ok": True, "platform": plat}
+
+
+@router.post("/calls/decline")
+def decline_call_from_shade(
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+):
+    """"Decline" tapped on the ringing call notification while Aluta is
+    closed: there's no app socket to send the WebRTC `call_decline` on, so the
+    phone posts it here and we relay it to the caller — their screen ends at
+    once ("declined") instead of ringing out the full 45 s."""
+    try:
+        caller = int(payload.get("caller_id"))
+    except (TypeError, ValueError):
+        return {"ok": False}
+    from websocket_manager import safe_notify_user
+    safe_notify_user(caller, {"type": "call_decline", "from": current_user.id})
+    return {"ok": True}

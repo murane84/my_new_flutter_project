@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:ui' show DartPluginRegistrant;
+import 'dart:ui' show Color, DartPluginRegistrant;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -365,9 +365,25 @@ Future<void> _declineLiveFromShade(Map<String, dynamic> p) async {
 /// up on next launch via [consumeCallLaunchAction].
 @pragma('vm:entry-point')
 Future<void> _onNotifBgResponse(NotificationResponse r) async {
-  // Calls: intentionally nothing (see above). An inline message reply typed
-  // while the app is closed is sent from here, and so is "Not now" on a
-  // Listen Together invite.
+  // Decline on a ringing call while Aluta is closed: tell the caller through
+  // the server, so their screen ends now instead of ringing out 45 s. An
+  // inline message reply typed while the app is closed is sent from here,
+  // and so is "Not now" on a Listen Together invite.
+  if (r.actionId == kCallDecline) {
+    try {
+      DartPluginRegistrant.ensureInitialized();
+    } catch (_) {}
+    final p = _decodePayload(r.payload);
+    final cid = int.tryParse('${p['caller_id'] ?? ''}');
+    if (cid != null && p['group'] != true) {
+      final api = ApiService();
+      var ok = await api.declineCallFromShade(cid);
+      if (!ok && await api.refreshAccessToken()) {
+        await api.declineCallFromShade(cid);
+      }
+    }
+    return;
+  }
   if (r.actionId == kLiveLater) {
     try {
       DartPluginRegistrant.ensureInitialized();
@@ -807,14 +823,16 @@ Future<void> showCallNotification({
           actions: <AndroidNotificationAction>[
             const AndroidNotificationAction(
               kCallDecline,
-              'Decline',
+              '✕  Decline',
               cancelNotification: true,
+              titleColor: Color(0xFFE53935),
             ),
             const AndroidNotificationAction(
               kCallAccept,
-              'Accept',
+              '📞  Accept',
               showsUserInterface: true,
               cancelNotification: true,
+              titleColor: Color(0xFF2E7D32),
             ),
           ],
         ),

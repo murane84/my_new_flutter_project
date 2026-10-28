@@ -2293,6 +2293,26 @@ class ApiService {
     }
   }
 
+  /// Decline a ringing call from the notification while the app is closed
+  /// (server relays `call_decline` to the caller). True when accepted.
+  Future<bool> declineCallFromShade(int callerId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return false;
+      final resp = await http
+          .post(
+            Uri.parse('${await _baseUrl}/calls/decline'),
+            headers: _authHeaders(token),
+            body: jsonEncode({'caller_id': callerId}),
+          )
+          .timeout(const Duration(seconds: 10));
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      _logger.w('declineCallFromShade failed: $e');
+      return false;
+    }
+  }
+
   /// "Thinking of you" — a one-tap ping to the bond's partner (no payload).
   /// [ok] when the server accepted it (delivery beyond is best-effort);
   /// otherwise [msg] says why in plain words, and [retry] whether trying again

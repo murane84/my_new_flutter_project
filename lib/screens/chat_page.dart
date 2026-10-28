@@ -499,6 +499,7 @@ class _ChatPageState extends State<ChatPage>
   // (show only while scrolling) instead of sitting over the row icons.
   final _pickerScrollCtrl = ScrollController();
   bool _showEmoji = false;
+  final FocusNode _emojiPanelFocus = FocusNode(skipTraversal: true);
   // Compose the next message as a secret heart (message_type 'heart').
   bool _heartMode = false;
   // Secret-heart composer choices (see _buildHeartTray): the mood it's sent
@@ -790,6 +791,7 @@ class _ChatPageState extends State<ChatPage>
 
   @override
   void dispose() {
+    _emojiPanelFocus.dispose();
     _pillTimer?.cancel();
     if (_isAtBottom) _markSeenUpToNewest();
     chatSearchRequest.removeListener(_onSearchRequest);
@@ -862,10 +864,13 @@ class _ChatPageState extends State<ChatPage>
   @override
   void didChangeMetrics() {
     // A rising keyboard normally means the user tapped the composer, so the
-    // emoji panel yields. EXCEPT on the GIF tab (index 1): its "Search GIFs"
-    // field lives INSIDE the panel and needs the keyboard — closing the panel
-    // there bounced the user straight back to the thread mid-search.
-    if (View.of(context).viewInsets.bottom > 0 && _showEmoji && _emojiTab != 1) {
+    // emoji panel yields. EXCEPT when the panel's own search field ("Search
+    // emoji" / "Search GIFs") has focus — closing the panel then bounced the
+    // user straight back to the Message box mid-search.
+    if (View.of(context).viewInsets.bottom > 0 &&
+        _showEmoji &&
+        _emojiTab != 1 &&
+        !_emojiPanelFocus.hasFocus) {
       setState(() => _showEmoji = false);
     }
   }
@@ -6408,7 +6413,12 @@ class _ChatPageState extends State<ChatPage>
           // sitting flush on the input like a sheet.
           Offstage(
             offstage: !_showEmoji,
-            child: Container(
+            // A focus scope around the panel: when ITS search field (emoji or
+            // GIF) takes the keyboard, didChangeMetrics keeps the panel open.
+            child: Focus(
+              focusNode: _emojiPanelFocus,
+              canRequestFocus: false,
+              child: Container(
               // GIF/sticker tab gets a taller panel so the denser grid shows
               // ~2–3 rows at a glance (was 306 → only one big row fit). The
               // emoji tab keeps 306 so the emoji picker (fixed 262 internal
@@ -6431,7 +6441,7 @@ class _ChatPageState extends State<ChatPage>
                   ),
                 ],
               ),
-            ),
+            )),
           ),
         ],
       ),

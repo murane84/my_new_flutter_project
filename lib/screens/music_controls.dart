@@ -235,12 +235,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   void _transportPrev() {
     if (!_liveActive) return _previous();
     final c = _live!;
+    // Same rule as the session screen: restart past 3 s, else go back one.
     if (_isLiveHost) {
-      if (c.currentIndex > 0) {
-        c.playIndex(c.currentIndex - 1);
-      } else {
-        c.player.seek(Duration.zero);
-      }
+      c.previousTrack();
     } else {
       c.requestControl('prev');
     }

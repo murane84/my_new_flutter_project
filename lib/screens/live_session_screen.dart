@@ -2303,8 +2303,8 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
 
   Widget _buildHostControls() {
     final scheme = Theme.of(context).colorScheme;
-    final hasPrev = _c.currentIndex > 0;
-    final hasNext = _c.currentIndex < _c.queue.length - 1;
+    final hasPrev = _c.queue.isNotEmpty;
+    final hasNext = _c.canNext;
     return StreamBuilder<PlayerState>(
       stream: _c.player.playerStateStream,
       builder: (context, snap) {
@@ -2327,9 +2327,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
             _shuffleBtn(scheme),
             btn(
                 Icons.skip_previous_rounded,
-                (_canControl && hasPrev)
-                    ? () => _c.playIndex(_c.currentIndex - 1)
-                    : null,
+                (_canControl && hasPrev) ? _c.previousTrack : null,
                 28),
             btn(Icons.replay_10_rounded,
                 _canControl ? () => _liveSeekBy(-10) : null, 24),
@@ -2381,8 +2379,10 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
 
   Widget _buildListenerControls() {
     final scheme = Theme.of(context).colorScheme;
-    final hasPrev = _c.remoteIndex > 0;
-    final hasNext = _c.remoteIndex < _c.remoteQueueTitles.length - 1;
+    // Previous always works (restart / go back); Next follows shuffle and
+    // repeat-all, not just "is there a song after this one".
+    final hasPrev = _c.remoteQueueTitles.isNotEmpty;
+    final hasNext = _c.canNext;
     return StreamBuilder<PlayerState>(
       stream: _c.player.playerStateStream,
       builder: (context, snap) {

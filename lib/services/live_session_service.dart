@@ -634,7 +634,14 @@ class LiveSessionController {
   /// Toggle SESSION shuffle from EITHER side. Same sync shape as
   /// [setRepeatMode]: applies locally at once, then the host broadcasts and a
   /// listener asks the host (who applies + re-broadcasts to confirm).
+  bool? _pendingShuffle;
+  DateTime? _pendingShuffleAt;
+
   void setShuffle(bool on) {
+    if (role != LiveRole.host) {
+      _pendingShuffle = on;
+      _pendingShuffleAt = DateTime.now();
+    }
     shuffle = on;
     onShuffleChanged?.call();
     flagsRev.value++;
@@ -711,6 +718,30 @@ class LiveSessionController {
     if (currentIndex + 1 < n) return currentIndex + 1;
     if (repeatMode == 'all') return 0;
     return -1;
+  }
+
+  /// Whether Next has somewhere to go — shuffle or repeat-all always do (with
+  /// more than one song); otherwise only when not on the last one. Works for
+  /// the listener too, from the host's mirrored queue.
+  bool get canNext {
+    final host = role == LiveRole.host;
+    final n = host ? queue.length : remoteQueueTitles.length;
+    final i = host ? currentIndex : remoteIndex;
+    if (n <= 1) return false;
+    return shuffle || repeatMode == 'all' || i < n - 1;
+  }
+
+  /// Previous like a music player: past the first 3 s (or on the first song)
+  /// it restarts the song; otherwise it goes back one.
+  Future<void> previousTrack() async {
+    if (currentIndex > 0 && player.position < const Duration(seconds: 3)) {
+      await playIndex(currentIndex - 1);
+      return;
+    }
+    try {
+      await player.seek(Duration.zero);
+    } catch (_) {}
+    _sendControl({'type': 'seek', 'position_ms': 0});
   }
 
   /// Skip to the next queued track. Honours shuffle, and wraps to the top when
@@ -1977,11 +2008,7 @@ class LiveSessionController {
             nextTrack();
             break;
           case 'prev':
-            if (currentIndex > 0) {
-              playIndex(currentIndex - 1);
-            } else {
-              player.seek(Duration.zero);
-            }
+            previousTrack();
             break;
           case 'seek':
             final pos = msg['position_ms'];
@@ -2119,8 +2146,17 @@ class LiveSessionController {
         }
         break;
       case 'shuffle':
-        // Host set session shuffle — mirror it so our button matches.
-        shuffle = msg['on'] == true;
+        // Host set session shuffle — mirror it so our button matches (an echo
+        // of an older tap of ours is ignored while the latest awaits).
+        final on = msg['on'] == true;
+        final ps = _pendingShuffle;
+        final pat = _pendingShuffleAt;
+        if (ps != null && pat != null &&
+            DateTime.now().difference(pat) < const Duration(seconds: 2)) {
+          if (on != ps) break;
+          _pendingShuffle = null;
+        }
+        shuffle = on;
         onShuffleChanged?.call();
         flagsRev.value++;
         break;

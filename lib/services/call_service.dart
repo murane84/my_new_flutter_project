@@ -99,6 +99,21 @@ class CallService {
     unawaited(_applyTone(want));
   }
 
+  /// The "call ended" beeps, on both sides, whoever hung up.
+  Future<void> _playEndTone() async {
+    if (_androidApp) {
+      await TelecomService.instance.endTone();
+      return;
+    }
+    try {
+      _tone = null;
+      final p = _tonePlayer ??= AudioPlayer();
+      await p.stop();
+      await p.setReleaseMode(ReleaseMode.stop);
+      await p.play(AssetSource('sounds/hangup.wav'), volume: 0.7);
+    } catch (_) {}
+  }
+
   Future<void> _applyTone(String? want) async {
     // Android: the ringback is the phone's own tone on the CALL stream (plays
     // alongside WebRTC's call audio mode, where a media player was muted).
@@ -287,9 +302,11 @@ class CallService {
     // the push may be late, deduplicated or blocked. Same id as the push's
     // notification, so the two never double up.
     if (_androidApp) {
-      unawaited(showCallNotification(
-          caller: peerName.isEmpty ? 'Someone' : peerName,
-          callerId: '$from'));
+      final who = peerName.isEmpty ? 'Someone' : peerName;
+      unawaited(showCallNotification(caller: who, callerId: '$from'));
+      // …and keep bringing it back while it rings (Android tucks a banner
+      // away after a few seconds); stops on answer / decline / end.
+      unawaited(keepCallBannerUp(caller: who, callerId: '$from'));
     }
     // Mirror as a system incoming call so a car / BT device can ring + answer it.
     TelecomService.instance.reportIncoming(_telecomId, peerName);
@@ -664,6 +681,7 @@ class CallService {
     state = CallState.ended;
     _publish();
     TelecomService.instance.endCall(_telecomId);
+    unawaited(_playEndTone());
     _teardownMedia();
     _maybeLogCall();
     // Answered past the fingerprint lock → lock again once the "call ended"

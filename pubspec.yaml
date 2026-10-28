@@ -226,3 +226,4 @@ flutter:
     - assets/sounds/received.wav
     - assets/sounds/ring.wav
     - assets/sounds/ringback.wav
+    - assets/sounds/hangup.wav

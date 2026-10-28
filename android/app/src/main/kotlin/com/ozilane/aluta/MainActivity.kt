@@ -65,6 +65,22 @@ class MainActivity : AudioServiceFragmentActivity() {
     // the phone's own standard tone on the call audio stream, like a real call.
     private var ringback: ToneGenerator? = null
 
+    // "Call ended": three short beeps on the call stream, like a phone.
+    private fun playEndTone() {
+        try {
+            setRingback(false)
+            val tg = ToneGenerator(AudioManager.STREAM_VOICE_CALL, 80)
+            val h = android.os.Handler(android.os.Looper.getMainLooper())
+            for (i in 0..2) {
+                h.postDelayed({
+                    try { tg.startTone(ToneGenerator.TONE_PROP_BEEP, 160) } catch (e: Exception) {}
+                }, (i * 300).toLong())
+            }
+            h.postDelayed({ try { tg.release() } catch (e: Exception) {} }, 1200)
+        } catch (e: Exception) {
+        }
+    }
+
     private fun setRingback(on: Boolean) {
         try {
             if (on) {
@@ -336,6 +352,10 @@ class MainActivity : AudioServiceFragmentActivity() {
             )
             "ringback" -> {
                 setRingback(call.argument<Boolean>("on") == true)
+                result.success(true)
+            }
+            "endTone" -> {
+                playEndTone()
                 result.success(true)
             }
             "setActive" -> {

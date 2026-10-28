@@ -155,6 +155,13 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         caller: caller,
         callerId: callerId.isEmpty ? null : callerId,
       );
+      // Bring the banner back while it's still ringing (Android hides it
+      // after a few seconds). Stops the moment the call is answered/ended.
+      // (App open: the call engine runs the same loop itself.)
+      if (!foreground) {
+        await keepCallBannerUp(
+            caller: caller, callerId: callerId.isEmpty ? null : callerId);
+      }
     } else if (type == 'group_call') {
       final caller = mine((data['caller_name'] ?? 'Someone').toString());
       final title = (data['title'] ?? 'Group').toString();

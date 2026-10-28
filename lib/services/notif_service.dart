@@ -7,6 +7,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tzdata;
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../screens/api_service.dart';
 
 /// Native bridge (see android MainActivity) for OS state the notification
@@ -845,9 +847,45 @@ Future<void> showCallNotification({
 /// caller cancelled). Safe to call even if nothing is showing.
 Future<void> cancelCallNotification() async {
   if (kIsWeb) return;
+  _callRingOver = DateTime.now().millisecondsSinceEpoch;
   try {
     await _fln.cancel(id: _callNotifId);
   } catch (_) {/* best-effort */}
+  // Tell a re-ringing loop in ANOTHER isolate (the push handler of a closed
+  // app) that this call is over, so it never brings the banner back.
+  try {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt(_kCallOverKey, _callRingOver);
+  } catch (_) {}
+}
+
+const _kCallOverKey = 'call_ring_over_at_v1';
+int _callRingOver = 0;
+
+/// Keep an incoming call in sight for the whole ring: Android shrinks a
+/// heads-up banner away after a few seconds, so while the call is still
+/// ringing the banner (with Accept / Decline) is posted again every 9 s —
+/// until it's answered, declined, cancelled by the caller, or 45 s pass.
+/// Safe to run from the push isolate of a closed app.
+Future<void> keepCallBannerUp({
+  required String caller,
+  String? callerId,
+  bool isGroup = false,
+  int? room,
+}) async {
+  if (kIsWeb) return;
+  final started = DateTime.now().millisecondsSinceEpoch;
+  for (var i = 0; i < 4; i++) {
+    await Future<void>.delayed(const Duration(seconds: 9));
+    if (_callRingOver >= started) return;
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.reload();
+      if ((p.getInt(_kCallOverKey) ?? 0) >= started) return;
+    } catch (_) {}
+    await showCallNotification(
+        caller: caller, callerId: callerId, isGroup: isGroup, room: room);
+  }
 }
 
 // ── Permission helpers (used by the Call reliability screen) ─────────────────

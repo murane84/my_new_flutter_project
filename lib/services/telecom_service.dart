@@ -78,6 +78,14 @@ class TelecomService {
     } catch (_) {}
   }
 
+  /// "Call ended" beeps (three short tones on the call stream).
+  Future<void> endTone() async {
+    if (!_android) return;
+    try {
+      await _ch.invokeMethod('endTone');
+    } catch (_) {}
+  }
+
   Future<void> setActive(String callId) async {
     if (!_android || !_registered) return;
     try {

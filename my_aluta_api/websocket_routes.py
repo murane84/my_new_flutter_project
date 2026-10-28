@@ -548,7 +548,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                             if has_token:
                                 await asyncio.to_thread(send_push_to_user, target, {
                                     "type": "tune_in_request",
-                                    "from": str(me_id),
+                                    # NB: 'from' is a RESERVED FCM data key
+                                    # (FCM rejects the whole push with 400).
+                                    "from_id": str(me_id),
                                     "from_name": name,
                                     "sender_phone": phone,
                                     "title": str(data.get("title") or "")[:120],

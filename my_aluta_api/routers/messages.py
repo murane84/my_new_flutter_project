@@ -125,8 +125,10 @@ def send_message(message: schemas.MessageCreate, background: BackgroundTasks, db
                 "message_id": str(db_message.id),
                 "body": crud.list_preview(db_message),
                 # Lets the phone treat call / Listen Together logs specially
-                # (e.g. a missed invite replaces the invite banner).
-                "message_type": (db_message.message_type or "text"),
+                # (e.g. a missed invite replaces the invite banner). NB:
+                # 'message_type' is a RESERVED FCM key (push.py strips it), so
+                # it travels as 'msg_kind'.
+                "msg_kind": (db_message.message_type or "text"),
             },
         )
 

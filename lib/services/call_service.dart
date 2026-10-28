@@ -1,6 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:audioplayers/audioplayers.dart'
+    show AssetSource, AudioPlayer, ReleaseMode;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../screens/api_service.dart';
@@ -66,6 +69,47 @@ class CallService {
           speakerOn: speakerOn,
           outgoing: outgoing,
         ));
+    _syncTone();
+  }
+
+  // ── Call tones ────────────────────────────────────────────────────────────
+  // The caller hears a ringback (425 Hz, 1 s on / 4 s off) once the friend's
+  // phone is ringing; the callee hears a ring. On Android the callee's ring is
+  // the system ringtone via the call notification (rung locally as soon as the
+  // offer arrives, so it never depends on the push getting through); web and
+  // desktop have no system ringtone, so they play our own.
+  AudioPlayer? _tonePlayer;
+  String? _tone;
+
+  static bool get _androidApp =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  void _syncTone() {
+    String? want;
+    if (isCaller &&
+        state == CallState.calling &&
+        outgoing != CallOutgoing.dialing &&
+        outgoing != CallOutgoing.none) {
+      want = 'ringback';
+    } else if (!isCaller && state == CallState.ringing && !_androidApp) {
+      want = 'ring';
+    }
+    if (want == _tone) return;
+    _tone = want;
+    unawaited(_applyTone(want));
+  }
+
+  Future<void> _applyTone(String? want) async {
+    try {
+      final p = _tonePlayer ??= AudioPlayer();
+      await p.stop();
+      if (want == null || _tone != want) return;
+      await p.setReleaseMode(ReleaseMode.loop);
+      await p.play(AssetSource('sounds/$want.wav'),
+          volume: want == 'ringback' ? 0.55 : 0.9);
+    } catch (_) {
+      // Tones are a nicety — never let them break a call.
+    }
   }
 
   // ── Public state (screens listen to this) ────────────────────────────────
@@ -166,7 +210,9 @@ class CallService {
     TelecomService.instance.startOutgoing(_telecomId, peerName);
 
     try {
-      await _createPeer();
+      // Bounded like accept: a microphone that never opens must end the
+      // attempt with a reason, not hang on "Calling…".
+      await _createPeer().timeout(const Duration(seconds: 15));
       final offer = await _pc!.createOffer(_offerAnswerConstraints);
       await _pc!.setLocalDescription(offer);
       _signal({
@@ -230,6 +276,15 @@ class CallService {
     endReason = CallEndReason.none;
     _publish();
     onShowCallUI?.call();
+    // Ring NOW with the phone's ringtone (the call notification), instead of
+    // relying on the push: in the app the offer arrives over the socket, and
+    // the push may be late, deduplicated or blocked. Same id as the push's
+    // notification, so the two never double up.
+    if (_androidApp) {
+      unawaited(showCallNotification(
+          caller: peerName.isEmpty ? 'Someone' : peerName,
+          callerId: '$from'));
+    }
     // Mirror as a system incoming call so a car / BT device can ring + answer it.
     TelecomService.instance.reportIncoming(_telecomId, peerName);
     // Tell the caller our device actually received the call and is ringing NOW,
@@ -327,14 +382,23 @@ class CallService {
     }
     state = CallState.connecting;
     _publish();
+    // The user answered: tell the system call first, so Android leaves the
+    // "ringing" audio mode and hands the microphone to the call.
+    TelecomService.instance.setActive(_telecomId);
     try {
-      await _createPeer();
-      await _pc!.setRemoteDescription(_pendingOffer!);
-      _remoteDescSet = true;
-      await _drainPendingCandidates();
-      final answer = await _pc!.createAnswer(_offerAnswerConstraints);
-      await _pc!.setLocalDescription(answer);
-      _signal({'type': 'call_answer', 'sdp': answer.sdp});
+      // Bounded: a microphone that never opens (held by another app) or a
+      // stuck negotiation must not leave the callee on "Connecting…" while the
+      // caller still sees "Ringing…" — end it clearly on both sides instead.
+      await () async {
+        await _createPeer();
+        await _pc!.setRemoteDescription(_pendingOffer!);
+        _remoteDescSet = true;
+        await _drainPendingCandidates();
+        final answer = await _pc!.createAnswer(_offerAnswerConstraints);
+        await _pc!.setLocalDescription(answer);
+        _signal({'type': 'call_answer', 'sdp': answer.sdp});
+      }()
+          .timeout(const Duration(seconds: 15));
     } catch (_) {
       _signal({'type': 'call_end'});
       _finish(CallEndReason.failed);

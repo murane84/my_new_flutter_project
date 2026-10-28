@@ -194,7 +194,8 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       );
     } else if (type == 'tune_in_request') {
       // A friend asks to listen along to MY song while Aluta was closed.
-      final from = (data['from'] ?? '').toString();
+      // 'from_id' (FCM reserves 'from'); 'from' kept for older servers.
+      final from = (data['from_id'] ?? data['from'] ?? '').toString();
       final who = mine((data['from_name'] ?? 'Your friend').toString());
       final song = (data['title'] ?? '').toString().trim();
       await showAlutaNotification(
@@ -381,7 +382,7 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         title: mine(data['title'].toString()),
         body: mine((data['body'] ?? '').toString()),
       );
-    } else if (data['message_type'] == 'live') {
+    } else if ((data['msg_kind'] ?? data['message_type']) == 'live') {
       // A Listen Together log: the invite banner becomes "You missed…" (or
       // just goes, once you've listened).
       final sender = mine((data['sender_name'] ?? 'Someone').toString());

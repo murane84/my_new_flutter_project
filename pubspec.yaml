@@ -224,3 +224,5 @@ flutter:
     - assets/sounds/delete.wav
     - assets/sounds/sent.wav
     - assets/sounds/received.wav
+    - assets/sounds/ring.wav
+    - assets/sounds/ringback.wav

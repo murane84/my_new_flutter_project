@@ -916,7 +916,12 @@ Column(
       // Up next) are kept only when they fit — decided by the space, never by
       // the song, so nothing jumps between tracks.
       Widget heroCard(double h) {
+        // Rows go in priority order as the card gets shorter; the disc
+        // shrinks first. The title, the heart (top row) and "How does this
+        // song feel?" always stay.
         final showSmartRow = h >= 290;
+        final showLyric = h >= 250;
+        final showArtist = h >= 215;
         // Same prediction the skip uses (shuffle's pick is made ahead of
         // time), so Up next is always the song that really comes next.
         final nextIdx = (!live && hasTrack && _effRepeatMode != 'one')
@@ -1076,7 +1081,7 @@ Column(
                   ),
                   // Always holds its line (empty until the artist is known), so
                   // the name arriving never nudges anything.
-                  SizedBox(
+                  if (showArtist) SizedBox(
                       height: 18,
                       child: displayArtist.isEmpty ? null : Align(
                         alignment: Alignment.center,
@@ -1091,7 +1096,7 @@ Column(
                         ),
                       ),
                     ),
-                  SizedBox(
+                  if (showLyric) SizedBox(
                       height: 26,
                       child: _syncedLyricLine(scheme, accent, false)),
                   // ONE smart row: Up next (used every song) — or, when there
@@ -1337,7 +1342,11 @@ Column(
                     // The song card adapts its rows to the room it gets, so
                     // it shows on any phone (it used to need 300 dp and fell
                     // back to the small desktop card, leaving a blank band).
-                    builder: (c, cc) => cc.maxHeight >= 260
+                    // 190: phones with big display/font settings or 3-button
+                    // navigation get less height; they used to drop to the
+                    // small card here and lose the title + feel strip below
+                    // the fold. The hero now sheds its optional rows instead.
+                    builder: (c, cc) => cc.maxHeight >= 190
                         ? heroCard(cc.maxHeight)
                         : Align(
                             alignment: Alignment.bottomCenter,

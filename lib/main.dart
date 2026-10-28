@@ -439,9 +439,22 @@ class MyApp extends StatelessWidget {
           themeMode: themeProvider.themeMode,
           // Record every tap's position app-wide so any popup opened right after
           // genies out of / back into that exact button/tile (see showAppPopup).
-          builder: (context, child) => GlobalTapOrigin(
-            child: BusyOverlay(child: child ?? const SizedBox.shrink()),
-          ),
+          // The phone's font-size setting still applies, but within a band
+          // (85–115 %) the layouts are designed for: a huge system font used
+          // to push the song title and feel strip out of the music page (and
+          // squeeze other screens) on some phones.
+          builder: (context, child) {
+            final mq = MediaQuery.of(context);
+            return MediaQuery(
+              data: mq.copyWith(
+                textScaler: mq.textScaler
+                    .clamp(minScaleFactor: 0.85, maxScaleFactor: 1.15),
+              ),
+              child: GlobalTapOrigin(
+                child: BusyOverlay(child: child ?? const SizedBox.shrink()),
+              ),
+            );
+          },
           // Use `home:` (not initialRoute) so the root stack is a single route.
           // With initialRoute: '/splash', Flutter also generates a route for '/'
           // (the unknown-route "Page not found") and puts it underneath — which

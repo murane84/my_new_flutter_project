@@ -13,6 +13,7 @@ import '../state/playback_state.dart' show providerContainer;
 import 'ice_config.dart';
 import 'notif_service.dart';
 import 'call_lock.dart';
+import 'contact_names.dart';
 import 'telecom_service.dart';
 
 /// High-level state of the single active Aluta voice call.
@@ -271,7 +272,7 @@ class CallService {
       _pendingAutoAccept = false;
       _rejoinTimer?.cancel();
       _ringTimeout?.cancel();
-      peerName = (msg['caller_name'] ?? peerName).toString();
+      peerName = _knownAs(msg, from, (msg['caller_name'] ?? peerName).toString());
       final av = (msg['caller_avatar'] as String?)?.trim();
       if (av != null && av.isNotEmpty) peerAvatar = av;
       _pendingOffer = RTCSessionDescription(msg['sdp'] as String?, 'offer');
@@ -290,7 +291,7 @@ class CallService {
     }
     _reset();
     peerId = from;
-    peerName = (msg['caller_name'] ?? '').toString();
+    peerName = _knownAs(msg, from, (msg['caller_name'] ?? '').toString());
     peerAvatar = (msg['caller_avatar'] as String?)?.trim();
     isCaller = false;
     _pendingOffer = RTCSessionDescription(msg['sdp'] as String?, 'offer');
@@ -356,7 +357,8 @@ class CallService {
     }
     _reset();
     peerId = callerId;
-    peerName = callerName;
+    peerName = ContactNames.instance
+        .displayName(userId: callerId, registered: callerName);
     isCaller = false;
     state = CallState.ringing; // ring UI (Accept/Decline) — but no offer yet
     endReason = CallEndReason.none;
@@ -579,6 +581,17 @@ class CallService {
         break;
     }
   }
+
+  /// The caller the way *I* saved them in my phone book ("My wife"), else the
+  /// name they registered — same rule as the chat list and the call banner.
+  String _knownAs(Map<String, dynamic> msg, int from, String registered) =>
+      ContactNames.instance.displayName(
+        phone: (msg['caller_phone'] ?? '').toString().trim().isEmpty
+            ? null
+            : msg['caller_phone'].toString(),
+        userId: from,
+        registered: registered,
+      );
 
   /// An end/decline/busy signal only counts from the person we're calling
   /// with — a stray one (an old banner's Decline, a stale socket) must never

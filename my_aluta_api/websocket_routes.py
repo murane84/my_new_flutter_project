@@ -320,6 +320,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
     # Column attributes are already loaded, so this is safe after the auth
     # helper closed its session. Used to label the incoming-call push.
     caller_name = caller.username or "Someone"
+    # So the callee's phone can show ITS OWN saved name for the caller.
+    caller_phone = caller.phone or ""
 
     # Register the now-authenticated socket. (We register here rather than via
     # connect_user() because that helper also calls websocket.accept(), and we
@@ -581,6 +583,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                 if to is not None:
                     payload = {k: v for k, v in data.items() if k != "to"}
                     payload["from"] = int(user_id)
+                    if etype == "call_offer":
+                        payload["caller_phone"] = caller_phone
                     try:
                         await notify_user(int(to), payload)
                     except Exception:

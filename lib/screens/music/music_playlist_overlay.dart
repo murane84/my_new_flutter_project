@@ -74,7 +74,20 @@ class _PlaylistOverlay extends StatefulWidget {
   // chat it stays false and the panel remains a right-side card drawer.
   final bool fullPage;
 
+  /// Songs the last scan just found: tinted with a NEW chip while this list
+  /// is open. When [revealFresh] turns true (the "Added N new songs" toast was
+  /// tapped) the list clears its filters, scrolls to the first one and makes
+  /// them all blink — then sets it back to false.
+  final Set<String> fresh;
+  final ValueNotifier<bool>? revealFresh;
+
+  /// Called when this list closes, so NEW marks don't linger to the next open.
+  final VoidCallback? onFreshSeen;
+
   const _PlaylistOverlay({
+    this.fresh = const {},
+    this.revealFresh,
+    this.onFreshSeen,
     required this.playlist,
     required this.currentIndex,
     required this.favorites,
@@ -115,8 +128,11 @@ class _PlaylistOverlay extends StatefulWidget {
 }
 
 class _PlaylistOverlayState extends State<_PlaylistOverlay>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   String _search = '';
+  final TextEditingController _searchCtrl = TextEditingController();
+  late final AnimationController _freshCtrl;
+  Future<void>? _filtersRestored;
   bool _favOnly = false;
   String? _activeGroup; // null = no group filter
   _Smart _smart = _Smart.none; // Recent / Most-played auto-list
@@ -167,7 +183,57 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       });
     }
     _loadTrackMeta();
-    _restoreFilters();
+    _filtersRestored = _restoreFilters();
+    _freshCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 420));
+    widget.revealFresh?.addListener(_onRevealFresh);
+    if (widget.revealFresh?.value == true) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _onRevealFresh());
+    }
+  }
+
+  void _onRevealFresh() {
+    final n = widget.revealFresh;
+    if (n == null || !n.value || !mounted) return;
+    n.value = false;
+    _revealFreshSongs();
+  }
+
+  /// Bring the newly found songs into view: drop any filter that hides them,
+  /// scroll to the first, and blink every one of them a few times.
+  Future<void> _revealFreshSongs() async {
+    await _filtersRestored;
+    if (!mounted || widget.fresh.isEmpty) return;
+    setState(() {
+      _search = '';
+      _searchCtrl.clear();
+      _favOnly = false;
+      _activeGroup = null;
+      _smart = _Smart.none;
+      if (_selecting) {
+        _selecting = false;
+        _selected.clear();
+      }
+    });
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    final d = _displayed();
+    final i = d.indexWhere((e) => widget.fresh.contains(e.value));
+    if (i >= 0 && _listCtrl.hasClients) {
+      final pos = _listCtrl.position;
+      final total = pos.maxScrollExtent + pos.viewportDimension;
+      final per = d.isEmpty ? 0.0 : total / d.length;
+      final target = (per * i - pos.viewportDimension * 0.3)
+          .clamp(0.0, pos.maxScrollExtent);
+      await _listCtrl.animateTo(target,
+          duration: const Duration(milliseconds: 460),
+          curve: Curves.easeOutCubic);
+    }
+    for (var k = 0; k < 3 && mounted; k++) {
+      await _freshCtrl.forward(from: 0);
+      if (!mounted) return;
+      await _freshCtrl.reverse();
+    }
   }
 
   // ── Filter / sort persistence ───────────────────────────────────────────────
@@ -437,8 +503,12 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
 
   @override
   void dispose() {
+    widget.revealFresh?.removeListener(_onRevealFresh);
+    widget.onFreshSeen?.call();
     _listCtrl.dispose();
     _pulseCtrl.dispose();
+    _freshCtrl.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -1315,6 +1385,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 children: [
                   Expanded(
                     child: TextField(
+                      controller: _searchCtrl,
                       onChanged: (v) => setState(() => _search = v),
                       decoration: InputDecoration(
                         hintText: 'Search tracks…',
@@ -1913,10 +1984,16 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     final isNow = realIdx == widget.currentIndex;
     final isFav = widget.favorites.contains(path);
     final isSel = _selected.contains(path);
+    final isFresh = widget.fresh.contains(path);
 
     Widget buildRow() {
       final tile = ListTile(
         key: ValueKey('tile_$i'),
+        // Just found by a scan: a soft tint that pulses when revealed.
+        tileColor: isFresh
+            ? scheme.primary
+                .withAlpha(18 + (90 * _freshCtrl.value).round())
+            : null,
         dense: true,
         visualDensity: const VisualDensity(vertical: -3),
         minVerticalPadding: 0,
@@ -1959,6 +2036,22 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             : Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (isFresh)
+                    Container(
+                      margin: const EdgeInsets.only(right: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withAlpha(36),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text('NEW',
+                          style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.4,
+                              color: scheme.primary)),
+                    ),
                   if (isFav)
                     const Padding(
                       padding: EdgeInsets.only(right: 2),
@@ -1994,11 +2087,17 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       return tile;
     }
 
+    if (isFresh && !isNow) {
+      return AnimatedBuilder(
+        animation: _freshCtrl,
+        builder: (_, _) => buildRow(),
+      );
+    }
     if (!isNow) return buildRow();
     return KeyedSubtree(
       key: _nowKey,
       child: AnimatedBuilder(
-        animation: _pulseCtrl,
+        animation: Listenable.merge([_pulseCtrl, _freshCtrl]),
         builder: (_, _) => buildRow(),
       ),
     );

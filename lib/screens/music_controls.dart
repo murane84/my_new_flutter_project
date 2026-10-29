@@ -364,6 +364,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // rendered by the HOST (home_page) — below the active header — using the
   // playlist body MusicControls exposes via playlistDrawerBus.contentBuilder.
   bool _showPlaylist = false;
+  // Songs the last scan found (NEW in the playlist until it closes), when
+  // each device song was added (to pick the newest), and the "Show" trigger.
+  final Set<String> _freshPaths = {};
+  final Map<String, int> _addedAt = {};
+  final ValueNotifier<bool> _revealFresh = ValueNotifier<bool>(false);
+  DateTime? _lastQuietScan;
   bool _showSpeedPanel = false;
   // Volume popup: appears on tap, auto-hides after a short idle.
   bool _showVolume = false;
@@ -512,6 +518,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   @override
   void dispose() {
     _sleepVN.dispose();
+    _revealFresh.dispose();
     AccountPrefs.offRestore(_eqRestore);
     _setHostingBusy(false);
     // Only clear the bus if we're still the registered owner.
@@ -1759,14 +1766,90 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       if (mounted) setState(() => _scanning = false);
     }
     if (!mounted) return;
-    final added = _playlist.where((p) => !before.contains(p)).length;
-    if (added > 0) {
-      _snack('Added $added new track${added == 1 ? '' : 's'}');
+    final added = _playlist.where((p) => !before.contains(p)).toList();
+    if (added.isNotEmpty) {
+      _announceFresh(added);
     } else if (_playlist.isNotEmpty) {
       _snack('No new music found — your library is up to date');
     }
     if (_playlist.isNotEmpty) _openPlaylist();
   }
+
+  /// "Added N new songs" — tap (or Show) jumps to them in the playlist and
+  /// makes them blink; with a partner, "Share one" sends them the newest.
+  void _announceFresh(List<String> added) {
+    if (!mounted || added.isEmpty) return;
+    setState(() {
+      _freshPaths
+        ..clear()
+        ..addAll(added);
+    });
+    var newest = added.first;
+    for (final p in added) {
+      if ((_addedAt[p] ?? 0) > (_addedAt[newest] ?? 0)) newest = p;
+    }
+    final n = added.length;
+    final partner = SongBridge.instance.partnerName?.call();
+    final canShare = _partnerId != null && (partner ?? '').isNotEmpty;
+    void show() {
+      _openPlaylist();
+      _revealFresh.value = true;
+    }
+
+    showToast(
+      context,
+      'Added $n new song${n == 1 ? '' : 's'} 🎶',
+      type: ToastType.success,
+      detail: canShare
+          ? 'Tap Show to see ${n == 1 ? 'it' : 'them'} — or share one with $partner'
+          : 'Tap to see ${n == 1 ? 'it' : 'them'} in your playlist',
+      onTap: show,
+      actions: [
+        ToastAction('Show', show),
+        if (canShare) ToastAction('Share one', () => _sendSongToPartner(newest)),
+      ],
+    );
+  }
+
+  /// Opening the playlist also checks for new songs quietly (at most once an
+  /// hour, no spinner) — new WhatsApp / Bluetooth songs show up by themselves.
+  Future<void> _quietRescan() async {
+    final last = _lastQuietScan;
+    if (last != null &&
+        DateTime.now().difference(last) < const Duration(hours: 1)) {
+      return;
+    }
+    _lastQuietScan = DateTime.now();
+    try {
+      if (!await _audioQuery.permissionsStatus()) return;
+      final prefs = await SharedPreferences.getInstance();
+      final since = prefs.getInt(_kLastScanKey);
+      final songs = await _audioQuery.querySongs(
+        sortType: SongSortType.TITLE,
+        orderType: OrderType.ASC_OR_SMALLER,
+        uriType: UriType.EXTERNAL,
+      );
+      await prefs.setInt(
+          _kLastScanKey, DateTime.now().millisecondsSinceEpoch ~/ 1000);
+      if (since == null || !mounted) return; // first run: just set the mark
+      // Only songs that arrived on the device since the last scan — a song
+      // the user removed from the playlist never sneaks back in.
+      final have = _playlist.toSet();
+      final added = <String>[];
+      for (final s in songs) {
+        final p = s.data;
+        if (p.isEmpty) continue;
+        _addedAt[p] = s.dateAdded ?? 0;
+        if (!have.contains(p) && (s.dateAdded ?? 0) > since) added.add(p);
+      }
+      if (added.isEmpty) return;
+      setState(() => _playlist = [..._playlist, ...added]);
+      _publishPlaylist();
+      _announceFresh(added);
+    } catch (_) {}
+  }
+
+  static const _kLastScanKey = 'music_last_scan_s_v1';
 
   /// Loads the device's music library via MediaStore (fast, indexed), prompting
   /// for permission if needed. Does NOT open the sheet — callers decide when to
@@ -1783,11 +1866,17 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       orderType: OrderType.ASC_OR_SMALLER,
       uriType: UriType.EXTERNAL,
     );
+    for (final s in songs) {
+      if (s.data.isNotEmpty) _addedAt[s.data] = s.dateAdded ?? 0;
+    }
     final paths = songs.map((s) => s.data).where((p) => p.isNotEmpty).toList();
     if (paths.isEmpty) {
       _snack('No audio files found');
       return;
     }
+    // Mark the scan so the quiet hourly check only looks at newer songs.
+    unawaited(SharedPreferences.getInstance().then((p) => p.setInt(
+        _kLastScanKey, DateTime.now().millisecondsSinceEpoch ~/ 1000)));
     if (!mounted) return;
     setState(() => _playlist = paths);
     _publishPlaylist();
@@ -1809,6 +1898,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     }
     if (_playlist.isNotEmpty) {
       _openPlaylistDrawer();
+      if (_isMobile) unawaited(_quietRescan());
       return;
     }
     if (!_isMobile) {
@@ -1860,6 +1950,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   /// host (home_page) frames it as the sliding drawer.
   Widget _buildPlaylistOverlayWidget() {
     return _PlaylistOverlay(
+      fresh: _freshPaths,
+      revealFresh: _revealFresh,
+      onFreshSeen: _freshPaths.clear,
       playlist: _playlist,
       currentIndex: _currentIndex,
       favorites: _favorites,

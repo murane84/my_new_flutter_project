@@ -587,6 +587,29 @@ Future<void> showWeekInMusic(
       Future.delayed(const Duration(seconds: 1), scroll.dispose));
 }
 
+const _months = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/// "✨ First heard 29 Oct · together with Wifey 💞" / "… · on your own".
+String _firstHeard(DateTime at, String? withName) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(at.year, at.month, at.day);
+  final gap = today.difference(day).inDays;
+  final when = gap == 0
+      ? 'today'
+      : gap == 1
+          ? 'yesterday'
+          : '${at.day} ${_months[at.month - 1]}'
+              '${at.year == now.year ? '' : ' ${at.year}'}';
+  final who = (withName ?? '').trim().split(RegExp(r'\s+')).first;
+  return who.isEmpty
+      ? '✨ First heard $when · on your own'
+      : '✨ First heard $when · together with $who 💞';
+}
+
 /// A floating, dismissible card with everything Aluta learned about one song
 /// — opened by tapping a song nudge banner ("on repeat", "makes you miss…",
 /// "feels like yours"): a 7-day play chart, this week's plays and rank,
@@ -747,6 +770,15 @@ Future<void> showSongInsight(BuildContext context, String title,
                   if (st.total > st.week) chip('🎧 ${st.total}× lately'),
                   if (st.ours) chip('💞 In Our Playlist'),
                 ]),
+                // The day it all started — and who was there.
+                if (st.firstAt != null) ...[
+                  const SizedBox(height: 10),
+                  Text(_firstHeard(st.firstAt!, st.firstWith),
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.onSurfaceVariant)),
+                ],
                 // When you listen — the part-of-day split.
                 if (st.moments.values.any((v) => v > 0)) ...[
                   const SizedBox(height: 14),

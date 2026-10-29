@@ -16,6 +16,7 @@ import '../screens/api_service.dart';
 import 'audio_handler.dart';
 import 'ice_config.dart';
 import 'live_audio_cache.dart';
+import 'song_insights.dart';
 import '../screens/web_fs/blob_url.dart';
 
 /// "Listen together" live session client.
@@ -355,6 +356,12 @@ class LiveSessionController {
   /// surface (popup, music panel, banner) reflects the current song.
   void _setCurrentTitle(String? t) {
     if (t == null || t.isEmpty) return;
+    // A listener hears the song through the session, not their own player —
+    // count it in their listening history here (the host's player counts it).
+    if (t != currentTitle && role == LiveRole.listener) {
+      unawaited(SongInsights.instance
+          .recordPlay(t, withName: activeLiveSession?.peerName));
+    }
     currentTitle = t;
     activeLiveSession?.title = t;
     // Push the new title straight into the media session so the now-playing

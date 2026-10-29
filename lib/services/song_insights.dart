@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'aluta_mood.dart';
 import 'account_prefs.dart';
 import '../screens/api_service.dart';
+import 'live_session_service.dart' show activeLiveSession;
 
 /// How a song makes you feel — the answer to the on-repeat card.
 enum SongFeel {
@@ -174,6 +175,16 @@ class SongInsights {
       out['fAt'] = b['fAt'];
     }
     if (b['ours'] == true) out['ours'] = true;
+    // First play: the earliest one wins, with whoever it was shared with.
+    final fa = _n(a['fp']), fb = _n(b['fp']);
+    if (fb > 0 && (fa == 0 || fb < fa)) {
+      out['fp'] = fb;
+      if (b['fw'] != null) {
+        out['fw'] = b['fw'];
+      } else {
+        out.remove('fw');
+      }
+    }
     for (final k in const ['ig', 'nAt', 'bAt', 'sAt']) {
       if (_n(b[k]) > _n(out[k])) out[k] = _n(b[k]);
     }
@@ -275,12 +286,21 @@ class SongInsights {
 
   bool get _nudgedToday => _lastNudgeDay == _today;
 
-  /// Called by the player each time a track starts.
-  Future<void> recordPlay(String title, {String artist = ''}) async {
+  /// Called by the player each time a track starts. [withName] — who it's
+  /// playing with (defaults to the Listen Together partner, if any).
+  Future<void> recordPlay(String title,
+      {String artist = '', String? withName}) async {
     final t = title.trim();
     if (t.isEmpty) return;
     await load();
     final s = _song(t, artist.trim());
+    // The very first time this song plays (no history at all — the per-part-
+    // of-day counts are all-time): remember when, and with whom.
+    if (s['fp'] == null && ((s['m'] as Map?) ?? const {}).isEmpty) {
+      s['fp'] = DateTime.now().millisecondsSinceEpoch;
+      final w = (withName ?? activeLiveSession?.peerName)?.trim();
+      if (w != null && w.isNotEmpty) s['fw'] = w;
+    }
     final d = Map<String, dynamic>.from((s['d'] as Map?) ?? {});
     // Days since I last played it (before today) — "rediscovered".
     String? lastBefore;
@@ -560,6 +580,8 @@ class SongInsights {
     int streak,
     int lastWeek,
     Map<AlutaMoment, int> moments,
+    DateTime? firstAt,
+    String? firstWith,
   })? songStats(String title) {
     final s = _songs[_keyOf(title)];
     if (s == null) return null;
@@ -604,6 +626,12 @@ class SongInsights {
             mo: ((s['m'] as Map?)?[mo.name] as num?)?.toInt() ?? 0,
         };
       }(),
+      firstAt: _n(s['fp']) > 0
+          ? DateTime.fromMillisecondsSinceEpoch(_n(s['fp']))
+          : null,
+      firstWith: (s['fw'] as String?)?.trim().isNotEmpty == true
+          ? (s['fw'] as String).trim()
+          : null,
     );
   }
 

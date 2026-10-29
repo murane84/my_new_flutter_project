@@ -15,6 +15,7 @@ import '../screens/home_page.dart'
         playbackBus,
         playlistDrawerBus,
         playlistNotifier,
+        freeMusicInbox,
         playProgressNotifier,
         playClockNotifier,
         PlayClock,
@@ -24,6 +25,7 @@ import '../state/playback_state.dart';
 import '../services/live_session_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/file_bytes.dart';
+import 'music/free_music_screen.dart';
 import 'equalizer_screen.dart';
 import '../utils/popup_shell.dart';
 import 'package:on_audio_query/on_audio_query.dart';
@@ -466,6 +468,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         ? (_isLiveHost ? _live!.player.play() : _live!.requestControl('play'))
         : _player.play();
     playbackBus.onSeekTo = _transportSeek;
+    freeMusicInbox.addListener(_takeFreeMusic);
 
     // Re-bind / refresh when a live session starts or ends.
     // (Was: liveSessionNotifier.addListener(_onLiveChanged). listenManual is the
@@ -519,6 +522,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   void dispose() {
     _sleepVN.dispose();
     _revealFresh.dispose();
+    freeMusicInbox.removeListener(_takeFreeMusic);
     AccountPrefs.offRestore(_eqRestore);
     _setHostingBusy(false);
     // Only clear the bus if we're still the registered owner.
@@ -1773,6 +1777,21 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       _snack('No new music found — your library is up to date');
     }
     if (_playlist.isNotEmpty) _openPlaylist();
+  }
+
+  /// Songs downloaded in Free music join the playlist right away.
+  void _takeFreeMusic() {
+    final paths = freeMusicInbox.value;
+    if (paths.isEmpty || !mounted) return;
+    freeMusicInbox.value = const <String>[];
+    final added = paths.where((p) => !_playlist.contains(p)).toList();
+    if (added.isEmpty) return;
+    setState(() => _playlist = [..._playlist, ...added]);
+    _publishPlaylist();
+    for (final p in added) {
+      _addedAt[p] = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    }
+    _announceFresh(added);
   }
 
   /// "Added N new songs" — tap (or Show) jumps to them in the playlist and

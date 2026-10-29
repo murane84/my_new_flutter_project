@@ -127,6 +127,12 @@ final ValueNotifier<double> playProgressNotifier = ValueNotifier<double>(0.0);
 final ValueNotifier<List<String>> playlistNotifier =
     ValueNotifier<List<String>>(<String>[]);
 
+/// Songs just downloaded from Free music (file paths) — the music player
+/// takes them into the playlist (with the "Added N new songs" toast) and
+/// empties this again.
+final ValueNotifier<List<String>> freeMusicInbox =
+    ValueNotifier<List<String>>(<String>[]);
+
 /// What a web queue song carries while it's dragged onto a chat.
 class WebSongDrag {
   const WebSongDrag(this.index, this.title);

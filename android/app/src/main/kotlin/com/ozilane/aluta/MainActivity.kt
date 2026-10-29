@@ -186,6 +186,21 @@ class MainActivity : AudioServiceFragmentActivity() {
                     // 10 scoped storage, some EMUI/OEM builds): find it in
                     // MediaStore by its path and read it through the
                     // ContentResolver. Also accepts a content:// uri.
+                    // A downloaded free song → Music/Aluta, indexed by the
+                    // media library so the playlist (and other apps) see it.
+                    // Returns the song's file path, or null.
+                    "saveToMusic" -> {
+                        val srcPath = call.argument<String>("srcPath")
+                        val fileName = call.argument<String>("fileName") ?: "aluta_song.mp3"
+                        Thread {
+                            val saved = try {
+                                saveToMusic(srcPath, fileName)
+                            } catch (e: Exception) {
+                                null
+                            }
+                            runOnUiThread { result.success(saved) }
+                        }.start()
+                    }
                     "readMedia" -> {
                         val p = call.argument<String>("path")
                         Thread {
@@ -552,6 +567,59 @@ class MainActivity : AudioServiceFragmentActivity() {
     // human-readable location ("Download/<name>") on success, else null.
     // Uses MediaStore on Android 10+ (scoped storage, no permission needed) and
     // a direct file write on Android 9 and below.
+    private fun saveToMusic(srcPath: String?, fileName: String): String? {
+        if (srcPath == null) return null
+        val src = File(srcPath)
+        if (!src.exists()) return null
+        val safeName = fileName.ifBlank { "aluta_song.mp3" }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val resolver = contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.Audio.Media.DISPLAY_NAME, safeName)
+                put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg")
+                put(MediaStore.Audio.Media.RELATIVE_PATH,
+                    Environment.DIRECTORY_MUSIC + "/Aluta")
+                put(MediaStore.Audio.Media.IS_MUSIC, 1)
+                put(MediaStore.Audio.Media.IS_PENDING, 1)
+            }
+            val collection =
+                MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            val uri = resolver.insert(collection, values) ?: return null
+            try {
+                resolver.openOutputStream(uri)?.use { out ->
+                    FileInputStream(src).use { input -> input.copyTo(out) }
+                } ?: run {
+                    resolver.delete(uri, null, null)
+                    return null
+                }
+            } catch (e: Exception) {
+                try { resolver.delete(uri, null, null) } catch (_: Exception) {}
+                return null
+            }
+            resolver.update(uri,
+                ContentValues().apply { put(MediaStore.Audio.Media.IS_PENDING, 0) },
+                null, null)
+            @Suppress("DEPRECATION")
+            val dataCol = MediaStore.MediaColumns.DATA
+            resolver.query(uri, arrayOf(dataCol), null, null, null)?.use { c ->
+                if (c.moveToFirst()) return c.getString(0)
+            }
+            return null
+        }
+        @Suppress("DEPRECATION")
+        val dir = File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC),
+            "Aluta")
+        if (!dir.exists()) dir.mkdirs()
+        val dest = uniqueFile(dir, safeName)
+        FileInputStream(src).use { input ->
+            FileOutputStream(dest).use { out -> input.copyTo(out) }
+        }
+        android.media.MediaScannerConnection.scanFile(
+            this, arrayOf(dest.absolutePath), arrayOf("audio/mpeg"), null)
+        return dest.absolutePath
+    }
+
     /** Bytes of [path] via MediaStore (or a content:// uri), or null. */
     private fun readMedia(path: String?): ByteArray? {
         if (path.isNullOrEmpty()) return null

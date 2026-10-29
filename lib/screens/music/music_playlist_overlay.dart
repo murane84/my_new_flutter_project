@@ -1490,6 +1490,11 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                     icon: Icons.add_rounded,
                     tooltip: 'Add music',
                     onTap: widget.onAdd),
+                // Songs artists share for free (legal downloads only).
+                AlutaTapChip(
+                    icon: Icons.travel_explore_rounded,
+                    tooltip: 'Free music',
+                    onTap: () => FreeMusicScreen.open(context)),
                 AlutaTapChip(
                   icon: _favOnly
                       ? Icons.favorite_rounded

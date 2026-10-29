@@ -5,6 +5,14 @@ import 'net.dart' show NetStatus;
 // ── Toast types ───────────────────────────────────────────────────────────────
 enum ToastType { info, error, success }
 
+/// A button on a toast ("Show", "Share one", "Tell me when…"). Tapping it
+/// runs [onPressed] and closes the toast.
+class ToastAction {
+  const ToastAction(this.label, this.onPressed);
+  final String label;
+  final VoidCallback onPressed;
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /// Shows a floating pill toast just above the footer (44 px bottom bar).
@@ -14,12 +22,23 @@ void showToast(
   String message, {
   ToastType type = ToastType.info,
   Duration duration = const Duration(milliseconds: 2000),
+  String? detail,
+  List<ToastAction> actions = const [],
+  VoidCallback? onTap,
+  // Show on this overlay instead of the nearest one (e.g. the app's root
+  // overlay, kept from a screen that may be gone by the time this fires).
+  OverlayState? overlay,
 }) {
   if (!context.mounted) return;
+  // Something to tap → give people time to read and reach it.
+  if ((actions.isNotEmpty || onTap != null) &&
+      duration < const Duration(milliseconds: 5000)) {
+    duration = const Duration(milliseconds: 5000);
+  }
   // An error toast says WHY when a request just failed (offline, timed out,
   // server busy, session expired…) — unless the message already says it.
-  String? why;
-  if (type == ToastType.error) {
+  String? why = detail;
+  if (type == ToastType.error && why == null) {
     final r = NetStatus.recentReason();
     if (r != null && !_alreadyExplains(message, r)) {
       why = r[0].toUpperCase() + r.substring(1);
@@ -41,6 +60,8 @@ void showToast(
       duration: duration,
       isDark: isDark,
       primaryColor: primary,
+      actions: actions,
+      onTap: onTap,
       onDone: () {
         try {
           entry?.remove();
@@ -48,7 +69,7 @@ void showToast(
       },
     ),
   );
-  Overlay.of(context).insert(entry);
+  (overlay ?? Overlay.of(context)).insert(entry);
 }
 
 bool _alreadyExplains(String message, String reason) {
@@ -82,8 +103,12 @@ class _ToastOverlay extends StatefulWidget {
   final bool isDark;
   final Color primaryColor;
   final VoidCallback onDone;
+  final List<ToastAction> actions;
+  final VoidCallback? onTap;
 
   const _ToastOverlay({
+    this.actions = const [],
+    this.onTap,
     required this.message,
     this.detail,
     required this.type,
@@ -112,10 +137,14 @@ class _ToastOverlayState extends State<_ToastOverlay>
     _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack);
     _ctrl.forward();
 
-    Future.delayed(widget.duration, () {
-      if (!mounted) return;
-      _ctrl.reverse().then((_) => widget.onDone());
-    });
+    Future.delayed(widget.duration, _close);
+  }
+
+  bool _closing = false;
+  void _close() {
+    if (!mounted || _closing) return;
+    _closing = true;
+    _ctrl.reverse().then((_) => widget.onDone());
   }
 
   @override
@@ -222,7 +251,15 @@ class _ToastOverlayState extends State<_ToastOverlay>
                       const SizedBox(width: 10),
                     ],
                     Flexible(
-                      child: Column(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: widget.onTap == null
+                            ? null
+                            : () {
+                                widget.onTap!();
+                                _close();
+                              },
+                        child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -252,7 +289,28 @@ class _ToastOverlayState extends State<_ToastOverlay>
                             ),
                         ],
                       ),
+                      ),
                     ),
+                    for (final a in widget.actions)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 6),
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            foregroundColor: _accent,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                            minimumSize: const Size(0, 32),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            textStyle: const TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w700),
+                          ),
+                          onPressed: () {
+                            a.onPressed();
+                            _close();
+                          },
+                          child: Text(a.label),
+                        ),
+                      ),
                   ],
                 ),
               ),

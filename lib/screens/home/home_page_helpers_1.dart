@@ -707,6 +707,16 @@ extension _HomePageHelpers1 on HomePageState {
     }
     // The banner for this invite has done its job.
     cancelAlutaNotification(alutaNotifId('live', '${data['host_id']}'));
+    // Too weak to listen smoothly → don't join; tell the host why.
+    if (!mounted) return;
+    if (!await ensureListenTogetherNet(context,
+        host: false,
+        peerName: hostName,
+        retry: () => _joinLive(sessionId, track, hostName))) {
+      ApiService().declineLiveSession(sessionId, reason: 'weak_net');
+      return;
+    }
+    if (!mounted) return;
     await _joinLive(sessionId, track, hostName);
   }
 
@@ -788,6 +798,8 @@ extension _HomePageHelpers1 on HomePageState {
               'busy' => '$name is in another session right now',
               'not_playing' => '$name just stopped the music',
               'unreadable' => "$name's song can't be shared from their device",
+              'weak_net' =>
+                "$name's internet is too weak to share right now — try again in a bit",
               _ => '$name is keeping this one to themselves for now 💛',
             },
             type: ToastType.info);
@@ -873,6 +885,15 @@ extension _HomePageHelpers1 on HomePageState {
       }
       return;
     }
+    // I'd be streaming my song up — only if my connection can carry it.
+    if (!await ensureListenTogetherNet(context,
+        host: true,
+        peerName: name,
+        sendInstead: playbackBus.onShareToChat)) {
+      svc.reply(from, accept: false, reason: 'weak_net');
+      return;
+    }
+    if (!mounted) return;
     final token = await getToken();
     final myUserId = _myUserId;
     if (token == null || myUserId == null || !mounted) return;
@@ -969,11 +990,16 @@ extension _HomePageHelpers1 on HomePageState {
     final data =
         (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
     final who = (data['listener_username'] ?? 'Your friend').toString();
+    final weak = data['reason'] == 'weak_net';
     final end = await showDialog<bool>(
       context: context,
       builder: (dctx) => AlertDialog(
-        title: const Text('Invite declined'),
-        content: Text('$who declined your Listen Together invite.'),
+        title: Text(weak ? "$who couldn't join yet" : 'Invite declined'),
+        content: Text(weak
+            ? "$who's internet is too weak for Listen Together right now. "
+                'They can join once they reach a stronger signal — keep '
+                'the session open, or end it.'
+            : '$who declined your Listen Together invite.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dctx, false),

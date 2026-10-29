@@ -184,6 +184,7 @@ def list_rooms(
 @router.post("/sessions/{session_id}/decline")
 def decline_session(
     session_id: str,
+    reason: Optional[str] = None,
     current_user: User = Depends(get_current_user),
 ):
     """An invited listener declines. We stop re-delivering the invite to them
@@ -202,6 +203,8 @@ def decline_session(
             "session_id": session_id,
             "listener_id": current_user.id,
             "listener_username": current_user.username,
+            # "weak_net": they wanted to, but their connection was too weak.
+            "reason": (reason or "")[:20] or None,
         },
     })
     return {"detail": "ok"}

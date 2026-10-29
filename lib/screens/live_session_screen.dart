@@ -14,6 +14,7 @@ import 'home_page.dart' show playbackBus, playlistNotifier;
 import '../state/playback_state.dart';
 import '../utils/file_bytes.dart';
 import '../utils/toast_helper.dart';
+import '../services/net_check.dart';
 import '../utils/app_config.dart';
 import '../utils/net_image.dart' show authNetworkImageProvider;
 import 'token_helper.dart' show mediaAuthHeaders;
@@ -708,6 +709,18 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
             _status = 'Couldn’t reconnect — try again';
           }
         });
+        // Out of automatic tries: was it this device's internet? Say so,
+        // with the same advice as before starting a session.
+        if (last) {
+          NetCheck.listenTogether(host: _isHost, force: true).then((v) {
+            if (!mounted || v.ok) return;
+            showToast(context, 'Your internet is too weak to keep listening',
+                type: ToastType.error,
+                detail: 'Move to a stronger Wi-Fi or mobile signal, then tap '
+                    'Reconnect.',
+                duration: const Duration(seconds: 6));
+          });
+        }
       }
       return false;
     }

@@ -208,3 +208,34 @@ async def relay_report(request: Request, db: Session = Depends(get_db)):
         row.payload = body
     db.commit()
     return {"ok": True}
+
+
+# ── Network probe (Listen Together pre-check) ───────────────────────────────
+# Before hosting or joining a Listen Together session the app measures the
+# real path to this server: a few tiny GETs (round-trip) and one timed
+# transfer — download for a guest, upload for a host. Nothing is stored.
+# Random bytes so a compressing proxy can't make a weak link look fast.
+from fastapi import Query  # noqa: E402
+from fastapi.responses import Response  # noqa: E402
+
+_PROBE_MAX = 512 * 1024
+_PROBE_BLOCK = os.urandom(_PROBE_MAX)
+
+
+@router.get("/probe")
+def net_probe_down(n: int = Query(0, ge=0, le=_PROBE_MAX),
+                   current_user: User = Depends(get_current_user)):
+    return Response(content=_PROBE_BLOCK[:n],
+                    media_type="application/octet-stream",
+                    headers={"Cache-Control": "no-store"})
+
+
+@router.post("/probe")
+async def net_probe_up(request: Request,
+                       current_user: User = Depends(get_current_user)):
+    got = 0
+    async for chunk in request.stream():
+        got += len(chunk)
+        if got > _PROBE_MAX:
+            raise HTTPException(413, "Probe too large")
+    return {"received": got}

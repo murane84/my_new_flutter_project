@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/tune_in.dart';
 import '../utils/toast_helper.dart';
+import 'net_gate.dart';
 import 'person_avatar.dart';
 
 /// Tap "Tune in" on a friend who's listening: ASK to join their song (they
@@ -16,6 +17,15 @@ Future<void> askToTuneIn(
   String? title,
 }) async {
   final svc = TuneInService.instance;
+  // A weak connection would only stutter — check before asking.
+  if (!await ensureListenTogetherNet(context,
+      host: false,
+      peerName: name,
+      retry: () => askToTuneIn(context,
+          friendId: friendId, name: name, avatar: avatar, title: title))) {
+    return;
+  }
+  if (!context.mounted) return;
   if (!svc.request(friendId, title: title)) {
     showToast(context, 'Still connecting — try again in a moment',
         type: ToastType.info);

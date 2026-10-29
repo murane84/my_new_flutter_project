@@ -44,6 +44,7 @@ import '../services/quick_status.dart';
 import '../services/live_inbox.dart';
 import '../services/now_playing_presence.dart';
 import '../widgets/listen_presence_gate.dart';
+import '../widgets/net_gate.dart';
 import '../services/gallery_autosave.dart';
 import '../services/contact_names.dart';
 import '../services/web_paste.dart' as webpaste;
@@ -1466,8 +1467,16 @@ class _ChatPageState extends State<ChatPage>
     if (!mounted) return;
     if (!_isGroup && widget.friendId > 0) {
       final go = await listenTogetherGate(context,
-          friendId: widget.friendId, name: _livePeerLabel);
+          friendId: widget.friendId,
+          name: _livePeerLabel,
+          retry: _startListenTogether);
       if (!go || !mounted) return;
+    } else if (!await ensureListenTogetherNet(context,
+        host: true,
+        peerName: _livePeerLabel,
+        retry: _startListenTogether,
+        sendInstead: playbackBus.onShareToChat)) {
+      return;
     }
 
     final loaded = playlistNotifier.value;

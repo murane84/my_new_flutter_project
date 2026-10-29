@@ -3149,12 +3149,13 @@ class ApiService {
 
   /// Decline a "listen together" invite: stops the server re-delivering it to us
   /// and notifies the host so they can end or keep waiting. Best-effort.
-  Future<void> declineLiveSession(String sessionId) async {
+  Future<void> declineLiveSession(String sessionId, {String? reason}) async {
     try {
       final token = await _getToken();
       if (token == null) return;
+      final q = reason == null ? '' : '?reason=${Uri.encodeQueryComponent(reason)}';
       await http.post(
-        Uri.parse('${await _baseUrl}/live/sessions/$sessionId/decline'),
+        Uri.parse('${await _baseUrl}/live/sessions/$sessionId/decline$q'),
         headers: _authHeaders(token),
       );
     } catch (e) {

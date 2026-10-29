@@ -1,15 +1,32 @@
 import 'package:flutter/material.dart';
 
 import '../screens/api_service.dart';
+import '../screens/home_page.dart' show playbackBus;
 import '../services/online_watch.dart';
 import '../utils/toast_helper.dart';
+import 'net_gate.dart';
 
 /// Before going live with Listen Together: is the partner actually here?
 ///  • online (or we can't tell) → true, start as usual;
 ///  • offline → a small sheet: "Notify me when she's online" (one-shot watch
 ///    that comes back with a Listen together button) or "Start anyway" (the
 ///    invite waits for her). Returns whether to start now.
+///
+/// Then the network check: a weak connection never starts the session (see
+/// [ensureListenTogetherNet]); [retry] reruns the caller's start action once
+/// the signal is good again.
 Future<bool> listenTogetherGate(BuildContext context,
+    {required int friendId, required String name, VoidCallback? retry}) async {
+  final here = await _presenceGate(context, friendId: friendId, name: name);
+  if (!here || !context.mounted) return false;
+  return ensureListenTogetherNet(context,
+      host: true,
+      peerName: name,
+      retry: retry,
+      sendInstead: playbackBus.onShareToChat);
+}
+
+Future<bool> _presenceGate(BuildContext context,
     {required int friendId, required String name}) async {
   final st = await ApiService().fetchFriendStatus(friendId);
   if (!context.mounted) return false;

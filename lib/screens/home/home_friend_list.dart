@@ -2079,6 +2079,14 @@ extension _HomeFriendListView on HomePageState {
 
   /// Start a room: from the song already playing (one tap), else pick one.
   Future<void> _startRoomFlow() async {
+    // Hosting streams the song UP — make sure the connection can carry it.
+    if (!await ensureListenTogetherNet(context,
+        host: true,
+        retry: _startRoomFlow,
+        sendInstead: playbackBus.onShareToChat)) {
+      return;
+    }
+    if (!mounted) return;
     // Web has no file paths — host from the lite player's loaded song bytes.
     if (kIsWeb) {
       await _startRoomFlowWeb();
@@ -2226,6 +2234,11 @@ extension _HomeFriendListView on HomePageState {
         registered: (room['host_username'] ?? 'Your friend').toString());
     final track =
         (room['track'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+    if (!await ensureListenTogetherNet(context,
+        host: false, peerName: host, retry: () => _dropIntoRoom(room))) {
+      return;
+    }
+    if (!mounted) return;
     // Don't stack a second listener controller on top of an active session —
     // two sockets for the same user duel and never settle (empty queue, no
     // audio). Same room → just resume the screen we already have; a different

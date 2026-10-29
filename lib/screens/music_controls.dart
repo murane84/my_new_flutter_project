@@ -1753,10 +1753,14 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     final newPaths = paths.where((p) => !_playlist.contains(p)).toList();
     setState(() => _playlist = [..._playlist, ...newPaths]);
     _publishPlaylist();
-    _snack(
-        'Added ${newPaths.length} track${newPaths.length == 1 ? '' : 's'}');
     if (!mounted) return;
     _openPlaylist();
+    // Same "Added N new songs · Show" as the phone's scan.
+    if (newPaths.isNotEmpty) {
+      _announceFresh(newPaths);
+    } else {
+      _snack('Those songs are already in your playlist');
+    }
   }
 
   Future<void> _pickAndroid() async {

@@ -1996,8 +1996,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         key: ValueKey('tile_$i'),
         // Just found by a scan: a soft tint that pulses when revealed.
         tileColor: isFresh
-            ? scheme.primary
-                .withAlpha(18 + (90 * _freshCtrl.value).round())
+            ? const Color(0xFF2EC4B6)
+                .withAlpha(22 + (80 * _freshCtrl.value).round())
             : null,
         dense: true,
         visualDensity: const VisualDensity(vertical: -3),
@@ -2046,16 +2046,17 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                       margin: const EdgeInsets.only(right: 4),
                       padding: const EdgeInsets.symmetric(
                           horizontal: 6, vertical: 2),
+                      // Same teal NEW mark as "Your week in music".
                       decoration: BoxDecoration(
-                        color: scheme.primary.withAlpha(36),
+                        color: const Color(0xFF2EC4B6).withAlpha(36),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Text('NEW',
+                      child: const Text('NEW',
                           style: TextStyle(
                               fontSize: 9.5,
                               fontWeight: FontWeight.w900,
                               letterSpacing: 0.4,
-                              color: scheme.primary)),
+                              color: Color(0xFF2EC4B6))),
                     ),
                   if (isFav)
                     const Padding(

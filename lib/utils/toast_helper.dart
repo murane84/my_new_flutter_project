@@ -51,6 +51,15 @@ void showToast(
   final theme = Theme.of(context);
   final isDark = theme.brightness == Brightness.dark;
   final primary = theme.colorScheme.primary;
+  // One toast at a time: a new one replaces the one on screen, so two never
+  // sit on top of each other (e.g. "Checking…" then the result).
+  final prev = _current;
+  _current = null;
+  if (prev != null) {
+    try {
+      prev.remove();
+    } catch (_) {}
+  }
   OverlayEntry? entry;
   entry = OverlayEntry(
     builder: (_) => _ToastOverlay(
@@ -63,14 +72,18 @@ void showToast(
       actions: actions,
       onTap: onTap,
       onDone: () {
+        if (identical(_current, entry)) _current = null;
         try {
           entry?.remove();
         } catch (_) {}
       },
     ),
   );
+  _current = entry;
   (overlay ?? Overlay.of(context)).insert(entry);
 }
+
+OverlayEntry? _current;
 
 bool _alreadyExplains(String message, String reason) {
   final m = message.toLowerCase();
@@ -287,30 +300,15 @@ class _ToastOverlayState extends State<_ToastOverlay>
                                 ),
                               ),
                             ),
+                          if (widget.actions.isNotEmpty)
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: _actionsRow(),
+                            ),
                         ],
                       ),
                       ),
                     ),
-                    for (final a in widget.actions)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 6),
-                        child: TextButton(
-                          style: TextButton.styleFrom(
-                            foregroundColor: _accent,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 6),
-                            minimumSize: const Size(0, 32),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            textStyle: const TextStyle(
-                                fontSize: 13, fontWeight: FontWeight.w700),
-                          ),
-                          onPressed: () {
-                            a.onPressed();
-                            _close();
-                          },
-                          child: Text(a.label),
-                        ),
-                      ),
                   ],
                 ),
               ),
@@ -321,4 +319,31 @@ class _ToastOverlayState extends State<_ToastOverlay>
       ),
     );
   }
+
+  Widget _actionsRow() => Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Wrap(
+          alignment: WrapAlignment.end,
+          spacing: 4,
+          children: [
+            for (final a in widget.actions)
+              TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: _accent,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+                onPressed: () {
+                  a.onPressed();
+                  _close();
+                },
+                child: Text(a.label),
+              ),
+          ],
+        ),
+      );
 }

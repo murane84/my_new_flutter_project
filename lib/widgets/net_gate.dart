@@ -31,11 +31,13 @@ Future<bool> ensureListenTogetherNet(
     showToast(context, 'Checking your connection…',
         duration: const Duration(milliseconds: 1600));
   });
+  // The app's root overlay outlives this screen — the advice (and a later
+  // "signal is strong now") can still show if the user moves on.
+  final overlay = Overlay.of(context, rootOverlay: true);
   final v = await NetCheck.listenTogether(host: host);
   hint.cancel();
-  if (!context.mounted) return false;
+  if (!overlay.mounted) return false;
   if (v.ok) return true;
-  final overlay = Overlay.of(context, rootOverlay: true);
   final why = v.why ?? 'the connection is too weak';
   showToast(
     overlay.context,

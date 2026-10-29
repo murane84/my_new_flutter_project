@@ -1505,7 +1505,8 @@ extension _HomeFriendListView on HomePageState {
                     ),
                     // How good their internet is for Listen Together (from
                     // their last check) — see before you invite.
-                    if (isOnline && _netDot(f['net_grade']) case final dot?)
+                    if (_netDot(isOnline ? f['net_grade'] : null)
+                        case final dot?)
                       Padding(
                         padding: const EdgeInsets.only(left: 5),
                         child: dot,

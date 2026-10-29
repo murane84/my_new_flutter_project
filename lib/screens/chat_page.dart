@@ -245,6 +245,8 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage>
     with WidgetsBindingObserver, TickerProviderStateMixin {
+  // Runs of call bubbles the user unfolded (keyed by the run's newest id).
+  final Set<String> _openCallRuns = {};
   // True when this screen is showing a GROUP conversation (vs a 1:1 DM).
   bool get _isGroup => widget.isGroup && widget.conversationId != null;
   int get _cid => widget.conversationId ?? 0;
@@ -4696,6 +4698,127 @@ class _ChatPageState extends State<ChatPage>
 
   // ── Build helpers ─────────────────────────────────────────────────────────
 
+  // ── Runs of calls ──────────────────────────────────────────────────────────
+  // Back-to-back call logs (nothing else between, same day) fold into one
+  // bubble: "📞 4 calls · 0:36 talked · 3:19–3:48 PM", tap to unfold.
+
+  bool _isCallAt(int i) =>
+      i >= 0 &&
+      i < _messages.length &&
+      _messages[i]['message_type'] == 'call' &&
+      _messages[i]['is_deleted'] != true;
+
+  bool _callLinked(int newer, int older) =>
+      _isCallAt(newer) &&
+      _isCallAt(older) &&
+      _sameDay((_messages[newer]['timestamp'] ?? '').toString(),
+          (_messages[older]['timestamp'] ?? '').toString());
+
+  /// (newest, oldest) index of the run [i] sits in — only for 2+ calls.
+  (int, int)? _callRun(int i) {
+    if (!_isCallAt(i)) return null;
+    var head = i;
+    while (_callLinked(head - 1, head)) {
+      head--;
+    }
+    var tail = i;
+    while (_callLinked(tail, tail + 1)) {
+      tail++;
+    }
+    return tail > head ? (head, tail) : null;
+  }
+
+  Widget _callRunSummary(int head, int tail, bool open, bool isDark) {
+    final scheme = Theme.of(context).colorScheme;
+    final calls = [for (var i = head; i <= tail; i++) _messages[i]];
+    var talked = 0, missed = 0;
+    for (final m in calls) {
+      final secs = (m['media_duration'] as num?)?.toInt() ?? 0;
+      talked += secs;
+      final mine = m['sender_id'].toString() == _myId;
+      if (secs == 0 && !mine) missed++;
+    }
+    String hm(Map<String, dynamic> m) => DateFormat.jm()
+        .format(parseServerTime((m['timestamp'] ?? '').toString()));
+    final from = hm(calls.last), to = hm(calls.first);
+    final range = from == to ? from : '$from–$to';
+    // The icon tells how it ended: green if the latest call connected, red if
+    // it was one I missed, neutral otherwise.
+    final last = calls.first;
+    final lastSecs = (last['media_duration'] as num?)?.toInt() ?? 0;
+    final lastMine = last['sender_id'].toString() == _myId;
+    final Color tone = lastSecs > 0
+        ? const Color(0xFF2BB673)
+        : (!lastMine ? const Color(0xFFE53935) : scheme.onSurfaceVariant);
+    final textColor = scheme.onSurface;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(40, 8, 40, 4),
+      child: Center(
+        child: Material(
+          color: isDark
+              ? scheme.surfaceContainerHigh.withValues(alpha: 0.92)
+              : scheme.surface.withValues(alpha: 0.95),
+          shape: StadiumBorder(
+              side: BorderSide(color: tone.withValues(alpha: 0.45))),
+          child: InkWell(
+            customBorder: const StadiumBorder(),
+            onTap: () {
+              HapticFeedback.selectionClick();
+              setState(() {
+                final k = _messages[head]['id'].toString();
+                if (!_openCallRuns.remove(k)) _openCallRuns.add(k);
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.call_rounded, size: 17, color: tone),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text.rich(
+                    TextSpan(children: [
+                      TextSpan(
+                          text: '${calls.length} calls',
+                          style: const TextStyle(fontWeight: FontWeight.w800)),
+                      if (missed > 0)
+                        TextSpan(
+                            text: ' · $missed missed',
+                            style: const TextStyle(
+                                color: Color(0xFFE53935),
+                                fontWeight: FontWeight.w700)),
+                      if (talked > 0)
+                        TextSpan(text: ' · ${_fmtCallDur(talked)} talked'),
+                      TextSpan(
+                          text: ' · $range',
+                          style: TextStyle(color: scheme.onSurfaceVariant)),
+                    ]),
+                    style: TextStyle(fontSize: 13, color: textColor),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                AnimatedRotation(
+                  turns: open ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 220),
+                  child: Icon(Icons.expand_less_rounded,
+                      size: 20, color: scheme.onSurfaceVariant),
+                ),
+                if (!_isGroup)
+                  IconButton(
+                    tooltip: 'Call back',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(Icons.call_rounded,
+                        size: 18, color: scheme.primary),
+                    onPressed: _callFriend,
+                  ),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   static String _fmtCallDur(int secs) {
     final m = secs ~/ 60;
     final s = secs % 60;
@@ -6728,10 +6851,32 @@ class _ChatPageState extends State<ChatPage>
                               if (_unreadAnchorId != null &&
                                   msg['id'].toString() == _unreadAnchorId)
                                 _buildUnreadDivider(scheme, isDark),
-                              _animateInWrap(
-                                  msg,
-                                  _buildBubble(msg, isMe, isDark, showAvatar,
-                                      isFirst, showTail)),
+                              Builder(builder: (_) {
+                                final bubble = _animateInWrap(
+                                    msg,
+                                    _buildBubble(msg, isMe, isDark, showAvatar,
+                                        isFirst, showTail));
+                                final run = _callRun(msgIdx);
+                                if (run == null) return bubble;
+                                final open = _openCallRuns.contains(
+                                    _messages[run.$1]['id'].toString());
+                                // The run's older calls unfold above the
+                                // summary, which sits where the newest one is.
+                                final shown = AnimatedSize(
+                                  duration: const Duration(milliseconds: 240),
+                                  curve: Curves.easeOutCubic,
+                                  alignment: Alignment.bottomCenter,
+                                  child: open
+                                      ? bubble
+                                      : const SizedBox(width: double.infinity),
+                                );
+                                if (msgIdx != run.$1) return shown;
+                                return Column(children: [
+                                  shown,
+                                  _callRunSummary(
+                                      run.$1, run.$2, open, isDark),
+                                ]);
+                              }),
                               if (isMe &&
                                   !_isGroup &&
                                   msg['id'].toString() == _seenByFriendId)

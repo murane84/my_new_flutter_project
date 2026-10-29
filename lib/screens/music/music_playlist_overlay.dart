@@ -1471,30 +1471,19 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           else
             Icon(Icons.queue_music_rounded, color: scheme.primary, size: 18),
           const SizedBox(width: 6),
-          // Title + action icons share one Expanded group on the left; the
-          // collapse chevron is the last child, so it stays pinned flush to the
-          // far-right edge no matter how wide the drawer is stretched.
+          // Title + actions. Wide: one row. Narrow (phones): the title gets its
+          // own line and the actions sit under it, so "Playlist" + the count
+          // are never squeezed into "Playlist (…".
           Expanded(
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    'Playlist (${widget.playlist.length})',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 14),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+            child: LayoutBuilder(builder: (ctx, c) {
+              final actions = <Widget>[
+                // + : scan this device / pick files, or Free music (legal).
+                Builder(
+                  builder: (chipCtx) => AlutaTapChip(
+                      icon: Icons.add_rounded,
+                      tooltip: 'Add music',
+                      onTap: () => _addMenu(chipCtx)),
                 ),
-                const SizedBox(width: 6),
-                AlutaTapChip(
-                    icon: Icons.add_rounded,
-                    tooltip: 'Add music',
-                    onTap: widget.onAdd),
-                // Songs artists share for free (legal downloads only).
-                AlutaTapChip(
-                    icon: Icons.travel_explore_rounded,
-                    tooltip: 'Free music',
-                    onTap: () => FreeMusicScreen.open(context)),
                 AlutaTapChip(
                   icon: _favOnly
                       ? Icons.favorite_rounded
@@ -1544,8 +1533,52 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                     tooltip: 'Find the playing song',
                     onTap: _locateNow,
                   ),
-              ],
-            ),
+              ];
+              final title = Row(mainAxisSize: MainAxisSize.min, children: [
+                const Flexible(
+                  child: Text('Playlist',
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      overflow: TextOverflow.ellipsis),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withAlpha(30),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Text('${widget.playlist.length}',
+                      style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          color: scheme.primary)),
+                ),
+              ]);
+              final wide = c.maxWidth >= 44.0 * actions.length + 130;
+              if (wide) {
+                return Row(children: [
+                  Flexible(child: title),
+                  const SizedBox(width: 6),
+                  ...actions,
+                ]);
+              }
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: 2, bottom: 6),
+                    child: title,
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: actions,
+                  ),
+                ],
+              );
+            }),
           ),
           if (!widget.fullPage) ...[
             const SizedBox(width: 6),
@@ -1571,6 +1604,49 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       tooltip: 'Back to Now Playing',
       onTap: widget.onClose,
     );
+  }
+
+  /// "+" → scan / pick music from this device, or open Free music.
+  Future<void> _addMenu(BuildContext chipCtx) async {
+    final box = chipCtx.findRenderObject() as RenderBox?;
+    final overlay =
+        Overlay.of(chipCtx).context.findRenderObject() as RenderBox?;
+    if (box == null || overlay == null) return;
+    final topLeft = box.localToGlobal(Offset(0, box.size.height + 4),
+        ancestor: overlay);
+    final scheme = Theme.of(context).colorScheme;
+    final choice = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+          topLeft & const Size(1, 1), Offset.zero & overlay.size),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      items: [
+        PopupMenuItem(
+          value: 'device',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.phone_android_rounded, color: scheme.primary),
+            title: const Text('From this device'),
+            subtitle: const Text('Find new songs saved here'),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'free',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading:
+                Icon(Icons.travel_explore_rounded, color: scheme.primary),
+            title: const Text('Free music'),
+            subtitle: const Text('Songs artists share for free'),
+          ),
+        ),
+      ],
+    );
+    if (!mounted) return;
+    if (choice == 'device') widget.onAdd();
+    if (choice == 'free') FreeMusicScreen.open(context);
   }
 
   /// Scroll the list so the playing song sits mid-view (and flash it). If the

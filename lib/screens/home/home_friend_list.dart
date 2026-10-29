@@ -1503,6 +1503,13 @@ extension _HomeFriendListView on HomePageState {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    // How good their internet is for Listen Together (from
+                    // their last check) — see before you invite.
+                    if (isOnline && _netDot(f['net_grade']) case final dot?)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 5),
+                        child: dot,
+                      ),
                     // Their quick status ("📞 Free to talk"), while it lasts.
                     if (QuickStatus.instance
                             .statusOf((f['id'] as num).toInt()) case final st?)
@@ -2398,4 +2405,21 @@ class _RefreshSpinButtonState extends State<_RefreshSpinButton>
       ),
     ));
   }
+}
+
+/// A friend's last Listen Together network grade as a tiny signal mark:
+/// green = strong, amber = okay, grey = too weak right now. Null = unknown.
+Widget? _netDot(Object? grade) {
+  final (Color c, String tip) = switch (grade) {
+    'good' => (const Color(0xFF2BB673), 'Strong connection — great for Listen Together'),
+    'fair' => (const Color(0xFFFFA000), 'Okay connection for Listen Together'),
+    'weak' || 'offline' =>
+      (const Color(0xFF9E9E9E), 'Weak connection right now — Listen Together may not start'),
+    _ => (Colors.transparent, ''),
+  };
+  if (tip.isEmpty) return null;
+  return Tooltip(
+    message: tip,
+    child: Icon(Icons.signal_cellular_alt_rounded, size: 13, color: c),
+  );
 }

@@ -7,6 +7,7 @@ from sqlalchemy import func
 from models import Message, User, Friend, MuteStatus, BlockStatus
 from schemas import MessageCreate, FriendWithUnread
 import crud_conversations
+import net_grades
 from hearts import heart_kwargs, seal_media as hearts_seal_media
 
 
@@ -350,12 +351,14 @@ def get_friends_with_unread_counts(db: Session, user_id: int):
     for friend in friends:
         last_message = get_last_message_with_friend(db, user_id, friend.id)
         unread_count = get_unread_messages_count_with_friend(db, user_id, friend.id)
+        online = bool(friend.is_online and is_recently_active(friend.last_seen))
 
         friends_with_data.append(
             FriendWithUnread(
                 id=friend.id,
                 username=friend.username,
-                is_online=friend.is_online and is_recently_active(friend.last_seen),
+                is_online=online,
+                net_grade=net_grades.grade_of(friend.id) if online else None,
                 last_timestamp=last_message.timestamp.strftime('%Y-%m-%d %H:%M') if last_message else None,
                 # Media-aware preview: tombstone text for deletions, a type
                 # label ("📷 Photo", "🎞️ GIF", "🎤 Voice note", "📎 File") for

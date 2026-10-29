@@ -46,6 +46,7 @@ import '../widgets/person_avatar.dart';
 import '../widgets/net_gate.dart';
 import 'api_service.dart';
 import '../services/device_report.dart';
+import '../services/net_check.dart';
 import 'websocket_manager.dart';
 import 'live_session_screen.dart';
 import 'legal_screen.dart';
@@ -688,6 +689,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
       _resumedAt = DateTime.now();
       // A banner tapped in the shade clears itself but not its person header.
       tidyNotificationBundles();
+      // Keep my Listen Together signal dot fresh for friends (≤ every 30 min).
+      NetCheck.refreshInBackground();
       final since = _bgSince;
       _bgSince = null;
       if (since != null) {
@@ -873,6 +876,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
       if (r != null) spaceEventBus.value++;
       return r != null;
     };
+    // First signal-dot reading once the app has settled.
+    Future.delayed(const Duration(seconds: 20), NetCheck.refreshInBackground);
     SongInsights.instance.load().then((_) {
       if (!mounted) return;
       // Your listening history follows the account (merge, never lose).

@@ -146,6 +146,8 @@ class FriendWithUnread(BaseModel):
     last_message_read: Optional[bool] = None         # ✅ Add this
     phone: Optional[str] = None                      # for direct call
     avatar_url: Optional[str] = None                 # profile picture
+    # Their last Listen Together network check (good/fair/weak), when online.
+    net_grade: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)  # For Pydantic v2
 

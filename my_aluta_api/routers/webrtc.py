@@ -239,3 +239,21 @@ async def net_probe_up(request: Request,
         if got > _PROBE_MAX:
             raise HTTPException(413, "Probe too large")
     return {"received": got}
+
+
+# The device's latest network-check grade, shown to friends as a signal dot.
+from pydantic import BaseModel  # noqa: E402
+
+import net_grades  # noqa: E402
+
+
+class _NetGradeIn(BaseModel):
+    grade: str
+
+
+@router.post("/net-grade")
+def report_net_grade(body: _NetGradeIn,
+                     current_user: User = Depends(get_current_user)):
+    if not net_grades.set_grade(current_user.id, body.grade):
+        raise HTTPException(422, "Unknown grade")
+    return {"ok": True}

@@ -70,7 +70,41 @@ class NetCheck {
     }
     _cache[host] = (DateTime.now(), v);
     lastGrade.value = v.grade;
+    _lastAny = DateTime.now();
+    unawaited(_report(v.grade));
     return v;
+  }
+
+  static DateTime? _lastAny;
+
+  /// Tell the server our grade so friends see the signal dot. Fire-and-forget.
+  static Future<void> _report(NetGrade g) async {
+    if (g == NetGrade.offline) return; // can't reach it anyway
+    try {
+      final token = await getToken();
+      if (token == null) return;
+      final base = await AppConfig.baseUrl;
+      await http
+          .post(Uri.parse('$base/webrtc/net-grade'),
+              headers: {
+                'Authorization': 'Bearer $token',
+                'Content-Type': 'application/json',
+              },
+              body: '{"grade":"${g.name}"}')
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {}
+  }
+
+  /// On app start / resume: keep the signal dot fresh with a quiet guest
+  /// check at most every 30 min (128 KB down).
+  static void refreshInBackground() {
+    final last = _lastAny;
+    if (last != null &&
+        DateTime.now().difference(last) < const Duration(minutes: 30)) {
+      return;
+    }
+    _lastAny = DateTime.now();
+    unawaited(listenTogether(host: false, force: true));
   }
 
   static Future<NetVerdict> _run(bool host) async {

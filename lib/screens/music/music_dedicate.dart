@@ -190,9 +190,8 @@ class _DedicateSheetState extends State<_DedicateSheet> {
     setState(() => _sending = true);
     try {
       final loader = widget.loadBytes;
-      final file = loader == null ? File(widget.path) : null;
       final List<int> bytes =
-          loader != null ? await loader() : await file!.readAsBytes();
+          loader != null ? await loader() : await readFileBytes(widget.path);
       if (bytes.length > _maxBytes) {
         if (mounted) {
           showToast(context, 'That song is too big for a heart (max 40 MB)',

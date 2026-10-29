@@ -182,6 +182,21 @@ class MainActivity : AudioServiceFragmentActivity() {
                             runOnUiThread { result.success(saved) }
                         }.start()
                     }
+                    // Read a song/media file Dart's File() can't open (Android
+                    // 10 scoped storage, some EMUI/OEM builds): find it in
+                    // MediaStore by its path and read it through the
+                    // ContentResolver. Also accepts a content:// uri.
+                    "readMedia" -> {
+                        val p = call.argument<String>("path")
+                        Thread {
+                            val bytes = try {
+                                readMedia(p)
+                            } catch (e: Throwable) {
+                                null
+                            }
+                            runOnUiThread { result.success(bytes) }
+                        }.start()
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -537,6 +552,47 @@ class MainActivity : AudioServiceFragmentActivity() {
     // human-readable location ("Download/<name>") on success, else null.
     // Uses MediaStore on Android 10+ (scoped storage, no permission needed) and
     // a direct file write on Android 9 and below.
+    /** Bytes of [path] via MediaStore (or a content:// uri), or null. */
+    private fun readMedia(path: String?): ByteArray? {
+        if (path.isNullOrEmpty()) return null
+        val uri: Uri? = if (path.startsWith("content://")) {
+            Uri.parse(path)
+        } else {
+            mediaUriForPath(path)
+        }
+        if (uri != null) {
+            contentResolver.openInputStream(uri)?.use { return it.readBytes() }
+        }
+        // Last try: a plain native read (some OEMs allow it where Dart's
+        // File() was refused).
+        val f = File(path)
+        return if (f.canRead()) FileInputStream(f).use { it.readBytes() } else null
+    }
+
+    private fun mediaUriForPath(path: String): Uri? {
+        val tables = mutableListOf(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+        )
+        tables.add(MediaStore.Files.getContentUri("external"))
+        @Suppress("DEPRECATION")
+        val dataCol = MediaStore.MediaColumns.DATA
+        for (t in tables) {
+            try {
+                contentResolver.query(
+                    t, arrayOf(MediaStore.MediaColumns._ID),
+                    "$dataCol = ?", arrayOf(path), null
+                )?.use { c ->
+                    if (c.moveToFirst()) {
+                        return android.content.ContentUris.withAppendedId(t, c.getLong(0))
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        return null
+    }
+
     private fun saveToDownloads(srcPath: String?, fileName: String, mime: String?): String? {
         if (srcPath == null) return null
         val src = File(srcPath)

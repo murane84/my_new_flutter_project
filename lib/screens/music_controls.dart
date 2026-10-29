@@ -23,6 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../state/playback_state.dart';
 import '../services/live_session_service.dart';
 import '../utils/toast_helper.dart';
+import '../utils/file_bytes.dart';
 import 'equalizer_screen.dart';
 import '../utils/popup_shell.dart';
 import 'package:on_audio_query/on_audio_query.dart';
@@ -1900,7 +1901,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         fileName: p.replaceAll('\\', '/').split('/').last,
         title: metadataStore.title(p, _nameFromPath(p)),
         artist: metadataStore.artist(p, ''),
-        loadBytes: () => File(p).readAsBytes(),
+        loadBytes: () => readFileBytes(p),
         durationMs: p == (_currentIndex >= 0 && _currentIndex < _playlist.length
                 ? _playlist[_currentIndex]
                 : null)

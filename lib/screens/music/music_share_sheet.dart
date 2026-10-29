@@ -193,14 +193,14 @@ class _ShareSheetState extends State<_ShareSheet> {
               continue;
             }
           } else {
-            final file = File(path);
-            final len = await file.length();
-            if (len > _maxBytes) {
+            // readFileBytes falls back to MediaStore where a plain File
+            // read is refused (Android 10 / some EMUI builds).
+            bytes = await readFileBytes(path);
+            if (bytes.length > _maxBytes) {
               tooBig++;
               step += targets.length;
               continue;
             }
-            bytes = await file.readAsBytes();
           }
         }
         for (final f in targets) {

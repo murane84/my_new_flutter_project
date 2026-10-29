@@ -4830,7 +4830,7 @@ class _ChatPageState extends State<ChatPage>
   }
 
   Widget _buildHeartBubble(Map<String, dynamic> msg, bool isMe, bool isDark,
-      bool showAvatar, bool isFirst) {
+      bool showAvatar, bool isFirst, {bool groupEdge = true}) {
     final scheme = Theme.of(context).colorScheme;
     // My own timed heart I've peeked at: the HEART draws its sealed contents
     // with no countdown (hv). Everything else — reply, menu, the "Opens …"
@@ -4855,7 +4855,7 @@ class _ChatPageState extends State<ChatPage>
     return Container(
       key: key,
       padding: EdgeInsets.only(
-          top: showAvatar ? 6 : 2, left: isMe ? 56 : 6, right: isMe ? 6 : 56),
+          top: groupEdge ? 6 : 2, left: isMe ? 56 : 6, right: isMe ? 6 : 56),
       child: Column(
         crossAxisAlignment:
             isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
@@ -5167,7 +5167,8 @@ class _ChatPageState extends State<ChatPage>
     // Media attachment?
     final msgType = (msg['message_type'] as String?) ?? 'text';
     if (!tomb && msgType == 'heart') {
-      return _buildHeartBubble(msg, isMe, isDark, showAvatar, isFirst);
+      return _buildHeartBubble(msg, isMe, isDark, showAvatar, isFirst,
+          groupEdge: showTail);
     }
     final mediaRel = msg['media_url'] as String?;
     // A pending (optimistic) media message has no server URL yet, but it IS a
@@ -5297,8 +5298,10 @@ class _ChatPageState extends State<ChatPage>
     );
 
     // ── Spacing: tighter between grouped messages ──────────────────────────
-    // A clear breath where the sender changes; snug inside a run.
-    final topPad = showAvatar ? 10.0 : 2.0;
+    // A clear breath where the sender changes; snug inside a run. Keyed off
+    // the group edge (showTail), not the avatar — my own bubbles never show
+    // an avatar, so they used to sit tight even minutes apart.
+    final topPad = showTail ? 10.0 : 2.0;
 
     // In a GROUP, received bubbles carry the sender's own name + avatar (so you
     // can tell who said what). For DMs these are unused (the friend is implied).

@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/metadata_overrides.dart';
 import '../../utils/app_config.dart';
 import '../../utils/toast_helper.dart';
+import '../../widgets/tap_chip.dart';
 import '../home_page.dart' show freeMusicInbox, playbackBus;
 import '../token_helper.dart';
 
@@ -20,7 +21,7 @@ import '../token_helper.dart';
 /// Jamendo (Creative Commons) and the Internet Archive (CC / public domain).
 /// Never pirate sites. Preview a song, then Download drops it into the
 /// playlist with its title, artist and a credit to the licence.
-class FreeMusicScreen extends StatefulWidget {
+class FreeMusicScreen extends StatelessWidget {
   const FreeMusicScreen({super.key});
 
   static Future<void> open(BuildContext context) =>
@@ -28,10 +29,25 @@ class FreeMusicScreen extends StatefulWidget {
           builder: (_) => const FreeMusicScreen()));
 
   @override
-  State<FreeMusicScreen> createState() => _FreeMusicScreenState();
+  Widget build(BuildContext context) => Scaffold(
+        body: SafeArea(
+          child: FreeMusicPanel(onBack: () => Navigator.of(context).pop()),
+        ),
+      );
 }
 
-class _FreeMusicScreenState extends State<FreeMusicScreen> {
+/// The Free music page itself, built to sit inside the music player like the
+/// playlist page: the same header bar (back chip, title, count pill), the
+/// same card surface. [onBack] returns to wherever it was opened from.
+class FreeMusicPanel extends StatefulWidget {
+  const FreeMusicPanel({super.key, required this.onBack});
+  final VoidCallback onBack;
+
+  @override
+  State<FreeMusicPanel> createState() => _FreeMusicPanelState();
+}
+
+class _FreeMusicPanelState extends State<FreeMusicPanel> {
   final _q = TextEditingController();
   final _player = AudioPlayer();
   Timer? _debounce;
@@ -235,47 +251,100 @@ class _FreeMusicScreenState extends State<FreeMusicScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Free music'),
-      ),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: Column(children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
-                child: TextField(
-                  controller: _q,
-                  onChanged: _onChanged,
-                  onSubmitted: _search,
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    hintText: 'Search free songs, artists, genres…',
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    filled: true,
-                    fillColor: scheme.surfaceContainerHighest,
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none),
-                  ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Header — same bar as the playlist page.
+        Container(
+          padding: const EdgeInsets.fromLTRB(6, 8, 10, 8),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest.withAlpha(120),
+            border: Border(
+                bottom:
+                    BorderSide(color: scheme.outlineVariant.withAlpha(80))),
+          ),
+          child: Row(children: [
+            AlutaTapChip(
+              icon: Icons.arrow_back_rounded,
+              tooltip: 'Back to playlist',
+              onTap: widget.onBack,
+            ),
+            const SizedBox(width: 6),
+            Icon(Icons.travel_explore_rounded, color: scheme.primary, size: 18),
+            const SizedBox(width: 6),
+            const Flexible(
+              child: Text('Free music',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            ),
+            if (_results.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                decoration: BoxDecoration(
+                  color: scheme.primary.withAlpha(30),
+                  borderRadius: BorderRadius.circular(9),
                 ),
+                child: Text('${_results.length}',
+                    style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        color: scheme.primary)),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
-                child: Text(
-                  'Songs artists chose to share for free (Creative Commons & '
-                  'public domain) — yours to keep, legally.',
-                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            ],
+            const Spacer(),
+            Tooltip(
+              message: 'Creative Commons & public domain only',
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2BB673).withAlpha(30),
+                  borderRadius: BorderRadius.circular(10),
                 ),
+                child: const Text('LEGAL',
+                    style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.6,
+                        color: Color(0xFF2BB673))),
               ),
-              if (_loading) const LinearProgressIndicator(minHeight: 2),
-              Expanded(child: _body(scheme)),
-            ]),
+            ),
+          ]),
+        ),
+        // Search — same field style as "Search tracks…".
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+          child: TextField(
+            controller: _q,
+            onChanged: _onChanged,
+            onSubmitted: _search,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'Search free songs, artists, genres…',
+              prefixIcon: const Icon(Icons.search, size: 18),
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              filled: true,
+              fillColor: scheme.surfaceContainerHighest,
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none),
+            ),
           ),
         ),
-      ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+          child: Text(
+            'Songs artists chose to share for free — yours to keep, legally.',
+            style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+          ),
+        ),
+        if (_loading) const LinearProgressIndicator(minHeight: 2),
+        Expanded(child: _body(scheme)),
+      ],
     );
   }
 
@@ -310,7 +379,7 @@ class _FreeMusicScreenState extends State<FreeMusicScreen> {
       );
     }
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 16),
+      padding: const EdgeInsets.fromLTRB(6, 4, 6, 12),
       itemCount: _results.length,
       itemBuilder: (_, i) {
         final t = _results[i];
@@ -322,15 +391,21 @@ class _FreeMusicScreenState extends State<FreeMusicScreen> {
         final artist = (t['artist'] ?? '').toString();
         final dur = _dur((t['duration'] as num?)?.toInt() ?? 0);
         return ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+          dense: true,
+          visualDensity: const VisualDensity(vertical: -1),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          selected: playing,
+          selectedTileColor: scheme.primary.withAlpha(22),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10),
           leading: GestureDetector(
             onTap: () => _togglePreview(t),
             child: Stack(alignment: Alignment.center, children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: SizedBox(
-                  width: 50,
-                  height: 50,
+                  width: 44,
+                  height: 44,
                   child: cover.isEmpty
                       ? ColoredBox(
                           color: scheme.primary.withValues(alpha: 0.15),
@@ -364,7 +439,10 @@ class _FreeMusicScreenState extends State<FreeMusicScreen> {
           ),
           title: Text((t['title'] ?? '').toString(),
               maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w700)),
+              style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: playing ? scheme.primary : null)),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -372,7 +450,9 @@ class _FreeMusicScreenState extends State<FreeMusicScreen> {
                   [if (artist.isNotEmpty) artist, if (dur.isNotEmpty) dur]
                       .join(' · '),
                   maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 11.5, color: scheme.onSurfaceVariant)),
               InkWell(
                 onTap: () => _openPage(t),
                 child: Text(

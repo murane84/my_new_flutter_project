@@ -130,6 +130,9 @@ class _PlaylistOverlay extends StatefulWidget {
 class _PlaylistOverlayState extends State<_PlaylistOverlay>
     with TickerProviderStateMixin {
   String _search = '';
+  // Free music opens INSIDE this page (same card, header, transport), like
+  // the other music-player pages; its back chip returns to the list.
+  bool _freeMode = false;
   final TextEditingController _searchCtrl = TextEditingController();
   late final AnimationController _freshCtrl;
   Future<void>? _filtersRestored;
@@ -1372,6 +1375,12 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
               ),
             ),
 
+          if (_freeMode)
+            Expanded(
+              child: FreeMusicPanel(
+                  onBack: () => setState(() => _freeMode = false)),
+            )
+          else ...[
           // Header — either the normal header or the multi-select action bar.
           _selecting ? _selectionBar(scheme) : _header(scheme),
 
@@ -1429,6 +1438,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                             _row(scheme, displayed, displayedPaths, i),
                       ),
           ),
+          ],
 
           // Inline transport strip — control playback without leaving the list.
           // Skipped on phone (the app's now-playing bar handles it), so a single
@@ -1646,7 +1656,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     );
     if (!mounted) return;
     if (choice == 'device') widget.onAdd();
-    if (choice == 'free') FreeMusicScreen.open(context);
+    if (choice == 'free') setState(() => _freeMode = true);
   }
 
   /// Scroll the list so the playing song sits mid-view (and flash it). If the

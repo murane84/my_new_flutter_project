@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'vocal_decode.dart';
 
 /// Where the singing is in a song: when the voice comes in, when it stops,
 /// and the instrumental breaks in between. Lyrics without hand timing use it
@@ -39,6 +42,38 @@ class VocalMap {
             ),
       ],
     );
+  }
+
+  /// The same per-100 ms profile as the Android / Windows code, from raw mono
+  /// samples (used on the web, where the browser decodes the song). Down-
+  /// samples to ~11 kHz first — the voice band (300–3400 Hz) fits well below.
+  static List<double> profileFromPcm(Float32List x, int sampleRate) {
+    final f = (sampleRate ~/ 11025).clamp(1, 8);
+    final sr = sampleRate / f;
+    final hp = _Biquad.highPass(300, sr), lp = _Biquad.lowPass(3400, sr);
+    final frame = (sr / 10).round();
+    final out = <double>[];
+    var sumAll = 0.0, sumVoice = 0.0, n = 0;
+    final limit = x.length - f;
+    for (var i = 0; i <= limit; i += f) {
+      var m = 0.0;
+      for (var k = 0; k < f; k++) {
+        m += x[i + k];
+      }
+      m /= f;
+      final v = lp.run(hp.run(m));
+      sumAll += m * m;
+      sumVoice += v * v;
+      if (++n >= frame) {
+        out
+          ..add(math.sqrt(sumAll / n))
+          ..add(math.sqrt(sumVoice / n));
+        sumAll = 0;
+        sumVoice = 0;
+        n = 0;
+      }
+    }
+    return out;
   }
 
   /// From the device's per-100 ms loudness: [all0, voice0, all1, voice1, …].
@@ -125,12 +160,43 @@ class VocalMap {
   }
 }
 
-/// Finds and remembers each song's VocalMap (Android; elsewhere it simply
-/// isn't available and lyrics use the plain estimate).
+class _Biquad {
+  _Biquad(this.b0, this.b1, this.b2, this.a1, this.a2);
+  final double b0, b1, b2, a1, a2;
+  double _x1 = 0, _x2 = 0, _y1 = 0, _y2 = 0;
+
+  double run(double x) {
+    final y = b0 * x + b1 * _x1 + b2 * _x2 - a1 * _y1 - a2 * _y2;
+    _x2 = _x1;
+    _x1 = x;
+    _y2 = _y1;
+    _y1 = y;
+    return y;
+  }
+
+  // RBJ cookbook, Q = 0.707 — same filters as VocalProfile.kt.
+  static _Biquad highPass(double fc, double sr) {
+    final w = 2 * math.pi * fc / sr, a = math.sin(w) / (2 * 0.707);
+    final c = math.cos(w), a0 = 1 + a;
+    return _Biquad((1 + c) / 2 / a0, -(1 + c) / a0, (1 + c) / 2 / a0,
+        -2 * c / a0, (1 - a) / a0);
+  }
+
+  static _Biquad lowPass(double fc, double sr) {
+    final w = 2 * math.pi * fc / sr, a = math.sin(w) / (2 * 0.707);
+    final c = math.cos(w), a0 = 1 + a;
+    return _Biquad((1 - c) / 2 / a0, (1 - c) / a0, (1 - c) / 2 / a0,
+        -2 * c / a0, (1 - a) / a0);
+  }
+}
+
+/// Finds and remembers each song's VocalMap: Android and Windows decode the
+/// file natively; the web decodes the loaded song's bytes in the browser.
 class VocalMaps {
   VocalMaps._();
   static final VocalMaps instance = VocalMaps._();
   static const _ch = MethodChannel('aluta/downloads');
+  static const _winCh = MethodChannel('aluta/vocal');
   static const _prefsKey = 'vocal_maps_v1';
 
   final Map<String, VocalMap?> _maps = {};
@@ -173,17 +239,39 @@ class VocalMaps {
   Future<VocalMap?> request(String path) async {
     await _load();
     if (_maps.containsKey(path)) return _maps[path];
-    if (kIsWeb || !Platform.isAndroid) return null;
+    if (kIsWeb || !(Platform.isAndroid || Platform.isWindows)) return null;
     return _running[path] ??= () async {
       VocalMap? map;
       try {
-        final r = await _ch.invokeMethod<Object?>('vocalProfile', {'path': path});
+        final r = await (Platform.isWindows ? _winCh : _ch)
+            .invokeMethod<Object?>('vocalProfile', {'path': path});
         if (r is List) {
           map = VocalMap.fromProfile([for (final x in r) (x as num).toDouble()]);
         }
       } catch (_) {}
       _maps[path] = map;
       _running.remove(path);
+      unawaited(_save());
+      return map;
+    }();
+  }
+
+  /// Web: the song is only in memory — decode [bytes] in the browser.
+  /// [key] identifies the song (e.g. 'web:<title>').
+  Future<VocalMap?> requestBytes(String key, Uint8List bytes) async {
+    await _load();
+    if (_maps.containsKey(key)) return _maps[key];
+    if (bytes.isEmpty) return null;
+    return _running[key] ??= () async {
+      VocalMap? map;
+      try {
+        final pcm = await decodePcm(bytes);
+        if (pcm != null) {
+          map = VocalMap.fromProfile(profileFromPcm(pcm.$1, pcm.$2));
+        }
+      } catch (_) {}
+      _maps[key] = map;
+      _running.remove(key);
       unawaited(_save());
       return map;
     }();

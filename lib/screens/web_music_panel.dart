@@ -10,7 +10,8 @@ import '../services/live_session_service.dart' show BytesAudioSource;
 import '../services/now_playing_presence.dart';
 import '../services/song_insights.dart';
 import '../widgets/song_feel_strip.dart';
-import 'home_page.dart' show playbackBus, WebSongDrag;
+import 'home_page.dart'
+    show playbackBus, WebSongDrag, playClockNotifier, PlayClock;
 import 'web_fs/music_folder.dart';
 import 'web_fs/blob_url.dart';
 import '../utils/app_config.dart';
@@ -24,7 +25,11 @@ import '../widgets/genie_menu.dart';
 import '../utils/readable.dart';
 import '../widgets/controls_glass.dart';
 import '../widgets/playing_bars.dart';
-import 'music_controls.dart' show showSongShareSheet, showSongDedicate;
+import 'music_controls.dart'
+    show showSongShareSheet, showSongDedicate, showLyricsSheet;
+import 'dart:convert' show jsonDecode, jsonEncode;
+import 'package:shared_preferences/shared_preferences.dart';
+import '../services/vocal_map.dart';
 import '../utils/typing_guard.dart';
 
 /// Web-only replacement for the native [MusicControls] panel.
@@ -102,6 +107,9 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     super.initState();
     _psSub = _player.playerStateStream.listen(_onPlayerState);
     _abSub = _player.positionStream.listen((pos) {
+      // Feed the shared play clock — the lyrics sheet follows it.
+      playClockNotifier.value =
+          PlayClock(pos, _player.duration ?? Duration.zero);
       final a = _abA, b = _abB;
       if (a != null &&
           b != null &&
@@ -1731,8 +1739,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           theme,
           icon: Icons.lyrics_rounded,
           label: 'Lyrics',
-          available: false,
-          onTap: () => _featureUnavailable('Lyrics'),
+          onTap: _openLyrics,
         ),
       ],
     );
@@ -2020,6 +2027,62 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
 
   // Banner shown when a feature only the full app can do is tapped on web.
   Timer? _bannerTimer;
+  // ── Lyrics (web) ────────────────────────────────────────────────────────
+  // Songs here are in memory (no file path), so lyrics are kept per song
+  // title in this browser; the voice-start map is found from the bytes.
+  static const _kWebLyrics = 'web_lyrics_v1';
+
+  String _lyricKey(String title) => title.trim().toLowerCase();
+
+  Future<Map<String, String>> _loadWebLyrics() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final raw = p.getString(_kWebLyrics);
+      if (raw == null) return {};
+      final m = jsonDecode(raw);
+      if (m is Map) {
+        return {for (final e in m.entries) '${e.key}': '${e.value}'};
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  Future<void> _openLyrics() async {
+    final title = _currentTitle;
+    if (title == null || title.isEmpty) {
+      showToast(context, 'Play a song to see its lyrics');
+      return;
+    }
+    final all = await _loadWebLyrics();
+    if (!mounted) return;
+    final key = _lyricKey(title);
+    final bytes = _currentBytes;
+    // Learn where the singing starts (once per song, in the background).
+    if (bytes != null) {
+      unawaited(VocalMaps.instance.requestBytes('web:$key', bytes));
+    }
+    showLyricsSheet(
+      context,
+      title: title,
+      artist: '',
+      raw: all[key] ?? '',
+      vocalKey: 'web:$key',
+      onSeek: (d) => _player.seek(d),
+      onSave: (text) async {
+        final m = await _loadWebLyrics();
+        if (text.trim().isEmpty) {
+          m.remove(key);
+        } else {
+          m[key] = text;
+        }
+        try {
+          final p = await SharedPreferences.getInstance();
+          await p.setString(_kWebLyrics, jsonEncode(m));
+        } catch (_) {}
+      },
+    );
+  }
+
   void _featureUnavailable(String feature) {
     final messenger = ScaffoldMessenger.of(context);
     final scheme = Theme.of(context).colorScheme;

@@ -447,6 +447,33 @@ class _BreatheState extends State<_Breathe>
 
 // ─── Share / dedicate for songs that aren't files here (web queue) ─────────
 
+/// The lyrics sheet for a player outside MusicControls (the web player):
+/// same view — auto timing, tap to sync, starts now — fed by [raw] and saved
+/// through [onSave]. [vocalKey] names the song's VocalMap (where the singing
+/// starts), found from its bytes on the web.
+void showLyricsSheet(
+  BuildContext context, {
+  required String title,
+  required String artist,
+  required String raw,
+  required void Function(String text) onSave,
+  void Function(Duration)? onSeek,
+  String? vocalKey,
+}) {
+  showGeniePopup(
+    context,
+    barrierColor: Colors.black.withAlpha(120),
+    builder: (_) => _LyricsView(
+      title: title,
+      artist: artist,
+      raw: raw,
+      onSave: onSave,
+      onSeek: onSeek,
+      path: vocalKey,
+    ),
+  );
+}
+
 /// Open the same share-to-friends sheet the native player uses, for songs
 /// identified by [keys] whose bytes come from [bytesOf] (web queue). A key's
 /// last path segment is used as the file name, so keep the real extension.

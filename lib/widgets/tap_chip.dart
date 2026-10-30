@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../utils/on_accent.dart';
+
 /// A tactile header action for the music lists (playlist, Up next queue,
 /// Listen Together): a soft rounded chip that reads as a button at rest,
 /// presses in (scale + deeper tint) under the finger, ripples, and glows in
@@ -41,19 +43,21 @@ class _AlutaTapChipState extends State<AlutaTapChip> {
     final enabled = widget.onTap != null;
     final accent = widget.activeColor ?? scheme.primary;
     final on = widget.active;
+    // Active = a solid accent chip with a contrasting icon (readable on any
+    // theme colour); idle = the soft surface chip.
     final bg = on
-        ? accent.withValues(alpha: _down ? 0.30 : 0.18)
+        ? (_down ? Color.lerp(accent, Colors.black, 0.12)! : accent)
         : (_down
             ? scheme.primary.withValues(alpha: isDark ? 0.24 : 0.14)
             : (isDark
                 ? scheme.surfaceContainerHigh
                 : Colors.white.withValues(alpha: 0.92)));
     final border = on
-        ? accent.withValues(alpha: 0.65)
+        ? Color.lerp(accent, Colors.black, 0.15)!
         : scheme.primary.withValues(alpha: isDark ? 0.35 : 0.22);
     final fg = !enabled
         ? scheme.onSurfaceVariant.withValues(alpha: 0.4)
-        : (on ? accent : scheme.primary);
+        : (on ? onAccent(accent) : scheme.primary);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 3),
       child: Tooltip(

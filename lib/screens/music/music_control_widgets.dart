@@ -445,13 +445,6 @@ class _CtrlChip extends StatelessWidget {
   }
 }
 
-/// White or near-black, whichever reads on [c] — for glyphs on accent fills
-/// (works for every theme colour, light or dark mode).
-Color onAccent(Color c) =>
-    ThemeData.estimateBrightnessForColor(c) == Brightness.dark
-        ? Colors.white
-        : const Color(0xFF1C1B1F);
-
 // ─── Speed panel ──────────────────────────────────────────────────────────────
 
 class _SpeedPanel extends StatefulWidget {

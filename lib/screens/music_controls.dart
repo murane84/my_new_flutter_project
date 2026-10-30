@@ -25,6 +25,7 @@ import '../state/playback_state.dart';
 import '../services/live_session_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/file_bytes.dart';
+import '../utils/on_accent.dart';
 import '../services/vocal_map.dart';
 import 'music/free_music_screen.dart';
 import 'equalizer_screen.dart';

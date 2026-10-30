@@ -31,6 +31,7 @@ import 'dart:convert' show jsonDecode, jsonEncode;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/vocal_map.dart';
 import '../utils/typing_guard.dart';
+import '../utils/on_accent.dart';
 
 /// Web-only replacement for the native [MusicControls] panel.
 ///
@@ -1440,7 +1441,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     final iconColor = !enabled
         ? scheme.onSurface.withValues(alpha: 0.30)
         : active
-            ? tint
+            ? onAccent(tint)
             : scheme.onSurface;
     return Tactile(
       enabled: enabled,
@@ -1452,11 +1453,14 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
             padding: const EdgeInsets.all(9),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
+              // Active = solid accent disc with a contrasting glyph.
               gradient: enabled
                   ? LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [
+                      colors: active
+                          ? [tint, Color.lerp(tint, Colors.black, 0.12)!]
+                          : [
                         Color.alphaBlend(
                           tint.withValues(alpha: isDark ? 0.14 : 0.09),
                           scheme.surface,
@@ -1761,7 +1765,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     final iconColor = !available
         ? scheme.onSurfaceVariant.withValues(alpha: 0.55)
         : active
-            ? accent
+            ? onAccent(accent)
             : scheme.onSurface;
     return Tactile(
       child: GestureDetector(
@@ -1781,14 +1785,16 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [
-                        Color.alphaBlend(
-                            tint.withValues(alpha: isDark ? 0.14 : 0.09),
-                            scheme.surface),
-                        Color.alphaBlend(
-                            tint.withValues(alpha: isDark ? 0.24 : 0.16),
-                            scheme.surfaceContainerHighest),
-                      ],
+                      colors: active
+                          ? [accent, Color.lerp(accent, Colors.black, 0.12)!]
+                          : [
+                              Color.alphaBlend(
+                                  tint.withValues(alpha: isDark ? 0.14 : 0.09),
+                                  scheme.surface),
+                              Color.alphaBlend(
+                                  tint.withValues(alpha: isDark ? 0.24 : 0.16),
+                                  scheme.surfaceContainerHighest),
+                            ],
                     ),
                     border: Border.all(
                       color: active

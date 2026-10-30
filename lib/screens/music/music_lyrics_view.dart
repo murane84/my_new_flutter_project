@@ -33,7 +33,9 @@ List<(Duration, String)> estimateLyricTiming(String plain, Duration total) {
   final ls = lyricPlainLines(plain);
   if (ls.isEmpty || total < const Duration(seconds: 20)) return const [];
   final totalMs = total.inMilliseconds;
-  final lead = (totalMs * 0.07).clamp(6000, 16000).toDouble();
+  // Many songs start singing within seconds — keep the lead-in short; the
+  // strip's nudge / tap-along fixes the rest.
+  final lead = (totalMs * 0.035).clamp(2500, 9000).toDouble();
   final outro = (totalMs * 0.06).clamp(4000, 14000).toDouble();
   const pauseMs = 1600.0;
   final pauses = ls.where((e) => e.$2).length * pauseMs;

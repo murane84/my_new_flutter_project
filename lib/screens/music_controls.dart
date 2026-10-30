@@ -278,6 +278,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // Cached parsed LRC lines for the now-playing synced-lyric ticker.
   String? _lrcCachePath;
   Duration? _lrcCacheDur;
+  // Tap-along sync on the Now Playing lyric strip: the times tapped so far
+  // (null = not syncing).
+  final ValueNotifier<List<Duration>?> _tapSync =
+      ValueNotifier<List<Duration>?>(null);
   List<(Duration, String)> _lrcCache = const [];
   static final RegExp _lrcTagRe =
       RegExp(r'\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]');
@@ -521,6 +525,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   @override
   void dispose() {
+    _tapSync.dispose();
     _sleepVN.dispose();
     _revealFresh.dispose();
     freeMusicInbox.removeListener(_takeFreeMusic);
@@ -645,6 +650,84 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     });
     _saveLyrics();
     unawaited(_exportLrc(path, text));
+  }
+
+  // ── Lyric timing from the Now Playing strip ───────────────────────────────
+
+  /// The current song's lyrics as plain lines (labels / blanks dropped).
+  List<String> _plainLyricLines() {
+    if (_currentIndex < 0 || _currentIndex >= _playlist.length) return const [];
+    final raw = _lyricsRaw(_playlist[_currentIndex]);
+    return lyricPlainLines(raw.replaceAll(_lrcTagRe, ''))
+        .map((e) => e.$1)
+        .toList();
+  }
+
+  void _saveLyricTiming(List<(Duration, String)> lines) {
+    if (_currentIndex < 0 || _currentIndex >= _playlist.length) return;
+    String tag(Duration d) {
+      final ms = d.inMilliseconds < 0 ? 0 : d.inMilliseconds;
+      final m = ms ~/ 60000, s = (ms % 60000) ~/ 1000, cs = (ms % 1000) ~/ 10;
+      return '[${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}'
+          '.${cs.toString().padLeft(2, '0')}]';
+    }
+    _setLyrics(_playlist[_currentIndex],
+        lines.map((e) => '${tag(e.$1)}${e.$2}').join('\n'));
+    playlistDrawerBus.revision.value++;
+  }
+
+  /// Lyrics a bit earlier / later (exact or auto timing — auto becomes exact).
+  void _lyricNudge(int ms) {
+    if (_currentIndex < 0 || _currentIndex >= _playlist.length) return;
+    final lines = _syncedLyricLines(_playlist[_currentIndex]);
+    if (lines.isEmpty) return;
+    _saveLyricTiming([
+      for (final l in lines) (l.$1 + Duration(milliseconds: ms), l.$2),
+    ]);
+  }
+
+  /// Tap-along: restart the song; every tap on the strip starts the next line.
+  void _tapSyncStart() {
+    if (_plainLyricLines().isEmpty) return;
+    _tapSync.value = <Duration>[];
+    _transportSeek(Duration.zero);
+    if (!_player.playing) unawaited(_player.play());
+  }
+
+  void _tapSyncTap() {
+    final cur = _tapSync.value;
+    if (cur == null) return;
+    final total = _plainLyricLines().length;
+    if (cur.length >= total) return;
+    HapticFeedback.selectionClick();
+    final next = [...cur, _player.position];
+    _tapSync.value = next;
+    if (next.length >= total) _tapSyncDone();
+  }
+
+  void _tapSyncUndo() {
+    final cur = _tapSync.value;
+    if (cur == null || cur.isEmpty) return;
+    final back = cur.last - const Duration(seconds: 3);
+    _tapSync.value = cur.sublist(0, cur.length - 1);
+    _transportSeek(back < Duration.zero ? Duration.zero : back);
+  }
+
+  void _tapSyncDone() {
+    final at = _tapSync.value;
+    _tapSync.value = null;
+    if (at == null || at.isEmpty) return;
+    final text = _plainLyricLines();
+    _saveLyricTiming([
+      for (var i = 0; i < text.length; i++)
+        (
+          i < at.length
+              ? at[i]
+              : at.last + Duration(seconds: 3 * (i - at.length + 1)),
+          text[i]
+        ),
+    ]);
+    _snack('Lyrics synced 🎤');
   }
 
   /// Timed lyrics also go to a real `.lrc` file, so they outlive a reinstall

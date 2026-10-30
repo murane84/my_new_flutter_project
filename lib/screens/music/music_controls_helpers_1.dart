@@ -377,7 +377,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                             // peeking records and a line for their names.
                             // …and, when the song has lyrics, a three-line
                             // lyric strip under them that follows the song.
-                            final lyrH = split && _hasLyricsNow ? 100.0 : 0.0;
+                            final lyrH = split && _hasLyricsNow ? 132.0 : 0.0;
                             final side = split
                                 ? min(cc.maxWidth * 0.8,
                                         cc.maxHeight - 64 - lyrH)
@@ -1476,69 +1476,173 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
 
   /// Under the record on wide screens: the line being sung, big and in the
   /// accent, with the one before (fading out) and the one coming next.
-  /// Lines glide up as the song moves; tap to open the full lyrics.
+  /// Lines glide up as the song moves; tap to open the full lyrics. Below:
+  /// "earlier / later" nudges and Tap along (tap the strip as each line
+  /// starts — one listen and the timing is exact).
   Widget _lyricStrip(ColorScheme scheme, Color accent, double height) {
-    final lines = _syncedLyricLines(_playlist[_currentIndex]);
-    return StreamBuilder<Duration>(
-      stream: _player.positionStream,
-      builder: (ctx, snap) {
-        final pos = snap.data ?? _player.position;
-        var i = -1;
-        for (var k = 0; k < lines.length; k++) {
-          if (lines[k].$1 <= pos) {
-            i = k;
-          } else {
-            break;
-          }
-        }
-        String at(int k) => k >= 0 && k < lines.length ? lines[k].$2 : '';
-        final cur = i < 0 ? '♪' : at(i);
-        Widget line(String t, double size, FontWeight w, Color c, Key key) =>
-            Text(t,
-                key: key,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: size, fontWeight: w, color: c));
-        return GestureDetector(
-          onTap: _openLyrics,
-          child: SizedBox(
-            height: height,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 360),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                transitionBuilder: (child, anim) => FadeTransition(
-                  opacity: anim,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                            begin: const Offset(0, 0.25), end: Offset.zero)
-                        .animate(anim),
-                    child: child,
+    return ValueListenableBuilder<List<Duration>?>(
+      valueListenable: _tapSync,
+      builder: (ctx, tapped, _) => tapped != null
+          ? _tapAlongStrip(scheme, accent, height, tapped)
+          : _followStrip(scheme, accent, height),
+    );
+  }
+
+  Widget _stripLine(String t, double size, FontWeight w, Color c) => Text(t,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.center,
+      style: TextStyle(fontSize: size, fontWeight: w, color: c));
+
+  Widget _followStrip(ColorScheme scheme, Color accent, double height) {
+    final muted = scheme.onSurface.withAlpha(120);
+    Widget mini(IconData icon, String tip, VoidCallback onTap) => IconButton(
+          tooltip: tip,
+          visualDensity: VisualDensity.compact,
+          iconSize: 18,
+          color: muted,
+          icon: Icon(icon),
+          onPressed: onTap,
+        );
+    return SizedBox(
+      height: height,
+      child: Column(children: [
+        Expanded(
+          child: StreamBuilder<Duration>(
+            stream: _player.positionStream,
+            builder: (ctx, snap) {
+              // Read per tick (cached) so a nudge / new sync shows at once.
+              if (_currentIndex < 0 || _currentIndex >= _playlist.length) {
+                return const SizedBox.shrink();
+              }
+              final lines = _syncedLyricLines(_playlist[_currentIndex]);
+              final pos = snap.data ?? _player.position;
+              var i = -1;
+              for (var k = 0; k < lines.length; k++) {
+                if (lines[k].$1 <= pos) {
+                  i = k;
+                } else {
+                  break;
+                }
+              }
+              String at(int k) =>
+                  k >= 0 && k < lines.length ? lines[k].$2 : '';
+              return GestureDetector(
+                onTap: _openLyrics,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 360),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    transitionBuilder: (child, anim) => FadeTransition(
+                      opacity: anim,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                                begin: const Offset(0, 0.25),
+                                end: Offset.zero)
+                            .animate(anim),
+                        child: child,
+                      ),
+                    ),
+                    child: Column(
+                      key: ValueKey(i),
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _stripLine(at(i - 1), 12.5, FontWeight.w500,
+                            scheme.onSurface.withAlpha(80)),
+                        const SizedBox(height: 6),
+                        _stripLine(i < 0 ? '♪' : at(i), 18, FontWeight.w800,
+                            accent),
+                        const SizedBox(height: 6),
+                        _stripLine(at(i + 1), 13.5, FontWeight.w600,
+                            scheme.onSurface.withAlpha(140)),
+                      ],
+                    ),
                   ),
                 ),
+              );
+            },
+          ),
+        ),
+        // Timing controls: lyrics too late → "earlier", too early → "later".
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          mini(Icons.fast_rewind_rounded, 'Lyrics 0.5 s earlier',
+              () => _lyricNudge(-500)),
+          TextButton.icon(
+            onPressed: _tapSyncStart,
+            icon: const Icon(Icons.touch_app_rounded, size: 16),
+            label: const Text('Tap along to sync'),
+            style: TextButton.styleFrom(
+                foregroundColor: accent,
+                visualDensity: VisualDensity.compact,
+                textStyle: const TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w700)),
+          ),
+          mini(Icons.fast_forward_rounded, 'Lyrics 0.5 s later',
+              () => _lyricNudge(500)),
+        ]),
+      ]),
+    );
+  }
+
+  /// Tap-along mode: the line to tap next, big; the whole strip is the button.
+  Widget _tapAlongStrip(ColorScheme scheme, Color accent, double height,
+      List<Duration> tapped) {
+    final text = _plainLyricLines();
+    final i = tapped.length;
+    String at(int k) => k >= 0 && k < text.length ? text[k] : '';
+    return SizedBox(
+      height: height,
+      child: Column(children: [
+        Expanded(
+          child: Material(
+            color: accent.withAlpha(26),
+            borderRadius: BorderRadius.circular(16),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: _tapSyncTap,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
                 child: Column(
-                  key: ValueKey(i),
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    line(at(i - 1), 12.5, FontWeight.w500,
-                        scheme.onSurface.withAlpha(80), const ValueKey('p')),
+                    Text('Tap here the moment this line starts · $i of ${text.length}',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: scheme.onSurface.withAlpha(140))),
                     const SizedBox(height: 6),
-                    line(cur, 18, FontWeight.w800, accent, const ValueKey('c')),
-                    const SizedBox(height: 6),
-                    line(at(i + 1), 13.5, FontWeight.w600,
-                        scheme.onSurface.withAlpha(140), const ValueKey('n')),
+                    _stripLine(at(i), 18, FontWeight.w800, accent),
+                    const SizedBox(height: 4),
+                    _stripLine(at(i + 1), 12.5, FontWeight.w500,
+                        scheme.onSurface.withAlpha(110)),
                   ],
                 ),
               ),
             ),
           ),
-        );
-      },
+        ),
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          TextButton.icon(
+            onPressed: i == 0 ? null : _tapSyncUndo,
+            icon: const Icon(Icons.undo_rounded, size: 16),
+            label: const Text('Back'),
+          ),
+          TextButton(
+            onPressed: () => _tapSync.value = null,
+            child: const Text('Cancel'),
+          ),
+          FilledButton.tonal(
+            onPressed: i == 0 ? null : _tapSyncDone,
+            style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+            child: const Text('Done'),
+          ),
+        ]),
+      ]),
     );
   }
+
 
   Widget _wrapDisc(double side, Color accent, bool isDark, StateSetter setFull,
       {required Widget child, bool roundRing = true, VoidCallback? onTap}) {
@@ -1605,11 +1709,16 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
     if (_currentIndex < 0 || _currentIndex >= _playlist.length) {
       return const SizedBox.shrink();
     }
-    final lines = _syncedLyricLines(_playlist[_currentIndex]);
-    if (lines.isEmpty) return const SizedBox.shrink();
+    if (_syncedLyricLines(_playlist[_currentIndex]).isEmpty) {
+      return const SizedBox.shrink();
+    }
     return StreamBuilder<Duration>(
       stream: _player.positionStream,
       builder: (ctx, snap) {
+        if (_currentIndex < 0 || _currentIndex >= _playlist.length) {
+          return const SizedBox(height: 26);
+        }
+        final lines = _syncedLyricLines(_playlist[_currentIndex]);
         final pos = _liveActive
             ? (_live?.player.position ?? Duration.zero)
             : (snap.data ?? _player.position);

@@ -1,8 +1,11 @@
 part of '../music_controls.dart';
 
 // Lyrics sheet: synced (LRC `[mm:ss.xx]`) with line-by-line highlight following
-// the shared play clock, or plain text. Users can paste/edit lyrics (saved via
-// onSave to the in-app store).
+// the shared play clock. Plain lyrics follow the song too, with no typing of
+// timestamps: an automatic estimate from the song length ("≈ auto timing"),
+// "Tap to sync" (tap Next as each line starts — one listen, exact), and a
+// long-press "Starts now" that fixes one line and re-flows the rest. Users can
+// paste/edit lyrics (saved via onSave to the in-app store).
 
 class _LyricsView extends StatefulWidget {
   final String title;
@@ -36,6 +39,17 @@ class _LyricsViewState extends State<_LyricsView> {
   // Parsed synced lines (empty => plain mode).
   List<(Duration, String)> _lines = [];
   String _plain = '';
+
+  // Auto-estimated timing for plain lyrics (cached per song length).
+  List<(Duration, String)> _auto = [];
+  Duration _autoFor = Duration.zero;
+
+  // Tap-to-sync session.
+  bool _syncing = false;
+  List<String> _syncText = [];
+  final List<Duration> _syncAt = [];
+
+  static final _labelRe = RegExp(r'^\s*[\[(][^\]\)]{1,40}[\])]\s*$');
 
   @override
   void initState() {
@@ -72,18 +86,6 @@ class _LyricsViewState extends State<_LyricsView> {
     lines.sort((a, b) => a.$1.compareTo(b.$1));
     _lines = lines;
     _plain = _raw.replaceAll(_tagRe, '').trim();
-  }
-
-  int _currentLine(Duration pos) {
-    var idx = -1;
-    for (var i = 0; i < _lines.length; i++) {
-      if (_lines[i].$1 <= pos) {
-        idx = i;
-      } else {
-        break;
-      }
-    }
-    return idx;
   }
 
   void _autoScroll(int idx) {
@@ -146,6 +148,58 @@ class _LyricsViewState extends State<_LyricsView> {
                       ],
                     ),
                   ),
+                  if (!_editing && !_syncing && _plain.isNotEmpty)
+                    PopupMenuButton<String>(
+                      tooltip: 'Timing',
+                      icon: Icon(Icons.timer_outlined, color: scheme.primary),
+                      onSelected: (v) {
+                        if (v == 'sync') _startSync();
+                        if (v == 'earlier') _shiftAll(-500);
+                        if (v == 'later') _shiftAll(500);
+                        if (v == 'auto') _clearTiming();
+                      },
+                      itemBuilder: (_) => [
+                        const PopupMenuItem(
+                          value: 'sync',
+                          child: ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.touch_app_rounded),
+                            title: Text('Tap to sync'),
+                            subtitle: Text('Tap Next as each line starts'),
+                          ),
+                        ),
+                        if (_lines.isNotEmpty) ...[
+                          const PopupMenuItem(
+                            value: 'earlier',
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.fast_rewind_rounded),
+                              title: Text('Lyrics 0.5 s earlier'),
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'later',
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.fast_forward_rounded),
+                              title: Text('Lyrics 0.5 s later'),
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'auto',
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.auto_mode_rounded),
+                              title: Text('Back to auto timing'),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   IconButton(
                     icon: Icon(
                         _editing ? Icons.check_rounded : Icons.edit_rounded,
@@ -179,9 +233,11 @@ class _LyricsViewState extends State<_LyricsView> {
             Expanded(
               child: _editing
                   ? _editor(scheme, sheetScroll)
-                  : _lines.isNotEmpty
-                      ? _synced(scheme)
-                      : _plainView(scheme, sheetScroll),
+                  : _syncing
+                      ? _syncPanel(scheme)
+                      : _lines.isNotEmpty
+                          ? _synced(scheme, _lines, auto: false)
+                          : _autoOrPlain(scheme, sheetScroll),
             ),
           ],
         ),
@@ -302,11 +358,12 @@ class _LyricsViewState extends State<_LyricsView> {
     );
   }
 
-  Widget _synced(ColorScheme scheme) {
+  Widget _synced(ColorScheme scheme, List<(Duration, String)> lines,
+      {required bool auto}) {
     return ValueListenableBuilder<PlayClock>(
       valueListenable: playClockNotifier,
       builder: (_, clock, _) {
-        final active = _currentLine(clock.position);
+        final active = _currentIn(lines, clock.position);
         WidgetsBinding.instance
             .addPostFrameCallback((_) => _autoScroll(active));
         // Soft top/bottom fade so lines drift in and out of view.
@@ -323,10 +380,11 @@ class _LyricsViewState extends State<_LyricsView> {
             ],
             stops: [0.0, 0.08, 0.88, 1.0],
           ).createShader(r),
-          child: ListView.builder(
+          child: Stack(children: [
+          ListView.builder(
           controller: _scrollCtrl,
-          padding: const EdgeInsets.fromLTRB(16, 24, 16, 80),
-          itemCount: _lines.length,
+          padding: EdgeInsets.fromLTRB(16, auto ? 44 : 24, 16, 80),
+          itemCount: lines.length,
           itemBuilder: (_, i) {
             final on = i == active;
             // Lines further from the current one fade gently; sung lines
@@ -339,7 +397,9 @@ class _LyricsViewState extends State<_LyricsView> {
               borderRadius: BorderRadius.circular(10),
               onTap: widget.onSeek == null
                   ? null
-                  : () => widget.onSeek!(_lines[i].$1),
+                  : () => widget.onSeek!(lines[i].$1),
+              // Fix one line: it starts NOW; the lines after it re-flow.
+              onLongPress: () => _startsNow(lines, i, clock.position),
               child: Padding(
                 padding:
                     const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
@@ -367,7 +427,7 @@ class _LyricsViewState extends State<_LyricsView> {
                           : null,
                     ),
                     child: Text(
-                      _lines[i].$2.isEmpty ? '♪' : _lines[i].$2,
+                      lines[i].$2.isEmpty ? '♪' : lines[i].$2,
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -376,8 +436,278 @@ class _LyricsViewState extends State<_LyricsView> {
             );
           },
         ),
+          if (auto)
+            Positioned(
+              top: 8,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Material(
+                  color: scheme.surfaceContainerHighest,
+                  shape: const StadiumBorder(),
+                  child: InkWell(
+                    customBorder: const StadiumBorder(),
+                    onTap: _startSync,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 5),
+                      child: Text(
+                        '≈ auto timing · tap to sync exactly',
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: scheme.onSurfaceVariant),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ]),
         );
       },
+    );
+  }
+
+  // ── Auto timing ────────────────────────────────────────────────────────────
+
+  int _currentIn(List<(Duration, String)> lines, Duration pos) {
+    var idx = -1;
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].$1 <= pos) {
+        idx = i;
+      } else {
+        break;
+      }
+    }
+    return idx;
+  }
+
+  /// The singable lines of plain lyrics, with section labels ("[Chorus]")
+  /// and blank lines kept as breaks (a short pause), not as lines.
+  List<(String, bool)> _plainLines() {
+    final out = <(String, bool)>[]; // (text, breakBefore)
+    var brk = false;
+    for (final raw in _plain.split('\n')) {
+      final l = raw.trim();
+      if (l.isEmpty || _labelRe.hasMatch(l)) {
+        brk = out.isNotEmpty;
+        continue;
+      }
+      out.add((l, brk));
+      brk = false;
+    }
+    return out;
+  }
+
+  /// Spread the lines over the song: an intro lead-in, an outro, a short
+  /// pause at each section break, and more time for longer lines.
+  List<(Duration, String)> _estimate(Duration total) {
+    final ls = _plainLines();
+    if (ls.isEmpty) return const [];
+    final totalMs = total.inMilliseconds;
+    final lead = (totalMs * 0.07).clamp(6000, 16000).toDouble();
+    final outro = (totalMs * 0.06).clamp(4000, 14000).toDouble();
+    const pauseMs = 1600.0;
+    final pauses = ls.where((e) => e.$2).length * pauseMs;
+    final weights = [for (final e in ls) e.$1.length.clamp(10, 60).toDouble()];
+    final wsum = weights.fold<double>(0, (a, b) => a + b);
+    var avail = totalMs - lead - outro - pauses;
+    if (avail < ls.length * 1200) avail = ls.length * 1200.0;
+    var t = lead;
+    final out = <(Duration, String)>[];
+    for (var i = 0; i < ls.length; i++) {
+      if (ls[i].$2) t += pauseMs;
+      out.add((Duration(milliseconds: t.round()), ls[i].$1));
+      t += avail * weights[i] / wsum;
+    }
+    return out;
+  }
+
+  Widget _autoOrPlain(ColorScheme scheme, ScrollController sc) {
+    if (_plain.isEmpty) return _plainView(scheme, sc);
+    return ValueListenableBuilder<PlayClock>(
+      valueListenable: playClockNotifier,
+      builder: (_, clock, _) {
+        final d = clock.duration;
+        if (d < const Duration(seconds: 20)) return _plainView(scheme, sc);
+        if (d != _autoFor) {
+          _autoFor = d;
+          _auto = _estimate(d);
+        }
+        if (_auto.isEmpty) return _plainView(scheme, sc);
+        return _synced(scheme, _auto, auto: true);
+      },
+    );
+  }
+
+  // ── Saving timing ──────────────────────────────────────────────────────────
+
+  static String _tag(Duration d) {
+    final ms = d.inMilliseconds < 0 ? 0 : d.inMilliseconds;
+    final m = ms ~/ 60000, s = (ms % 60000) ~/ 1000, cs = (ms % 1000) ~/ 10;
+    return '[${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}.'
+        '${cs.toString().padLeft(2, '0')}]';
+  }
+
+  void _saveTimed(List<(Duration, String)> lines) {
+    final text = lines.map((e) => '${_tag(e.$1)}${e.$2}').join('\n');
+    widget.onSave(text);
+    setState(() {
+      _raw = text;
+      _editCtrl.text = text;
+      _lastLine = -1;
+      _parse();
+    });
+  }
+
+  void _shiftAll(int ms) {
+    if (_lines.isEmpty) return;
+    _saveTimed([
+      for (final l in _lines) (l.$1 + Duration(milliseconds: ms), l.$2),
+    ]);
+    showToast(context, ms < 0 ? 'Lyrics moved 0.5 s earlier' : 'Lyrics moved 0.5 s later');
+  }
+
+  void _clearTiming() {
+    final text = _plain;
+    widget.onSave(text);
+    setState(() {
+      _raw = text;
+      _editCtrl.text = text;
+      _lastLine = -1;
+      _autoFor = Duration.zero;
+      _parse();
+    });
+  }
+
+  /// Long-press: this line starts NOW — it and every line after it move by
+  /// the same amount (what came before stays as it was).
+  void _startsNow(List<(Duration, String)> lines, int i, Duration now) {
+    HapticFeedback.mediumImpact();
+    final delta = now - lines[i].$1;
+    _saveTimed([
+      for (var j = 0; j < lines.length; j++)
+        (j >= i ? lines[j].$1 + delta : lines[j].$1, lines[j].$2),
+    ]);
+    showToast(context, 'Line set to start here — the rest follow');
+  }
+
+  // ── Tap to sync ────────────────────────────────────────────────────────────
+
+  void _startSync() {
+    final ls = _plainLines().map((e) => e.$1).toList();
+    if (ls.isEmpty) return;
+    setState(() {
+      _syncing = true;
+      _syncText = ls;
+      _syncAt.clear();
+    });
+    widget.onSeek?.call(Duration.zero);
+    playbackBus.onPlay?.call();
+  }
+
+  void _syncTap() {
+    if (_syncAt.length >= _syncText.length) return;
+    HapticFeedback.selectionClick();
+    setState(() => _syncAt.add(playClockNotifier.value.position));
+    if (_syncAt.length == _syncText.length) _finishSync();
+  }
+
+  void _finishSync() {
+    if (_syncAt.isEmpty) {
+      setState(() => _syncing = false);
+      return;
+    }
+    // Lines not reached yet keep an estimate after the last tap.
+    final timed = <(Duration, String)>[];
+    for (var i = 0; i < _syncText.length; i++) {
+      final at = i < _syncAt.length
+          ? _syncAt[i]
+          : _syncAt.last + Duration(seconds: 3 * (i - _syncAt.length + 1));
+      timed.add((at, _syncText[i]));
+    }
+    setState(() => _syncing = false);
+    _saveTimed(timed);
+    showToast(context, 'Lyrics synced 🎤', type: ToastType.success);
+  }
+
+  Widget _syncPanel(ColorScheme scheme) {
+    final i = _syncAt.length;
+    String at(int k) => k >= 0 && k < _syncText.length ? _syncText[k] : '';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      child: Column(children: [
+        Text('Tap Next the moment each line starts',
+            style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 4),
+        Text('${i.clamp(0, _syncText.length)} of ${_syncText.length}',
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: scheme.primary)),
+        const Spacer(),
+        Text(at(i - 1),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontSize: 14, color: scheme.onSurface.withAlpha(110))),
+        const SizedBox(height: 14),
+        Text(i < _syncText.length ? at(i) : 'All lines timed',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: scheme.primary)),
+        const SizedBox(height: 14),
+        Text(at(i + 1),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontSize: 14, color: scheme.onSurface.withAlpha(150))),
+        const Spacer(),
+        SizedBox(
+          width: double.infinity,
+          height: 64,
+          child: FilledButton.icon(
+            onPressed: i < _syncText.length ? _syncTap : null,
+            icon: const Icon(Icons.touch_app_rounded),
+            label: const Text('Next line',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+            style: FilledButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20))),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(children: [
+          TextButton.icon(
+            onPressed: i == 0
+                ? null
+                : () {
+                    // Missed one: undo the last tap and replay a bit before.
+                    final back = _syncAt.removeLast();
+                    setState(() {});
+                    final to = back - const Duration(seconds: 3);
+                    widget.onSeek
+                        ?.call(to < Duration.zero ? Duration.zero : to);
+                  },
+            icon: const Icon(Icons.undo_rounded, size: 18),
+            label: const Text('Back'),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: () => setState(() {
+              _syncing = false;
+              _syncAt.clear();
+            }),
+            child: const Text('Cancel'),
+          ),
+          const SizedBox(width: 4),
+          FilledButton.tonal(
+            onPressed: i == 0 ? null : _finishSync,
+            child: const Text('Done'),
+          ),
+        ]),
+      ]),
     );
   }
 }

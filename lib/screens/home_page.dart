@@ -2159,12 +2159,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Daily "Us" question — your partner answered, or you both just revealed.
     if (type == 'prompt_answered' || type == 'prompt_revealed') {
       final reveal = type == 'prompt_revealed';
+      final data = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
       if (mounted) {
         showToast(
           context,
           reveal
               ? 'You both answered today\'s question 💞'
-              : 'Your partner answered today\'s question 💬',
+              : '${ContactNames.instance.displayName(userId: data['from_id'], registered: (data['from_username'] ?? 'Your partner').toString())} answered today\'s question — your turn 💬',
           type: ToastType.info,
         );
       }

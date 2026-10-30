@@ -146,8 +146,9 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
     final day = (it['day'] ?? '').toString();
     final mine = (it['my_answer'] as Map?)?.cast<String, dynamic>();
     final theirs = (it['partner_answer'] as Map?)?.cast<String, dynamic>();
-    final partnerName =
-        ((_space['question'] as Map?)?['partner_name'] ?? 'Partner').toString();
+    final partnerName = _partnerShown(
+        ((_space['question'] as Map?)?['partner_name'] ?? 'Partner')
+            .toString());
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -279,7 +280,10 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
     final memo = (t['memo'] ?? '').toString().trim();
     final source = (t['source'] ?? 'manual').toString();
     final mine = t['mine'] == true;
-    final adder = mine ? 'You' : (t['added_by_username'] ?? '').toString();
+    final adder = mine
+        ? 'You'
+        : _personShown(t['added_by'], t['added_by_username'],
+            fallback: _partnerShown('them'));
     final (srcIcon, srcText) = _sourceBadge(source);
     final avail = id == null ? null : _trackAvail[id];
     // The song playing right now (in my player) dances.

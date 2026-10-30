@@ -774,6 +774,24 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         .toList();
   }
 
+  /// The partner by the name saved in MY phone book (else their Aluta name,
+  /// else [fallback]). Every partner mention in Our Space goes through this.
+  String _partnerShown([String fallback = 'your partner']) {
+    if (_others.isEmpty) return fallback;
+    final o = _others.first;
+    final reg = (o['username'] ?? '').toString().trim();
+    return ContactNames.instance
+        .displayName(of: o, registered: reg.isEmpty ? fallback : reg);
+  }
+
+  /// Anyone in this Space by id, as I know them (phone-book name first).
+  String _personShown(Object? userId, Object? registered,
+      {String fallback = 'Your partner'}) {
+    final reg = (registered ?? '').toString().trim();
+    return ContactNames.instance.displayName(
+        userId: userId, registered: reg.isEmpty ? fallback : reg);
+  }
+
   // ── actions ────────────────────────────────────────────────────────────────
   /// Start a private 1:1 Listen Together with this bond's partner: pick the song
   /// (what's playing now, else choose one), then open the live session as host —
@@ -2001,7 +2019,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final kind = (prompt['kind'] ?? 'text').toString();
     final answered = q['answered'] == true;
     final revealed = q['revealed'] == true;
-    final partnerName = (q['partner_name'] ?? 'your partner').toString();
+    final partnerName = _partnerShown(
+        (q['partner_name'] ?? 'your partner').toString());
     final myAns = (q['my_answer'] as Map?)?.cast<String, dynamic>();
     final partnerAns = (q['partner_answer'] as Map?)?.cast<String, dynamic>();
     // Both answered (and no mood to mend): fold to a small chip so the

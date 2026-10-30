@@ -796,9 +796,12 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
     final title = (d['track_title'] ?? '').toString();
     final artist = (d['track_artist'] ?? '').toString();
     final mood = (d['mood'] ?? '').toString();
-    final partnerName =
-        ((_space['question'] as Map?)?['partner_name'] ?? 'Partner').toString();
-    final who = mine ? 'To $partnerName' : 'From ${d['from_username'] ?? partnerName}';
+    final partnerName = _partnerShown(
+        ((_space['question'] as Map?)?['partner_name'] ?? 'Partner')
+            .toString());
+    final who = mine
+        ? 'To $partnerName'
+        : 'From ${_personShown(d['from_id'], d['from_username'], fallback: partnerName)}';
     return GestureDetector(
       onTap: () => _openDedicationDetail(d),
       child: Container(

@@ -989,7 +989,9 @@ extension _HomePageHelpers1 on HomePageState {
     activeLiveSession?.controller.markDeclined();
     final data =
         (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
-    final who = (data['listener_username'] ?? 'Your friend').toString();
+    final who = ContactNames.instance.displayName(
+        userId: data['listener_id'],
+        registered: (data['listener_username'] ?? 'Your friend').toString());
     final weak = data['reason'] == 'weak_net';
     final end = await showDialog<bool>(
       context: context,

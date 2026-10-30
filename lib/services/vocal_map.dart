@@ -79,7 +79,9 @@ class VocalMap {
     ]);
     if (rMed <= 0) return null;
     final singing = [
-      for (var i = 0; i < n; i++) rs[i] >= 0.9 * rMed && vs[i] >= 0.6 * vMed
+      // Below the median on purpose: half of the sung frames sit under it, and
+      // counting those as "no voice" would invent breaks mid-verse.
+      for (var i = 0; i < n; i++) rs[i] >= 0.75 * rMed && vs[i] >= 0.5 * vMed
     ];
     // Smoothing lags ~0.75 s behind the sound; pull edges back by that.
     const lag = 7;

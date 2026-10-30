@@ -1119,9 +1119,14 @@ class _ChatPageState extends State<ChatPage>
         final fresh = await ApiService().fetchMessagesBetween(
           uid, widget.friendId, skip: 0, limit: 60);
         if (!mounted) return;
-        final before = _messages.length;
+        final had = {for (final m in _messages) m['id'].toString()};
         final merged = _merge(_messages, fresh, markRead: _isAtBottom);
-        final newCount = merged.length - before;
+        // Count only incoming ones — my own synced sends aren't "received".
+        final newCount = merged
+            .where((m) =>
+                !had.contains(m['id'].toString()) &&
+                m['sender_id']?.toString() != _myId)
+            .length;
         setState(() => _messages = merged);
         await _saveMessagesCache();
 
@@ -1176,11 +1181,19 @@ class _ChatPageState extends State<ChatPage>
     final merged = _merge(_messages, fetched, markRead: _isAtBottom);
     if (!mounted) return;
     if (!_listEq(_messages, merged)) {
+      // Only a message that wasn't here before AND came from someone else
+      // counts as "new". A tick turning blue on my own message (the friend
+      // came back online and read it) also changes the list, and used to
+      // pop the "New messages" chip on the sender's side.
+      final had = {for (final m in _messages) m['id'].toString()};
+      final gotNew = merged.any((m) =>
+          !had.contains(m['id'].toString()) &&
+          m['sender_id']?.toString() != _myId);
       setState(() => _messages = merged);
       _saveMessagesCache();
       if (_isAtBottom) {
-        _scrollToBottom();
-      } else {
+        if (gotNew) _scrollToBottom();
+      } else if (gotNew) {
         setState(() => _hasNewMsg = true);
       }
     }

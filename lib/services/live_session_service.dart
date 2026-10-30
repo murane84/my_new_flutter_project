@@ -295,6 +295,13 @@ class LiveSessionController {
   bool _peerEverPresent = false; // has a listener ever joined? (rejoin detect)
   bool _peerGraceful = false; // listener announced 'leaving' (vs a silent drop)
   bool _switchingTrack = false; // guards auto-advance during a source swap
+  // Host: true once the first track is loaded and playing. Songs queued
+  // before that (e.g. my "up next" carried over when accepting a tune-in,
+  // which races the session bring-up) wait in [_earlyAdds] — otherwise
+  // [addTrack] saw an idle player, started the NEXT song, and then the
+  // bring-up snapped back to the current one and wiped the queue.
+  bool _hostStarted = false;
+  final List<LiveTrack> _earlyAdds = [];
   StreamSubscription? _completeSub;
   /// Fired whenever the queue or current index changes (host UI refresh, and —
   /// now — the listener's mirrored queue too).
@@ -554,7 +561,9 @@ class LiveSessionController {
     // Seed the queue with this first track.
     queue
       ..clear()
-      ..add(LiveTrack(bytes: audioBytes, title: title, mime: mime));
+      ..add(LiveTrack(bytes: audioBytes, title: title, mime: mime))
+      ..addAll(_earlyAdds);
+    _earlyAdds.clear();
     currentIndex = 0;
     // Auto-advance to the next queued track when one finishes.
     _completeSub = player.processingStateStream.listen((s) {
@@ -574,6 +583,7 @@ class LiveSessionController {
     // Do NOT await: play()'s future completes only when the song ENDS.
     unawaited(player.play());
     _sendControl({'type': 'play', 'position_ms': startPositionMs});
+    _hostStarted = true;
     onQueueChanged?.call();
     _broadcastQueue();
   }
@@ -584,6 +594,11 @@ class LiveSessionController {
   /// Append a song to the up-next queue. If the current track has already
   /// finished (nothing playing), start this one immediately.
   Future<void> addTrack(LiveTrack t) async {
+    if (role == LiveRole.host && !_hostStarted) {
+      // First track not up yet — hold it; it joins the queue right after.
+      _earlyAdds.add(t);
+      return;
+    }
     queue.add(t);
     onQueueChanged?.call();
     _broadcastQueue();

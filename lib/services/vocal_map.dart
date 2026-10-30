@@ -198,6 +198,11 @@ class VocalMaps {
   static const _ch = MethodChannel('aluta/downloads');
   static const _winCh = MethodChannel('aluta/vocal');
   static const _prefsKey = 'vocal_maps_v1';
+  // Written just before a native analysis and cleared after: if the app dies
+  // in the middle, that song is marked "no map" on the next start and never
+  // analysed again — one bad file can't crash Aluta on every launch.
+  static const _inflightKey = 'vocal_inflight_v1';
+  static const _maxBytes = 40 * 1024 * 1024;
 
   final Map<String, VocalMap?> _maps = {};
   final Map<String, Future<VocalMap?>> _running = {};
@@ -212,10 +217,28 @@ class VocalMaps {
     try {
       final p = await SharedPreferences.getInstance();
       final raw = p.getString(_prefsKey);
-      if (raw == null) return;
-      final m = jsonDecode(raw);
-      if (m is Map) {
-        m.forEach((k, v) => _maps[k.toString()] = VocalMap.fromJson(v));
+      if (raw != null) {
+        final m = jsonDecode(raw);
+        if (m is Map) {
+          m.forEach((k, v) => _maps[k.toString()] = VocalMap.fromJson(v));
+        }
+      }
+      final crashed = p.getString(_inflightKey);
+      if (crashed != null && crashed.isNotEmpty) {
+        _maps[crashed] = null;
+        await p.remove(_inflightKey);
+        unawaited(_save());
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _mark(String? path) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      if (path == null) {
+        await p.remove(_inflightKey);
+      } else {
+        await p.setString(_inflightKey, path);
       }
     } catch (_) {}
   }
@@ -243,12 +266,25 @@ class VocalMaps {
     return _running[path] ??= () async {
       VocalMap? map;
       try {
+        // Huge files (long mixes, videos) aren't worth decoding.
+        try {
+          final f = File(path);
+          if (await f.exists() && await f.length() > _maxBytes) {
+            _maps[path] = null;
+            _running.remove(path);
+            unawaited(_save());
+            return null;
+          }
+        } catch (_) {}
+        await _mark(path);
         final r = await (Platform.isWindows ? _winCh : _ch)
-            .invokeMethod<Object?>('vocalProfile', {'path': path});
+            .invokeMethod<Object?>('vocalProfile', {'path': path})
+            .timeout(const Duration(seconds: 25));
         if (r is List) {
           map = VocalMap.fromProfile([for (final x in r) (x as num).toDouble()]);
         }
       } catch (_) {}
+      await _mark(null);
       _maps[path] = map;
       _running.remove(path);
       unawaited(_save());
@@ -261,7 +297,7 @@ class VocalMaps {
   Future<VocalMap?> requestBytes(String key, Uint8List bytes) async {
     await _load();
     if (_maps.containsKey(key)) return _maps[key];
-    if (bytes.isEmpty) return null;
+    if (bytes.isEmpty || bytes.length > _maxBytes) return null;
     return _running[key] ??= () async {
       VocalMap? map;
       try {

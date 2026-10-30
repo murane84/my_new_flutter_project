@@ -72,7 +72,7 @@ object VocalProfile {
             var frameLen = sr / 10
             val out = ArrayList<Double>(4000)
             var sumAll = 0.0; var sumVoice = 0.0; var n = 0
-            val maxFrames = 12 * 60 * 10 // 12 minutes is plenty
+            val maxFrames = 8 * 60 * 10 // 8 minutes is plenty
             val info = MediaCodec.BufferInfo()
             var inDone = false; var outDone = false
             while (!outDone && out.size / 2 < maxFrames) {

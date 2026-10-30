@@ -279,6 +279,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // Cached parsed LRC lines for the now-playing synced-lyric ticker.
   String? _lrcCachePath;
   Duration? _lrcCacheDur;
+  // Songs whose voice-start analysis was already asked for this run.
+  final Set<String> _vocalAsked = {};
   // Tap-along sync on the Now Playing lyric strip: the times tapped so far
   // (null = not syncing).
   final ValueNotifier<List<Duration>?> _tapSync =
@@ -1108,14 +1110,25 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     final plain = raw.replaceAll(_lrcTagRe, '');
     // Plain lyrics: listen to the song once (Android, in the background) to
     // learn where the singing starts; re-estimate when that's known.
+    // Asked at most ONCE per song per run (this runs on every position
+    // tick), and only after the song has been playing a few seconds — never
+    // during app start-up.
     if (out.isEmpty &&
         plain.trim().isNotEmpty &&
-        !VocalMaps.instance.known(path)) {
-      VocalMaps.instance.request(path).then((m) {
+        !VocalMaps.instance.known(path) &&
+        _vocalAsked.add(path)) {
+      Future.delayed(const Duration(seconds: 4), () async {
+        if (!mounted ||
+            _currentIndex < 0 ||
+            _currentIndex >= _playlist.length ||
+            _playlist[_currentIndex] != path) {
+          _vocalAsked.remove(path); // try again when it's actually playing
+          return;
+        }
+        final m = await VocalMaps.instance.request(path);
         if (m == null || !mounted) return;
         _lrcCachePath = null;
         setState(() {});
-        playlistDrawerBus.revision.value++;
       });
     }
     final lines = out.isNotEmpty || dur == null

@@ -220,6 +220,9 @@ class MainActivity : AudioServiceFragmentActivity() {
                     "vocalProfile" -> {
                         val p = call.argument<String>("path")
                         Thread {
+                            // Low priority: never compete with playback / UI.
+                            android.os.Process.setThreadPriority(
+                                android.os.Process.THREAD_PRIORITY_BACKGROUND)
                             val prof = try {
                                 if (p.isNullOrEmpty()) null
                                 else if (p.startsWith("content://"))

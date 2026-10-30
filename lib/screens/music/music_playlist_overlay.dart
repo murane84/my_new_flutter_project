@@ -1582,8 +1582,12 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           return Row(children: [
             leading,
             const SizedBox(width: 8),
-            Flexible(child: title),
-            const Spacer(),
+            // The title takes ALL the free room (left-aligned), so the
+            // actions sit flush right. (Flexible + Spacer split it in half
+            // and parked the actions mid-header on a full-screen player.)
+            Expanded(
+              child: Align(alignment: Alignment.centerLeft, child: title),
+            ),
             for (final a in actions)
               Builder(
                 builder: (bctx) => AlutaTapChip(

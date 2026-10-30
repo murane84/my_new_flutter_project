@@ -1465,144 +1465,187 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         if ((d.primaryVelocity ?? 0) > 200) widget.onClose();
       },
       child: Container(
-        padding: EdgeInsets.fromLTRB(widget.fullPage ? 6 : 14, 8, 6, 8),
+        padding: EdgeInsets.fromLTRB(widget.fullPage ? 8 : 12, 10, 10, 10),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest.withAlpha(120),
         border: Border(
             bottom: BorderSide(color: scheme.outlineVariant.withAlpha(80))),
       ),
-      child: Row(
-        children: [
-          // Full-page (music surface): a leading back arrow returns to Now
-          // Playing. Drawer/sheet: the queue glyph, with a collapse control on
-          // the far right instead.
-          if (widget.fullPage)
-            _backBtn(scheme)
-          else
-            Icon(Icons.queue_music_rounded, color: scheme.primary, size: 18),
-          const SizedBox(width: 6),
-          // Title + actions. Wide: one row. Narrow (phones): the title gets its
-          // own line and the actions sit under it, so "Playlist" + the count
-          // are never squeezed into "Playlist (…".
-          Expanded(
-            child: LayoutBuilder(builder: (ctx, c) {
-              final actions = <Widget>[
-                // + : scan this device / pick files, or Free music (legal).
-                Builder(
-                  builder: (chipCtx) => AlutaTapChip(
-                      icon: Icons.add_rounded,
-                      tooltip: 'Add music',
-                      onTap: () => _addMenu(chipCtx)),
-                ),
-                AlutaTapChip(
-                  icon: _favOnly
-                      ? Icons.favorite_rounded
-                      : Icons.favorite_border_rounded,
-                  tooltip: _favOnly ? 'Showing favourites' : 'Favourites',
-                  active: _favOnly,
-                  activeColor: Colors.pinkAccent,
-                  onTap: () {
-                    setState(() {
-                      _favOnly = !_favOnly;
-                      if (_favOnly) {
-                        _activeGroup = null;
-                        _smart = _Smart.none;
-                      }
-                    });
-                    _persistFilters();
-                  },
-                ),
-                AlutaTapChip(
-                  icon: Icons.checklist_rounded,
-                  tooltip: 'Select songs',
-                  onTap: widget.playlist.isEmpty
-                      ? null
-                      : () => setState(() {
-                            _selecting = true;
-                            _selected.clear();
-                          }),
-                ),
-                // Shuffle everything currently shown (respects the filter).
-                AlutaTapChip(
-                  icon: Icons.shuffle_rounded,
-                  tooltip: 'Shuffle these',
-                  onTap: widget.playlist.isEmpty
-                      ? null
-                      : () {
-                          final paths =
-                              _displayed().map((e) => e.value).toList();
-                          if (paths.isNotEmpty) {
-                            widget.onPlayScope(paths, 0, true);
-                          }
-                        },
-                ),
-                // Scroll to the song that's playing.
-                if (widget.hasTrack)
-                  AlutaTapChip(
-                    icon: Icons.my_location_rounded,
-                    tooltip: 'Find the playing song',
-                    onTap: _locateNow,
-                  ),
-              ];
-              final title = Row(mainAxisSize: MainAxisSize.min, children: [
-                const Flexible(
-                  child: Text('Playlist',
-                      style:
-                          TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      overflow: TextOverflow.ellipsis),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: scheme.primary.withAlpha(30),
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: Text('${widget.playlist.length}',
-                      style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w800,
-                          color: scheme.primary)),
-                ),
-              ]);
-              final wide = c.maxWidth >= 44.0 * actions.length + 130;
-              if (wide) {
-                return Row(children: [
-                  Flexible(child: title),
-                  const SizedBox(width: 6),
-                  ...actions,
-                ]);
-              }
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(left: 2, bottom: 6),
-                    child: title,
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: actions,
-                  ),
-                ],
-              );
-            }),
+      child: LayoutBuilder(builder: (ctx, c) {
+        // The header's actions, described once and drawn two ways: chips in
+        // one row on wide panels, a neat toolbar strip on phones.
+        final actions = <({
+          IconData icon,
+          String tip,
+          void Function(BuildContext)? onTap,
+          bool active,
+          Color? activeColor,
+        })>[
+          (
+            icon: Icons.add_rounded,
+            tip: 'Add music',
+            onTap: _addMenu,
+            active: false,
+            activeColor: null,
           ),
-          if (!widget.fullPage) ...[
-            const SizedBox(width: 6),
-            // Drawer: collapse back to the right edge; sheet: close.
-            AlutaTapChip(
-              icon: widget.drawer
-                  ? Icons.chevron_right_rounded
-                  : Icons.keyboard_arrow_down_rounded,
-              tooltip: widget.drawer ? 'Collapse' : 'Close',
-              onTap: widget.onClose,
+          (
+            icon: _favOnly
+                ? Icons.favorite_rounded
+                : Icons.favorite_border_rounded,
+            tip: _favOnly ? 'Showing favourites' : 'Favourites',
+            onTap: (_) {
+              setState(() {
+                _favOnly = !_favOnly;
+                if (_favOnly) {
+                  _activeGroup = null;
+                  _smart = _Smart.none;
+                }
+              });
+              _persistFilters();
+            },
+            active: _favOnly,
+            activeColor: Colors.pinkAccent,
+          ),
+          (
+            icon: Icons.checklist_rounded,
+            tip: 'Select songs',
+            onTap: widget.playlist.isEmpty
+                ? null
+                : (_) => setState(() {
+                      _selecting = true;
+                      _selected.clear();
+                    }),
+            active: false,
+            activeColor: null,
+          ),
+          (
+            icon: Icons.shuffle_rounded,
+            tip: 'Shuffle these',
+            onTap: widget.playlist.isEmpty
+                ? null
+                : (_) {
+                    final paths = _displayed().map((e) => e.value).toList();
+                    if (paths.isNotEmpty) widget.onPlayScope(paths, 0, true);
+                  },
+            active: false,
+            activeColor: null,
+          ),
+          if (widget.hasTrack)
+            (
+              icon: Icons.my_location_rounded,
+              tip: 'Find the playing song',
+              onTap: (_) => _locateNow(),
+              active: false,
+              activeColor: null,
             ),
-          ],
-        ],
-      ),
+        ];
+
+        final leading = widget.fullPage
+            ? _backBtn(scheme)
+            : Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Icon(Icons.queue_music_rounded,
+                    color: scheme.primary, size: 20),
+              );
+        final trailing = widget.fullPage
+            ? null
+            : AlutaTapChip(
+                icon: widget.drawer
+                    ? Icons.chevron_right_rounded
+                    : Icons.keyboard_arrow_down_rounded,
+                tooltip: widget.drawer ? 'Collapse' : 'Close',
+                onTap: widget.onClose,
+              );
+        final title = Row(mainAxisSize: MainAxisSize.min, children: [
+          const Flexible(
+            child: Text('Playlist',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: scheme.primary.withAlpha(30),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text('${widget.playlist.length}',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: scheme.primary)),
+          ),
+        ]);
+
+        final wide = c.maxWidth >= 44.0 * actions.length + 190;
+        if (wide) {
+          return Row(children: [
+            leading,
+            const SizedBox(width: 8),
+            Flexible(child: title),
+            const Spacer(),
+            for (final a in actions)
+              Builder(
+                builder: (bctx) => AlutaTapChip(
+                  icon: a.icon,
+                  tooltip: a.tip,
+                  active: a.active,
+                  activeColor: a.activeColor,
+                  onTap: a.onTap == null ? null : () => a.onTap!(bctx),
+                ),
+              ),
+            if (trailing != null) ...[const SizedBox(width: 6), trailing],
+          ]);
+        }
+        // Phones: title row (back · Playlist [93] · collapse), then ONE
+        // toolbar strip with the actions evenly inside it.
+        return Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            leading,
+            const SizedBox(width: 10),
+            Expanded(child: title),
+            ?trailing,
+          ]),
+          const SizedBox(height: 10),
+          Container(
+            height: 44,
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: scheme.primary.withAlpha(40)),
+            ),
+            child: Row(children: [
+              for (var i = 0; i < actions.length; i++) ...[
+                if (i > 0)
+                  Container(
+                      width: 1,
+                      height: 20,
+                      color: scheme.outlineVariant.withAlpha(90)),
+                Expanded(
+                  child: Builder(builder: (bctx) {
+                    final a = actions[i];
+                    final color = a.active
+                        ? (a.activeColor ?? scheme.primary)
+                        : (a.onTap == null
+                            ? scheme.onSurface.withAlpha(70)
+                            : scheme.primary);
+                    return Tooltip(
+                      message: a.tip,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: a.onTap == null ? null : () => a.onTap!(bctx),
+                        child: SizedBox.expand(
+                          child: Icon(a.icon, size: 21, color: color),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ],
+            ]),
+          ),
+        ]);
+      }),
       ),
     );
   }

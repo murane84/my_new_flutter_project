@@ -375,8 +375,12 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                           child: LayoutBuilder(builder: (c, cc) {
                             // Wide split: leave room either side for the
                             // peeking records and a line for their names.
+                            // …and, when the song has lyrics, a three-line
+                            // lyric strip under them that follows the song.
+                            final lyrH = split && _hasLyricsNow ? 100.0 : 0.0;
                             final side = split
-                                ? min(cc.maxWidth * 0.8, cc.maxHeight - 64)
+                                ? min(cc.maxWidth * 0.8,
+                                        cc.maxHeight - 64 - lyrH)
                                     .clamp(0.0, 360.0)
                                     .toDouble()
                                 : (cc.maxWidth < cc.maxHeight
@@ -425,7 +429,8 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                             );
                             return split
                                 ? _peekStage(discW, side, cc.maxWidth, accent,
-                                    scheme, setFull)
+                                    scheme, setFull,
+                                    lyricH: lyrH)
                                 : discW;
                           }),
                         ),
@@ -486,9 +491,10 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                         ),
                   ];
                   final rest = <Widget>[
-                      // Synced-lyric ticker — shows only when the song has LRC
-                      // timing; tap it to open the full lyrics sheet.
-                      _syncedLyricLine(scheme, accent, false),
+                      // Lyric ticker (exact or auto timing); tap it to open
+                      // the full sheet. Wide split shows the 3-line strip
+                      // under the record instead.
+                      _syncedLyricLine(scheme, accent, split),
                       // How this song feels → who it's for. Folds away with
                       // the utilities when the queue opens.
                       if (!live && title.trim().isNotEmpty)
@@ -1289,7 +1295,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
   /// (click to skip; ← / → too), with their names, and the place in the list
   /// underneath. Works for Listening Together too (the session's queue).
   Widget _peekStage(Widget disc, double side, double width, Color accent,
-      ColorScheme scheme, StateSetter setFull) {
+      ColorScheme scheme, StateSetter setFull, {double lyricH = 0}) {
     String? prevTitle, nextTitle, prevBy, nextBy;
     VoidCallback? goPrev, goNext;
     int place = 0, total = 0;
@@ -1352,7 +1358,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
         goNext = () => _play(nIdx);
       }
     }
-    final h = side + 64;
+    final h = side + 64 + lyricH;
     Widget name(String? title, String? by, VoidCallback? go, bool left) =>
         Expanded(
           child: _PeekName(
@@ -1453,10 +1459,84 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                   ],
                 ),
               ),
+              if (lyricH > 0) _lyricStrip(scheme, accent, lyricH),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  /// Whether the current song has lyrics that can follow it (exact or auto).
+  bool get _hasLyricsNow =>
+      !_liveActive &&
+      _currentIndex >= 0 &&
+      _currentIndex < _playlist.length &&
+      _syncedLyricLines(_playlist[_currentIndex]).isNotEmpty;
+
+  /// Under the record on wide screens: the line being sung, big and in the
+  /// accent, with the one before (fading out) and the one coming next.
+  /// Lines glide up as the song moves; tap to open the full lyrics.
+  Widget _lyricStrip(ColorScheme scheme, Color accent, double height) {
+    final lines = _syncedLyricLines(_playlist[_currentIndex]);
+    return StreamBuilder<Duration>(
+      stream: _player.positionStream,
+      builder: (ctx, snap) {
+        final pos = snap.data ?? _player.position;
+        var i = -1;
+        for (var k = 0; k < lines.length; k++) {
+          if (lines[k].$1 <= pos) {
+            i = k;
+          } else {
+            break;
+          }
+        }
+        String at(int k) => k >= 0 && k < lines.length ? lines[k].$2 : '';
+        final cur = i < 0 ? '♪' : at(i);
+        Widget line(String t, double size, FontWeight w, Color c, Key key) =>
+            Text(t,
+                key: key,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: size, fontWeight: w, color: c));
+        return GestureDetector(
+          onTap: _openLyrics,
+          child: SizedBox(
+            height: height,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 360),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, anim) => FadeTransition(
+                  opacity: anim,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                            begin: const Offset(0, 0.25), end: Offset.zero)
+                        .animate(anim),
+                    child: child,
+                  ),
+                ),
+                child: Column(
+                  key: ValueKey(i),
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    line(at(i - 1), 12.5, FontWeight.w500,
+                        scheme.onSurface.withAlpha(80), const ValueKey('p')),
+                    const SizedBox(height: 6),
+                    line(cur, 18, FontWeight.w800, accent, const ValueKey('c')),
+                    const SizedBox(height: 6),
+                    line(at(i + 1), 13.5, FontWeight.w600,
+                        scheme.onSurface.withAlpha(140), const ValueKey('n')),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

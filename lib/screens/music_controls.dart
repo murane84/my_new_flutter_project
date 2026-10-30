@@ -277,6 +277,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   int? _artAccentForId;
   // Cached parsed LRC lines for the now-playing synced-lyric ticker.
   String? _lrcCachePath;
+  Duration? _lrcCacheDur;
   List<(Duration, String)> _lrcCache = const [];
   static final RegExp _lrcTagRe =
       RegExp(r'\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]');
@@ -643,6 +644,26 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       }
     });
     _saveLyrics();
+    unawaited(_exportLrc(path, text));
+  }
+
+  /// Timed lyrics also go to a real `.lrc` file, so they outlive a reinstall
+  /// and other music players show them: next to the song when that folder is
+  /// writable (desktop, older Android), else Documents/Aluta Lyrics (Android).
+  Future<void> _exportLrc(String path, String text) async {
+    if (kIsWeb || !_lrcTagRe.hasMatch(text)) return;
+    final dot = path.lastIndexOf('.');
+    final base = dot > 0 ? path.substring(0, dot) : path;
+    try {
+      await File('$base.lrc').writeAsString(text);
+      return;
+    } catch (_) {}
+    if (!Platform.isAndroid) return;
+    final name = '${base.split(RegExp(r'[\\/]')).last}.lrc';
+    try {
+      await const MethodChannel('aluta/downloads')
+          .invokeMethod<bool>('saveLyrics', {'fileName': name, 'text': text});
+    } catch (_) {}
   }
 
   void _openLyrics() {
@@ -976,10 +997,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     );
   }
 
-  // Parse (and cache) the current song's LRC lines, sorted by time. Empty when
-  // the lyrics are plain text with no [mm:ss.xx] timestamps.
+  // Parse (and cache) the current song's LRC lines, sorted by time. Plain
+  // lyrics (no [mm:ss.xx] stamps) get the same automatic timing as the lyrics
+  // sheet, so the Now Playing ticker moves for them too.
   List<(Duration, String)> _syncedLyricLines(String path) {
-    if (_lrcCachePath == path) return _lrcCache;
+    final dur = _player.duration;
+    if (_lrcCachePath == path && _lrcCacheDur == dur) return _lrcCache;
     final raw = _lyricsRaw(path);
     final out = <(Duration, String)>[];
     for (final line in raw.split('\n')) {
@@ -997,9 +1020,13 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       }
     }
     out.sort((a, b) => a.$1.compareTo(b.$1));
+    final lines = out.isNotEmpty || dur == null
+        ? out
+        : estimateLyricTiming(raw.replaceAll(_lrcTagRe, ''), dur);
     _lrcCachePath = path;
-    _lrcCache = out;
-    return out;
+    _lrcCacheDur = dur;
+    _lrcCache = lines;
+    return lines;
   }
 
   // newI here is the onReorderItem index: already adjusted for the removal of

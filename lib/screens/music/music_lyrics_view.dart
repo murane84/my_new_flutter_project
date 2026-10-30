@@ -7,6 +7,50 @@ part of '../music_controls.dart';
 // long-press "Starts now" that fixes one line and re-flows the rest. Users can
 // paste/edit lyrics (saved via onSave to the in-app store).
 
+final _lyricLabelRe = RegExp(r'^\s*[\[(][^\]\)]{1,40}[\])]\s*$');
+
+/// The singable lines of plain lyrics, with section labels ("[Chorus]") and
+/// blank lines kept as breaks (a short pause), not as lines.
+List<(String, bool)> lyricPlainLines(String plain) {
+  final out = <(String, bool)>[]; // (text, breakBefore)
+  var brk = false;
+  for (final raw in plain.split('\n')) {
+    final l = raw.trim();
+    if (l.isEmpty || _lyricLabelRe.hasMatch(l)) {
+      brk = out.isNotEmpty;
+      continue;
+    }
+    out.add((l, brk));
+    brk = false;
+  }
+  return out;
+}
+
+/// Plain lyrics spread over the song: an intro lead-in, an outro, a short
+/// pause at each section break, and more time for longer lines. Shared by the
+/// lyrics sheet and the one-line ticker on Now Playing.
+List<(Duration, String)> estimateLyricTiming(String plain, Duration total) {
+  final ls = lyricPlainLines(plain);
+  if (ls.isEmpty || total < const Duration(seconds: 20)) return const [];
+  final totalMs = total.inMilliseconds;
+  final lead = (totalMs * 0.07).clamp(6000, 16000).toDouble();
+  final outro = (totalMs * 0.06).clamp(4000, 14000).toDouble();
+  const pauseMs = 1600.0;
+  final pauses = ls.where((e) => e.$2).length * pauseMs;
+  final weights = [for (final e in ls) e.$1.length.clamp(10, 60).toDouble()];
+  final wsum = weights.fold<double>(0, (a, b) => a + b);
+  var avail = totalMs - lead - outro - pauses;
+  if (avail < ls.length * 1200) avail = ls.length * 1200.0;
+  var t = lead;
+  final out = <(Duration, String)>[];
+  for (var i = 0; i < ls.length; i++) {
+    if (ls[i].$2) t += pauseMs;
+    out.add((Duration(milliseconds: t.round()), ls[i].$1));
+    t += avail * weights[i] / wsum;
+  }
+  return out;
+}
+
 class _LyricsView extends StatefulWidget {
   final String title;
   final String artist;
@@ -49,7 +93,6 @@ class _LyricsViewState extends State<_LyricsView> {
   List<String> _syncText = [];
   final List<Duration> _syncAt = [];
 
-  static final _labelRe = RegExp(r'^\s*[\[(][^\]\)]{1,40}[\])]\s*$');
 
   @override
   void initState() {
@@ -483,46 +526,8 @@ class _LyricsViewState extends State<_LyricsView> {
     return idx;
   }
 
-  /// The singable lines of plain lyrics, with section labels ("[Chorus]")
-  /// and blank lines kept as breaks (a short pause), not as lines.
-  List<(String, bool)> _plainLines() {
-    final out = <(String, bool)>[]; // (text, breakBefore)
-    var brk = false;
-    for (final raw in _plain.split('\n')) {
-      final l = raw.trim();
-      if (l.isEmpty || _labelRe.hasMatch(l)) {
-        brk = out.isNotEmpty;
-        continue;
-      }
-      out.add((l, brk));
-      brk = false;
-    }
-    return out;
-  }
-
-  /// Spread the lines over the song: an intro lead-in, an outro, a short
-  /// pause at each section break, and more time for longer lines.
-  List<(Duration, String)> _estimate(Duration total) {
-    final ls = _plainLines();
-    if (ls.isEmpty) return const [];
-    final totalMs = total.inMilliseconds;
-    final lead = (totalMs * 0.07).clamp(6000, 16000).toDouble();
-    final outro = (totalMs * 0.06).clamp(4000, 14000).toDouble();
-    const pauseMs = 1600.0;
-    final pauses = ls.where((e) => e.$2).length * pauseMs;
-    final weights = [for (final e in ls) e.$1.length.clamp(10, 60).toDouble()];
-    final wsum = weights.fold<double>(0, (a, b) => a + b);
-    var avail = totalMs - lead - outro - pauses;
-    if (avail < ls.length * 1200) avail = ls.length * 1200.0;
-    var t = lead;
-    final out = <(Duration, String)>[];
-    for (var i = 0; i < ls.length; i++) {
-      if (ls[i].$2) t += pauseMs;
-      out.add((Duration(milliseconds: t.round()), ls[i].$1));
-      t += avail * weights[i] / wsum;
-    }
-    return out;
-  }
+  List<(Duration, String)> _estimate(Duration total) =>
+      estimateLyricTiming(_plain, total);
 
   Widget _autoOrPlain(ColorScheme scheme, ScrollController sc) {
     if (_plain.isEmpty) return _plainView(scheme, sc);
@@ -596,7 +601,7 @@ class _LyricsViewState extends State<_LyricsView> {
   // ── Tap to sync ────────────────────────────────────────────────────────────
 
   void _startSync() {
-    final ls = _plainLines().map((e) => e.$1).toList();
+    final ls = lyricPlainLines(_plain).map((e) => e.$1).toList();
     if (ls.isEmpty) return;
     setState(() {
       _syncing = true;

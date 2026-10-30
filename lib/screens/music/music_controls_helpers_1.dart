@@ -156,6 +156,13 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
         final f = File('$base$ext');
         if (f.existsSync()) return f.readAsStringSync();
       }
+      // Lyrics Aluta exported on Android (the song's folder wasn't writable).
+      if (Platform.isAndroid) {
+        final name = base.split(RegExp(r'[\\/]')).last;
+        final f =
+            File('/storage/emulated/0/Documents/Aluta Lyrics/$name.lrc');
+        if (f.existsSync()) return f.readAsStringSync();
+      }
     } catch (_) {}
     return '';
   }

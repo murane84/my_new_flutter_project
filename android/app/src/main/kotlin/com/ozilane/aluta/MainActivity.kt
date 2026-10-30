@@ -201,6 +201,20 @@ class MainActivity : AudioServiceFragmentActivity() {
                             runOnUiThread { result.success(saved) }
                         }.start()
                     }
+                    // Synced lyrics → Documents/Aluta Lyrics/<song>.lrc (the
+                    // song's own folder usually isn't writable on Android 10+).
+                    "saveLyrics" -> {
+                        val fileName = call.argument<String>("fileName") ?: "lyrics.lrc"
+                        val text = call.argument<String>("text") ?: ""
+                        Thread {
+                            val ok = try {
+                                saveLyricsFile(fileName, text)
+                            } catch (e: Exception) {
+                                false
+                            }
+                            runOnUiThread { result.success(ok) }
+                        }.start()
+                    }
                     "readMedia" -> {
                         val p = call.argument<String>("path")
                         Thread {
@@ -618,6 +632,43 @@ class MainActivity : AudioServiceFragmentActivity() {
         android.media.MediaScannerConnection.scanFile(
             this, arrayOf(dest.absolutePath), arrayOf("audio/mpeg"), null)
         return dest.absolutePath
+    }
+
+    private fun saveLyricsFile(fileName: String, text: String): Boolean {
+        val bytes = text.toByteArray(Charsets.UTF_8)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val resolver = contentResolver
+            val rel = Environment.DIRECTORY_DOCUMENTS + "/Aluta Lyrics/"
+            val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            // Same song synced again → overwrite its file instead of "name (1)".
+            var uri: Uri? = null
+            resolver.query(
+                collection, arrayOf(MediaStore.MediaColumns._ID),
+                "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND ${MediaStore.MediaColumns.RELATIVE_PATH} = ?",
+                arrayOf(fileName, rel), null
+            )?.use { c ->
+                if (c.moveToFirst()) {
+                    uri = android.content.ContentUris.withAppendedId(collection, c.getLong(0))
+                }
+            }
+            if (uri == null) {
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, rel)
+                }
+                uri = resolver.insert(collection, values) ?: return false
+            }
+            resolver.openOutputStream(uri!!, "wt")?.use { it.write(bytes) } ?: return false
+            return true
+        }
+        @Suppress("DEPRECATION")
+        val dir = File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+            "Aluta Lyrics")
+        if (!dir.exists()) dir.mkdirs()
+        File(dir, fileName).writeBytes(bytes)
+        return true
     }
 
     /** Bytes of [path] via MediaStore (or a content:// uri), or null. */

@@ -303,7 +303,8 @@ class VocalMaps {
       try {
         final pcm = await decodePcm(bytes);
         if (pcm != null) {
-          map = VocalMap.fromProfile(profileFromPcm(pcm.$1, pcm.$2));
+          map = VocalMap.fromProfile(
+              VocalMap.profileFromPcm(pcm.$1, pcm.$2));
         }
       } catch (_) {}
       _maps[key] = map;

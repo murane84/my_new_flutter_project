@@ -29,25 +29,58 @@ List<(String, bool)> lyricPlainLines(String plain) {
 /// Plain lyrics spread over the song: an intro lead-in, an outro, a short
 /// pause at each section break, and more time for longer lines. Shared by the
 /// lyrics sheet and the one-line ticker on Now Playing.
-List<(Duration, String)> estimateLyricTiming(String plain, Duration total) {
+///
+/// With a [vocal] map (where the singer actually starts / stops, and the
+/// instrumental breaks — found by listening to the file) the lines are laid
+/// over the SUNG time only: the first line lands when the voice comes in,
+/// and nothing runs during a guitar solo.
+List<(Duration, String)> estimateLyricTiming(String plain, Duration total,
+    {VocalMap? vocal}) {
   final ls = lyricPlainLines(plain);
   if (ls.isEmpty || total < const Duration(seconds: 20)) return const [];
   final totalMs = total.inMilliseconds;
-  // Many songs start singing within seconds — keep the lead-in short; the
-  // strip's nudge / tap-along fixes the rest.
-  final lead = (totalMs * 0.035).clamp(2500, 9000).toDouble();
-  final outro = (totalMs * 0.06).clamp(4000, 14000).toDouble();
+  // Sung stretches of the song, in ms: [from, to).
+  final segs = <(double, double)>[];
+  if (vocal != null && vocal.end.inMilliseconds <= totalMs + 2000) {
+    var from = vocal.start.inMilliseconds.toDouble();
+    for (final b in vocal.breaks) {
+      final bs = b.$1.inMilliseconds.toDouble();
+      if (bs > from) segs.add((from, bs));
+      from = b.$2.inMilliseconds.toDouble();
+    }
+    final end = vocal.end.inMilliseconds.clamp(0, totalMs).toDouble();
+    if (end > from) segs.add((from, end));
+  }
+  if (segs.isEmpty) {
+    // No map: many songs start singing within seconds — keep the lead-in
+    // short; the strip's nudge / tap-along fixes the rest.
+    final lead = (totalMs * 0.035).clamp(2500, 9000).toDouble();
+    final outro = (totalMs * 0.06).clamp(4000, 14000).toDouble();
+    segs.add((lead, totalMs - outro));
+  }
+  final sung = segs.fold<double>(0, (a, s) => a + (s.$2 - s.$1));
   const pauseMs = 1600.0;
   final pauses = ls.where((e) => e.$2).length * pauseMs;
   final weights = [for (final e in ls) e.$1.length.clamp(10, 60).toDouble()];
   final wsum = weights.fold<double>(0, (a, b) => a + b);
-  var avail = totalMs - lead - outro - pauses;
+  var avail = sung - pauses;
   if (avail < ls.length * 1200) avail = ls.length * 1200.0;
-  var t = lead;
+  // Sung-time position → real song time (skipping the breaks).
+  double real(double t) {
+    var left = t;
+    for (final s in segs) {
+      final len = s.$2 - s.$1;
+      if (left <= len) return s.$1 + left;
+      left -= len;
+    }
+    return segs.last.$2 + left;
+  }
+
+  var t = 0.0;
   final out = <(Duration, String)>[];
   for (var i = 0; i < ls.length; i++) {
-    if (ls[i].$2) t += pauseMs;
-    out.add((Duration(milliseconds: t.round()), ls[i].$1));
+    if (ls[i].$2 && i > 0) t += pauseMs;
+    out.add((Duration(milliseconds: real(t).round()), ls[i].$1));
     t += avail * weights[i] / wsum;
   }
   return out;
@@ -61,7 +94,11 @@ class _LyricsView extends StatefulWidget {
   /// Tap a synced line to jump the song there.
   final void Function(Duration)? onSeek;
 
+  /// The song file — for its VocalMap (where the singing starts).
+  final String? path;
+
   const _LyricsView({
+    this.path,
     required this.title,
     required this.artist,
     required this.raw,
@@ -89,6 +126,7 @@ class _LyricsViewState extends State<_LyricsView> {
   // Auto-estimated timing for plain lyrics (cached per song length).
   List<(Duration, String)> _auto = [];
   Duration _autoFor = Duration.zero;
+  VocalMap? _autoVocal;
 
   // Tap-to-sync session.
   bool _syncing = false;
@@ -529,7 +567,10 @@ class _LyricsViewState extends State<_LyricsView> {
   }
 
   List<(Duration, String)> _estimate(Duration total) =>
-      estimateLyricTiming(_plain, total);
+      estimateLyricTiming(_plain, total,
+          vocal: widget.path == null
+              ? null
+              : VocalMaps.instance.cached(widget.path!));
 
   Widget _autoOrPlain(ColorScheme scheme, ScrollController sc) {
     if (_plain.isEmpty) return _plainView(scheme, sc);
@@ -538,8 +579,12 @@ class _LyricsViewState extends State<_LyricsView> {
       builder: (_, clock, _) {
         final d = clock.duration;
         if (d < const Duration(seconds: 20)) return _plainView(scheme, sc);
-        if (d != _autoFor) {
+        final vm = widget.path == null
+            ? null
+            : VocalMaps.instance.cached(widget.path!);
+        if (d != _autoFor || !identical(vm, _autoVocal)) {
           _autoFor = d;
+          _autoVocal = vm;
           _auto = _estimate(d);
         }
         if (_auto.isEmpty) return _plainView(scheme, sc);

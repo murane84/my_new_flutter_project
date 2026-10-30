@@ -25,6 +25,7 @@ import '../state/playback_state.dart';
 import '../services/live_session_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/file_bytes.dart';
+import '../services/vocal_map.dart';
 import 'music/free_music_screen.dart';
 import 'equalizer_screen.dart';
 import '../utils/popup_shell.dart';
@@ -767,6 +768,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         raw: _lyricsRaw(path),
         onSave: (text) => _setLyrics(path, text),
         onSeek: _transportSeek,
+        path: path,
       ),
     );
   }
@@ -1103,9 +1105,23 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       }
     }
     out.sort((a, b) => a.$1.compareTo(b.$1));
+    final plain = raw.replaceAll(_lrcTagRe, '');
+    // Plain lyrics: listen to the song once (Android, in the background) to
+    // learn where the singing starts; re-estimate when that's known.
+    if (out.isEmpty &&
+        plain.trim().isNotEmpty &&
+        !VocalMaps.instance.known(path)) {
+      VocalMaps.instance.request(path).then((m) {
+        if (m == null || !mounted) return;
+        _lrcCachePath = null;
+        setState(() {});
+        playlistDrawerBus.revision.value++;
+      });
+    }
     final lines = out.isNotEmpty || dur == null
         ? out
-        : estimateLyricTiming(raw.replaceAll(_lrcTagRe, ''), dur);
+        : estimateLyricTiming(plain, dur,
+            vocal: VocalMaps.instance.cached(path));
     _lrcCachePath = path;
     _lrcCacheDur = dur;
     _lrcCache = lines;

@@ -215,6 +215,25 @@ class MainActivity : AudioServiceFragmentActivity() {
                             runOnUiThread { result.success(ok) }
                         }.start()
                     }
+                    // Loudness of the whole song + its voice band per 100 ms
+                    // (VocalProfile) — lyrics find where the singing starts.
+                    "vocalProfile" -> {
+                        val p = call.argument<String>("path")
+                        Thread {
+                            val prof = try {
+                                if (p.isNullOrEmpty()) null
+                                else if (p.startsWith("content://"))
+                                    VocalProfile.analyze(this, Uri.parse(p), null)
+                                else VocalProfile.analyze(this, null, p)
+                                    ?: mediaUriForPath(p)?.let {
+                                        VocalProfile.analyze(this, it, null)
+                                    }
+                            } catch (e: Throwable) {
+                                null
+                            }
+                            runOnUiThread { result.success(prof) }
+                        }.start()
+                    }
                     "readMedia" -> {
                         val p = call.argument<String>("path")
                         Thread {

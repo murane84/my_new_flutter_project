@@ -407,10 +407,13 @@ class _CtrlChip extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
+              // Active = a SOLID accent key with a contrasting glyph. A tint of
+              // the accent under an accent icon vanished on some theme colours
+              // (pink theme: the Repeat-One "1" was invisible).
               colors: active
                   ? [
-                      activeColor.withValues(alpha: 0.30),
-                      activeColor.withValues(alpha: 0.15),
+                      activeColor,
+                      Color.lerp(activeColor, Colors.black, 0.12)!,
                     ]
                   : _keyFill(scheme, scheme.primary).colors,
             ),
@@ -430,7 +433,7 @@ class _CtrlChip extends StatelessWidget {
             size: 20,
             // Full-strength icons: crisp on any background.
             color: active
-                ? activeColor
+                ? onAccent(activeColor)
                 : Color.alphaBlend(
                     scheme.primary.withValues(alpha: 0.18),
                     scheme.onSurface.withValues(alpha: 0.95),
@@ -441,6 +444,13 @@ class _CtrlChip extends StatelessWidget {
     ));
   }
 }
+
+/// White or near-black, whichever reads on [c] — for glyphs on accent fills
+/// (works for every theme colour, light or dark mode).
+Color onAccent(Color c) =>
+    ThemeData.estimateBrightnessForColor(c) == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF1C1B1F);
 
 // ─── Speed panel ──────────────────────────────────────────────────────────────
 

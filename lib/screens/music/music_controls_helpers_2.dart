@@ -1746,10 +1746,14 @@ Column(
                             ),
                           ],
                         ),
-                  color: active ? color.withAlpha(38) : null,
+                  // Active = solid colour + contrasting glyph (a faint tint
+                  // under a same-colour icon disappeared on some themes).
+                  color: active ? color : null,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: active ? color.withAlpha(150) : _keyEdge(scheme),
+                    color: active
+                        ? Color.lerp(color, Colors.black, 0.15)!
+                        : _keyEdge(scheme),
                   ),
                   boxShadow: _glassLift(
                       scheme, active ? color : scheme.primary,
@@ -1760,7 +1764,7 @@ Column(
                   size: compact ? 19 : 21,
                   // Full-strength icons (no wash): crisp in HD.
                   color: active
-                      ? color
+                      ? onAccent(color)
                       : Color.alphaBlend(
                           scheme.primary.withAlpha(40),
                           onSurface.withAlpha(245),
@@ -1775,14 +1779,17 @@ Column(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 5, vertical: 2),
                     decoration: BoxDecoration(
-                      color: color,
+                      // On a solid (active) tile the badge flips to the
+                      // surface colour so it doesn't merge into the tile.
+                      color: active ? scheme.surface : color,
                       borderRadius: BorderRadius.circular(9),
-                      border: Border.all(color: scheme.surface, width: 1.5),
+                      border: Border.all(
+                          color: active ? color : scheme.surface, width: 1.5),
                     ),
                     child: Text(
                       badge,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: active ? color : onAccent(color),
                         fontSize: 8.5,
                         fontWeight: FontWeight.bold,
                         height: 1,

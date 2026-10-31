@@ -284,29 +284,51 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
           }
           setFull(() {});
         }
-        // Album-art adaptive accent: when artwork gave us a colour the whole
-        // page (disc, ring, waveform, buttons) tints to it; else theme accent.
+        // Hybrid cover-art colour: every control (buttons, waveform, ring,
+        // chips) keeps the THEME accent so this page matches the music card;
+        // the artwork's colour only paints the soft glow behind the record
+        // and the record itself. No artwork → both are the theme accent.
         return ValueListenableBuilder<Color?>(
           valueListenable: _artAccentVN,
           builder: (context, artAccent, _) {
-            final accent = artAccent ?? scheme.primary;
+            final accent = scheme.primary;
+            final glow = artAccent ?? accent;
             return Scaffold(
           backgroundColor: scheme.surface,
           body: Stack(
             children: [
-              // Accent wash backdrop.
+              // Accent wash backdrop (cover-art colour when there is art).
               Positioned.fill(
-                child: DecoratedBox(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 500),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
                         Color.alphaBlend(
-                            accent.withValues(alpha: isDark ? 0.24 : 0.16),
+                            glow.withValues(alpha: isDark ? 0.24 : 0.16),
                             scheme.surface),
                         scheme.surface,
                       ],
+                    ),
+                  ),
+                ),
+              ),
+              // Soft halo behind the record.
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 500),
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: const Alignment(0, -0.45),
+                        radius: 0.75,
+                        colors: [
+                          glow.withValues(alpha: isDark ? 0.22 : 0.14),
+                          glow.withValues(alpha: 0),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -413,7 +435,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                                       child: PlayerDisc(
                                         style: dStyle,
                                         side: side,
-                                        accent: accent,
+                                        accent: glow,
                                         scheme: scheme,
                                         isDark: isDark,
                                         spin: _discCtrl,

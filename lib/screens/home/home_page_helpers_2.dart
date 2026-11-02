@@ -776,7 +776,8 @@ extension _HomePageHelpers2 on HomePageState {
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: () async {
-                    await showAppPopup(context, const ProfileScreen());
+                    await showAppPopup(context, const ProfileScreen(),
+                    avatarFlight: true);
                     // Refresh the cached username in case it changed.
                     if (mounted) _loadUserData();
                   },

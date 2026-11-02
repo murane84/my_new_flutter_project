@@ -17,6 +17,8 @@ import '../utils/popup_shell.dart';
 import '../utils/app_config.dart';
 import '../utils/emoji_field.dart';
 import '../utils/readable.dart';
+import '../widgets/avatar_flight.dart';
+import '../widgets/photo_viewer.dart';
 
 /// Profile popup: edit username / phone / password (email is fixed), or
 /// permanently delete the account and wipe all data from the server. Rendered
@@ -229,6 +231,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         color: scheme.onSurface)),
               ),
             ),
+            if (_fullAvatar != null)
+              ListTile(
+                leading: Icon(Icons.zoom_out_map_rounded,
+                    color: scheme.primary),
+                title: const Text('View photo'),
+                subtitle: const Text('See it full size'),
+                onTap: () => Navigator.pop(ctx, 'view'),
+              ),
             ListTile(
               leading:
                   Icon(Icons.photo_library_rounded, color: scheme.primary),
@@ -249,6 +259,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
     if (!mounted || choice == null) return;
+    if (choice == 'view') {
+      final full = _fullAvatar;
+      if (full != null) {
+        await showPhotoViewer(
+            context, authNetworkImageProvider(full, mediaAuthHeaders(full)));
+      }
+      return;
+    }
     if (choice == 'gallery') {
       await _pickFromGallery();
     } else {
@@ -751,7 +769,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                CircleAvatar(
+                // Flies in from the tapped profile pill (Telegram-style).
+                AvatarFlight(
+                  child: CircleAvatar(
                   radius: 42,
                   backgroundColor: scheme.primaryContainer,
                   // Web-safe + desktop-safe loader (raw CachedNetworkImage fails
@@ -771,6 +791,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         )
                       : null,
+                ),
                 ),
                 if (_uploadingAvatar)
                   Positioned.fill(

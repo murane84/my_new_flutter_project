@@ -77,6 +77,9 @@ Future<T?> showAppPopup<T>(
   // (great for small popups); a big page passes a gentler value like 0.85 so it
   // grows/settles softly from the tapped spot rather than zooming from nothing.
   double genieMinScale = 0.12,
+  // Profile pages: a plain fade + rise instead of the genie, so the page's
+  // [AvatarFlight] photo can fly from the tapped spot to a steady target.
+  bool avatarFlight = false,
 }) async {
   // Drop any active text focus so opening the popup never carries a keyboard
   // in with it.
@@ -84,7 +87,11 @@ Future<T?> showAppPopup<T>(
   // GLOBAL RULE: default the genie origin to wherever the user just tapped, so
   // every page opens from / minimises back into the tapped button/tile. A live
   // [originResolver] or an explicit [origin] still wins.
-  final snapshot = origin ?? gLastTapDownGlobal;
+  final snapshot = avatarFlight ? null : (origin ?? gLastTapDownGlobal);
+  if (avatarFlight) {
+    originResolver = null;
+    minimizeStyle = false;
+  }
   final result = await showGeneralDialog<T>(
     context: context,
     barrierDismissible: true,

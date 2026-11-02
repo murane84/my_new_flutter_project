@@ -10,6 +10,8 @@ import '../services/now_playing_presence.dart';
 import '../utils/net_image.dart';
 import '../utils/time_utils.dart';
 import '../utils/toast_helper.dart';
+import '../widgets/avatar_flight.dart';
+import '../widgets/photo_viewer.dart';
 
 /// A read-only profile card for ANOTHER user (a friend or a group member).
 /// Opens from a tap on their name/avatar. Shows the photo, the name (their saved
@@ -385,8 +387,18 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            // Avatar
-            CircleAvatar(
+            // Avatar — flies up from the little one that was tapped
+            // (Telegram-style); tap it to see the photo full size.
+            GestureDetector(
+              onTap: hasAvatar
+                  ? () => showPhotoViewer(
+                      context,
+                      authNetworkImageProvider(
+                          avatarUrl!, mediaAuthHeaders(avatarUrl)),
+                      caption: title)
+                  : null,
+              child: AvatarFlight(
+                child: CircleAvatar(
               radius: 46,
               backgroundColor: scheme.primaryContainer,
               backgroundImage: hasAvatar
@@ -400,6 +412,8 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
                           fontSize: 34,
                           fontWeight: FontWeight.w700,
                           color: scheme.onPrimaryContainer)),
+            ),
+              ),
             ),
             const SizedBox(height: 12),
             Text(title,

@@ -135,7 +135,8 @@ extension _HomeMenu on HomePageState {
               icon: Icons.person_rounded,
               label: 'Profile',
               onTap: () async {
-                await showAppPopup(context, const ProfileScreen());
+                await showAppPopup(context, const ProfileScreen(),
+                    avatarFlight: true);
                 if (mounted) _loadUserData();
               },
             ),

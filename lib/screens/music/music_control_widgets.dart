@@ -67,10 +67,14 @@ class _PlayKey extends StatefulWidget {
     required this.buffering,
     required this.accent,
     required this.onTap,
+    this.diameter = size,
   });
   final bool playing, buffering;
   final Color accent;
   final VoidCallback onTap;
+  // The disc's size (the orbit ring sits 6 px outside it). The music card
+  // uses the default; Now Playing passes its bigger, shrinking-with-queue one.
+  final double diameter;
   static const double size = 68;
 
   @override
@@ -108,7 +112,7 @@ class _PlayKeyState extends State<_PlayKey>
   Widget build(BuildContext context) {
     final a = widget.accent;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    const s = _PlayKey.size;
+    final s = widget.diameter;
     return Tactile(
       child: GestureDetector(
         onTap: widget.onTap,
@@ -174,8 +178,8 @@ class _PlayKeyState extends State<_PlayKey>
                 ],
               ),
               child: widget.buffering
-                  ? const Padding(
-                      padding: EdgeInsets.all(18),
+                  ? Padding(
+                      padding: EdgeInsets.all(s * 0.26),
                       child: CircularProgressIndicator(
                           color: Colors.white, strokeWidth: 2.5),
                     )

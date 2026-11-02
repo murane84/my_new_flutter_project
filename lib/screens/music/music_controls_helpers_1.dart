@@ -641,42 +641,33 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                               StreamBuilder<PlayerState>(
                                 stream: _player.playerStateStream,
                                 builder: (ctx, snap) {
+                                  final st = snap.data;
+                                  final realPlaying = st != null &&
+                                      st.playing &&
+                                      st.processingState !=
+                                          ProcessingState.completed;
                                   final playing = live
                                       ? (_live?.player.playing ?? false)
-                                      : (snap.data?.playing ?? _player.playing);
-                                  return Tactile(child: GestureDetector(
+                                      : (st == null
+                                          ? _player.playing
+                                          : realPlaying);
+                                  final buffering = !live &&
+                                      st != null &&
+                                      (st.processingState ==
+                                              ProcessingState.loading ||
+                                          st.processingState ==
+                                              ProcessingState.buffering);
+                                  // Same key as the music card: the icon turns
+                                  // play ↔ pause and a light ring orbits it
+                                  // while playing.
+                                  return _PlayKey(
+                                    playing: playing,
+                                    buffering: buffering,
+                                    accent: accent,
                                     onTap: _transportPlayPause,
-                                    child: Container(
-                                      width: 76 - 14 * openT.clamp(0.0, 1.0),
-                                      height: 76 - 14 * openT.clamp(0.0, 1.0),
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        gradient: LinearGradient(
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
-                                          colors: [
-                                            Color.lerp(
-                                                accent, Colors.white, 0.22)!,
-                                            accent,
-                                          ],
-                                        ),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color:
-                                                accent.withValues(alpha: 0.5),
-                                            blurRadius: 22,
-                                            spreadRadius: 2,
-                                          ),
-                                        ],
-                                      ),
-                                      child: Icon(
-                                          playing
-                                              ? Icons.pause_rounded
-                                              : Icons.play_arrow_rounded,
-                                          size: 40 - 8 * openT.clamp(0.0, 1.0),
-                                          color: Colors.white),
-                                    ),
-                                  ));
+                                    diameter:
+                                        76 - 14 * openT.clamp(0.0, 1.0),
+                                  );
                                 },
                               ),
                               _CtrlBtn(

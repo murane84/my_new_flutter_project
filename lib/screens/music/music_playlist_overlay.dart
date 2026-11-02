@@ -2348,28 +2348,21 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
               StreamBuilder<PlayerState>(
                 stream: widget.player.playerStateStream,
                 builder: (_, snap) {
-                  final playing = snap.data?.playing ?? false;
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: scheme.primary,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: scheme.primary.withValues(alpha: 0.40),
-                          blurRadius: 9,
-                          spreadRadius: 0.5,
-                        ),
-                      ],
-                    ),
-                    child: IconButton(
-                      icon: Icon(
-                          playing
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
-                          color: scheme.onPrimary),
-                      visualDensity: VisualDensity.compact,
-                      onPressed: widget.onTogglePlay,
-                    ),
+                  final st = snap.data;
+                  final playing = st != null &&
+                      st.playing &&
+                      st.processingState != ProcessingState.completed;
+                  final buffering = st != null &&
+                      (st.processingState == ProcessingState.loading ||
+                          st.processingState == ProcessingState.buffering);
+                  // The same key as the music card and Now Playing: icon
+                  // turns play <-> pause, light ring orbits while playing.
+                  return _PlayKey(
+                    playing: playing,
+                    buffering: buffering,
+                    accent: scheme.primary,
+                    onTap: widget.onTogglePlay,
+                    diameter: 38,
                   );
                 },
               ),

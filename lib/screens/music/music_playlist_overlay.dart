@@ -1311,8 +1311,27 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     );
   }
 
+  // On the music page the mini player floats as its OWN card under the
+  // playlist card (a clear gap between them), not glued to its bottom.
+  bool get _stripDetached => widget.fullPage;
+
   @override
   Widget build(BuildContext context) {
+    final card = _cardBuild(context);
+    final showStrip =
+        widget.hasTrack && !_selecting && !widget.hostIsChat;
+    if (!_stripDetached || !showStrip) return card;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(child: card),
+        const SizedBox(height: 10),
+        _transportStrip(Theme.of(context).colorScheme),
+      ],
+    );
+  }
+
+  Widget _cardBuild(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final displayed = _displayed();
     final displayedPaths = displayed.map((e) => e.value).toList();
@@ -1451,7 +1470,10 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           // Inline transport strip — control playback without leaving the list.
           // Skipped on phone (the app's now-playing bar handles it), so a single
           // song never shows two players stacked.
-          if (widget.hasTrack && !_selecting && !appBarHandlesPlayback)
+          if (widget.hasTrack &&
+              !_selecting &&
+              !appBarHandlesPlayback &&
+              !_stripDetached)
             _transportStrip(scheme),
         ],
       ),
@@ -2283,7 +2305,9 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     // card: waveform seek, spinning cover, title + artist + up next, heart,
     // the animated play key. Swipe it sideways to skip.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+      padding: _stripDetached
+          ? EdgeInsets.zero
+          : const EdgeInsets.fromLTRB(8, 4, 8, 8),
       child: GestureDetector(
         onHorizontalDragEnd: (d) {
           final v = d.primaryVelocity ?? 0;

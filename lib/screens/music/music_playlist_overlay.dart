@@ -24,6 +24,11 @@ class _PlaylistOverlay extends StatefulWidget {
   // Inline transport strip.
   final AudioPlayer player; // observed for live play-state
   final String currentTitle;
+  // Mini player extras: the artist, the song that plays next, and opening
+  // Now Playing from a tap on the cover / title.
+  final String? currentArtist;
+  final String? nextTitle;
+  final VoidCallback? onOpenNowPlaying;
   final bool hasTrack;
   final void Function(List<String> paths, int startIndex, bool shuffle)
       onPlayScope;
@@ -96,6 +101,9 @@ class _PlaylistOverlay extends StatefulWidget {
     required this.lastPlayed,
     required this.player,
     required this.currentTitle,
+    this.currentArtist,
+    this.nextTitle,
+    this.onOpenNowPlaying,
     required this.hasTrack,
     required this.onPlayScope,
     required this.onTogglePlay,
@@ -1724,9 +1732,18 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     final per = d.isEmpty ? 0.0 : total / d.length;
     final target = (per * i - pos.viewportDimension / 2 + per / 2)
         .clamp(0.0, pos.maxScrollExtent);
-    _listCtrl.animateTo(target,
-        duration: const Duration(milliseconds: 420),
-        curve: Curves.easeOutCubic);
+    _listCtrl
+        .animateTo(target,
+            duration: const Duration(milliseconds: 420),
+            curve: Curves.easeOutCubic)
+        .then((_) async {
+      // …then blink the row so the eye lands on it.
+      for (var k = 0; k < 3 && mounted; k++) {
+        await _pulseCtrl.forward(from: 0);
+        if (!mounted) return;
+        await _pulseCtrl.reverse();
+      }
+    });
   }
 
   Widget _selectionBar(ColorScheme scheme) {
@@ -2252,129 +2269,280 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   }
 
   Widget _transportStrip(ColorScheme scheme) {
-    return Container(
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        border: Border(
-            top: BorderSide(color: scheme.outlineVariant.withAlpha(80))),
-      ),
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Seek bar + time labels (driven by the shared play clock).
-          ValueListenableBuilder<PlayClock>(
-            valueListenable: playClockNotifier,
-            builder: (_, clock, _) {
-              final total = clock.duration.inMilliseconds;
-              final pos = clock.position.inMilliseconds;
-              final frac =
-                  total > 0 ? (pos / total).clamp(0.0, 1.0) : 0.0;
-              return Column(
+    final a = scheme.primary;
+    final isDark = scheme.brightness == Brightness.dark;
+    final path = _curPath();
+    final fav = path != null && widget.favorites.contains(path);
+    final artist = (widget.currentArtist ?? '').trim();
+    final next = (widget.nextTitle ?? '').trim();
+    final sub = [
+      if (artist.isNotEmpty && artist != '<unknown>') artist,
+      if (next.isNotEmpty) 'Next: $next',
+    ].join('  ·  ');
+    // A floating, softly tinted glass card — a small sibling of the music
+    // card: waveform seek, spinning cover, title + artist + up next, heart,
+    // the animated play key. Swipe it sideways to skip.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+      child: GestureDetector(
+        onHorizontalDragEnd: (d) {
+          final v = d.primaryVelocity ?? 0;
+          if (v < -250) widget.onNext();
+          if (v > 250) widget.onPrev();
+        },
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(10, 6, 6, 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color.alphaBlend(a.withValues(alpha: isDark ? 0.16 : 0.10),
+                            scheme.surfaceContainerHigh)
+                        .withValues(alpha: 0.86),
+                    Color.alphaBlend(a.withValues(alpha: isDark ? 0.06 : 0.04),
+                            scheme.surfaceContainerHigh)
+                        .withValues(alpha: 0.86),
+                  ],
+                ),
+                border: Border.all(color: a.withValues(alpha: 0.22)),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.12),
+                      blurRadius: 18,
+                      offset: const Offset(0, 6)),
+                ],
+              ),
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 3,
-                      thumbShape:
-                          const RoundSliderThumbShape(enabledThumbRadius: 6),
-                      overlayShape:
-                          const RoundSliderOverlayShape(overlayRadius: 12),
-                    ),
-                    child: Slider(
-                      value: frac,
-                      onChanged: total > 0
-                          ? (v) => widget.onSeekFraction(v)
-                          : null,
-                    ),
+                  // Waveform seek (same as the music card) + times.
+                  ValueListenableBuilder<PlayClock>(
+                    valueListenable: playClockNotifier,
+                    builder: (_, clock, _) {
+                      final total = clock.duration.inMilliseconds;
+                      final pos = clock.position.inMilliseconds;
+                      final frac =
+                          total > 0 ? (pos / total).clamp(0.0, 1.0) : 0.0;
+                      final timeStyle = TextStyle(
+                          fontSize: 10.5,
+                          color: scheme.onSurfaceVariant,
+                          fontFeatures: const [FontFeature.tabularFigures()]);
+                      return Row(children: [
+                        Text(_fmtTime(clock.position), style: timeStyle),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: _WaveformSeekBar(
+                              fraction: frac.toDouble(),
+                              accent: a,
+                              inactive: a.withAlpha(48),
+                              enabled: total > 0,
+                              seed: widget.currentTitle.hashCode ^
+                                  widget.currentIndex,
+                              onSeek: widget.onSeekFraction,
+                              labelFor: (f) => _fmtTime(Duration(
+                                  milliseconds: (f * total).round())),
+                            ),
+                          ),
+                        ),
+                        Text(_fmtTime(clock.duration), style: timeStyle),
+                        const SizedBox(width: 4),
+                      ]);
+                    },
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(_fmtTime(clock.position),
-                            style: TextStyle(
-                                fontSize: 10.5,
-                                color: scheme.onSurfaceVariant)),
-                        Text(_fmtTime(clock.duration),
-                            style: TextStyle(
-                                fontSize: 10.5,
-                                color: scheme.onSurfaceVariant)),
-                      ],
-                    ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      // Spinning cover + title: tap to open Now Playing.
+                      Expanded(
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: widget.onOpenNowPlaying,
+                          child: Row(children: [
+                            if (path != null) ...[
+                              StreamBuilder<PlayerState>(
+                                stream: widget.player.playerStateStream,
+                                builder: (_, snap) {
+                                  final st = snap.data;
+                                  final on = st != null &&
+                                      st.playing &&
+                                      st.processingState !=
+                                          ProcessingState.completed;
+                                  return _SpinArt(
+                                    spinning: on,
+                                    child: ClipOval(
+                                        child: _miniArt(path, scheme)),
+                                  );
+                                },
+                              ),
+                              const SizedBox(width: 10),
+                            ],
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  MarqueeText(
+                                    text: widget.currentTitle,
+                                    height: 18,
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: scheme.onSurface),
+                                  ),
+                                  if (sub.isNotEmpty)
+                                    Text(sub,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color: scheme.onSurfaceVariant)),
+                                ],
+                              ),
+                            ),
+                          ]),
+                        ),
+                      ),
+                      if (path != null)
+                        IconButton(
+                          icon: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 220),
+                            transitionBuilder: (c, an) =>
+                                ScaleTransition(scale: an, child: c),
+                            child: Icon(
+                              fav
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_border_rounded,
+                              key: ValueKey(fav),
+                              color: fav ? Colors.pinkAccent : scheme.onSurfaceVariant,
+                            ),
+                          ),
+                          visualDensity: VisualDensity.compact,
+                          tooltip: fav ? 'Unlike' : 'Like',
+                          onPressed: () => widget.onFavorite(path),
+                        ),
+                      IconButton(
+                        icon: Icon(Icons.skip_previous_rounded,
+                            color: scheme.onSurface),
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Previous',
+                        onPressed: widget.onPrev,
+                      ),
+                      StreamBuilder<PlayerState>(
+                        stream: widget.player.playerStateStream,
+                        builder: (_, snap) {
+                          final st = snap.data;
+                          final playing = st != null &&
+                              st.playing &&
+                              st.processingState != ProcessingState.completed;
+                          final buffering = st != null &&
+                              (st.processingState == ProcessingState.loading ||
+                                  st.processingState ==
+                                      ProcessingState.buffering);
+                          // Same key as the music card and Now Playing.
+                          return _PlayKey(
+                            playing: playing,
+                            buffering: buffering,
+                            accent: a,
+                            onTap: widget.onTogglePlay,
+                            diameter: 38,
+                          );
+                        },
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.skip_next_rounded,
+                            color: scheme.onSurface),
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Next',
+                        onPressed: widget.onNext,
+                      ),
+                      // More: find the playing song, share it.
+                      PopupMenuButton<String>(
+                        tooltip: 'More',
+                        icon: Icon(Icons.more_vert_rounded,
+                            size: 20, color: scheme.onSurfaceVariant),
+                        padding: EdgeInsets.zero,
+                        onSelected: (v) {
+                          if (v == 'find') _locateNow();
+                          if (v == 'share' && path != null) {
+                            widget.onShare(path);
+                          }
+                        },
+                        itemBuilder: (_) => [
+                          const PopupMenuItem(
+                            value: 'find',
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.my_location_rounded),
+                              title: Text('Find playing song'),
+                            ),
+                          ),
+                          if (path != null)
+                            const PopupMenuItem(
+                              value: 'share',
+                              child: ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(Icons.share_rounded),
+                                title: Text('Share this song'),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
                   ),
                 ],
-              );
-            },
+              ),
+            ),
           ),
-          const SizedBox(height: 2),
-          Row(
-            children: [
-              if (_curPath() != null) ...[
-                _miniArt(_curPath()!, scheme),
-                const SizedBox(width: 10),
-              ],
-              Expanded(
-                child: Text(
-                  widget.currentTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  // Explicit colour: a colourless TextStyle falls back to the
-                  // ambient text theme (dark) and vanished on this dark stage.
-                  style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onSurface),
-                ),
-              ),
-              // Share the CURRENT song straight to a chat — a one-tap, always-
-              // visible affordance (the per-track ⋮ menu also has "Share to
-              // chat" for any other song in the list).
-              if (_curPath() != null)
-                IconButton(
-                  icon: Icon(Icons.share_rounded, color: scheme.primary),
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Share this song',
-                  onPressed: () => widget.onShare(_curPath()!),
-                ),
-              IconButton(
-                icon: Icon(Icons.skip_previous_rounded,
-                    color: scheme.onSurface),
-                visualDensity: VisualDensity.compact,
-                onPressed: widget.onPrev,
-              ),
-              // Play/pause reflects the live player state.
-              StreamBuilder<PlayerState>(
-                stream: widget.player.playerStateStream,
-                builder: (_, snap) {
-                  final st = snap.data;
-                  final playing = st != null &&
-                      st.playing &&
-                      st.processingState != ProcessingState.completed;
-                  final buffering = st != null &&
-                      (st.processingState == ProcessingState.loading ||
-                          st.processingState == ProcessingState.buffering);
-                  // The same key as the music card and Now Playing: icon
-                  // turns play <-> pause, light ring orbits while playing.
-                  return _PlayKey(
-                    playing: playing,
-                    buffering: buffering,
-                    accent: scheme.primary,
-                    onTap: widget.onTogglePlay,
-                    diameter: 38,
-                  );
-                },
-              ),
-              IconButton(
-                icon: Icon(Icons.skip_next_rounded, color: scheme.onSurface),
-                visualDensity: VisualDensity.compact,
-                onPressed: widget.onNext,
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
+}
+
+/// The mini player's cover, turning slowly like a little record while music
+/// plays (and easing to a stop on pause).
+class _SpinArt extends StatefulWidget {
+  const _SpinArt({required this.spinning, required this.child});
+  final bool spinning;
+  final Widget child;
+  @override
+  State<_SpinArt> createState() => _SpinArtState();
+}
+
+class _SpinArtState extends State<_SpinArt>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(seconds: 9));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.spinning) _c.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SpinArt old) {
+    super.didUpdateWidget(old);
+    if (widget.spinning && !_c.isAnimating) _c.repeat();
+    if (!widget.spinning && _c.isAnimating) _c.stop();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      RotationTransition(turns: _c, child: widget.child);
 }

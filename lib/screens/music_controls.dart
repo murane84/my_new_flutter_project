@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -2125,6 +2126,15 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       loading: _scanning,
       player: _player,
       currentTitle: _trackName,
+      currentArtist: _artistName,
+      nextTitle: () {
+        if (_effShuffle) return null; // no fixed order to promise
+        final n = _peekNextIndex();
+        if (n == null || n < 0 || n >= _playlist.length) return null;
+        final p = _playlist[n];
+        return metadataStore.title(p, _nameFromPath(p));
+      }(),
+      onOpenNowPlaying: _openFullPlayer,
       hasTrack: _currentIndex >= 0 && _currentIndex < _playlist.length,
       // Tapping a song, "Play all", and "Shuffle" all route here so auto-advance
       // stays within whatever the user is viewing.

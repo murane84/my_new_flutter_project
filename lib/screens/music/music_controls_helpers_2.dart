@@ -384,7 +384,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                     // A waveform that IS the seek control: drag/tap to scrub,
                     // bars fill with the accent up to the play head, with a
                     // time bubble following the finger.
-                    child: _WaveformSeekBar(
+                    child: WaveformSeekBar(
                       fraction: sliderMax > 0 ? sliderVal / sliderMax : 0.0,
                       accent: accent,
                       inactive: accent.withAlpha(48),
@@ -451,7 +451,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                     tooltip: 'Back 10s',
                   ),
                   const SizedBox(width: 14),
-                  _PlayKey(
+                  PlayKey(
                     playing: isPlaying,
                     buffering: buffering,
                     accent: accent,

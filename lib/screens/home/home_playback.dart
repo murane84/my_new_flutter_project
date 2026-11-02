@@ -65,6 +65,9 @@ class PlaybackBus {
   void Function(int index, int friendId)? webSendAtTo;
   // Toggle "favourite" on the currently-playing track (driven by the bar heart).
   VoidCallback? onToggleFavorite;
+  // What plays next (null = unknown, or shuffle). Read by the phone's
+  // now-playing bar.
+  String? Function()? nextTitle;
   // Share the currently-playing track to a chat (the quick action that used to
   // live in the drawer's transport strip; now surfaced on the in-chat bar).
   VoidCallback? onShareToChat;

@@ -2328,7 +2328,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                         Expanded(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 8),
-                            child: _WaveformSeekBar(
+                            child: WaveformSeekBar(
                               fraction: frac.toDouble(),
                               accent: a,
                               inactive: a.withAlpha(48),
@@ -2364,7 +2364,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                                       st.playing &&
                                       st.processingState !=
                                           ProcessingState.completed;
-                                  return _SpinArt(
+                                  return SpinArt(
                                     spinning: on,
                                     child: ClipOval(
                                         child: _miniArt(path, scheme)),
@@ -2444,7 +2444,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                                   st.processingState ==
                                       ProcessingState.buffering);
                           // Same key as the music card and Now Playing.
-                          return _PlayKey(
+                          return PlayKey(
                             playing: playing,
                             buffering: buffering,
                             accent: a,
@@ -2508,15 +2508,15 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
 
 /// The mini player's cover, turning slowly like a little record while music
 /// plays (and easing to a stop on pause).
-class _SpinArt extends StatefulWidget {
-  const _SpinArt({required this.spinning, required this.child});
+class SpinArt extends StatefulWidget {
+  const SpinArt({super.key, required this.spinning, required this.child});
   final bool spinning;
   final Widget child;
   @override
-  State<_SpinArt> createState() => _SpinArtState();
+  State<SpinArt> createState() => _SpinArtState();
 }
 
-class _SpinArtState extends State<_SpinArt>
+class _SpinArtState extends State<SpinArt>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
       vsync: this, duration: const Duration(seconds: 9));
@@ -2528,7 +2528,7 @@ class _SpinArtState extends State<_SpinArt>
   }
 
   @override
-  void didUpdateWidget(covariant _SpinArt old) {
+  void didUpdateWidget(covariant SpinArt old) {
     super.didUpdateWidget(old);
     if (widget.spinning && !_c.isAnimating) _c.repeat();
     if (!widget.spinning && _c.isAnimating) _c.stop();

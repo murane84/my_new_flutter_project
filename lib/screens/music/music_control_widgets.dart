@@ -61,8 +61,9 @@ Color _keyEdge(ColorScheme scheme) => scheme.brightness == Brightness.dark
 /// The big play / pause key. Idle: a clean glossy disc with a crisp rim.
 /// Playing: a thin light ring orbits it (like a turning record) and the disc
 /// breathes very slightly; the icon morphs play ↔ pause with a quick turn.
-class _PlayKey extends StatefulWidget {
-  const _PlayKey({
+class PlayKey extends StatefulWidget {
+  const PlayKey({
+    super.key,
     required this.playing,
     required this.buffering,
     required this.accent,
@@ -78,10 +79,10 @@ class _PlayKey extends StatefulWidget {
   static const double size = 68;
 
   @override
-  State<_PlayKey> createState() => _PlayKeyState();
+  State<PlayKey> createState() => _PlayKeyState();
 }
 
-class _PlayKeyState extends State<_PlayKey>
+class _PlayKeyState extends State<PlayKey>
     with SingleTickerProviderStateMixin {
   late final AnimationController _orbit = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 5200));
@@ -93,7 +94,7 @@ class _PlayKeyState extends State<_PlayKey>
   }
 
   @override
-  void didUpdateWidget(covariant _PlayKey old) {
+  void didUpdateWidget(covariant PlayKey old) {
     super.didUpdateWidget(old);
     if (widget.playing && !_orbit.isAnimating) {
       _orbit.repeat();
@@ -777,7 +778,7 @@ Widget _musicPickChip(
 /// (a stable per-track pattern) fill with the accent up to the play position
 /// and are faint beyond it; drag or tap anywhere to scrub, with a small time
 /// bubble following the finger.
-class _WaveformSeekBar extends StatefulWidget {
+class WaveformSeekBar extends StatefulWidget {
   final double fraction; // 0..1 played
   final Color accent;
   final Color inactive;
@@ -789,7 +790,8 @@ class _WaveformSeekBar extends StatefulWidget {
   final double? markA;
   final double? markB;
 
-  const _WaveformSeekBar({
+  const WaveformSeekBar({
+    super.key,
     required this.fraction,
     required this.accent,
     required this.inactive,
@@ -802,10 +804,10 @@ class _WaveformSeekBar extends StatefulWidget {
   });
 
   @override
-  State<_WaveformSeekBar> createState() => _WaveformSeekBarState();
+  State<WaveformSeekBar> createState() => _WaveformSeekBarState();
 }
 
-class _WaveformSeekBarState extends State<_WaveformSeekBar> {
+class _WaveformSeekBarState extends State<WaveformSeekBar> {
   static const int _bars = 44;
   double? _dragFrac; // non-null while scrubbing
   late List<double> _heights;
@@ -817,7 +819,7 @@ class _WaveformSeekBarState extends State<_WaveformSeekBar> {
   }
 
   @override
-  void didUpdateWidget(covariant _WaveformSeekBar old) {
+  void didUpdateWidget(covariant WaveformSeekBar old) {
     super.didUpdateWidget(old);
     if (old.seed != widget.seed) _heights = _gen(widget.seed);
   }

@@ -492,6 +492,13 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     playbackBus.isPlaying = () => _player.playing;
     playbackBus.onToggleFavorite = _toggleCurrentFavorite;
     playbackBus.onShareToChat = _shareCurrentSong;
+    playbackBus.nextTitle = () {
+      if (_liveActive || _effShuffle) return null;
+      final n = _peekNextIndex();
+      if (n == null || n < 0 || n >= _playlist.length) return null;
+      final p = _playlist[n];
+      return metadataStore.title(p, _nameFromPath(p));
+    };
 
     // App-wide playlist drawer. MusicControls owns the playlist UI + data and
     // is always mounted, so it registers the drawer handlers here — any screen
@@ -549,6 +556,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       playbackBus.isPlaying = null;
       playbackBus.onToggleFavorite = null;
       playbackBus.onShareToChat = null;
+      playbackBus.nextTitle = null;
     }
     // Relinquish the playlist drawer if we own it.
     if (playlistDrawerBus.toggle == _togglePlaylistDrawer) {

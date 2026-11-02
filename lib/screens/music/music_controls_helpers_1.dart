@@ -578,7 +578,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                                   (pos.inMilliseconds / maxMs).clamp(0.0, 1.0);
                               return Column(
                                 children: [
-                                  _WaveformSeekBar(
+                                  WaveformSeekBar(
                                     fraction: frac,
                                     accent: accent,
                                     inactive: accent.withAlpha(48),
@@ -660,7 +660,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                                   // Same key as the music card: the icon turns
                                   // play ↔ pause and a light ring orbits it
                                   // while playing.
-                                  return _PlayKey(
+                                  return PlayKey(
                                     playing: playing,
                                     buffering: buffering,
                                     accent: accent,

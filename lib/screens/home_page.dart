@@ -4333,6 +4333,21 @@ class HomePageState extends rp.ConsumerState<HomePage>
     );
   }
 
+  Widget _barIcon(IconData icon, Color color, String tip, VoidCallback onTap,
+      {double size = 20}) {
+    return Tooltip(
+      message: tip,
+      child: InkResponse(
+        onTap: onTap,
+        radius: 20,
+        child: Padding(
+          padding: const EdgeInsets.all(5),
+          child: Icon(icon, size: size, color: color),
+        ),
+      ),
+    );
+  }
+
   Widget _buildNowPlayingBar(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     // Snapshot: this bar is built inside _buildPhoneBody's Consumer, which
@@ -4399,93 +4414,176 @@ class HomePageState extends rp.ConsumerState<HomePage>
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
+            // Same look as the playlist's mini player: waveform seek with
+            // times, then a spinning record + title / artist · Next, heart,
+            // share, the animated play key and transport. Swipe sideways to
+            // skip, up to open, down to tuck into the footer pill.
             Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 8, 8),
-              child: Row(
-                children: [
-                  const SizedBox(width: 2),
-                  // Transport leads the bar now (logo moved to the status
-                  // strip): Previous · Play · Next. The favourite heart is by
-                  // the seek
-                  // bar so the controls nudge left and the space balances out.
-                  _barBtn(
-                    context,
-                    Icons.skip_previous_rounded,
-                    () => playbackBus.onPrev?.call(),
-                    size: 22,
-                  ),
-                  _barBtn(
-                    context,
-                    np.playing
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded,
-                    () => playbackBus.onToggle?.call(),
-                    size: 26,
-                    filled: true,
-                  ),
-                  _barBtn(
-                    context,
-                    Icons.skip_next_rounded,
-                    () => playbackBus.onNext?.call(),
-                    size: 22,
-                  ),
-                  const SizedBox(width: 10),
-                  // Title (auto-scrolls if long) above a slim seekable bar.
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          height: 17,
-                          child: _ScrollingText(
-                            text: np.track.isEmpty ? 'No track' : np.track,
-                            style: TextStyle(
-                              color: scheme.onSurface,
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
+              padding: const EdgeInsets.fromLTRB(12, 0, 6, 8),
+              child: LayoutBuilder(builder: (ctx, cons) {
+                // Phone-narrow: the heart lives in the full player; wider
+                // screens get it here too.
+                final roomy = cons.maxWidth >= 440;
+                final a = scheme.primary;
+                final artist = np.artist.trim();
+                final next = (playbackBus.nextTitle?.call() ?? '').trim();
+                final sub = [
+                  if (artist.isNotEmpty && artist != '<unknown>') artist,
+                  if (next.isNotEmpty) 'Next: $next',
+                ].join('  ·  ');
+                final timeStyle = TextStyle(
+                  fontSize: 10,
+                  color: scheme.onSurface.withAlpha(150),
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                );
+                return GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onHorizontalDragEnd: (d) {
+                    final v = d.primaryVelocity ?? 0;
+                    if (v < -250) playbackBus.onNext?.call();
+                    if (v > 250) playbackBus.onPrev?.call();
+                  },
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ValueListenableBuilder<PlayClock>(
+                        valueListenable: playClockNotifier,
+                        builder: (_, clock, _) {
+                          final total = clock.duration.inMilliseconds;
+                          final frac = total > 0
+                              ? (clock.position.inMilliseconds / total)
+                                  .clamp(0.0, 1.0)
+                                  .toDouble()
+                              : 0.0;
+                          return Row(children: [
+                            Text(_fmtClock(clock.position), style: timeStyle),
+                            Expanded(
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
+                                child: WaveformSeekBar(
+                                  fraction: frac,
+                                  accent: a,
+                                  inactive: a.withAlpha(48),
+                                  enabled: total > 0,
+                                  seed: np.track.hashCode,
+                                  onSeek: (f) =>
+                                      playbackBus.onSeekFraction?.call(f),
+                                  labelFor: (f) => _fmtClock(Duration(
+                                      milliseconds: (f * total).round())),
+                                ),
+                              ),
+                            ),
+                            Text(_fmtClock(clock.duration), style: timeStyle),
+                            const SizedBox(width: 6),
+                          ]);
+                        },
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          // A little record that turns while music plays.
+                          SpinArt(
+                            spinning: np.playing,
+                            child: Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: RadialGradient(colors: [
+                                  Color.lerp(a, Colors.white, 0.25)!,
+                                  a,
+                                  Color.lerp(a, Colors.black, 0.45)!,
+                                ], stops: const [0.0, 0.45, 1.0]),
+                                border: Border.all(
+                                    color: Colors.white.withAlpha(60)),
+                              ),
+                              child: Icon(Icons.music_note_rounded,
+                                  size: 18,
+                                  color: a.computeLuminance() > 0.5
+                                      ? const Color(0xFF111111)
+                                      : Colors.white),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 5),
-                        _barProgress(context),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Share to chat — the quick action that used to live in the
-                  // drawer's transport strip (dropped on the chat surface). It's
-                  // more useful than the heart on this in-chat bar, so it takes
-                  // that spot; favouriting still lives in the full player.
-                  Tooltip(
-                    message: 'Share to chat',
-                    child: GestureDetector(
-                      onTap: () => playbackBus.onShareToChat?.call(),
-                      behavior: HitTestBehavior.opaque,
-                      child: Padding(
-                        padding: const EdgeInsets.all(5),
-                        child: Icon(
-                          Icons.share_rounded,
-                          size: 20,
-                          color: scheme.primary,
-                        ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  height: 17,
+                                  child: _ScrollingText(
+                                    text: np.track.isEmpty
+                                        ? 'No track'
+                                        : np.track,
+                                    style: TextStyle(
+                                      color: scheme.onSurface,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                if (sub.isNotEmpty)
+                                  Text(sub,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: scheme.onSurface
+                                              .withAlpha(150))),
+                              ],
+                            ),
+                          ),
+                          if (roomy)
+                            ValueListenableBuilder<bool>(
+                              valueListenable: favoriteNotifier,
+                              builder: (_, fav, _) => _barIcon(
+                                fav
+                                    ? Icons.favorite_rounded
+                                    : Icons.favorite_border_rounded,
+                                fav
+                                    ? Colors.pinkAccent
+                                    : scheme.onSurface.withAlpha(170),
+                                fav ? 'Unlike' : 'Like',
+                                () => playbackBus.onToggleFavorite?.call(),
+                              ),
+                            ),
+                          _barIcon(Icons.share_rounded, a, 'Share to chat',
+                              () => playbackBus.onShareToChat?.call()),
+                          _barIcon(
+                              Icons.skip_previous_rounded,
+                              scheme.onSurface,
+                              'Previous',
+                              () => playbackBus.onPrev?.call(),
+                              size: 24),
+                          PlayKey(
+                            playing: np.playing,
+                            buffering: false,
+                            accent: a,
+                            onTap: () => playbackBus.onToggle?.call(),
+                            diameter: 38,
+                          ),
+                          _barIcon(
+                              Icons.skip_next_rounded,
+                              scheme.onSurface,
+                              'Next',
+                              () => playbackBus.onNext?.call(),
+                              size: 24),
+                          // Close → genies down into the footer pill.
+                          _barIcon(
+                              Icons.close_rounded,
+                              scheme.onSurface.withAlpha(140),
+                              'Hide player',
+                              () => setState(() => _barDismissed = true),
+                              size: 18),
+                        ],
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(width: 4),
-                  // Close the bar → it genies down into the footer pill.
-                  GestureDetector(
-                    onTap: () => setState(() => _barDismissed = true),
-                    behavior: HitTestBehavior.opaque,
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Icon(Icons.close_rounded,
-                          size: 18, color: scheme.onSurface.withAlpha(140)),
-                    ),
-                  ),
-                ],
-              ),
+                );
+              }),
             ),
           ],
         ),

@@ -22,6 +22,48 @@ import '../widgets/photo_viewer.dart';
 /// (/users/{id}/status → phone + is_online + last_seen) on open, so it shows the
 /// current profile even when the caller only had a partial record. Any values
 /// passed in are used immediately as a first paint while the fetch resolves.
+/// Everything the card shows beyond what the caller handed in: live status +
+/// phone, the In-tune streak and the secret-heart count. Fetched TOGETHER and
+/// applied in one go, so the card never pops pieces in one by one.
+class _Bond {
+  Map<String, dynamic>? live; // /users/{id}/status
+  Map<String, dynamic>? streak; // /spaces/{id}/streak
+  int? hearts;
+}
+
+// Last bond per person, so re-opening a profile paints complete instantly
+// (then refreshes quietly).
+final Map<String, _Bond> _bondCache = {};
+String _bondKey(int? userId, int? spaceId) => '$userId:$spaceId';
+
+Future<void> _quiet(Future<void> Function() f) async {
+  try {
+    await f();
+  } catch (_) {}
+}
+
+Future<_Bond> _loadBond(
+    {int? userId, int? spaceId, bool hearts = false}) async {
+  final b = _Bond();
+  await Future.wait([
+    if (userId != null)
+      _quiet(() async => b.live = await ApiService().fetchFriendStatus(userId)),
+    if (spaceId != null)
+      _quiet(() async => b.streak = await ApiService().getStreak(spaceId)),
+    if (hearts && userId != null)
+      _quiet(() async =>
+          b.hearts = (await ApiService().loveLetters(userId)).length),
+  ]);
+  _bondCache[_bondKey(userId, spaceId)] = b;
+  return b;
+}
+
+/// Fetch a profile card's details ahead of time (e.g. when a chat opens), so
+/// tapping the header shows the full card at once.
+Future<void> warmUserProfile(
+        {int? userId, int? spaceId, bool showHearts = false}) =>
+    _loadBond(userId: userId, spaceId: spaceId, hearts: showHearts);
+
 Future<void> showUserProfile(
   BuildContext context, {
   required String username,
@@ -40,8 +82,23 @@ Future<void> showUserProfile(
   VoidCallback? onTuneIn,
   // DM friends: count the secret hearts between you.
   bool showHearts = false,
-}) {
-  return showModalBottomSheet(
+}) async {
+  // Load the bond first so the card opens with streak + hearts + status
+  // already in place. Seen before → open instantly from the cache and
+  // refresh behind it; first time → wait briefly (capped, so a slow network
+  // never holds the tap hostage), then everything lands together.
+  final wants = userId != null || spaceId != null;
+  final fresh = wants
+      ? _loadBond(userId: userId, spaceId: spaceId, hearts: showHearts)
+      : null;
+  var initial = _bondCache[_bondKey(userId, spaceId)];
+  if (initial == null && fresh != null) {
+    initial = await fresh
+        .then<_Bond?>((b) => b)
+        .timeout(const Duration(milliseconds: 900), onTimeout: () => null);
+    if (!context.mounted) return;
+  }
+  await showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
@@ -64,6 +121,8 @@ Future<void> showUserProfile(
       onOpenSpace: onOpenSpace,
       onTuneIn: onTuneIn,
       showHearts: showHearts,
+      initial: initial,
+      fresh: fresh,
     ),
   );
 }
@@ -81,6 +140,8 @@ class _UserProfileSheet extends StatefulWidget {
   final VoidCallback? onOpenSpace;
   final VoidCallback? onTuneIn;
   final bool showHearts;
+  final _Bond? initial;
+  final Future<_Bond>? fresh;
 
   const _UserProfileSheet({
     required this.username,
@@ -95,6 +156,8 @@ class _UserProfileSheet extends StatefulWidget {
     this.onOpenSpace,
     this.onTuneIn,
     this.showHearts = false,
+    this.initial,
+    this.fresh,
   });
 
   @override
@@ -112,27 +175,34 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
   @override
   void initState() {
     super.initState();
-    _fetchLive();
-    _fetchBond();
+    final first = widget.initial;
+    if (first != null) _apply(first);
+    // Still loading (slow network) → the small "Loading details…" row shows
+    // until the whole bond lands at once.
+    _fetching = first == null && widget.fresh != null;
+    widget.fresh?.then((b) {
+      if (mounted) setState(() => _apply(b));
+    });
   }
 
-  /// The bond's details: the In-tune streak (bonded friends) and how many
-  /// secret hearts have passed between you.
-  Future<void> _fetchBond() async {
-    final sid = widget.spaceId;
-    if (sid != null) {
-      try {
-        final st = await ApiService().getStreak(sid);
-        if (mounted && st != null) setState(() => _streak = st);
-      } catch (_) {}
+  /// Take a loaded bond — status, phone, streak, hearts — in ONE update.
+  void _apply(_Bond b) {
+    _fetching = false;
+    final st = b.live;
+    if (st != null) {
+      final fp = (st['phone'] as String?)?.trim();
+      final online = st['is_online'] == true;
+      final lastSeen = (st['last_seen'] as String?)?.trim();
+      if (fp != null && fp.isNotEmpty) _phone = fp;
+      _isOnline = online;
+      if (online) {
+        _statusLine = 'Online';
+      } else if (lastSeen != null && lastSeen.isNotEmpty) {
+        _statusLine = 'Last seen ${formatLastSeen(lastSeen)}';
+      }
     }
-    final uid = widget.userId;
-    if (widget.showHearts && uid != null) {
-      try {
-        final list = await ApiService().loveLetters(uid);
-        if (mounted) setState(() => _hearts = list.length);
-      } catch (_) {}
-    }
+    if (b.streak != null) _streak = b.streak;
+    if (b.hearts != null) _hearts = b.hearts;
   }
 
   // ── In tune ────────────────────────────────────────────────────────────────
@@ -296,33 +366,6 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
     );
   }
 
-  /// Pull the user's live status (online, last-seen) + phone from the server so
-  /// the sheet reflects the current profile, not a possibly-stale hand-off.
-  Future<void> _fetchLive() async {
-    final id = widget.userId;
-    if (id == null) return;
-    setState(() => _fetching = true);
-    try {
-      final st = await ApiService().fetchFriendStatus(id);
-      if (!mounted) return;
-      final fp = (st['phone'] as String?)?.trim();
-      final online = st['is_online'] == true;
-      final lastSeen = (st['last_seen'] as String?)?.trim();
-      setState(() {
-        if (fp != null && fp.isNotEmpty) _phone = fp;
-        _isOnline = online;
-        if (online) {
-          _statusLine = 'Online';
-        } else if (lastSeen != null && lastSeen.isNotEmpty) {
-          _statusLine = 'Last seen ${formatLastSeen(lastSeen)}';
-        }
-        _fetching = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _fetching = false);
-    }
-  }
-
   // Opens the phone's native "new contact" screen pre-filled with this number
   // (WhatsApp-style), then re-reads the address book so a newly saved name
   // resolves. Mobile only — the "Add to contacts" tile is hidden on web, where
@@ -461,20 +504,32 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
                   );
                 },
               ),
-            // The bond: In tune streak.
-            if (_streak != null && _streak!['bonded'] == true) ...[
-              _inTuneCard(scheme),
-              const SizedBox(height: 10),
-            ],
-            if ((_hearts ?? 0) > 0) ...[
-              _infoTile(scheme,
-                  icon: Icons.favorite_rounded,
-                  color: const Color(0xFFFF073A),
-                  text: _hearts == 1
-                      ? '1 secret heart between you 💌'
-                      : '$_hearts secret hearts between you 💌'),
-              const SizedBox(height: 10),
-            ],
+            // The bond: In tune streak + secret hearts — they arrive
+            // together (one update); if that's after opening, the card
+            // grows smoothly instead of jumping.
+            AnimatedSize(
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_streak != null && _streak!['bonded'] == true) ...[
+                    _inTuneCard(scheme),
+                    const SizedBox(height: 10),
+                  ],
+                  if ((_hearts ?? 0) > 0) ...[
+                    _infoTile(scheme,
+                        icon: Icons.favorite_rounded,
+                        color: const Color(0xFFFF073A),
+                        text: _hearts == 1
+                            ? '1 secret heart between you 💌'
+                            : '$_hearts secret hearts between you 💌'),
+                    const SizedBox(height: 10),
+                  ],
+                ],
+              ),
+            ),
             if (widget.onOpenSpace != null) ...[
               _infoTile(scheme,
                   icon: Icons.home_rounded,

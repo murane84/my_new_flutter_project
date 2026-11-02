@@ -3164,6 +3164,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Optimistically clear the badge (was: friend['unread_count'] = 0).
     ref.read(unreadProvider.notifier).clear(friend['id'] as int);
     ApiService().markMessagesAsReadPatch(friend['id'] as int);
+    // Fetch their profile card's details now, so tapping the chat header
+    // opens it complete (streak + hearts + status) with nothing popping in.
+    final fid = friend['id'] as int;
+    warmUserProfile(
+        userId: fid,
+        spaceId: (_spaceWithFriend(fid)?['id'] as num?)?.toInt(),
+        showHearts: true);
   }
 
   /// Open a GROUP conversation inside the chat panel (leaving the music panel

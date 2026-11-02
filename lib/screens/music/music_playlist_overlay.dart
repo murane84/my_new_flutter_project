@@ -1311,27 +1311,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     );
   }
 
-  // On the music page the mini player floats as its OWN card under the
-  // playlist card (a clear gap between them), not glued to its bottom.
-  bool get _stripDetached => widget.fullPage;
-
   @override
   Widget build(BuildContext context) {
-    final card = _cardBuild(context);
-    final showStrip =
-        widget.hasTrack && !_selecting && !widget.hostIsChat;
-    if (!_stripDetached || !showStrip) return card;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(child: card),
-        const SizedBox(height: 10),
-        _transportStrip(Theme.of(context).colorScheme),
-      ],
-    );
-  }
-
-  Widget _cardBuild(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final displayed = _displayed();
     final displayedPaths = displayed.map((e) => e.value).toList();
@@ -1470,10 +1451,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           // Inline transport strip — control playback without leaving the list.
           // Skipped on phone (the app's now-playing bar handles it), so a single
           // song never shows two players stacked.
-          if (widget.hasTrack &&
-              !_selecting &&
-              !appBarHandlesPlayback &&
-              !_stripDetached)
+          if (widget.hasTrack && !_selecting && !appBarHandlesPlayback)
             _transportStrip(scheme),
         ],
       ),
@@ -2301,46 +2279,34 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       if (artist.isNotEmpty && artist != '<unknown>') artist,
       if (next.isNotEmpty) 'Next: $next',
     ].join('  ·  ');
-    // A floating, softly tinted glass card — a small sibling of the music
-    // card: waveform seek, spinning cover, title + artist + up next, heart,
-    // the animated play key. Swipe it sideways to skip.
-    return Padding(
-      padding: _stripDetached
-          ? EdgeInsets.zero
-          : const EdgeInsets.fromLTRB(8, 4, 8, 8),
-      child: GestureDetector(
+    // The playlist card's own footer (connected, edge to edge — it's how
+    // you control the music while the list is open): softly theme-tinted,
+    // waveform seek, spinning cover, title + artist + up next, share, the
+    // animated play key. Swipe it sideways to skip.
+    return LayoutBuilder(builder: (context, cons) {
+      // Narrow card: the heart moves into the ⋮ menu so the title keeps room.
+      final roomy = cons.maxWidth >= 460;
+      return GestureDetector(
         onHorizontalDragEnd: (d) {
           final v = d.primaryVelocity ?? 0;
           if (v < -250) widget.onNext();
           if (v > 250) widget.onPrev();
         },
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-            child: Container(
+        child: Container(
               padding: const EdgeInsets.fromLTRB(10, 6, 6, 8),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
+                border: Border(
+                    top: BorderSide(color: a.withValues(alpha: 0.22))),
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Color.alphaBlend(a.withValues(alpha: isDark ? 0.16 : 0.10),
-                            scheme.surfaceContainerHigh)
-                        .withValues(alpha: 0.86),
-                    Color.alphaBlend(a.withValues(alpha: isDark ? 0.06 : 0.04),
-                            scheme.surfaceContainerHigh)
-                        .withValues(alpha: 0.86),
+                    Color.alphaBlend(a.withValues(alpha: isDark ? 0.14 : 0.08),
+                        scheme.surfaceContainerHigh),
+                    Color.alphaBlend(a.withValues(alpha: isDark ? 0.05 : 0.03),
+                        scheme.surfaceContainerHigh),
                   ],
                 ),
-                border: Border.all(color: a.withValues(alpha: 0.22)),
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.12),
-                      blurRadius: 18,
-                      offset: const Offset(0, 6)),
-                ],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -2433,7 +2399,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                           ]),
                         ),
                       ),
-                      if (path != null)
+                      if (path != null && roomy)
                         IconButton(
                           icon: AnimatedSwitcher(
                             duration: const Duration(milliseconds: 220),
@@ -2450,6 +2416,14 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                           visualDensity: VisualDensity.compact,
                           tooltip: fav ? 'Unlike' : 'Like',
                           onPressed: () => widget.onFavorite(path),
+                        ),
+                      // Share stays one tap away, as before.
+                      if (path != null)
+                        IconButton(
+                          icon: Icon(Icons.share_rounded, color: a),
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Share this song',
+                          onPressed: () => widget.onShare(path),
                         ),
                       IconButton(
                         icon: Icon(Icons.skip_previous_rounded,
@@ -2486,7 +2460,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                         tooltip: 'Next',
                         onPressed: widget.onNext,
                       ),
-                      // More: find the playing song, share it.
+                      // More: find the playing song (+ like, on a narrow card).
                       PopupMenuButton<String>(
                         tooltip: 'More',
                         icon: Icon(Icons.more_vert_rounded,
@@ -2494,8 +2468,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                         padding: EdgeInsets.zero,
                         onSelected: (v) {
                           if (v == 'find') _locateNow();
-                          if (v == 'share' && path != null) {
-                            widget.onShare(path);
+                          if (v == 'like' && path != null) {
+                            widget.onFavorite(path);
                           }
                         },
                         itemBuilder: (_) => [
@@ -2508,14 +2482,16 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                               title: Text('Find playing song'),
                             ),
                           ),
-                          if (path != null)
-                            const PopupMenuItem(
-                              value: 'share',
+                          if (path != null && !roomy)
+                            PopupMenuItem(
+                              value: 'like',
                               child: ListTile(
                                 dense: true,
                                 contentPadding: EdgeInsets.zero,
-                                leading: Icon(Icons.share_rounded),
-                                title: Text('Share this song'),
+                                leading: Icon(fav
+                                    ? Icons.favorite_rounded
+                                    : Icons.favorite_border_rounded),
+                                title: Text(fav ? 'Unlike' : 'Like'),
                               ),
                             ),
                         ],
@@ -2524,11 +2500,9 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                   ),
                 ],
               ),
-            ),
-          ),
         ),
-      ),
-    );
+      );
+    });
   }
 }
 

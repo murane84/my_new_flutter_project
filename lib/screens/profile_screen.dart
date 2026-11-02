@@ -19,6 +19,8 @@ import '../utils/emoji_field.dart';
 import '../utils/readable.dart';
 import '../widgets/avatar_flight.dart';
 import '../widgets/photo_viewer.dart';
+import '../widgets/recent_photo_picker.dart';
+import 'package:image_picker/image_picker.dart';
 
 /// Profile popup: edit username / phone / password (email is fixed), or
 /// permanently delete the account and wipe all data from the server. Rendered
@@ -200,77 +202,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
   /// device storage (files) — the same two-way choice the wallpaper picker
   /// offers, so the flow feels consistent across the app.
   Future<void> _chooseAvatarSource() async {
-    final scheme = Theme.of(context).colorScheme;
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: scheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              margin: const EdgeInsets.only(top: 8, bottom: 4),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: scheme.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Change photo',
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: scheme.onSurface)),
-              ),
-            ),
-            if (_fullAvatar != null)
-              ListTile(
-                leading: Icon(Icons.zoom_out_map_rounded,
-                    color: scheme.primary),
-                title: const Text('View photo'),
-                subtitle: const Text('See it full size'),
-                onTap: () => Navigator.pop(ctx, 'view'),
-              ),
-            ListTile(
-              leading:
-                  Icon(Icons.photo_library_rounded, color: scheme.primary),
-              title: const Text('Choose from gallery'),
-              subtitle: const Text('Pick a saved Aluta picture'),
-              onTap: () => Navigator.pop(ctx, 'gallery'),
-            ),
-            ListTile(
-              leading: Icon(Icons.add_photo_alternate_rounded,
-                  color: scheme.primary),
-              title: const Text('Upload a photo'),
-              subtitle: const Text('Browse your device storage'),
-              onTap: () => Navigator.pop(ctx, 'files'),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-    if (!mounted || choice == null) return;
-    if (choice == 'view') {
-      final full = _fullAvatar;
-      if (full != null) {
-        await showPhotoViewer(
-            context, authNetworkImageProvider(full, mediaAuthHeaders(full)));
-      }
+    // Telegram-style: a sheet of my recent photos (camera first), plus
+    // Aluta pictures / files / view chips.
+    final pick = await showRecentPhotoPicker(context,
+        title: 'Choose photo', canView: _fullAvatar != null);
+    if (!mounted || pick == null) return;
+    if (pick.bytes != null) {
+      await _uploadAvatarBytes(
+          pick.bytes!, pick.name ?? 'photo.jpg', _mimeFor(pick.name));
       return;
     }
-    if (choice == 'gallery') {
-      await _pickFromGallery();
-    } else {
-      await _pickFromFiles();
+    switch (pick.action) {
+      case 'view':
+        final full = _fullAvatar;
+        if (full != null) {
+          await showPhotoViewer(
+              context, authNetworkImageProvider(full, mediaAuthHeaders(full)));
+        }
+      case 'aluta':
+        await _pickFromGallery();
+      case 'files':
+        await _pickFromFiles();
+      case 'camera':
+        await _takeAvatarPhoto();
+    }
+  }
+
+  String _mimeFor(String? name) {
+    final n = (name ?? '').toLowerCase();
+    if (n.endsWith('.png')) return 'image/png';
+    if (n.endsWith('.webp')) return 'image/webp';
+    if (n.endsWith('.gif')) return 'image/gif';
+    return 'image/jpeg';
+  }
+
+  Future<void> _takeAvatarPhoto() async {
+    try {
+      final shot = await ImagePicker().pickImage(
+          source: ImageSource.camera,
+          preferredCameraDevice: CameraDevice.front,
+          maxWidth: 1600,
+          imageQuality: 88);
+      if (shot == null) return;
+      final bytes = await shot.readAsBytes();
+      if (bytes.isEmpty || !mounted) return;
+      await _uploadAvatarBytes(bytes, shot.name, _mimeFor(shot.name));
+    } catch (_) {
+      if (mounted) {
+        showToast(context, "Couldn't open the camera", type: ToastType.error);
+      }
     }
   }
 

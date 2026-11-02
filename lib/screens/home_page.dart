@@ -399,6 +399,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Our Space reads its saved copy synchronously → opens complete.
+    warmSpacePrefs();
     _loadPinnedChats();
     AccountPrefs.onRestore(_loadPinnedChats); // pins back from the account
     _wireSongMoments();

@@ -20,6 +20,7 @@ import '../utils/readable.dart';
 import '../widgets/avatar_flight.dart';
 import '../widgets/photo_viewer.dart';
 import '../widgets/recent_photo_picker.dart';
+import '../utils/prefs_now.dart';
 import 'package:image_picker/image_picker.dart';
 
 /// Profile popup: edit username / phone / password (email is fixed), or
@@ -69,26 +70,63 @@ class _ProfileScreenState extends State<ProfileScreen> {
     AppConfig.baseUrl.then((b) {
       if (mounted) setState(() => _apiBase = b);
     });
-    _loadCached();
+    // Paint the saved profile + switches before the first frame (opens
+    // complete), then refresh quietly.
+    if (!_paintCachedSync()) _loadCached();
     _load();
     _loadBio();
     _load2fa();
   }
 
+  static const String _k2fa = 'profile_2fa_v1';
+  static const String _kBioAvail = 'profile_bio_avail_v1';
+  static const String _kBioOn = 'profile_bio_on_v1';
+
+  /// Same as [_loadCached] but synchronous (prefs already in memory), so the
+  /// photo, name, phone and the 2FA / quick-unlock switches are there on the
+  /// very first frame instead of flicking in.
+  bool _paintCachedSync() {
+    final p = prefsNow;
+    if (p == null) return false;
+    try {
+      _twoFAOn = p.getBool(_k2fa) ?? _twoFAOn;
+      _bioAvailable = p.getBool(_kBioAvail) ?? _bioAvailable;
+      _bioOn = p.getBool(_kBioOn) ?? _bioOn;
+      final email = p.getString(_kEmail);
+      final uname = p.getString(_kUsername);
+      if (email == null && uname == null) return true;
+      _email = email ?? _email;
+      _origUsername = uname ?? _origUsername;
+      _origPhone = p.getString(_kPhone) ?? _origPhone;
+      _origAvatar = p.getString(_kAvatar) ?? _origAvatar;
+      _avatarUrl = _origAvatar;
+      if (_username.text.isEmpty) _username.text = _origUsername;
+      if (_phone.text.isEmpty) _phone.text = _origPhone;
+      _loading = false;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _load2fa() async {
     final on = await ApiService().twoFactorStatus();
-    if (mounted) setState(() => _twoFAOn = on);
+    if (!mounted) return;
+    if (on != _twoFAOn) setState(() => _twoFAOn = on);
+    prefsNow?.setBool(_k2fa, on);
   }
 
   Future<void> _loadBio() async {
     final avail = await BiometricService.instance.isAvailable();
     final on = await BiometricService.instance.isEnabled();
-    if (mounted) {
+    if (mounted && (avail != _bioAvailable || on != _bioOn)) {
       setState(() {
         _bioAvailable = avail;
         _bioOn = on;
       });
     }
+    prefsNow?.setBool(_kBioAvail, avail);
+    prefsNow?.setBool(_kBioOn, on);
   }
 
   Future<void> _toggleBio(bool want) async {

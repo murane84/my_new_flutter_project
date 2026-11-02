@@ -10,13 +10,25 @@ part of '../relationship_space_page.dart';
 final Set<int> _heartHealTried = <int>{};
 // Which kept hearts can't be opened, per set of moments (scanned once).
 final Map<String, Future<List<int>>> _brokenScans = {};
+// Last love-letter list per partner this app run → the shelf opens filled.
+final Map<int, List<Map<String, dynamic>>> _lettersMem = {};
 
 extension _SpaceLoveLetters on _RelationshipSpacePageState {
-  Widget _loveLettersSection(ColorScheme scheme, {VoidCallback? onMenu}) {
+  /// Start loading the letters with the page (not when the shelf opens), and
+  /// remember them, so the shelf never sits on a spinner.
+  void _warmLetters() {
     final pid = _partnerId;
     _lettersFuture ??= pid == null
         ? Future.value(const <Map<String, dynamic>>[])
-        : ApiService().loveLetters(pid);
+        : ApiService().loveLetters(pid).then((l) {
+            _lettersMem[pid] = l;
+            return l;
+          });
+  }
+
+  Widget _loveLettersSection(ColorScheme scheme, {VoidCallback? onMenu}) {
+    final pid = _partnerId;
+    _warmLetters();
     final partner = _others.isNotEmpty
         ? ContactNames.instance.displayName(of: _others.first, registered: (_others.first['username'] ?? 'them').toString())
         : 'them';
@@ -27,8 +39,10 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
       onMenu: onMenu,
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _lettersFuture,
+        initialData: pid == null ? null : _lettersMem[pid],
         builder: (ctx, snap) {
-          if (snap.connectionState != ConnectionState.done) {
+          if (snap.connectionState != ConnectionState.done &&
+              snap.data == null) {
             return const Padding(
               padding: EdgeInsets.all(40),
               child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),

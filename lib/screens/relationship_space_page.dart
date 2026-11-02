@@ -50,6 +50,7 @@ import '../services/track_title.dart' show cleanTrackName;
 import '../utils/marquee_text.dart';
 import '../services/contact_names.dart';
 import '../widgets/keepsake_photo.dart';
+import '../utils/prefs_now.dart';
 
 part 'space/space_moment_composer.dart'; // moment composer + add-to-playlist sheet
 part 'space/space_edit_sheet.dart'; // edit-space sheet + wallpaper picker
@@ -456,6 +457,14 @@ String deriveSpaceName(Map<String, dynamic> space, int? myUserId) {
   return 'You & ${others.length} others';
 }
 
+// Our Space reads its saved copy SYNCHRONOUSLY (see utils/prefs_now.dart)
+// and opens complete on the first frame — no pieces flooding in.
+SharedPreferences? get _spacePrefs => prefsNow;
+set _spacePrefs(SharedPreferences? p) => prefsNow ??= p;
+
+/// Call early (home start-up) so Our Space opens complete from its saved copy.
+Future<void> warmSpacePrefs() => warmPrefsNow();
+
 class RelationshipSpacePage extends StatefulWidget {
   final Map<String, dynamic> space; // light map from the list (id, members…)
   final String apiBase;
@@ -531,9 +540,53 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   List<String> _cardOrder = List.of(kDefaultCardOrder);
   String get _orderKey => 'space_order_v1_$_id';
 
+  bool _cachePainted = false;
+  bool _localPainted = false;
+
+  /// First frame: the saved space (diary, moments, playlist…), the In-tune
+  /// streak, the recap card and my card order / "seen" dots — all at once.
+  void _paintCachedSync() {
+    final prefs = _spacePrefs;
+    if (prefs == null) return;
+    try {
+      final raw = prefs.getString(_fullCacheKey);
+      if (raw != null) {
+        _applyCached((jsonDecode(raw) as Map).cast<String, dynamic>());
+        _cachePainted = true;
+      }
+    } catch (_) {}
+    try {
+      _applyLocal(prefs.getString(_seenKey), prefs.getStringList(_orderKey));
+      _localPainted = true;
+    } catch (_) {}
+  }
+
+  void _applyCached(Map<String, dynamic> c) {
+    final st = c.remove('__streak');
+    final rc = c.remove('__recap');
+    _space = {..._space, ...c};
+    if (st is Map) _streak = st.cast<String, dynamic>();
+    if (rc is Map) _recapReady = rc.cast<String, dynamic>();
+  }
+
+  void _applyLocal(String? raw, List<String>? order) {
+    if (raw != null) {
+      _seenCounts = (jsonDecode(raw) as Map)
+          .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+    }
+    _seenLoaded = true;
+    if (order != null) {
+      _cardOrder = [
+        ...order.where(kDefaultCardOrder.contains),
+        ...kDefaultCardOrder.where((k) => !order.contains(k)),
+      ];
+    }
+  }
+
   Future<void> _loadLocalPrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      _spacePrefs ??= prefs;
       final raw = prefs.getString(_seenKey);
       final order = prefs.getStringList(_orderKey);
       if (!mounted) return;
@@ -647,8 +700,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   @override
   void initState() {
     super.initState();
+    // Paint the saved copy (space + streak + recap + card order) before the
+    // first frame, then refresh everything in ONE update.
+    _paintCachedSync();
     _load();
-    _loadLocalPrefs();
+    if (!_localPainted) _loadLocalPrefs();
     // Repaint when the partner starts/stops/changes what they're playing, so the
     // "tune in together" card appears and clears live.
     NowPlayingPresence.instance.addListener(_onPresence);
@@ -718,30 +774,59 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     // cache-paint — repainting from the stale cached copy would flip the page
     // back to the OLD theme/wallpaper for a moment until the network refresh
     // lands (the "few seconds then it changes" delay). Go straight to refresh.
-    if (!keepCurrent) {
+    if (!keepCurrent && !_cachePainted) {
       try {
         final prefs = await SharedPreferences.getInstance();
+        _spacePrefs ??= prefs;
         final raw = prefs.getString(_fullCacheKey);
         if (raw != null && mounted) {
           final cached = (jsonDecode(raw) as Map).cast<String, dynamic>();
-          setState(() => _space = {..._space, ...cached});
+          setState(() => _applyCached(cached));
         }
       } catch (_) {}
     }
-    final full = await ApiService().getSpace(_id);
+    _cachePainted = false; // later reloads (events, saves) take this path
+    _warmLetters(); // love letters load alongside, ready when the shelf opens
+    // The space, the In-tune streak and the recap card in PARALLEL, applied
+    // in ONE update — so nothing trickles in card by card after opening.
+    final pid = _partnerId;
+    final got = await Future.wait<Object?>([
+      ApiService().getSpace(_id),
+      if (pid != null) ApiService().getStreak(_id).catchError((_) => null),
+      if (pid != null) ApiService().listRecaps(_id).catchError((_) => null),
+    ]);
     if (!mounted) return;
+    final full = got[0] as Map<String, dynamic>?;
+    final streak = pid != null ? got[1] as Map<String, dynamic>? : null;
+    final recaps = pid != null ? got[2] as Map<String, dynamic>? : null;
     if (full != null) {
-      setState(() => _space = full);
+      setState(() {
+        _space = full;
+        if (streak != null) _streak = streak;
+        if (pid != null) {
+          _recapReady =
+              (recaps?['latest_ready'] as Map?)?.cast<String, dynamic>();
+        }
+      });
       try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_fullCacheKey, jsonEncode(full));
+        final prefs = _spacePrefs ?? await SharedPreferences.getInstance();
+        final keep = <String, dynamic>{...full};
+        final st = _streak;
+        if (st != null) {
+          keep['__streak'] = {...st}..remove('new_unlocks');
+        }
+        if (_recapReady != null) keep['__recap'] = _recapReady;
+        await prefs.setString(_fullCacheKey, jsonEncode(keep));
       } catch (_) {}
       // Cache any shared crate audio so Listen Together quick-starts.
       _prefetchPlaylistAudio();
-      // The "In tune" streak (separate endpoint) — refreshes the hub card and
-      // reveals any freshly-earned unlock.
-      if (_partnerId != null) _fetchStreak();
-      if (_partnerId != null) _fetchRecap();
+      if (streak != null) {
+        _afterStreak(streak);
+      } else if (pid == null && _partnerId != null) {
+        // The light map had no members yet — fetch the bond cards now.
+        _fetchStreak();
+        _fetchRecap();
+      }
       // Arrived from "she's online now · Listen together" → start it.
       final auto = spaceAutoListen.value;
       if (auto != null && auto == _partnerId) {
@@ -1991,6 +2076,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final s = await ApiService().getStreak(_id);
     if (!mounted || s == null) return;
     setState(() => _streak = s);
+    _afterStreak(s);
+  }
+
+  void _afterStreak(Map<String, dynamic> s) {
     // Apply earned cosmetics: the Anniversary Vinyl disc becomes selectable in
     // the player once the bond has reached the 30-day milestone.
     if (_hasStreakUnlock('disc_anniversary')) {

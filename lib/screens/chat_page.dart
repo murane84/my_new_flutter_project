@@ -39,6 +39,7 @@ import '../utils/time_utils.dart';
 import '../utils/file_bytes.dart';
 import '../utils/marquee_text.dart';
 import '../utils/prefs_now.dart';
+import '../utils/popup_shell.dart' show gPointerMoveHook, gPointerUpHook;
 import 'live_session_screen.dart';
 import 'gif_picker.dart';
 import '../services/call_service.dart';
@@ -7858,6 +7859,10 @@ class _ReactSlide {
     _active = true;
     hovered.value = null;
     sliding.value = true;
+    // Follow the finger from the app root: once the menu opens on top, the
+    // bubble's own gesture may stop hearing it.
+    gPointerMoveHook = move;
+    gPointerUpHook = end;
   }
 
   static void move(Offset global) {
@@ -7881,6 +7886,8 @@ class _ReactSlide {
     if (!_active) return;
     _active = false;
     sliding.value = false;
+    if (gPointerMoveHook == move) gPointerMoveHook = null;
+    if (gPointerUpHook == end) gPointerUpHook = null;
     final e = hovered.value;
     hovered.value = null;
     if (e != null) pick?.call(e);

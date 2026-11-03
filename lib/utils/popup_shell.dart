@@ -7,6 +7,13 @@ import 'package:flutter/material.dart';
 /// without each call site having to pass a position.
 Offset? gLastTapDownGlobal;
 
+/// App-wide finger tracking for gestures that must keep following the SAME
+/// finger after a new page / menu opens on top (press-and-slide reactions):
+/// a route pushed mid-gesture can cut the original widget off from the
+/// pointer, but this root listener always sees it.
+void Function(Offset global)? gPointerMoveHook;
+VoidCallback? gPointerUpHook;
+
 /// Height of the phone's now-playing bar while it's showing above the footer
 /// (0 when hidden / not a phone). Set by the home page.
 final ValueNotifier<double> gNowPlayingBarHeight = ValueNotifier<double>(0);
@@ -33,6 +40,9 @@ class GlobalTapOrigin extends StatelessWidget {
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: (e) => gLastTapDownGlobal = e.position,
+      onPointerMove: (e) => gPointerMoveHook?.call(e.position),
+      onPointerUp: (_) => gPointerUpHook?.call(),
+      onPointerCancel: (_) => gPointerUpHook?.call(),
       child: child,
     );
   }

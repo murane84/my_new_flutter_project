@@ -102,7 +102,7 @@ const String kMsgReply = 'msg_reply';
 // "🎤 Voice" on a message notification → open that chat with the recorder on.
 const String kMsgVoice = 'msg_voice';
 
-/// Set to a thread key ('s<friendId>' / 'c<conversationId>') when the chat
+/// Set to a thread key (`s<friendId>` / `c<conversationId>`) when the chat
 /// should start recording a voice reply as soon as it's open (the 🎤 Voice
 /// notification action, or the in-app reply banner's mic). The chat clears it.
 final ValueNotifier<String?> pendingVoiceReply = ValueNotifier<String?>(null);

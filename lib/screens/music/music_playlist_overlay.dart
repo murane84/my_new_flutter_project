@@ -1390,7 +1390,9 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             )
           else ...[
           // Header — either the normal header or the multi-select action bar.
-          _selecting ? _selectionBar(scheme) : _header(scheme),
+          _selecting
+              ? _selectionBar(scheme)
+              : _header(scheme, shownCount: displayed.length),
 
           // Search + filter + sort — the ONLY chrome above the list now. The
           // old always-on chip row and the Play/Shuffle row were folded into
@@ -1460,7 +1462,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
 
   // ── Header ──────────────────────────────────────────────────────────────────
 
-  Widget _header(ColorScheme scheme) {
+  Widget _header(ColorScheme scheme, {int? shownCount}) {
     // The header doubles as a swipe handle: a downward or rightward fling
     // dismisses the playlist (back to Now Playing), alongside the back/collapse
     // button. The scrolling track list below is untouched.
@@ -1609,17 +1611,76 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             if (trailing != null) ...[const SizedBox(width: 6), trailing],
           ]);
         }
-        // Phones: title row (back · Playlist [93] · collapse), then ONE
-        // toolbar strip with the actions evenly inside it.
-        return Column(mainAxisSize: MainAxisSize.min, children: [
-          Row(children: [
-            leading,
-            const SizedBox(width: 10),
-            Expanded(child: title),
-            ?trailing,
-          ]),
-          const SizedBox(height: 10),
-          Container(
+        // Phones: ONE row — [← 93] back + song count, then the toolbar strip
+        // with the actions evenly inside it (no separate title row: more
+        // room for the songs).
+        final total = widget.playlist.length;
+        final shown = shownCount ?? _displayed().length;
+        final filtered = shown != total;
+        final countTip = filtered
+            ? '${_groupedCount(shown)} of ${_groupedCount(total)} songs'
+            : '${_groupedCount(total)} ${total == 1 ? 'song' : 'songs'}';
+        final backCount = Tooltip(
+          message: widget.fullPage
+              ? 'Back to Now Playing · $countTip'
+              : countTip,
+          child: Material(
+            color: scheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: scheme.primary.withAlpha(40)),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: widget.fullPage ? widget.onClose : null,
+              child: SizedBox(
+                height: 44,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(
+                        widget.fullPage
+                            ? Icons.arrow_back_rounded
+                            : Icons.queue_music_rounded,
+                        size: 20,
+                        color: scheme.primary),
+                    const SizedBox(width: 5),
+                    // Count badge: never wider than ~5 characters —
+                    // 93 · 999 · 5,000 · 12.3k · 250k · 1.2M — and it
+                    // shrinks rather than ever overflowing.
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 46),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: scheme.primary.withAlpha(30),
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                          child: Text(_compactCount(shown),
+                              maxLines: 1,
+                              style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: scheme.primary,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures()
+                                  ])),
+                        ),
+                      ),
+                    ),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+        );
+        return Row(children: [
+          backCount,
+          const SizedBox(width: 8),
+          Expanded(child: Container(
             height: 44,
             decoration: BoxDecoration(
               color: scheme.surface,
@@ -1655,11 +1716,36 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 ),
               ],
             ]),
-          ),
+          )),
+          if (trailing != null) ...[const SizedBox(width: 6), trailing],
         ]);
       }),
       ),
     );
+  }
+
+  /// 1234 → "1,234" (for tooltips: the exact number).
+  String _groupedCount(int n) {
+    final s = n.toString();
+    final b = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) b.write(',');
+      b.write(s[i]);
+    }
+    return b.toString();
+  }
+
+  /// The header badge: exact up to 9,999 ("93", "5,000"), then short —
+  /// "12.3k", "250k", "1.2M" — so it never grows past ~5 characters.
+  String _compactCount(int n) {
+    if (n < 10000) return _groupedCount(n);
+    String short(double v) {
+      final one = v.toStringAsFixed(1);
+      return one.endsWith('.0') ? one.substring(0, one.length - 2) : one;
+    }
+    if (n < 100000) return '${short(n / 1000)}k';
+    if (n < 1000000) return '${(n / 1000).floor()}k';
+    return '${short(n / 1000000)}M';
   }
 
   // Back to Now Playing (full-page mode) — the same tactile chip as the rest.

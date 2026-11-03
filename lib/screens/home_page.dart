@@ -1924,7 +1924,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// minimal record from the payload — ChatPage fetches the rest by id.
   /// Aluta's own message banner (app open): reply in it — text or voice —
   /// without leaving the screen; tap it to open the chat.
-  void _showReplyBanner({
+  bool _showReplyBanner({
     required String title,
     required String body,
     String? senderId,
@@ -1932,7 +1932,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     String? groupTitle,
     String? messageId,
   }) {
-    if (!mounted) return;
+    if (!mounted) return false;
     final payload = <String, dynamic>{
       'type': 'message',
       'friend_id': ?senderId,
@@ -1941,8 +1941,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
       'group_title': ?groupTitle,
       'message_id': ?messageId,
     };
-    ReplyBanner.show(
-      navigatorKey.currentContext ?? context,
+    // The home page's own context: it sits INSIDE the navigator, so the
+    // overlay is found (the navigator key's context is above it → nothing
+    // showed and the message went unannounced).
+    return ReplyBanner.show(
+      context,
       title: title,
       body: body,
       friendId: conversationId == null ? int.tryParse(senderId ?? '') : null,

@@ -29,7 +29,9 @@ class ReplyBanner {
   /// (from the live socket OR a foreground push) shows THIS banner instead
   /// of Android's notification — the reply box there loses your draft on a
   /// stray tap and its send arrow is the phone's, not Aluta's.
-  static void Function({
+  /// Returns true when the banner is on screen (false → the caller falls
+  /// back to the normal notification, so a message is never missed).
+  static bool Function({
     required String title,
     required String body,
     String? senderId,
@@ -41,7 +43,9 @@ class ReplyBanner {
   /// True while the user is writing / recording a reply in the banner.
   static bool get busy => _key.currentState?._engaged ?? false;
 
-  static void show(
+  /// Shows the banner; true when it's on screen (or the user is already
+  /// writing in one / it's the same message), false when it couldn't show.
+  static bool show(
     BuildContext context, {
     required String title,
     required String body,
@@ -52,14 +56,17 @@ class ReplyBanner {
     String? messageId,
   }) {
     // Never replace a banner the user is writing in.
-    if (busy) return;
+    if (busy) return true;
     // Socket + push both report the same message → show it once.
-    if (messageId != null && messageId.isNotEmpty) {
-      if (messageId == _lastMessageId && _entry != null) return;
-      _lastMessageId = messageId;
+    if (messageId != null &&
+        messageId.isNotEmpty &&
+        messageId == _lastMessageId &&
+        _entry != null) {
+      return true;
     }
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
-    if (overlay == null) return;
+    if (overlay == null) return false;
+    if (messageId != null && messageId.isNotEmpty) _lastMessageId = messageId;
     hide();
     final entry = OverlayEntry(
       builder: (_) => _ReplyBannerView(
@@ -81,6 +88,7 @@ class ReplyBanner {
     );
     _entry = entry;
     overlay.insert(entry);
+    return true;
   }
 
   static void hide() {

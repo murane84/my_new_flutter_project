@@ -434,8 +434,9 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       // App open → Aluta's own reply banner (keeps your draft, same send
       // button as the chat, voice notes) instead of Android's.
       final inApp = ReplyBanner.onIncoming;
-      if (foreground && inApp != null) {
-        inApp(
+      if (foreground &&
+          inApp != null &&
+          inApp(
           title: isGroup && groupTitle.isNotEmpty ? groupTitle : sender,
           body: isGroup
               ? '$sender: ${body.isEmpty ? 'Sent a message' : body}'
@@ -444,7 +445,7 @@ Future<void> handleFcmData(Map<String, dynamic> data,
           conversationId: convId.isEmpty ? null : convId,
           groupTitle: groupTitle.isEmpty ? null : groupTitle,
           messageId: messageId.isEmpty ? null : messageId,
-        );
+          )) {
         return;
       }
       // For a group message show the group name as the title and "Sender: text"

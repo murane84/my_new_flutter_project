@@ -22,11 +22,22 @@ class HeartBurst {
   static void fromTap(BuildContext context) =>
       at(context, gLastTapDownGlobal);
 
-  static void at(BuildContext context, Offset? origin, {int count = 34}) {
+  /// [fromBottom] (default): the hearts rise from the BOTTOM of the screen,
+  /// under the tapped spot's x, and sweep up across the whole page — like
+  /// Instagram's story reaction — wherever the heart was tapped (a heart at
+  /// the top would otherwise fly straight off-screen). false = burst from
+  /// the exact [origin].
+  static void at(BuildContext context, Offset? origin,
+      {int count = 34, bool fromBottom = true}) {
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) return;
     final size = MediaQuery.sizeOf(context);
-    final from = origin ?? Offset(size.width / 2, size.height * 0.6);
+    final x = (origin?.dx ?? size.width / 2)
+        .clamp(size.width * 0.15, size.width * 0.85)
+        .toDouble();
+    final from = fromBottom
+        ? Offset(x, size.height * 0.94)
+        : (origin ?? Offset(size.width / 2, size.height * 0.6));
     _live?.remove(); // a new tap restarts the show
     late final OverlayEntry entry;
     entry = OverlayEntry(
@@ -51,7 +62,7 @@ class _Heart {
       : delay = r.nextDouble() * 0.35,
         size = 14 + r.nextDouble() * 26,
         dx = (r.nextDouble() - 0.5) * screen.width * 0.9,
-        rise = screen.height * (0.45 + r.nextDouble() * 0.5),
+        rise = screen.height * (0.55 + r.nextDouble() * 0.45),
         sway = (r.nextDouble() - 0.5) * 60,
         swayFreq = 1 + r.nextDouble() * 2,
         tilt = (r.nextDouble() - 0.5) * 0.9,

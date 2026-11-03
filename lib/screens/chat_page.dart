@@ -3916,8 +3916,12 @@ class _ChatPageState extends State<ChatPage>
     setState(() => msg['reactions'] = data['reactions']);
     final e = landed;
     if (e != null && mounted && ModalRoute.of(context)?.isCurrent != false) {
-      final size = MediaQuery.sizeOf(context);
-      HeartBurst.react(context, e, origin: Offset(size.width / 2, 0));
+      // Centre of THIS chat panel (not the whole window on desktop).
+      final box = context.findRenderObject();
+      final mid = box is RenderBox && box.hasSize
+          ? box.localToGlobal(box.size.center(Offset.zero))
+          : MediaQuery.sizeOf(context).center(Offset.zero);
+      HeartBurst.react(context, e, origin: mid);
     }
   }
 

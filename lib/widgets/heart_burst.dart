@@ -61,33 +61,74 @@ class HeartBurst {
       bool fromBottom = true}) {
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) return;
-    final size = MediaQuery.sizeOf(context);
-    final x = (origin?.dx ?? size.width / 2)
+    // The fountain plays inside the PANEL that was tapped (chat / music on
+    // desktop), clipped to it — never spilling over the neighbour panel or
+    // the title bar. On a phone that panel is ~the whole screen.
+    final area = _areaFor(context);
+    final size = area.size;
+    final o = origin == null ? null : origin - area.topLeft;
+    final x = (o?.dx ?? size.width / 2)
         .clamp(size.width * 0.15, size.width * 0.85)
         .toDouble();
     final from = motion == _Motion.fall
         ? Offset(x, size.height * 0.10) // tears start high and drift down
         : fromBottom
             ? Offset(x, size.height * 0.94)
-            : (origin ?? Offset(size.width / 2, size.height * 0.6));
+            : (o ?? Offset(size.width / 2, size.height * 0.6));
     _live?.remove(); // a new reaction restarts the show
     late final OverlayEntry entry;
     entry = OverlayEntry(
-      builder: (_) => IgnorePointer(
-        child: _Fountain(
-          origin: from,
-          count: count,
-          glyph: glyph,
-          motion: motion,
-          onDone: () {
-            if (_live == entry) _live = null;
-            if (entry.mounted) entry.remove();
-          },
+      builder: (_) => Positioned.fromRect(
+        rect: area,
+        child: IgnorePointer(
+          child: ClipRect(
+            // No Material above the overlay → plain text would get the
+            // yellow "missing Material" double underline.
+            child: DefaultTextStyle(
+              style: const TextStyle(decoration: TextDecoration.none),
+              child: _Fountain(
+                origin: from,
+                space: size,
+                count: count,
+                glyph: glyph,
+                motion: motion,
+                onDone: () {
+                  if (_live == entry) _live = null;
+                  if (entry.mounted) entry.remove();
+                },
+              ),
+            ),
+          ),
         ),
       ),
     );
     _live = entry;
     overlay.insert(entry);
+  }
+
+  /// Global rect of the panel that holds [context]: the nearest ancestor
+  /// box that is panel-sized (tall and reasonably wide). Falls back to the
+  /// whole screen.
+  static Rect _areaFor(BuildContext context) {
+    final screen = Offset.zero & MediaQuery.sizeOf(context);
+    RenderObject? ro;
+    try {
+      ro = context.findRenderObject();
+    } catch (_) {
+      ro = null;
+    }
+    while (ro != null) {
+      if (ro is RenderBox && ro.attached && ro.hasSize) {
+        final s = ro.size;
+        if (s.height >= screen.height * 0.6 && s.width >= 260) {
+          final r = ro.localToGlobal(Offset.zero) & s;
+          final hit = r.intersect(screen);
+          return hit.isEmpty ? screen : hit;
+        }
+      }
+      ro = ro.parent;
+    }
+    return screen;
   }
 }
 
@@ -108,12 +149,14 @@ class _Particle {
 class _Fountain extends StatefulWidget {
   const _Fountain({
     required this.origin,
+    required this.space,
     required this.count,
     required this.motion,
     required this.onDone,
     this.glyph,
   });
   final Offset origin;
+  final Size space; // the panel the fountain plays in
   final int count;
   final _Motion motion;
   final String? glyph; // null = red hearts
@@ -140,7 +183,7 @@ class _FountainState extends State<_Fountain>
 
   @override
   Widget build(BuildContext context) {
-    final screen = MediaQuery.sizeOf(context);
+    final screen = widget.space;
     final r = Random();
     final parts = _parts ??= List.generate(widget.count,
         (_) => _Particle(r, screen, emoji: widget.glyph != null));
@@ -190,7 +233,10 @@ class _FountainState extends State<_Fountain>
                         offset: Offset(0, 1)),
                   ])
               : Text(widget.glyph!,
-                  style: TextStyle(fontSize: p.size, height: 1));
+                  style: TextStyle(
+                      fontSize: p.size,
+                      height: 1,
+                      decoration: TextDecoration.none));
           children.add(Positioned(
             left: x - p.size / 2,
             top: y - p.size / 2,

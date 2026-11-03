@@ -4341,7 +4341,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         onTap: onTap,
         radius: 20,
         child: Padding(
-          padding: const EdgeInsets.all(5),
+          padding: const EdgeInsets.all(4),
           child: Icon(icon, size: size, color: color),
         ),
       ),
@@ -4414,25 +4414,23 @@ class HomePageState extends rp.ConsumerState<HomePage>
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            // Same look as the playlist's mini player: waveform seek with
-            // times, then a spinning record + title / artist · Next, heart,
-            // share, the animated play key and transport. Swipe sideways to
-            // skip, up to open, down to tuck into the footer pill.
+            // Same parts as the playlist's mini player, packed into ONE slim
+            // row so the bar stays as short as before (the chat reserves a
+            // fixed strip for it — a taller bar covered the composer):
+            // spinning record · title over a slim waveform · share · prev ·
+            // play key · next · close. Swipe sideways to skip.
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 6, 8),
+              padding: const EdgeInsets.fromLTRB(10, 0, 4, 6),
               child: LayoutBuilder(builder: (ctx, cons) {
-                // Phone-narrow: the heart lives in the full player; wider
-                // screens get it here too.
-                final roomy = cons.maxWidth >= 440;
                 final a = scheme.primary;
                 final artist = np.artist.trim();
-                final next = (playbackBus.nextTitle?.call() ?? '').trim();
-                final sub = [
-                  if (artist.isNotEmpty && artist != '<unknown>') artist,
-                  if (next.isNotEmpty) 'Next: $next',
-                ].join('  ·  ');
+                final title = np.track.isEmpty ? 'No track' : np.track;
+                final line = (artist.isNotEmpty && artist != '<unknown>')
+                    ? '$title  ·  $artist'
+                    : title;
                 final timeStyle = TextStyle(
-                  fontSize: 10,
+                  fontSize: 9.5,
+                  height: 1.0,
                   color: scheme.onSurface.withAlpha(150),
                   fontWeight: FontWeight.w600,
                   fontFeatures: const [FontFeature.tabularFigures()],
@@ -4444,142 +4442,113 @@ class HomePageState extends rp.ConsumerState<HomePage>
                     if (v < -250) playbackBus.onNext?.call();
                     if (v > 250) playbackBus.onPrev?.call();
                   },
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                  child: Row(
                     children: [
-                      ValueListenableBuilder<PlayClock>(
-                        valueListenable: playClockNotifier,
-                        builder: (_, clock, _) {
-                          final total = clock.duration.inMilliseconds;
-                          final frac = total > 0
-                              ? (clock.position.inMilliseconds / total)
-                                  .clamp(0.0, 1.0)
-                                  .toDouble()
-                              : 0.0;
-                          return Row(children: [
-                            Text(_fmtClock(clock.position), style: timeStyle),
-                            Expanded(
-                              child: Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 8),
-                                child: WaveformSeekBar(
-                                  fraction: frac,
-                                  accent: a,
-                                  inactive: a.withAlpha(48),
-                                  enabled: total > 0,
-                                  seed: np.track.hashCode,
-                                  onSeek: (f) =>
-                                      playbackBus.onSeekFraction?.call(f),
-                                  labelFor: (f) => _fmtClock(Duration(
-                                      milliseconds: (f * total).round())),
+                      // A little record that turns while music plays.
+                      SpinArt(
+                        spinning: np.playing,
+                        child: Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(colors: [
+                              Color.lerp(a, Colors.white, 0.25)!,
+                              a,
+                              Color.lerp(a, Colors.black, 0.45)!,
+                            ], stops: const [0.0, 0.45, 1.0]),
+                            border:
+                                Border.all(color: Colors.white.withAlpha(60)),
+                          ),
+                          child: Icon(Icons.music_note_rounded,
+                              size: 16,
+                              color: a.computeLuminance() > 0.5
+                                  ? const Color(0xFF111111)
+                                  : Colors.white),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              height: 16,
+                              child: _ScrollingText(
+                                text: line,
+                                style: TextStyle(
+                                  color: scheme.onSurface,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
-                            Text(_fmtClock(clock.duration), style: timeStyle),
-                            const SizedBox(width: 6),
-                          ]);
-                        },
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          // A little record that turns while music plays.
-                          SpinArt(
-                            spinning: np.playing,
-                            child: Container(
-                              width: 38,
-                              height: 38,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: RadialGradient(colors: [
-                                  Color.lerp(a, Colors.white, 0.25)!,
-                                  a,
-                                  Color.lerp(a, Colors.black, 0.45)!,
-                                ], stops: const [0.0, 0.45, 1.0]),
-                                border: Border.all(
-                                    color: Colors.white.withAlpha(60)),
-                              ),
-                              child: Icon(Icons.music_note_rounded,
-                                  size: 18,
-                                  color: a.computeLuminance() > 0.5
-                                      ? const Color(0xFF111111)
-                                      : Colors.white),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                SizedBox(
-                                  height: 17,
-                                  child: _ScrollingText(
-                                    text: np.track.isEmpty
-                                        ? 'No track'
-                                        : np.track,
-                                    style: TextStyle(
-                                      color: scheme.onSurface,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
+                            const SizedBox(height: 3),
+                            ValueListenableBuilder<PlayClock>(
+                              valueListenable: playClockNotifier,
+                              builder: (_, clock, _) {
+                                final total = clock.duration.inMilliseconds;
+                                final frac = total > 0
+                                    ? (clock.position.inMilliseconds / total)
+                                        .clamp(0.0, 1.0)
+                                        .toDouble()
+                                    : 0.0;
+                                return Row(children: [
+                                  Text(_fmtClock(clock.position),
+                                      style: timeStyle),
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 5),
+                                      child: WaveformSeekBar(
+                                        height: 18,
+                                        fraction: frac,
+                                        accent: a,
+                                        inactive: a.withAlpha(48),
+                                        enabled: total > 0,
+                                        seed: np.track.hashCode,
+                                        onSeek: (f) => playbackBus
+                                            .onSeekFraction
+                                            ?.call(f),
+                                        labelFor: (f) => _fmtClock(Duration(
+                                            milliseconds:
+                                                (f * total).round())),
+                                      ),
                                     ),
                                   ),
-                                ),
-                                if (sub.isNotEmpty)
-                                  Text(sub,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                          fontSize: 11,
-                                          color: scheme.onSurface
-                                              .withAlpha(150))),
-                              ],
+                                  Text(_fmtClock(clock.duration),
+                                      style: timeStyle),
+                                ]);
+                              },
                             ),
-                          ),
-                          if (roomy)
-                            ValueListenableBuilder<bool>(
-                              valueListenable: favoriteNotifier,
-                              builder: (_, fav, _) => _barIcon(
-                                fav
-                                    ? Icons.favorite_rounded
-                                    : Icons.favorite_border_rounded,
-                                fav
-                                    ? Colors.pinkAccent
-                                    : scheme.onSurface.withAlpha(170),
-                                fav ? 'Unlike' : 'Like',
-                                () => playbackBus.onToggleFavorite?.call(),
-                              ),
-                            ),
-                          _barIcon(Icons.share_rounded, a, 'Share to chat',
-                              () => playbackBus.onShareToChat?.call()),
-                          _barIcon(
-                              Icons.skip_previous_rounded,
-                              scheme.onSurface,
-                              'Previous',
-                              () => playbackBus.onPrev?.call(),
-                              size: 24),
-                          PlayKey(
-                            playing: np.playing,
-                            buffering: false,
-                            accent: a,
-                            onTap: () => playbackBus.onToggle?.call(),
-                            diameter: 38,
-                          ),
-                          _barIcon(
-                              Icons.skip_next_rounded,
-                              scheme.onSurface,
-                              'Next',
-                              () => playbackBus.onNext?.call(),
-                              size: 24),
-                          // Close → genies down into the footer pill.
-                          _barIcon(
-                              Icons.close_rounded,
-                              scheme.onSurface.withAlpha(140),
-                              'Hide player',
-                              () => setState(() => _barDismissed = true),
-                              size: 18),
-                        ],
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 2),
+                      _barIcon(Icons.share_rounded, a, 'Share to chat',
+                          () => playbackBus.onShareToChat?.call(),
+                          size: 19),
+                      _barIcon(Icons.skip_previous_rounded, scheme.onSurface,
+                          'Previous', () => playbackBus.onPrev?.call(),
+                          size: 22),
+                      PlayKey(
+                        playing: np.playing,
+                        buffering: false,
+                        accent: a,
+                        onTap: () => playbackBus.onToggle?.call(),
+                        diameter: 34,
+                      ),
+                      _barIcon(Icons.skip_next_rounded, scheme.onSurface,
+                          'Next', () => playbackBus.onNext?.call(),
+                          size: 22),
+                      // Close → genies down into the footer pill.
+                      _barIcon(
+                          Icons.close_rounded,
+                          scheme.onSurface.withAlpha(140),
+                          'Hide player',
+                          () => setState(() => _barDismissed = true),
+                          size: 17),
                     ],
                   ),
                 );

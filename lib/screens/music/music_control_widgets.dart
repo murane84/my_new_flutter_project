@@ -789,9 +789,12 @@ class WaveformSeekBar extends StatefulWidget {
   // A-B repeat points as fractions of the song (null = not set).
   final double? markA;
   final double? markB;
+  // Bar area height — the phone's slim now-playing bar uses a short one.
+  final double height;
 
   const WaveformSeekBar({
     super.key,
+    this.height = 34,
     required this.fraction,
     required this.accent,
     required this.inactive,
@@ -863,7 +866,7 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> {
               widget.enabled ? (d) => _setFromDx(d.localPosition.dx, w) : null,
           onHorizontalDragEnd: widget.enabled ? (_) => _commit() : null,
           child: SizedBox(
-            height: 34,
+            height: widget.height,
             child: Stack(
               clipBehavior: Clip.none,
               children: [

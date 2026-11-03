@@ -5717,7 +5717,9 @@ class _ChatPageState extends State<ChatPage>
                   child: ConstrainedBox(
                   constraints: BoxConstraints(
                       maxWidth: isMedia ? double.infinity : 520),
-                  child: JumpRings(
+                  // A reaction rides on the bubble's bottom-left corner.
+                  child: _withReactionChip(msg, isMe, reactions, scheme,
+                      isDark, JumpRings(
                     trigger: ringFor,
                     shape: bubbleShape,
                     // Aluta's signature: every ordinary bubble ripples in
@@ -6078,7 +6080,7 @@ class _ChatPageState extends State<ChatPage>
                       ],
                     ),
                   ),
-                  ), // JumpRings
+                  )), // JumpRings
                   ),
                 ),
                 if (!isMe && _canHarmony && _isQuickKeepBubble(msg)) ...[
@@ -6096,11 +6098,24 @@ class _ChatPageState extends State<ChatPage>
           // Reactions sit ON the bubble's bottom edge (half over it), not on
           // a row of their own — and the "seen" photo rides beside them —
           // so a reacted message takes barely more room than a plain one.
-          if (reactions.isNotEmpty)
+          // Emoji-only messages have no bubble → their reactions keep the
+          // strip below; a reacted bubble's "seen" photo sits on that line.
+          if (reactions.isNotEmpty && emojiOnly)
             _reactionOverlap(msg, isMe, scheme, isDark,
                 seen: isMe &&
                     !_isGroup &&
-                    msg['id'].toString() == _seenByFriendId),
+                    msg['id'].toString() == _seenByFriendId)
+          else if (reactions.isNotEmpty &&
+              isMe &&
+              !_isGroup &&
+              msg['id'].toString() == _seenByFriendId)
+            Padding(
+              padding: const EdgeInsets.only(right: 10, top: 2),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: _buildSeenAvatar(scheme, inline: true),
+              ),
+            ),
         ],
       ),
     );
@@ -6135,9 +6150,8 @@ class _ChatPageState extends State<ChatPage>
   /// the emojis (each once, most-used first) + a count when more than one
   /// person reacted; song reactions keep their own chip beside it. Tap → who
   /// reacted with what. [seen] adds the friend's tiny "seen" photo next to it.
-  Widget _reactionOverlap(
-      Map<String, dynamic> msg, bool isMe, ColorScheme scheme, bool isDark,
-      {bool seen = false}) {
+  Widget? _reactionChipRow(
+      Map<String, dynamic> msg, ColorScheme scheme, bool isDark) {
     final map = _reactionMap(msg);
     final counts = <String, int>{};
     for (final e in map.values) {
@@ -6209,18 +6223,24 @@ class _ChatPageState extends State<ChatPage>
         ),
       ?pill,
     ]);
+    return (pill == null && songs.isEmpty) ? null : row;
+  }
 
-    // A short strip whose content is lifted up over the bubble's bottom edge.
-    // My bubbles: the chip sits left of the time + ticks (never over them);
-    // theirs: at the bottom-left corner (their time is on the right).
+  Widget _reactionOverlap(
+      Map<String, dynamic> msg, bool isMe, ColorScheme scheme, bool isDark,
+      {bool seen = false}) {
+    final row = _reactionChipRow(msg, scheme, isDark) ?? const SizedBox();
+
+    // Emoji-only messages (no bubble): a short strip lifted up under the
+    // emoji, on its side.
     return SizedBox(
       height: 17,
       width: double.infinity,
       child: Stack(clipBehavior: Clip.none, children: [
         Positioned(
           top: -8,
-          right: isMe ? 78 : null,
-          left: isMe ? null : 46,
+          right: isMe ? (seen ? 34 : 10) : null,
+          left: isMe ? null : 40,
           child: row,
         ),
         // The friend's "seen" photo on the same line, at the outer edge.
@@ -6232,6 +6252,24 @@ class _ChatPageState extends State<ChatPage>
           ),
       ]),
     );
+  }
+
+  /// The bubble + its reaction chip overlapping the bottom-left corner (the
+  /// chip area counts as part of the row, so the whole chip is tappable).
+  Widget _withReactionChip(Map<String, dynamic> msg, bool isMe,
+      List<String> reactions, ColorScheme scheme, bool isDark, Widget bubble) {
+    if (reactions.isEmpty) return bubble;
+    final chip = _reactionChipRow(msg, scheme, isDark);
+    if (chip == null) return bubble;
+    return Stack(clipBehavior: Clip.none, children: [
+      Padding(padding: const EdgeInsets.only(bottom: 14), child: bubble),
+      Positioned(
+        bottom: 0,
+        // Just inside the corner (past the tail gutter on their bubbles).
+        left: isMe ? 12 : 22,
+        child: chip,
+      ),
+    ]);
   }
 
   /// Tap a reaction chip → who reacted with what (tap mine to remove it).

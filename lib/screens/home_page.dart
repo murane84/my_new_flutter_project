@@ -58,6 +58,7 @@ import '../services/live_session_service.dart'
     show activeLiveSession, endActiveLiveSession, ActiveLiveSession, LiveTrack;
 import '../services/notif_service.dart';
 import '../services/fcm_service.dart';
+import '../widgets/reply_banner.dart';
 import '../services/download_manager.dart';
 import '../services/share_inbox.dart';
 import '../services/contact_names.dart';
@@ -399,6 +400,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // App open: incoming chat messages show Aluta's reply banner.
+    ReplyBanner.onIncoming = _showReplyBanner;
     // Our Space reads its saved copy synchronously → opens complete.
     warmSpacePrefs();
     _loadPinnedChats();
@@ -562,6 +565,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   @override
   void dispose() {
+    if (ReplyBanner.onIncoming == _showReplyBanner) {
+      ReplyBanner.onIncoming = null;
+    }
+    ReplyBanner.hide();
     _glowTimer?.cancel();
     SongInsights.instance.pending.removeListener(_onSongNudge);
     final sb = SongBridge.instance;
@@ -1915,8 +1922,47 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// Open the sender's thread from a tapped message notification. Uses the
   /// loaded friend list when available (so avatar/phone are correct), else a
   /// minimal record from the payload — ChatPage fetches the rest by id.
+  /// Aluta's own message banner (app open): reply in it — text or voice —
+  /// without leaving the screen; tap it to open the chat.
+  void _showReplyBanner({
+    required String title,
+    required String body,
+    String? senderId,
+    String? conversationId,
+    String? groupTitle,
+    String? messageId,
+  }) {
+    if (!mounted) return;
+    final payload = <String, dynamic>{
+      'type': 'message',
+      'friend_id': ?senderId,
+      'sender_name': title,
+      'conversation_id': ?conversationId,
+      'group_title': ?groupTitle,
+      'message_id': ?messageId,
+    };
+    ReplyBanner.show(
+      navigatorKey.currentContext ?? context,
+      title: title,
+      body: body,
+      friendId: conversationId == null ? int.tryParse(senderId ?? '') : null,
+      conversationId: int.tryParse(conversationId ?? ''),
+      messageId: messageId,
+      onOpen: () => _handleMessageTap(payload),
+      onVoiceInChat: () => _handleMessageTap({...payload, 'voice': true}),
+    );
+  }
+
   void _handleMessageTap(Map<String, dynamic> payload) {
     if (!mounted) return;
+    // 🎤 Voice (notification) / mic (reply banner) → the chat starts
+    // recording as soon as it's open.
+    if (payload['voice'] == true) {
+      final c = (payload['conversation_id'] ?? '').toString();
+      final f = (payload['friend_id'] ?? '').toString();
+      pendingVoiceReply.value =
+          c.isNotEmpty ? 'c$c' : (f.isNotEmpty ? 's$f' : null);
+    }
     // Whatever sits on top of home (a sheet, Our Space, Now Playing, a pushed
     // chat…) would hide the thread we're about to open — close back to home
     // first, so the tap always visibly lands in that chat. A live call screen
@@ -2433,6 +2479,29 @@ class HomePageState extends rp.ConsumerState<HomePage>
           groupTitle: gTitle.isEmpty ? null : gTitle,
           messageId: msgId.isEmpty ? null : msgId,
         );
+      } else if (senderId != null &&
+          senderId.toString() != _myUserId?.toString()) {
+        // App open, the message is for a chat that isn't on screen → the
+        // in-app reply banner (not Android's notification).
+        final isGroup = data['receiver_id'] == null &&
+            (data['conversation_id'] ?? '').toString().isNotEmpty;
+        final convId =
+            isGroup ? (data['conversation_id'] ?? '').toString() : '';
+        final gTitle = (data['group_title'] ?? '').toString();
+        final msgId = (data['id'] ?? data['message_id'] ?? '').toString();
+        if (!ActiveChat.instance.suppresses(
+            senderId: senderId.toString(), convId: convId)) {
+          _showReplyBanner(
+            title: isGroup && gTitle.isNotEmpty ? gTitle : sender,
+            body: isGroup
+                ? '$sender: ${text.isEmpty ? 'Sent a message' : text}'
+                : (text.isEmpty ? 'Sent you a message' : text),
+            senderId: senderId.toString(),
+            conversationId: convId.isEmpty ? null : convId,
+            groupTitle: gTitle.isEmpty ? null : gTitle,
+            messageId: msgId.isEmpty ? null : msgId,
+          );
+        }
       }
       if (senderId != null && senderId.toString() != _activeFriendId) {
         ref.read(unreadProvider.notifier).bump(senderId);

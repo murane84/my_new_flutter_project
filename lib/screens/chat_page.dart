@@ -5,7 +5,8 @@ import 'dart:math' as math;
 import 'package:flutter/physics.dart' show SpringSimulation, SpringDescription;
 
 import '../services/fcm_service.dart' show ActiveChat;
-import '../services/notif_service.dart' show cancelConversationNotifications;
+import '../services/notif_service.dart'
+    show cancelConversationNotifications, pendingVoiceReply;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, compute, kIsWeb;
 import 'package:flutter/services.dart';
@@ -659,6 +660,10 @@ class _ChatPageState extends State<ChatPage>
   @override
   void initState() {
     super.initState();
+    // 🎤 Voice reply asked for this thread (notification / reply banner) →
+    // start recording once the chat is up.
+    pendingVoiceReply.addListener(_onPendingVoice);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onPendingVoice());
     // Web: files pasted (Ctrl/Cmd+V) arrive through the browser paste event.
     if (kIsWeb) webpaste.registerClipboardPaste(_onWebPaste);
     // Seed the friend's avatar from the caller (which already knows it, e.g.
@@ -796,6 +801,7 @@ class _ChatPageState extends State<ChatPage>
 
   @override
   void dispose() {
+    pendingVoiceReply.removeListener(_onPendingVoice);
     _emojiPanelFocus.dispose();
     _pillTimer?.cancel();
     if (_isAtBottom) _markSeenUpToNewest();
@@ -2655,6 +2661,19 @@ class _ChatPageState extends State<ChatPage>
   }
 
   // ── Voice notes ─────────────────────────────────────────────────────────
+  String get _voiceKey => _isGroup ? 'c$_cid' : 's${widget.friendId}';
+
+  void _onPendingVoice() {
+    if (!mounted || pendingVoiceReply.value != _voiceKey) return;
+    pendingVoiceReply.value = null;
+    if (!kIsWeb && !_isRecording) {
+      // Let the thread settle (and the mic permission prompt show over it).
+      Future.delayed(const Duration(milliseconds: 450), () {
+        if (mounted && !_isRecording) _startRecording();
+      });
+    }
+  }
+
   Future<void> _startRecording() async {
     try {
       if (!await _recorder.hasPermission()) {

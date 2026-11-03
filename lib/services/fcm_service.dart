@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'contact_names.dart';
 import 'notif_service.dart';
+import '../widgets/reply_banner.dart';
 import '../screens/api_service.dart';
 import '../screens/token_helper.dart' show getToken;
 import '../utils/app_config.dart';
@@ -428,6 +429,22 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       // notified in-app the instant it arrived. All other chats still notify.
       if (foreground &&
           ActiveChat.instance.suppresses(senderId: senderId, convId: convId)) {
+        return;
+      }
+      // App open → Aluta's own reply banner (keeps your draft, same send
+      // button as the chat, voice notes) instead of Android's.
+      final inApp = ReplyBanner.onIncoming;
+      if (foreground && inApp != null) {
+        inApp(
+          title: isGroup && groupTitle.isNotEmpty ? groupTitle : sender,
+          body: isGroup
+              ? '$sender: ${body.isEmpty ? 'Sent a message' : body}'
+              : (body.isEmpty ? 'Sent you a message' : body),
+          senderId: senderId.isEmpty ? null : senderId,
+          conversationId: convId.isEmpty ? null : convId,
+          groupTitle: groupTitle.isEmpty ? null : groupTitle,
+          messageId: messageId.isEmpty ? null : messageId,
+        );
         return;
       }
       // For a group message show the group name as the title and "Sender: text"

@@ -99,6 +99,13 @@ set onMessageTap(void Function(Map<String, dynamic> payload)? fn) {
 
 /// Inline "Reply" action on message notifications (type a reply in the shade).
 const String kMsgReply = 'msg_reply';
+// "🎤 Voice" on a message notification → open that chat with the recorder on.
+const String kMsgVoice = 'msg_voice';
+
+/// Set to a thread key ('s<friendId>' / 'c<conversationId>') when the chat
+/// should start recording a voice reply as soon as it's open (the 🎤 Voice
+/// notification action, or the in-app reply banner's mic). The chat clears it.
+final ValueNotifier<String?> pendingVoiceReply = ValueNotifier<String?>(null);
 
 // ── Aluta notifications (everything that isn't a chat message or a call) ────
 // Listen Together invites, tune-in requests, Our Space moments, reactions and
@@ -317,6 +324,17 @@ void _onNotifResponse(NotificationResponse r) {
   // Inline reply typed in the notification → send it, no app needed.
   if (a == kMsgReply) {
     _sendInlineReply(p, r.input);
+    return;
+  }
+  // 🎤 Voice → open the thread with the recorder on.
+  if (a == kMsgVoice && p['type'] == 'message') {
+    final vp = {...p, 'voice': true};
+    final fn = _onMessageTap;
+    if (fn != null) {
+      fn(vp);
+    } else {
+      _pendingMessageTap = vp;
+    }
     return;
   }
   // Listen Together / tune-in / Our Space / team → home routes it.
@@ -781,6 +799,17 @@ Future<void> showMessageNotification({
                     ],
                     showsUserInterface: false,
                     cancelNotification: false,
+                    // Lets Android offer its quick-reply suggestions and use
+                    // its full reply handling (some phones' send arrow only
+                    // reacts on such replies).
+                    allowGeneratedReplies: true,
+                  ),
+                  // A voice reply: opens the chat with the recorder running.
+                  AndroidNotificationAction(
+                    kMsgVoice,
+                    '🎤 Voice',
+                    showsUserInterface: true,
+                    cancelNotification: true,
                   ),
                 ],
         ),
@@ -802,8 +831,10 @@ Future<Map<String, dynamic>?> consumeMessageLaunchAction() async {
   try {
     final details = await _fln.getNotificationAppLaunchDetails();
     if (details == null || !details.didNotificationLaunchApp) return null;
-    final p = _decodePayload(details.notificationResponse?.payload);
-    return p['type'] == 'message' ? p : null;
+    final resp = details.notificationResponse;
+    final p = _decodePayload(resp?.payload);
+    if (p['type'] != 'message') return null;
+    return resp?.actionId == kMsgVoice ? {...p, 'voice': true} : p;
   } catch (_) {
     return null;
   }

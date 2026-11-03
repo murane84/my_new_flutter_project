@@ -8,9 +8,14 @@ import 'package:flutter/material.dart';
 Offset? gLastTapDownGlobal;
 
 /// Height of the phone's now-playing bar while it's showing above the footer
-/// (0 when hidden / not a phone). Set by the home page; edge-to-edge pages
-/// (Profile…) end exactly on top of it — no gap, no overlap.
+/// (0 when hidden / not a phone). Set by the home page.
 final ValueNotifier<double> gNowPlayingBarHeight = ValueNotifier<double>(0);
+
+/// Phone: the screen Y where the chat / music panels END (the top of the
+/// now-playing bar's strip when it's up, else the top of the footer) —
+/// measured from the real layout by the home page. Edge-to-edge pages
+/// (Profile…) end on exactly the same line. Null = not measured (desktop).
+final ValueNotifier<double?> gPanelBottomY = ValueNotifier<double?>(null);
 
 /// The app footer's own height (the 44 px status strip above the system
 /// navigation inset).
@@ -348,16 +353,19 @@ class AppPopupShell extends StatelessWidget {
       // End EXACTLY on the footer (its 44 px strip + the system nav inset) —
       // and on top of the now-playing bar when it's up — so nothing behind
       // peeks through a gap and the bar is never covered.
-      return ValueListenableBuilder<double>(
-        valueListenable: gNowPlayingBarHeight,
-        builder: (context, barH, child) => AnimatedPadding(
+      // Phone: end on the SAME line as the chat / music panels (measured by
+      // the home page: above the now-playing bar's strip when it's up, else
+      // on the footer). Elsewhere: the footer strip + system inset.
+      return ValueListenableBuilder<double?>(
+        valueListenable: gPanelBottomY,
+        builder: (context, panelBottom, child) => AnimatedPadding(
           duration: const Duration(milliseconds: 260),
           curve: Curves.easeOutCubic,
           padding: EdgeInsets.only(
               top: topInset,
-              bottom: media.padding.bottom +
-                  kAppFooterHeight +
-                  (media.size.width < 640 ? barH : 0)),
+              bottom: (media.size.width < 640 && panelBottom != null)
+                  ? (media.size.height - panelBottom).clamp(0.0, 400.0)
+                  : media.padding.bottom + kAppFooterHeight),
           child: child,
         ),
         child: Material(
@@ -365,12 +373,18 @@ class AppPopupShell extends StatelessWidget {
           child: Container(
             width: double.infinity,
             height: double.infinity,
+            // Same shape as the chat / music panels: a card rounded on all
+            // four corners, emerging from the header and sitting on the
+            // footer (or the now-playing bar).
             decoration: BoxDecoration(
               color: scheme.surface,
-              border: Border(
-                top: BorderSide(
-                    color: scheme.primary.withAlpha(120), width: 1),
-              ),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Theme.of(context).shadowColor.withAlpha(35),
+                  blurRadius: 12,
+                ),
+              ],
             ),
             clipBehavior: Clip.antiAlias,
             child: Column(

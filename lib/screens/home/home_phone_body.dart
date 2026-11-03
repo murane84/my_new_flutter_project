@@ -8,6 +8,8 @@ part of '../home_page.dart';
 
 // Measures the phone now-playing bar for [gNowPlayingBarHeight].
 final GlobalKey _npBarKey = GlobalKey();
+// The phone body (its bottom edge = the footer's top), for [gPanelBottomY].
+final GlobalKey _phoneBodyKey = GlobalKey();
 
 extension _HomePhoneBody on HomePageState {
   // ── Phone layout ───────────────────────────────────────────────────────────
@@ -32,13 +34,23 @@ extension _HomePhoneBody on HomePageState {
         // Tell edge-to-edge pages (Profile…) how tall the bar is right now,
         // so they end exactly on top of it (0 when it's hidden).
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          final h = barVisible && !_playerExpanded
+          final showing = barVisible && !_playerExpanded;
+          final h = showing
               ? (_npBarKey.currentContext?.size?.height ?? barSpace)
               : 0.0;
           if (gNowPlayingBarHeight.value != h) gNowPlayingBarHeight.value = h;
+          // Where the chat panel ends on screen = the body's bottom edge
+          // (the footer's top) minus the strip reserved for the bar.
+          final box = _phoneBodyKey.currentContext?.findRenderObject();
+          if (box is RenderBox && box.hasSize && box.attached) {
+            final bottom = box.localToGlobal(Offset(0, box.size.height)).dy -
+                (showing ? barSpace : 0);
+            if (gPanelBottomY.value != bottom) gPanelBottomY.value = bottom;
+          }
         });
 
         return Stack(
+          key: _phoneBodyKey,
           children: [
             // Chat surface — full width; reserve room for the collapsed bar.
             // AnimatedPadding so the reflow eases in step with the bar's genie.

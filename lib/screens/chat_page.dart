@@ -6104,18 +6104,7 @@ class _ChatPageState extends State<ChatPage>
             _reactionOverlap(msg, isMe, scheme, isDark,
                 seen: isMe &&
                     !_isGroup &&
-                    msg['id'].toString() == _seenByFriendId)
-          else if (reactions.isNotEmpty &&
-              isMe &&
-              !_isGroup &&
-              msg['id'].toString() == _seenByFriendId)
-            Padding(
-              padding: const EdgeInsets.only(right: 10, top: 2),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: _buildSeenAvatar(scheme, inline: true),
-              ),
-            ),
+                    msg['id'].toString() == _seenByFriendId),
         ],
       ),
     );
@@ -6261,13 +6250,25 @@ class _ChatPageState extends State<ChatPage>
     if (reactions.isEmpty) return bubble;
     final chip = _reactionChipRow(msg, scheme, isDark);
     if (chip == null) return bubble;
+    // Mine: bottom-RIGHT corner, with the friend's "seen" photo right
+    // beside it on the same compact line (dipping only a little into the
+    // bubble, below the time + ticks). Theirs: bottom-left, past the tail.
+    final seen =
+        isMe && !_isGroup && msg['id'].toString() == _seenByFriendId;
     return Stack(clipBehavior: Clip.none, children: [
-      Padding(padding: const EdgeInsets.only(bottom: 14), child: bubble),
+      Padding(
+          padding: EdgeInsets.only(bottom: isMe ? 18 : 14), child: bubble),
       Positioned(
         bottom: 0,
-        // Just inside the corner (past the tail gutter on their bubbles).
-        left: isMe ? 12 : 22,
-        child: chip,
+        right: isMe ? 0 : null,
+        left: isMe ? null : 22,
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          chip,
+          if (seen) ...[
+            const SizedBox(width: 4),
+            _buildSeenAvatar(scheme, inline: true),
+          ],
+        ]),
       ),
     ]);
   }

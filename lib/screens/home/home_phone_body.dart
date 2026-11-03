@@ -6,6 +6,9 @@ part of '../home_page.dart';
 // of these methods call setState directly, so the extension stays clear of
 // @protected members.
 
+// Measures the phone now-playing bar for [gNowPlayingBarHeight].
+final GlobalKey _npBarKey = GlobalKey();
+
 extension _HomePhoneBody on HomePageState {
   // ── Phone layout ───────────────────────────────────────────────────────────
   // Chat is the primary full-width surface. The music player stays mounted the
@@ -26,6 +29,14 @@ extension _HomePhoneBody on HomePageState {
         // Reserve just enough chat space for the now-playing bar (grab handle +
         // title + progress row) so it sits flush under the composer with no gap.
         final barSpace = 70.0;
+        // Tell edge-to-edge pages (Profile…) how tall the bar is right now,
+        // so they end exactly on top of it (0 when it's hidden).
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final h = barVisible && !_playerExpanded
+              ? (_npBarKey.currentContext?.size?.height ?? barSpace)
+              : 0.0;
+          if (gNowPlayingBarHeight.value != h) gNowPlayingBarHeight.value = h;
+        });
 
         return Stack(
           children: [
@@ -82,7 +93,9 @@ extension _HomePhoneBody on HomePageState {
                       opacity: _barDismissed ? 0.0 : 1.0,
                       duration: const Duration(milliseconds: 200),
                       curve: Curves.easeOut,
-                      child: _buildNowPlayingBar(context),
+                      child: KeyedSubtree(
+                          key: _npBarKey,
+                          child: _buildNowPlayingBar(context)),
                     ),
                   ),
                 ),

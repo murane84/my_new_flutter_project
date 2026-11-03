@@ -7,6 +7,15 @@ import 'package:flutter/material.dart';
 /// without each call site having to pass a position.
 Offset? gLastTapDownGlobal;
 
+/// Height of the phone's now-playing bar while it's showing above the footer
+/// (0 when hidden / not a phone). Set by the home page; edge-to-edge pages
+/// (Profile…) end exactly on top of it — no gap, no overlap.
+final ValueNotifier<double> gNowPlayingBarHeight = ValueNotifier<double>(0);
+
+/// The app footer's own height (the 44 px status strip above the system
+/// navigation inset).
+const double kAppFooterHeight = 44;
+
 /// Wrap the app (via MaterialApp.builder) with this so every tap records its
 /// point for the popup genie. Translucent + non-consuming: it never affects
 /// hit-testing, scrolling or taps.
@@ -335,10 +344,22 @@ class AppPopupShell extends StatelessWidget {
       // Sit BETWEEN the app header and the footer: full width, square corners,
       // no side gutters — a clean page that never hides the now-playing bar.
       final topInset = media.padding.top + kToolbarHeight;
-      final bottomInset = media.padding.bottom + 72;
       final body = builder(context, isWide);
-      return Padding(
-        padding: EdgeInsets.only(top: topInset, bottom: bottomInset),
+      // End EXACTLY on the footer (its 44 px strip + the system nav inset) —
+      // and on top of the now-playing bar when it's up — so nothing behind
+      // peeks through a gap and the bar is never covered.
+      return ValueListenableBuilder<double>(
+        valueListenable: gNowPlayingBarHeight,
+        builder: (context, barH, child) => AnimatedPadding(
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+          padding: EdgeInsets.only(
+              top: topInset,
+              bottom: media.padding.bottom +
+                  kAppFooterHeight +
+                  (media.size.width < 640 ? barH : 0)),
+          child: child,
+        ),
         child: Material(
           type: MaterialType.transparency,
           child: Container(

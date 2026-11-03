@@ -169,13 +169,18 @@ extension _ChatMentionsSeen on _ChatPageState {
     return out;
   }
 
-  Widget _buildSeenAvatar(ColorScheme scheme) {
+  /// [inline]: just the little photo (it rides beside a reaction chip).
+  Widget _buildSeenAvatar(ColorScheme scheme, {bool inline = false}) {
     final url = _friendAvatar;
     final name = widget.friendName;
     return Align(
       alignment: Alignment.centerRight,
+      widthFactor: inline ? 1 : null,
+      heightFactor: inline ? 1 : null,
       child: Padding(
-        padding: const EdgeInsets.only(right: 10, top: 1, bottom: 2),
+        padding: inline
+            ? EdgeInsets.zero
+            : const EdgeInsets.only(right: 10, top: 1, bottom: 2),
         child: TweenAnimationBuilder<double>(
           tween: Tween(begin: 0, end: 1),
           duration: const Duration(milliseconds: 320),

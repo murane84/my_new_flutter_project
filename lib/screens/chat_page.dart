@@ -6093,41 +6093,197 @@ class _ChatPageState extends State<ChatPage>
             ),
             )),
           ),
-          // Reactions
+          // Reactions sit ON the bubble's bottom edge (half over it), not on
+          // a row of their own — and the "seen" photo rides beside them —
+          // so a reacted message takes barely more room than a plain one.
           if (reactions.isNotEmpty)
-            Padding(
-              padding: EdgeInsets.only(
-                top: 2,
-                left: isMe ? 0 : 36,
-              ),
-              child: Wrap(
-                spacing: 2,
-                children: reactions.map((e) {
-                  if (_isSongReaction(e)) {
-                    return GestureDetector(
-                      onTap: () => _addReaction(msg, e),
-                      child: _songReactionChip(e, scheme),
-                    );
-                  }
-                  return GestureDetector(
-                    onTap: () => _addReaction(msg, e),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color:
-                            scheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: scheme.outlineVariant.withAlpha(80)),
-                      ),
-                      child: AnimatedReaction(emoji: e, size: 15),
+            _reactionOverlap(msg, isMe, scheme, isDark,
+                seen: isMe &&
+                    !_isGroup &&
+                    msg['id'].toString() == _seenByFriendId),
+        ],
+      ),
+    );
+  }
+
+  /// Who reacted with what: {userId: emoji}.
+  Map<String, String> _reactionMap(Map<String, dynamic> msg) {
+    final raw = msg['reactions'];
+    if (raw == null || (raw is String && raw.isEmpty)) return const {};
+    try {
+      final d = raw is String ? jsonDecode(raw) : raw;
+      if (d is Map) {
+        return d.map((k, v) => MapEntry(k.toString(), v.toString()));
+      }
+    } catch (_) {}
+    return const {};
+  }
+
+  String _reactorName(String uid) {
+    if (uid == _myId) return 'You';
+    if (!_isGroup) return _livePeerLabel;
+    for (final m in _groupMembers) {
+      if ((m['id'] ?? m['user_id'])?.toString() == uid) {
+        return ContactNames.instance.displayName(
+            of: m, registered: (m['username'] ?? 'Member').toString());
+      }
+    }
+    return 'Member';
+  }
+
+  /// The reaction chip, overlapping the bubble's bottom corner: one pill with
+  /// the emojis (each once, most-used first) + a count when more than one
+  /// person reacted; song reactions keep their own chip beside it. Tap → who
+  /// reacted with what. [seen] adds the friend's tiny "seen" photo next to it.
+  Widget _reactionOverlap(
+      Map<String, dynamic> msg, bool isMe, ColorScheme scheme, bool isDark,
+      {bool seen = false}) {
+    final map = _reactionMap(msg);
+    final counts = <String, int>{};
+    for (final e in map.values) {
+      if (!_isSongReaction(e)) counts[e] = (counts[e] ?? 0) + 1;
+    }
+    final emojis = counts.keys.toList()
+      ..sort((a, b) => counts[b]!.compareTo(counts[a]!));
+    final songs = map.values.where(_isSongReaction).toSet().toList();
+    final total = counts.values.fold<int>(0, (a, b) => a + b);
+    final mineOn = map[_myId];
+
+    final pill = emojis.isEmpty
+        ? null
+        : GestureDetector(
+            onTap: () => _showReactors(msg),
+            child: TweenAnimationBuilder<double>(
+              // A small pop whenever the set of reactions changes.
+              key: ValueKey('rx_${msg['id']}_${map.length}_${emojis.join()}'),
+              tween: Tween(begin: 0.6, end: 1),
+              duration: const Duration(milliseconds: 320),
+              curve: Curves.easeOutBack,
+              builder: (_, s, child) =>
+                  Transform.scale(scale: s, child: child),
+              child: Container(
+                height: 24,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                decoration: BoxDecoration(
+                  color: isDark ? scheme.surfaceContainerHigh : scheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: mineOn != null && counts.containsKey(mineOn)
+                          ? scheme.primary.withValues(alpha: 0.55)
+                          : scheme.outlineVariant.withValues(alpha: 0.5)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
                     ),
-                  );
-                }).toList(),
+                  ],
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  for (final e in emojis.take(3))
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 1),
+                      child: AnimatedReaction(emoji: e, size: 14),
+                    ),
+                  if (total > 1) ...[
+                    const SizedBox(width: 3),
+                    Text('$total',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurfaceVariant)),
+                  ],
+                ]),
               ),
             ),
-        ],
+          );
+
+    final row = Row(mainAxisSize: MainAxisSize.min, children: [
+      for (final s in songs)
+        Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: GestureDetector(
+            onTap: () => _addReaction(msg, s),
+            child: _songReactionChip(s, scheme),
+          ),
+        ),
+      ?pill,
+    ]);
+
+    // A short strip whose content is lifted up over the bubble's bottom edge.
+    // My bubbles: the chip sits left of the time + ticks (never over them);
+    // theirs: at the bottom-left corner (their time is on the right).
+    return SizedBox(
+      height: 17,
+      width: double.infinity,
+      child: Stack(clipBehavior: Clip.none, children: [
+        Positioned(
+          top: -8,
+          right: isMe ? 78 : null,
+          left: isMe ? null : 46,
+          child: row,
+        ),
+        // The friend's "seen" photo on the same line, at the outer edge.
+        if (seen)
+          Positioned(
+            top: 1,
+            right: 10,
+            child: _buildSeenAvatar(scheme, inline: true),
+          ),
+      ]),
+    );
+  }
+
+  /// Tap a reaction chip → who reacted with what (tap mine to remove it).
+  void _showReactors(Map<String, dynamic> msg) {
+    final map = _reactionMap(msg);
+    if (map.isEmpty) return;
+    final scheme = Theme.of(context).colorScheme;
+    final entries = map.entries
+        .where((e) => !_isSongReaction(e.value))
+        .toList()
+      ..sort((a, b) => a.key == _myId ? -1 : (b.key == _myId ? 1 : 0));
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            margin: const EdgeInsets.only(top: 8, bottom: 6),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+                color: scheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2)),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 6),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                  entries.length == 1 ? '1 reaction' : '${entries.length} reactions',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: scheme.onSurface)),
+            ),
+          ),
+          for (final e in entries)
+            ListTile(
+              leading: Text(e.value, style: const TextStyle(fontSize: 24)),
+              title: Text(_reactorName(e.key)),
+              subtitle: e.key == _myId ? const Text('Tap to remove') : null,
+              onTap: e.key == _myId
+                  ? () {
+                      Navigator.pop(ctx);
+                      _addReaction(msg, e.value);
+                    }
+                  : null,
+            ),
+          const SizedBox(height: 8),
+        ]),
       ),
     );
   }
@@ -7035,7 +7191,9 @@ class _ChatPageState extends State<ChatPage>
                               }),
                               if (isMe &&
                                   !_isGroup &&
-                                  msg['id'].toString() == _seenByFriendId)
+                                  msg['id'].toString() == _seenByFriendId &&
+                                  (msg['is_deleted'] == true ||
+                                      _reactionsOf(msg).isEmpty))
                                 _buildSeenAvatar(scheme),
                             ],
                           );

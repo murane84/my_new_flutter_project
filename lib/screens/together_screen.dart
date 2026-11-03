@@ -102,6 +102,9 @@ class _TogetherScreenState extends State<TogetherScreen> {
     return AppPopupShell(
       title: 'Aluta Together',
       icon: Icons.workspace_premium_rounded,
+      // Same page shape as Profile: a full-width panel card between
+      // the header and the footer / now-playing bar.
+      edgeToEdge: true,
       builder: (context, isWide) => ListView(
         shrinkWrap: true,
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),

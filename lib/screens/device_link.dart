@@ -497,6 +497,9 @@ class _LinkedDevicesScreenState extends State<LinkedDevicesScreen> {
     return AppPopupShell(
       title: 'Linked devices',
       icon: Icons.devices_rounded,
+      // Same page shape as Profile: a full-width panel card between
+      // the header and the footer / now-playing bar.
+      edgeToEdge: true,
       headerAction: IconButton(
         tooltip: 'Refresh',
         icon: const Icon(Icons.refresh_rounded),

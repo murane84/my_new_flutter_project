@@ -92,6 +92,9 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
     return AppPopupShell(
       title: 'Moments & nudges',
       icon: Icons.auto_awesome_rounded,
+      // Same page shape as Profile: a full-width panel card between
+      // the header and the footer / now-playing bar.
+      edgeToEdge: true,
       builder: (ctx, isWide) => ListView(
         shrinkWrap: true,
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),

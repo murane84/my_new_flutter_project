@@ -79,6 +79,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
     return AppPopupShell(
       title: 'Groups',
       icon: Icons.groups_rounded,
+      edgeToEdge: true,
       headerAction: IconButton(
         tooltip: 'New group',
         icon: const Icon(Icons.group_add_rounded),
@@ -267,6 +268,7 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
     return AppPopupShell(
       title: 'New group',
       icon: Icons.group_add_rounded,
+      edgeToEdge: true,
       headerAction: TextButton(
         onPressed: _creating ? null : _create,
         child: _creating
@@ -667,6 +669,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     return AppPopupShell(
       title: 'Group info',
       icon: Icons.info_outline_rounded,
+      edgeToEdge: true,
       builder: (ctx, isWide) => _loading
           ? const Padding(
               padding: EdgeInsets.all(40),
@@ -968,6 +971,7 @@ class _AddMembersPickerState extends State<_AddMembersPicker> {
     return AppPopupShell(
       title: 'Add members',
       icon: Icons.person_add_alt_1_rounded,
+      edgeToEdge: true,
       headerAction: TextButton(
         onPressed:
             _selected.isEmpty ? null : () => Navigator.pop(context, _selected.toList()),

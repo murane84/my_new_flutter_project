@@ -40,6 +40,7 @@ extension _HomeSpaceActions on HomePageState {
           _loadSpaces();
         },
       ),
+      avatarFlight: true, // opens like Profile (fade + rise, panel shape)
     );
     _loadPlan();
   }

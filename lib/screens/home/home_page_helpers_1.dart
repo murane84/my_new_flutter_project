@@ -502,7 +502,7 @@ extension _HomePageHelpers1 on HomePageState {
             p['title']?.toString(),
             preApproved: action == kTuneLet);
       case 'feedback':
-        showAppPopup(context, const FeedbackScreen());
+        showAppPopup(context, const FeedbackScreen(), avatarFlight: true);
       case 'space':
         final from = int.tryParse('${p['from']}');
         final space = from == null ? null : _spaceWithFriend(from);

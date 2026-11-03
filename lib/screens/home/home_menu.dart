@@ -58,7 +58,8 @@ extension _HomeMenu on HomePageState {
           label: 'Groups',
           onTap: () async {
             final conv = await showAppPopup<Map<String, dynamic>>(
-                context, const GroupsScreen());
+                context, const GroupsScreen(),
+                avatarFlight: true);
             if (conv != null && mounted) openGroupInPanel(conv);
           },
         ),
@@ -95,7 +96,8 @@ extension _HomeMenu on HomePageState {
             GenieMenuEntry(
               icon: Icons.devices_other_rounded,
               label: 'Linked devices',
-              onTap: () => showAppPopup(context, const LinkedDevicesScreen()),
+              onTap: () => showAppPopup(context, const LinkedDevicesScreen(),
+                    avatarFlight: true),
             ),
           ],
         ),
@@ -144,16 +146,19 @@ extension _HomeMenu on HomePageState {
                 icon: Icons.palette_outlined,
                 label: 'Appearance',
                 onTap: () =>
-                    showAppPopup(context, const AppearanceScreen())),
+                    showAppPopup(context, const AppearanceScreen(),
+                    avatarFlight: true)),
             GenieMenuEntry(
                 icon: Icons.auto_awesome_rounded,
                 label: 'Moments & nudges',
                 onTap: () =>
-                    showAppPopup(context, const MomentsSettingsScreen())),
+                    showAppPopup(context, const MomentsSettingsScreen(),
+                    avatarFlight: true)),
             GenieMenuEntry(
                 icon: Icons.lock_outline_rounded,
                 label: 'Backup & restore',
-                onTap: () => showAppPopup(context, const BackupScreen())),
+                onTap: () => showAppPopup(context, const BackupScreen(),
+                    avatarFlight: true)),
             GenieMenuEntry(
                 icon: Icons.shield_outlined,
                 label: 'Legal & About',
@@ -164,7 +169,8 @@ extension _HomeMenu on HomePageState {
         GenieMenuEntry(
             icon: Icons.rate_review_rounded,
             label: 'Help & feedback',
-            onTap: () => showAppPopup(context, const FeedbackScreen())),
+            onTap: () => showAppPopup(context, const FeedbackScreen(),
+                    avatarFlight: true)),
         const GenieMenuEntry.divider(),
         GenieMenuEntry(
             icon: Icons.logout_rounded,

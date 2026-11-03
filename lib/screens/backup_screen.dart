@@ -126,6 +126,9 @@ class _BackupScreenState extends State<BackupScreen> {
     return AppPopupShell(
       title: 'Backup & restore',
       icon: Icons.lock_rounded,
+      // Same page shape as Profile: a full-width panel card between
+      // the header and the footer / now-playing bar.
+      edgeToEdge: true,
       builder: (context, isWide) {
         final scheme = Theme.of(context).colorScheme;
         return SingleChildScrollView(

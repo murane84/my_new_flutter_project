@@ -175,6 +175,9 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     return AppPopupShell(
       title: 'Help & feedback',
       icon: Icons.rate_review_rounded,
+      // Same page shape as Profile: a full-width panel card between
+      // the header and the footer / now-playing bar.
+      edgeToEdge: true,
       desktopMaxWidth: 640,
       builder: (context, isWide) => SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),

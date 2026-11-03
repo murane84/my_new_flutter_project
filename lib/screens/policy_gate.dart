@@ -60,7 +60,8 @@ class _PolicyGateDialogState extends State<_PolicyGateDialog> {
   /// Questions go to the Aluta team in-app first (replies come back here);
   /// email stays as the fallback.
   void _help() =>
-      showAppPopup(context, const FeedbackScreen(initialKind: 'help'));
+      showAppPopup(context, const FeedbackScreen(initialKind: 'help'),
+          avatarFlight: true);
 
   Future<void> _accept() async {
     if (!_agreed || _busy) return;

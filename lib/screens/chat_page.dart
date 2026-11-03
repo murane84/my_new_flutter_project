@@ -7857,6 +7857,12 @@ class _ReactSlide {
   static final Map<String, BuildContext> targets = {};
   static void Function(String emoji)? pick;
   static VoidCallback? closeMenu;
+  // When a slide last picked an emoji — the emoji's own tap (which fires on
+  // the same finger lift) is ignored right after, so it doesn't toggle the
+  // reaction back off or pop the route twice.
+  static DateTime _lastPick = DateTime(0);
+  static bool get justPicked =>
+      DateTime.now().difference(_lastPick).inMilliseconds < 450;
 
   static void begin() {
     _active = true;
@@ -7893,7 +7899,10 @@ class _ReactSlide {
     if (gPointerUpHook == end) gPointerUpHook = null;
     final e = hovered.value;
     hovered.value = null;
-    if (e != null) pick?.call(e);
+    if (e != null) {
+      _lastPick = DateTime.now();
+      pick?.call(e);
+    }
   }
 }
 
@@ -7943,7 +7952,19 @@ class _ReactionStrip extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Row(
+      // A finger that lifted after the menu opened can press the strip
+      // again and SLIDE across it: the emoji under it lifts, let go = react.
+      Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (e) {
+          if (e.kind == PointerDeviceKind.mouse) return;
+          _ReactSlide.begin();
+          _ReactSlide.move(e.position);
+        },
+        onPointerMove: (e) => _ReactSlide.move(e.position),
+        onPointerUp: (_) => _ReactSlide.end(),
+        onPointerCancel: (_) => _ReactSlide.end(),
+        child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           for (var i = 0; i < reactions.length; i++)
@@ -7980,13 +8001,17 @@ class _ReactionStrip extends StatelessWidget {
                       : null,
                   child: _ReactionButton(
                     emoji: reactions[i],
-                    onTap: () => onPick(reactions[i]),
+                    onTap: () {
+                      if (_ReactSlide.justPicked) return;
+                      onPick(reactions[i]);
+                    },
                   ),
                 ),
                 ),
               ),
             ),
         ],
+      ),
       ),
       // While the finger that opened the menu is still down: say what to
       // do, then name the emoji under it.

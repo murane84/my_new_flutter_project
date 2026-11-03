@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../utils/popup_shell.dart'
-    show gLastTapDownGlobal, genieAlignmentFor, HeaderActionButton;
+    show HeaderActionButton, gPanelBottomY, kAppFooterHeight;
 
 // Height of the Aluta app header (toolbar). The full-page legal views start
 // just under it, so the "Aluta" title + overflow (⋮) menu stay visible above.
@@ -44,16 +44,12 @@ const List<_LegalDoc> _kLegalDocs = [
 /// item), like Our Space. A transparent barrier keeps the header + ⋮ menu fully
 /// visible; tapping the exposed header strip (tap-out) dismisses.
 void _showLegalHub(BuildContext ctx, int initialIndex) {
-  // The tapped menu item is the genie's "home" spot (snapshot at open; the item
-  // unmounts once tapped, so a live resolver isn't needed here).
-  final origin = gLastTapDownGlobal;
+  // Opens like Profile and the other menu pages: a plain fade + rise.
   showGeneralDialog(
     context: ctx,
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
-    // Transparent: nothing dims the header strip above the page, so the "Aluta"
-    // title + ⋮ menu stay clearly visible, and a tap up there closes the hub.
-    barrierColor: Colors.transparent,
+    barrierColor: Colors.black.withAlpha(90),
     transitionDuration: const Duration(milliseconds: 300),
     pageBuilder: (_, _, _) => _LegalHub(initialIndex: initialIndex),
     transitionBuilder: (dctx, anim, _, child) {
@@ -62,20 +58,6 @@ void _showLegalHub(BuildContext ctx, int initialIndex) {
         curve: Curves.easeOutCubic,
         reverseCurve: Curves.easeInCubic,
       );
-      final genie = genieAlignmentFor(dctx, origin);
-      if (genie != null) {
-        // Genie: grow out of the tapped point on open, collapse back into it on
-        // close, while fading — exactly like the Our Space page.
-        return FadeTransition(
-          opacity: curved,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.12, end: 1.0).animate(curved),
-            alignment: genie,
-            child: RepaintBoundary(child: child),
-          ),
-        );
-      }
-      // Fallback (origin unknown): rise up + fade, reversing on close.
       return FadeTransition(
         opacity: curved,
         child: SlideTransition(
@@ -107,6 +89,31 @@ class _LegalHubState extends State<_LegalHub> {
   // there's no earlier tab left, matching the app-wide "back = previous page,
   // then minimise" rule (same contract Our Space and the home stack use).
   final List<int> _history = [];
+  // Swipe left / right between the documents (the footer pills still work).
+  late final PageController _pages = PageController(initialPage: _index);
+  // True while WE animate the pages (a pill tap / back), so the pages the
+  // animation passes through don't count as the user's swipes.
+  bool _jumping = false;
+
+  Future<void> _goTo(int i) async {
+    if (!_pages.hasClients) return;
+    _jumping = true;
+    await _pages.animateToPage(i,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic);
+    _jumping = false;
+  }
+
+  void _onSwiped(int i) {
+    if (_jumping) return;
+    _selectTab(i);
+  }
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
 
   void _selectTab(int i) {
     if (i == _index) return;
@@ -114,6 +121,9 @@ class _LegalHubState extends State<_LegalHub> {
       _history.add(_index);
       _index = i;
     });
+    if (_pages.hasClients && (_pages.page?.round() ?? _index) != i) {
+      _goTo(i);
+    }
   }
 
   @override
@@ -123,8 +133,6 @@ class _LegalHubState extends State<_LegalHub> {
     final isWide = media.size.width >= 640;
     // Clear the Aluta app header (status bar + toolbar) so it stays in view.
     final topInset = media.padding.top + _kAppHeaderHeight;
-    // Leave the bottom footer / now-playing bar in view (never cover it).
-    final bottomInset = media.padding.bottom + 72;
     final doc = _kLegalDocs[_index];
 
     return PopScope(
@@ -132,10 +140,25 @@ class _LegalHubState extends State<_LegalHub> {
       canPop: _history.isEmpty,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop || _history.isEmpty) return;
-        setState(() => _index = _history.removeLast());
+        final back = _history.removeLast();
+        setState(() => _index = back);
+        _goTo(back);
       },
-      child: Padding(
-      padding: EdgeInsets.only(top: topInset, bottom: bottomInset),
+      // Same place and shape as Profile and the other pages: ends on the
+      // line the chat / music panels end on (above the now-playing bar when
+      // it's up, else the footer), a card rounded on all four corners.
+      child: ValueListenableBuilder<double?>(
+        valueListenable: gPanelBottomY,
+        builder: (context, panelBottom, child) => AnimatedPadding(
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+          padding: EdgeInsets.only(
+              top: topInset,
+              bottom: (media.size.width < 640 && panelBottom != null)
+                  ? (media.size.height - panelBottom).clamp(0.0, 400.0)
+                  : media.padding.bottom + kAppFooterHeight),
+          child: child,
+        ),
       child: Material(
         type: MaterialType.transparency,
         child: Container(
@@ -143,24 +166,22 @@ class _LegalHubState extends State<_LegalHub> {
           height: double.infinity,
           decoration: BoxDecoration(
             color: scheme.surface,
-            border: Border(
-              top: BorderSide(color: scheme.primary.withAlpha(120), width: 1),
-              bottom: BorderSide(color: scheme.primary.withAlpha(60), width: 1),
-            ),
+            borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withAlpha(80),
-                blurRadius: 26,
-                offset: const Offset(0, -6),
+                color: Theme.of(context).shadowColor.withAlpha(35),
+                blurRadius: 12,
               ),
             ],
           ),
           clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
-              // Header row — current doc's icon + title + close.
+              // Header row — current doc's icon + title + close (same look
+              // as the other pages' headers).
               Container(
-                padding: const EdgeInsets.fromLTRB(16, 8, 10, 8),
+                padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
+                color: scheme.surfaceContainerHighest.withAlpha(120),
                 child: Row(
                   children: [
                     Container(
@@ -199,15 +220,21 @@ class _LegalHubState extends State<_LegalHub> {
               Divider(height: 1, color: scheme.outlineVariant.withAlpha(70)),
               // Body — width-capped + centred on desktop, full-bleed on phone.
               // Scrolls BETWEEN the title above and the footer tab bar below.
+              // Swipe left / right to move between Privacy · Terms · About.
               Expanded(
-                child: isWide
-                    ? Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 720),
-                          child: _body(doc),
-                        ),
-                      )
-                    : _body(doc),
+                child: PageView.builder(
+                  controller: _pages,
+                  itemCount: _kLegalDocs.length,
+                  onPageChanged: _onSwiped,
+                  itemBuilder: (_, i) => isWide
+                      ? Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 720),
+                            child: _body(_kLegalDocs[i], i),
+                          ),
+                        )
+                      : _body(_kLegalDocs[i], i),
+                ),
               ),
               // PERSISTENT switcher — pinned to the FOOTER as equal-width pills.
               _footerTabs(scheme, isWide),
@@ -221,10 +248,10 @@ class _LegalHubState extends State<_LegalHub> {
 
   // The scrollable document body. Keyed by index so switching tabs starts the
   // new document from the top rather than inheriting the previous scroll.
-  Widget _body(_LegalDoc doc) {
+  Widget _body(_LegalDoc doc, int i) {
     return Scrollbar(
       child: SingleChildScrollView(
-        key: ValueKey(_index),
+        key: PageStorageKey('legal_$i'),
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -257,19 +284,17 @@ class _LegalHubState extends State<_LegalHub> {
           top: BorderSide(color: scheme.outlineVariant.withAlpha(90)),
         ),
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-          child: isWide
-              ? Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 560),
-                    child: row,
-                  ),
-                )
-              : row,
-        ),
+      // The page ends above the footer now, so no system-inset padding here.
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: isWide
+            ? Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: row,
+                ),
+              )
+            : row,
       ),
     );
   }

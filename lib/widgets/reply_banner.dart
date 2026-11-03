@@ -54,6 +54,7 @@ class ReplyBanner {
     required VoidCallback onOpen,
     required VoidCallback onVoiceInChat,
     String? messageId,
+    VoidCallback? onReplied,
   }) {
     // Never replace a banner the user is writing in.
     if (busy) return true;
@@ -84,6 +85,7 @@ class ReplyBanner {
           onVoiceInChat();
         },
         onClose: hide,
+        onReplied: onReplied,
       ),
     );
     _entry = entry;
@@ -108,6 +110,7 @@ class _ReplyBannerView extends StatefulWidget {
     required this.onOpen,
     required this.onVoiceInChat,
     required this.onClose,
+    this.onReplied,
   });
   final String title;
   final String body;
@@ -116,6 +119,7 @@ class _ReplyBannerView extends StatefulWidget {
   final VoidCallback onOpen;
   final VoidCallback onVoiceInChat;
   final VoidCallback onClose;
+  final VoidCallback? onReplied;
 
   @override
   State<_ReplyBannerView> createState() => _ReplyBannerViewState();
@@ -178,6 +182,20 @@ class _ReplyBannerViewState extends State<_ReplyBannerView>
     widget.onClose();
   }
 
+  /// Replying means I've read it: mark the thread read (their ticks turn
+  /// blue) and let the app clear its unread badge.
+  void _markSeen() {
+    final api = ApiService();
+    final cid = widget.conversationId;
+    final fid = widget.friendId;
+    if (cid != null) {
+      api.markConversationRead(cid);
+    } else if (fid != null && fid > 0) {
+      api.markMessagesAsReadPatch(fid);
+    }
+    widget.onReplied?.call();
+  }
+
   Future<void> _sendText() async {
     final t = _text.text.trim();
     if (t.isEmpty || _sending) return;
@@ -192,6 +210,7 @@ class _ReplyBannerViewState extends State<_ReplyBannerView>
       return; // keep the draft
     }
     HapticFeedback.lightImpact();
+    _markSeen();
     _text.clear();
     _replying = false;
     _close();
@@ -284,6 +303,7 @@ class _ReplyBannerViewState extends State<_ReplyBannerView>
         return;
       }
       HapticFeedback.lightImpact();
+      _markSeen();
       _replying = false;
       _close();
     } catch (_) {

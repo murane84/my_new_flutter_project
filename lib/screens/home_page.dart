@@ -1953,6 +1953,16 @@ class HomePageState extends rp.ConsumerState<HomePage>
       messageId: messageId,
       onOpen: () => _handleMessageTap(payload),
       onVoiceInChat: () => _handleMessageTap({...payload, 'voice': true}),
+      // Replied from the banner → I've seen it: clear the unread badge too
+      // (the banner already marked the thread read on the server).
+      onReplied: () {
+        if (!mounted) return;
+        final fid = int.tryParse(senderId ?? '');
+        if (conversationId == null && fid != null) {
+          ref.read(unreadProvider.notifier).clear(fid);
+        }
+        _fetchFriends(quiet: true);
+      },
     );
   }
 

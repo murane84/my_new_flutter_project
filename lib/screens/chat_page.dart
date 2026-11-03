@@ -8458,16 +8458,65 @@ class _HoverChevronState extends State<_HoverChevron> {
   bool get _canReact =>
       widget.onReact != null && widget.reactions.isNotEmpty;
 
+  bool _below = false; // no room above the bubble → chip sits under it
+  ScrollPosition? _scroll;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Scrolling the chat folds the floating chip away — it lives in an
+    // overlay and would otherwise ride up over the chat / app header.
+    final pos = Scrollable.maybeOf(context)?.position;
+    if (pos != _scroll) {
+      _scroll?.removeListener(_onScroll);
+      _scroll = pos;
+      _scroll?.addListener(_onScroll);
+    }
+  }
+
+  void _onScroll() {
+    if (_portal.isShowing) _portal.hide();
+    if (_rowOpen && mounted) setState(() => _rowOpen = false);
+  }
+
   @override
   void dispose() {
     _hideTimer?.cancel();
+    _scroll?.removeListener(_onScroll);
     super.dispose();
+  }
+
+  /// Picks where the chip may float so it stays INSIDE the chat's visible
+  /// message area: above the bubble when there's room, else just under it.
+  /// false = neither fits (bubble mostly scrolled off) → no chip.
+  bool _placeChip() {
+    final me = context.findRenderObject();
+    if (me is! RenderBox || !me.attached || !me.hasSize) return false;
+    final sc = Scrollable.maybeOf(context)?.context.findRenderObject();
+    if (sc is! RenderBox || !sc.attached || !sc.hasSize) {
+      _below = false;
+      return true;
+    }
+    const room = 34.0; // chip / row height + gap
+    final top = me.localToGlobal(Offset.zero).dy;
+    final bottom = top + me.size.height;
+    final vTop = sc.localToGlobal(Offset.zero).dy;
+    final vBottom = vTop + sc.size.height;
+    if (top - room >= vTop && top < vBottom) {
+      _below = false;
+      return true;
+    }
+    if (bottom + room <= vBottom && bottom > vTop) {
+      _below = true;
+      return true;
+    }
+    return false;
   }
 
   void _enterBubble() {
     _hideTimer?.cancel();
     if (!_hover) setState(() => _hover = true);
-    if (_canReact && !_portal.isShowing) _portal.show();
+    if (_canReact && !_portal.isShowing && _placeChip()) _portal.show();
   }
 
   // Leaving the bubble toward the floating chip must not close it: wait a
@@ -8545,13 +8594,19 @@ class _HoverChevronState extends State<_HoverChevron> {
       link: _link,
       showWhenUnlinked: false,
       // Just above the bubble's top corner (outside it — never over the
-      // text): right corner for my bubbles, left for theirs.
-      targetAnchor: widget.isMe ? Alignment.topRight : Alignment.topLeft,
-      followerAnchor:
-          widget.isMe ? Alignment.bottomRight : Alignment.bottomLeft,
-      offset: Offset(widget.isMe ? -8 : 40, 4),
+      // text): right corner for my bubbles, left for theirs. Under the
+      // bubble instead when it sits at the top edge of the chat.
+      targetAnchor: _below
+          ? (widget.isMe ? Alignment.bottomRight : Alignment.bottomLeft)
+          : (widget.isMe ? Alignment.topRight : Alignment.topLeft),
+      followerAnchor: _below
+          ? (widget.isMe ? Alignment.topRight : Alignment.topLeft)
+          : (widget.isMe ? Alignment.bottomRight : Alignment.bottomLeft),
+      offset: Offset(widget.isMe ? -8 : 40, _below ? -4 : 4),
       child: Align(
-        alignment: widget.isMe ? Alignment.bottomRight : Alignment.bottomLeft,
+        alignment: _below
+            ? (widget.isMe ? Alignment.topRight : Alignment.topLeft)
+            : (widget.isMe ? Alignment.bottomRight : Alignment.bottomLeft),
         widthFactor: 1,
         heightFactor: 1,
         child: MouseRegion(

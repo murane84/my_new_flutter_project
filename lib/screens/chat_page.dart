@@ -39,7 +39,6 @@ import '../utils/time_utils.dart';
 import '../utils/file_bytes.dart';
 import '../utils/marquee_text.dart';
 import '../utils/prefs_now.dart';
-import '../utils/popup_shell.dart' show gPointerMoveHook, gPointerUpHook;
 import 'live_session_screen.dart';
 import 'gif_picker.dart';
 import '../services/call_service.dart';
@@ -7868,10 +7867,46 @@ class _ReactSlide {
     _active = true;
     hovered.value = null;
     sliding.value = true;
-    // Follow the finger from the app root: once the menu opens on top, the
-    // bubble's own gesture may stop hearing it.
-    gPointerMoveHook = move;
-    gPointerUpHook = end;
+    _listenRaw();
+  }
+
+  // Opening the menu pushes a route, and Navigator.push CANCELS every
+  // pointer that's down (flutter/flutter#4770) — the holding finger stops
+  // reaching any widget or gesture. So the hold-and-slide reads the raw
+  // touch stream from the engine instead (peek, then hand it on untouched).
+  static ui.PointerDataPacketCallback? _engine;
+  static void _listenRaw() {
+    if (_engine != null) return;
+    final pd = WidgetsBinding.instance.platformDispatcher;
+    final orig = pd.onPointerDataPacket;
+    if (orig == null) return;
+    _engine = orig;
+    pd.onPointerDataPacket = (packet) {
+      orig(packet);
+      if (_active) _peek(packet);
+    };
+  }
+
+  static void _peek(ui.PointerDataPacket packet) {
+    final pd = WidgetsBinding.instance.platformDispatcher;
+    for (final d in packet.data) {
+      final dpr = (pd.view(id: d.viewId) ?? pd.implicitView)
+              ?.devicePixelRatio ??
+          1.0;
+      final pos = Offset(d.physicalX / dpr, d.physicalY / dpr);
+      switch (d.change) {
+        case ui.PointerChange.move:
+          move(pos);
+        case ui.PointerChange.up:
+          move(pos);
+          end();
+        case ui.PointerChange.cancel: // a real (engine) cancel
+          hovered.value = null;
+          end();
+        default:
+          break;
+      }
+    }
   }
 
   static void move(Offset global) {
@@ -7895,8 +7930,6 @@ class _ReactSlide {
     if (!_active) return;
     _active = false;
     sliding.value = false;
-    if (gPointerMoveHook == move) gPointerMoveHook = null;
-    if (gPointerUpHook == end) gPointerUpHook = null;
     final e = hovered.value;
     hovered.value = null;
     if (e != null) {

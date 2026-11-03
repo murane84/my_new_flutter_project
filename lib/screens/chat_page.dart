@@ -6149,7 +6149,6 @@ class _ChatPageState extends State<ChatPage>
     final emojis = counts.keys.toList()
       ..sort((a, b) => counts[b]!.compareTo(counts[a]!));
     final songs = map.values.where(_isSongReaction).toSet().toList();
-    final total = counts.values.fold<int>(0, (a, b) => a + b);
     final mineOn = map[_myId];
 
     final pill = emojis.isEmpty
@@ -6182,20 +6181,37 @@ class _ChatPageState extends State<ChatPage>
                     ),
                   ],
                 ),
+                // Each emoji with ITS OWN count (❤️ 3 · 😂 2) — in a group you
+                // see how many people picked each one; "+n" when more kinds
+                // than fit.
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  for (final e in emojis.take(3))
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 1),
-                      child: AnimatedReaction(emoji: e, size: 14),
-                    ),
-                  if (total > 1) ...[
-                    const SizedBox(width: 3),
-                    Text('$total',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: scheme.onSurfaceVariant)),
+                  for (var k = 0; k < emojis.length && k < 4; k++) ...[
+                    if (k > 0) const SizedBox(width: 5),
+                    AnimatedReaction(emoji: emojis[k], size: 14),
+                    if (counts[emojis[k]]! > 1)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 2),
+                        child: Text('${counts[emojis[k]]}',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: emojis[k] == mineOn
+                                    ? scheme.primary
+                                    : scheme.onSurfaceVariant,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures()
+                                ])),
+                      ),
                   ],
+                  if (emojis.length > 4)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Text('+${emojis.length - 4}',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: scheme.onSurfaceVariant)),
+                    ),
                 ]),
               ),
             ),
@@ -6278,10 +6294,20 @@ class _ChatPageState extends State<ChatPage>
     final map = _reactionMap(msg);
     if (map.isEmpty) return;
     final scheme = Theme.of(context).colorScheme;
+    // Grouped by emoji (most-picked first), me first within each.
+    final perEmoji = <String, int>{};
+    for (final v in map.values) {
+      if (!_isSongReaction(v)) perEmoji[v] = (perEmoji[v] ?? 0) + 1;
+    }
     final entries = map.entries
         .where((e) => !_isSongReaction(e.value))
         .toList()
-      ..sort((a, b) => a.key == _myId ? -1 : (b.key == _myId ? 1 : 0));
+      ..sort((a, b) {
+        final c = perEmoji[b.value]!.compareTo(perEmoji[a.value]!);
+        if (c != 0) return c;
+        if (a.value != b.value) return a.value.compareTo(b.value);
+        return a.key == _myId ? -1 : (b.key == _myId ? 1 : 0);
+      });
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: scheme.surface,
@@ -6302,7 +6328,12 @@ class _ChatPageState extends State<ChatPage>
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                  entries.length == 1 ? '1 reaction' : '${entries.length} reactions',
+                  [
+                    entries.length == 1
+                        ? '1 reaction'
+                        : '${entries.length} reactions',
+                    for (final e in perEmoji.entries) '${e.key} ${e.value}',
+                  ].join('   '),
                   style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,

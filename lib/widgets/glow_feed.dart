@@ -8,6 +8,7 @@ import '../data/glow_cards.dart';
 import '../services/aluta_mood.dart';
 import '../services/song_insights.dart';
 import '../services/account_prefs.dart';
+import 'heart_burst.dart';
 
 int _glowDaySeed() {
   final d = DateTime.now();
@@ -124,6 +125,7 @@ class _GlowFeedState extends State<GlowFeed> {
 
   Future<void> _toggleSave(GlowCard c) async {
     HapticFeedback.selectionClick();
+    if (!_saved.contains(c.id)) HeartBurst.fromTap(context);
     setState(() {
       if (!_saved.remove(c.id)) _saved.add(c.id);
     });

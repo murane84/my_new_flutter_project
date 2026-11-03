@@ -2,12 +2,25 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../utils/popup_shell.dart' show gLastTapDownGlobal;
+
 /// Instagram-style heart fountain: a burst of red hearts of mixed sizes
 /// shoots up and out from [origin] (the tapped spot), sways as it rises up
 /// the screen, and fades out near the top. Runs on the root overlay, never
 /// blocks touches, and cleans itself up (~1.6 s).
 class HeartBurst {
   static OverlayEntry? _live;
+
+  /// Hearts that count as a "like" reaction.
+  static bool isHeart(String e) {
+    final s = e.replaceAll('\uFE0F', '').trim();
+    return const {'❤', '♥', '💖', '💕', '💞', '💗', '💓', '💘', '💝', '😍', '🥰'}
+        .contains(s);
+  }
+
+  /// Fountain from the spot the user just tapped (anywhere in the app).
+  static void fromTap(BuildContext context) =>
+      at(context, gLastTapDownGlobal);
 
   static void at(BuildContext context, Offset? origin, {int count = 34}) {
     final overlay = Overlay.maybeOf(context, rootOverlay: true);

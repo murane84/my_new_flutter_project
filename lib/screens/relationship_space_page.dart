@@ -50,6 +50,7 @@ import '../services/track_title.dart' show cleanTrackName;
 import '../utils/marquee_text.dart';
 import '../services/contact_names.dart';
 import '../widgets/keepsake_photo.dart';
+import '../widgets/heart_burst.dart';
 import '../utils/prefs_now.dart';
 
 part 'space/space_moment_composer.dart'; // moment composer + add-to-playlist sheet
@@ -288,7 +289,13 @@ Future<String?> pickDiaryReaction(BuildContext context, Color accent) {
                     children: [
                       for (final em in _kQuickReactions)
                         InkWell(
-                          onTap: () => Navigator.pop(ctx, em),
+                          onTap: () {
+                            // A heart → the heart fountain, from the tap.
+                            if (HeartBurst.isHeart(em)) {
+                              HeartBurst.fromTap(ctx);
+                            }
+                            Navigator.pop(ctx, em);
+                          },
                           borderRadius: BorderRadius.circular(14),
                           child: Container(
                             padding: const EdgeInsets.all(8),

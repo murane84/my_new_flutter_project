@@ -20,6 +20,7 @@ import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:video_player/video_player.dart';
 import '../widgets/glimpse_video.dart';
 import '../widgets/animated_reaction.dart';
+import '../widgets/heart_burst.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -3827,6 +3828,17 @@ class _ChatPageState extends State<ChatPage>
     final id = msg['id'];
     if (id == null) return;
     final myId = _myId;
+    // Hearting a message → Instagram-style heart fountain from the tap.
+    if (HeartBurst.isHeart(emoji)) {
+      var had = false;
+      try {
+        final raw = msg['reactions'];
+        if (raw is String && raw.isNotEmpty) {
+          had = (jsonDecode(raw) as Map)[myId] == emoji;
+        }
+      } catch (_) {}
+      if (!had) HeartBurst.fromTap(context);
+    }
     setState(() {
       Map<String, dynamic> map = {};
       try {

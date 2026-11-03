@@ -2,6 +2,8 @@ import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../widgets/heart_burst.dart';
+
 import '../../services/device_lean.dart';
 import 'dart:math' as math;
 import 'dart:ui' show FontFeature, PathMetric;
@@ -1994,7 +1996,11 @@ class _HeartGenieState extends State<_HeartGenie>
               type: MaterialType.transparency,
               child: InkWell(
                 customBorder: const StadiumBorder(),
-                onTap: () => _after(widget.onSendBack!),
+                onTap: () {
+                  // Sending a heart back → the heart fountain from the tap.
+                  HeartBurst.fromTap(context);
+                  _after(widget.onSendBack!);
+                },
                 child: Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

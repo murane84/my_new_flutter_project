@@ -6167,20 +6167,19 @@ class _ChatPageState extends State<ChatPage>
               child: Container(
                 height: 24,
                 padding: const EdgeInsets.symmetric(horizontal: 6),
+                // One clean edge only (the accent outline + a drop shadow
+                // read as a double line under the emoji). Mine → a soft
+                // accent tint inside instead of a coloured outline.
                 decoration: BoxDecoration(
-                  color: isDark ? scheme.surfaceContainerHigh : scheme.surface,
+                  color: mineOn != null && counts.containsKey(mineOn)
+                      ? Color.alphaBlend(
+                          scheme.primary.withValues(alpha: isDark ? 0.22 : 0.12),
+                          isDark ? scheme.surfaceContainerHigh : scheme.surface)
+                      : (isDark ? scheme.surfaceContainerHigh : scheme.surface),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                      color: mineOn != null && counts.containsKey(mineOn)
-                          ? scheme.primary.withValues(alpha: 0.55)
-                          : scheme.outlineVariant.withValues(alpha: 0.5)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
+                      width: 0.8,
+                      color: scheme.outlineVariant.withValues(alpha: 0.35)),
                 ),
                 // Each emoji with ITS OWN count (❤️ 3 · 😂 2) — in a group you
                 // see how many people picked each one; "+n" when more kinds

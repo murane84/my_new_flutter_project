@@ -168,7 +168,13 @@ class PlayerDisc extends StatelessWidget {
     required this.artBuilder,
     this.playing = true,
     this.dimmed = false,
+    this.progress,
   });
+
+  /// Song progress 0..1 for the classic tonearm's creep toward the centre.
+  /// Defaults to the music player's own; Listen Together passes the
+  /// session's.
+  final ValueListenable<double>? progress;
 
   final PlayerDiscStyle style;
   final double side;
@@ -199,6 +205,7 @@ class PlayerDisc extends StatelessWidget {
           spin: spin,
           playing: playing,
           artBuilder: artBuilder,
+          progress: progress,
         ),
       PlayerDiscStyle.cd => _cd(),
       PlayerDiscStyle.cassette => _cassette(),
@@ -235,6 +242,7 @@ class PlayerDisc extends StatelessWidget {
           spin: spin,
           playing: playing,
           artBuilder: artBuilder,
+          progress: progress,
         ),
     };
   }
@@ -845,7 +853,10 @@ class _ClassicVinyl extends StatefulWidget {
     required this.spin,
     required this.playing,
     required this.artBuilder,
+    this.progress,
   });
+
+  final ValueListenable<double>? progress;
 
   final double side;
   final Color accent;
@@ -1026,11 +1037,16 @@ class _ClassicVinylState extends State<_ClassicVinyl>
           child: AnimatedBuilder(
             // Like a real turntable, the resting arm creeps from the outer
             // groove (song start) toward the centre (song end).
-            animation: Listenable.merge([_lift, playProgressNotifier]),
+            animation: Listenable.merge(
+                [_lift, widget.progress ?? playProgressNotifier]),
             builder: (_, _) => Transform.rotate(
               angle: -_lift.value * 1.25 +
                   (1 - _lift.value) *
-                      (0.12 - 0.24 * playProgressNotifier.value.clamp(0.0, 1.0)),
+                      (0.12 -
+                          0.24 *
+                              (widget.progress ?? playProgressNotifier)
+                                  .value
+                                  .clamp(0.0, 1.0)),
               // Must match the painter's pivot (0.89, 0.17) in -1..1 space.
               alignment: const Alignment(0.78, -0.66),
               child: CustomPaint(

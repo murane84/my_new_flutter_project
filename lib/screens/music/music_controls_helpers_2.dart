@@ -1045,9 +1045,12 @@ Column(
                       ),
                     ),
                   ),
-                  const Spacer(),
-                  // Partner listening right now → their tiny badge.
+                  // Partner listening right now → their tiny badge, on the
+                  // LEFT beside the place chip (the right corner belongs to
+                  // the tonearm's resting spot).
+                  const SizedBox(width: 6),
                   _partnerBadge(accent),
+                  const Spacer(),
                   PresenceShareButton(color: accent, size: 20),
                   if (!live && hasTrack) BounceTap(
                           onTap: () =>

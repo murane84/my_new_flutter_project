@@ -21,6 +21,7 @@ import 'token_helper.dart' show mediaAuthHeaders;
 import 'gif_picker.dart' show GifPicker, GifResult;
 import 'music/player_disc_style.dart'
     show PlayerDisc, PlayerStyleController, showPlayerStyleSheet;
+import 'music_controls.dart' show PlayKey;
 import 'relationship_space_page.dart'
     show pickDiaryReaction, resolveAvatarUrl;
 import '../utils/marquee_text.dart';
@@ -1157,6 +1158,8 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
 
   @override
   void dispose() {
+    _progSub?.cancel();
+    _liveProgress.dispose();
     _queueCtrl.dispose();
     _awayTimer?.cancel();
     _discSpin.dispose();
@@ -2144,9 +2147,25 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
 
   // Now-Playing-style disc hero: the user's chosen player style, spinning while
   // audio plays, tap to restyle — plus the track title and who you're with.
+  // The session's song progress (0..1, on the REAL timeline even when a
+  // listener joined a trimmed tail) — the classic tonearm follows it.
+  final ValueNotifier<double> _liveProgress = ValueNotifier<double>(0);
+  StreamSubscription<Duration>? _progSub;
+
+  void _watchProgress() {
+    _progSub ??= _c.player.positionStream.listen((_) {
+      final d = _c.liveDuration;
+      final ms = d?.inMilliseconds ?? 0;
+      _liveProgress.value = ms <= 0
+          ? 0
+          : (_c.livePosition.inMilliseconds / ms).clamp(0.0, 1.0).toDouble();
+    });
+  }
+
   Widget _discHero(ThemeData theme, ColorScheme scheme, {double side = 132}) {
     final isDark = scheme.brightness == Brightness.dark;
     final accent = scheme.primary;
+    _watchProgress();
     return StreamBuilder<PlayerState>(
       stream: _c.player.playerStateStream,
       builder: (ctx, snap) {
@@ -2171,6 +2190,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                       isDark: isDark,
                       spin: _discSpin,
                       playing: playing,
+                      progress: _liveProgress,
                       dimmed: PlayerStyleController.instance.orbDimmed,
                       artBuilder: (d, [col]) => Center(
                         child: Icon(Icons.music_note_rounded,
@@ -2383,13 +2403,18 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                       ]
                     : null,
               ),
-              child: IconButton.filled(
-                iconSize: 34,
-                onPressed: !_canControl
+              // The same animated key as the music player (play ↔ pause
+              // turn, orbit ring while playing, spinner while loading).
+              child: PlayKey(
+                playing: playing,
+                buffering: _c.player.processingState ==
+                        ProcessingState.loading ||
+                    _c.player.processingState == ProcessingState.buffering,
+                accent: scheme.primary,
+                diameter: 58,
+                onTap: !_canControl
                     ? null
                     : () => playing ? _c.player.pause() : _c.player.play(),
-                icon: Icon(
-                    playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
               ),
             ),
             btn(Icons.forward_10_rounded,
@@ -2471,14 +2496,14 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                           ]
                         : null,
                   ),
-                  child: IconButton.filled(
-                    iconSize: 34,
-                    onPressed: !_ready
+                  child: PlayKey(
+                    playing: playing,
+                    buffering: !_ready,
+                    accent: scheme.primary,
+                    diameter: 58,
+                    onTap: !_ready
                         ? null
                         : () => _c.requestControl(playing ? 'pause' : 'play'),
-                    icon: Icon(playing
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded),
                   ),
                 ),
                 btn(Icons.forward_10_rounded,

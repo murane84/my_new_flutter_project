@@ -72,7 +72,8 @@ class PlayKey extends StatefulWidget {
   });
   final bool playing, buffering;
   final Color accent;
-  final VoidCallback onTap;
+  // null = disabled (dimmed, not tappable).
+  final VoidCallback? onTap;
   // The disc's size (the orbit ring sits 6 px outside it). The music card
   // uses the default; Now Playing passes its bigger, shrinking-with-queue one.
   final double diameter;
@@ -114,7 +115,9 @@ class _PlayKeyState extends State<PlayKey>
     final a = widget.accent;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final s = widget.diameter;
-    return Tactile(
+    return Opacity(
+      opacity: widget.onTap == null ? 0.45 : 1,
+      child: Tactile(
       child: GestureDetector(
         onTap: widget.onTap,
         child: SizedBox(
@@ -209,6 +212,7 @@ class _PlayKeyState extends State<PlayKey>
             ),
           ),
         ),
+      ),
       ),
     );
   }

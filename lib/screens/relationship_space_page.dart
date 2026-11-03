@@ -51,6 +51,7 @@ import '../utils/marquee_text.dart';
 import '../services/contact_names.dart';
 import '../widgets/keepsake_photo.dart';
 import '../widgets/heart_burst.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import '../utils/prefs_now.dart';
 
 part 'space/space_moment_composer.dart'; // moment composer + add-to-playlist sheet
@@ -291,9 +292,8 @@ Future<String?> pickDiaryReaction(BuildContext context, Color accent) {
                         InkWell(
                           onTap: () {
                             // A heart → the heart fountain, from the tap.
-                            if (HeartBurst.isHeart(em)) {
-                              HeartBurst.fromTap(ctx);
-                            }
+                            // Its fountain (hearts: the full show).
+                            HeartBurst.react(ctx, em);
                             Navigator.pop(ctx, em);
                           },
                           borderRadius: BorderRadius.circular(14),

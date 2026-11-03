@@ -37,6 +37,7 @@ import '../utils/connection_status.dart';
 import '../utils/time_utils.dart';
 import '../utils/file_bytes.dart';
 import '../utils/marquee_text.dart';
+import '../utils/prefs_now.dart';
 import 'live_session_screen.dart';
 import 'gif_picker.dart';
 import '../services/call_service.dart';
@@ -1241,6 +1242,10 @@ class _ChatPageState extends State<ChatPage>
     }
     if (type == 'msg_pulse_result') {
       _onPulseResult(event);
+      return;
+    }
+    if (type == 'message_reaction') {
+      _onLiveReaction(event);
       return;
     }
     if (type == 'held_released') {
@@ -3493,7 +3498,13 @@ class _ChatPageState extends State<ChatPage>
     final scheme = Theme.of(context).colorScheme;
     final isDark = scheme.brightness == Brightness.dark;
 
-    const reactions = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+    final reactions = _reactionOrder();
+    // Press-and-slide: the long-press that opened this menu can pick an
+    // emoji by sliding onto it and letting go.
+    _ReactSlide.pick = (e) {
+      _ReactSlide.closeMenu?.call();
+      _addReaction(msg, e);
+    };
 
     final softShadow = <BoxShadow>[
       BoxShadow(
@@ -3769,15 +3780,18 @@ class _ChatPageState extends State<ChatPage>
         shadow: softShadow,
         // Reactions live INSIDE the same card (top strip), so the menu reads
         // as one "respond to this message" surface instead of two loose pills.
-        header: _ReactionStrip(
-          reactions: reactions,
-          mine: _myReactionOn(msg),
-          isDark: isDark,
-          onPick: (e) {
-            Navigator.pop(ctx);
-            _addReaction(msg, e);
-          },
-        ),
+        header: Builder(builder: (_) {
+          _ReactSlide.closeMenu = () => Navigator.pop(ctx);
+          return _ReactionStrip(
+            reactions: reactions,
+            mine: _myReactionOn(msg),
+            isDark: isDark,
+            onPick: (e) {
+              Navigator.pop(ctx);
+              _addReaction(msg, e);
+            },
+          );
+        }),
       );
     }
 
@@ -3810,6 +3824,83 @@ class _ChatPageState extends State<ChatPage>
     }
   }
 
+  // ── Quick reactions ──────────────────────────────────────────────────────
+  static const List<String> _kBaseReactions = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
+  static const String _kReactCountKey = 'reaction_counts_v1';
+
+  /// The six quick reactions, my most-used first (❤️ leads until Aluta
+  /// learns otherwise).
+  List<String> _reactionOrder() {
+    Map<String, int> counts = {};
+    try {
+      final raw = prefsNow?.getString(_kReactCountKey);
+      if (raw != null) {
+        counts = (jsonDecode(raw) as Map)
+            .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+      }
+    } catch (_) {}
+    final list = List<String>.from(_kBaseReactions);
+    list.sort((a, b) {
+      final d = (counts[b] ?? 0).compareTo(counts[a] ?? 0);
+      return d != 0
+          ? d
+          : _kBaseReactions.indexOf(a).compareTo(_kBaseReactions.indexOf(b));
+    });
+    return list;
+  }
+
+  void _countReaction(String emoji) {
+    if (!_kBaseReactions.contains(emoji)) return;
+    try {
+      final p = prefsNow;
+      if (p == null) return;
+      final raw = p.getString(_kReactCountKey);
+      final m = raw == null
+          ? <String, dynamic>{}
+          : Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      m[emoji] = ((m[emoji] as num?)?.toInt() ?? 0) + 1;
+      p.setString(_kReactCountKey, jsonEncode(m));
+    } catch (_) {}
+  }
+
+  /// Double-tap a message → ❤️ (double-tap again takes it back).
+  void _quickHeart(Map<String, dynamic> msg) {
+    if (msg['is_deleted'] == true) return;
+    if ((msg['id']?.toString() ?? 'tmp-').startsWith('tmp-')) return;
+    HapticFeedback.lightImpact();
+    _addReaction(msg, '❤️');
+  }
+
+  /// Someone reacted to a message in this chat (live over the socket).
+  /// Update the bubble, and when it's THEIR new reaction on a message here,
+  /// play its fountain on my screen too — their ❤️ / 😂 lands while I watch.
+  void _onLiveReaction(Map<String, dynamic> event) {
+    final data = (event['data'] as Map?)?.cast<String, dynamic>();
+    if (data == null) return;
+    final id = data['message_id']?.toString();
+    if (id == null) return;
+    final i = _messages.indexWhere((m) => m['id']?.toString() == id);
+    if (i < 0) return;
+    final msg = _messages[i];
+    Map<String, dynamic> before = {}, after = {};
+    try {
+      final b = msg['reactions'];
+      if (b is String && b.isNotEmpty) before = Map.from(jsonDecode(b));
+      final a = data['reactions'];
+      if (a is String && a.isNotEmpty) after = Map.from(jsonDecode(a));
+    } catch (_) {}
+    String? landed;
+    after.forEach((who, e) {
+      if (who.toString() != _myId && before[who] != e) landed = e.toString();
+    });
+    setState(() => msg['reactions'] = data['reactions']);
+    final e = landed;
+    if (e != null && mounted && ModalRoute.of(context)?.isCurrent != false) {
+      final size = MediaQuery.sizeOf(context);
+      HeartBurst.react(context, e, origin: Offset(size.width / 2, 0));
+    }
+  }
+
   /// The emoji I've already reacted with on [msg] (highlighted in the menu).
   String? _myReactionOn(Map<String, dynamic> msg) {
     final raw = msg['reactions'];
@@ -3828,16 +3919,18 @@ class _ChatPageState extends State<ChatPage>
     final id = msg['id'];
     if (id == null) return;
     final myId = _myId;
-    // Hearting a message → Instagram-style heart fountain from the tap.
-    if (HeartBurst.isHeart(emoji)) {
-      var had = false;
-      try {
-        final raw = msg['reactions'];
-        if (raw is String && raw.isNotEmpty) {
-          had = (jsonDecode(raw) as Map)[myId] == emoji;
-        }
-      } catch (_) {}
-      if (!had) HeartBurst.fromTap(context);
+    // Adding a reaction → its fountain (hearts: the full heart show; other
+    // emojis: a lighter burst of that emoji). Removing → nothing.
+    var had = false;
+    try {
+      final raw = msg['reactions'];
+      if (raw is String && raw.isNotEmpty) {
+        had = (jsonDecode(raw) as Map)[myId] == emoji;
+      }
+    } catch (_) {}
+    if (!had) {
+      HeartBurst.react(context, emoji);
+      _countReaction(emoji);
     }
     setState(() {
       Map<String, dynamic> map = {};
@@ -5513,9 +5606,28 @@ class _ChatPageState extends State<ChatPage>
               isMe: isMe,
               onOpen: (pos) =>
                   _showMessageMenu(context, msg, anchor: pos),
+              reactions: (tomb || pending || msgId.startsWith('tmp-'))
+                  ? const []
+                  : _reactionOrder(),
+              mine: _myReactionOn(msg),
+              onReact: (e) => _addReaction(msg, e),
               child: GestureDetector(
-              onLongPressStart: (d) =>
-                  _showMessageMenu(context, msg, anchor: d.globalPosition),
+              // Double-tap a text message → ❤️ (again → take it back).
+              onDoubleTap: ((msg['message_type'] ?? 'text') == 'text' &&
+                      !tomb &&
+                      !pending)
+                  ? () => _quickHeart(msg)
+                  : null,
+              // Press → the menu opens with the emoji strip; keep the finger
+              // down and SLIDE onto an emoji, let go → reacted. Let go
+              // elsewhere → the menu simply stays open.
+              onLongPressStart: (d) {
+                _ReactSlide.begin();
+                _showMessageMenu(context, msg, anchor: d.globalPosition);
+              },
+              onLongPressMoveUpdate: (d) =>
+                  _ReactSlide.move(d.globalPosition),
+              onLongPressEnd: (_) => _ReactSlide.end(),
               onSecondaryTapDown: (d) =>
                   _showMessageMenu(context, msg, anchor: d.globalPosition),
               child: Row(
@@ -7481,6 +7593,76 @@ class _MsgActionMenuState extends State<_MsgActionMenu> {
 
 /// The quick-reaction strip at the top of the message card: emojis pop in
 /// one after another, and the one I already picked sits in a soft tinted pill.
+/// Press-and-slide reactions: the long-press that opens the message menu
+/// keeps tracking the finger; sliding over the menu's emoji strip lifts the
+/// emoji under it (with a tick), and letting go there reacts.
+class _ReactSlide {
+  static bool _active = false;
+  static final ValueNotifier<String?> hovered = ValueNotifier<String?>(null);
+  // The emoji targets currently on screen (registered by [_SlideTarget]).
+  static final Map<String, BuildContext> targets = {};
+  static void Function(String emoji)? pick;
+  static VoidCallback? closeMenu;
+
+  static void begin() {
+    _active = true;
+    hovered.value = null;
+  }
+
+  static void move(Offset global) {
+    if (!_active) return;
+    String? hit;
+    targets.forEach((e, ctx) {
+      if (!ctx.mounted) return;
+      final box = ctx.findRenderObject();
+      if (box is RenderBox && box.attached && box.hasSize) {
+        final r = (box.localToGlobal(Offset.zero) & box.size).inflate(8);
+        if (r.contains(global)) hit = e;
+      }
+    });
+    if (hit != hovered.value) {
+      hovered.value = hit;
+      if (hit != null) HapticFeedback.selectionClick();
+    }
+  }
+
+  static void end() {
+    if (!_active) return;
+    _active = false;
+    final e = hovered.value;
+    hovered.value = null;
+    if (e != null) pick?.call(e);
+  }
+}
+
+/// Registers one emoji of the strip as a press-and-slide target.
+class _SlideTarget extends StatefulWidget {
+  const _SlideTarget({required this.emoji, required this.child});
+  final String emoji;
+  final Widget child;
+  @override
+  State<_SlideTarget> createState() => _SlideTargetState();
+}
+
+class _SlideTargetState extends State<_SlideTarget> {
+  @override
+  void initState() {
+    super.initState();
+    _ReactSlide.targets[widget.emoji] = context;
+  }
+
+  @override
+  void dispose() {
+    if (_ReactSlide.targets[widget.emoji] == context) {
+      _ReactSlide.targets.remove(widget.emoji);
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
 class _ReactionStrip extends StatelessWidget {
   const _ReactionStrip({
     required this.reactions,
@@ -7511,17 +7693,33 @@ class _ReactionStrip extends StatelessWidget {
                     .clamp(0.0, 1.2),
                 child: child,
               ),
-              child: Container(
-                decoration: reactions[i] == mine
-                    ? BoxDecoration(
-                        color: scheme.primary
-                            .withValues(alpha: isDark ? 0.24 : 0.14),
-                        shape: BoxShape.circle,
-                      )
-                    : null,
-                child: _ReactionButton(
+              // Lifts + grows while a press-and-slide finger is over it.
+              child: ValueListenableBuilder<String?>(
+                valueListenable: _ReactSlide.hovered,
+                builder: (_, hov, child) => AnimatedSlide(
+                  duration: const Duration(milliseconds: 120),
+                  offset: Offset(0, hov == reactions[i] ? -0.35 : 0),
+                  child: AnimatedScale(
+                    duration: const Duration(milliseconds: 120),
+                    scale: hov == reactions[i] ? 1.45 : 1.0,
+                    child: child,
+                  ),
+                ),
+                child: _SlideTarget(
                   emoji: reactions[i],
-                  onTap: () => onPick(reactions[i]),
+                  child: Container(
+                  decoration: reactions[i] == mine
+                      ? BoxDecoration(
+                          color: scheme.primary
+                              .withValues(alpha: isDark ? 0.24 : 0.14),
+                          shape: BoxShape.circle,
+                        )
+                      : null,
+                  child: _ReactionButton(
+                    emoji: reactions[i],
+                    onTap: () => onPick(reactions[i]),
+                  ),
+                ),
                 ),
               ),
             ),
@@ -7937,11 +8135,19 @@ class _HoverChevron extends StatefulWidget {
     required this.isMe,
     required this.onOpen,
     required this.child,
+    this.reactions = const [],
+    this.mine,
+    this.onReact,
   });
   final bool enabled;
   final bool isMe;
   final void Function(Offset globalAnchor) onOpen;
   final Widget child;
+  // Desktop quick reactions: a 😊 chip beside the chevron that unfolds the
+  // emoji row on hover — one click reacts.
+  final List<String> reactions;
+  final String? mine;
+  final ValueChanged<String>? onReact;
 
   @override
   State<_HoverChevron> createState() => _HoverChevronState();
@@ -7949,6 +8155,66 @@ class _HoverChevron extends StatefulWidget {
 
 class _HoverChevronState extends State<_HoverChevron> {
   bool _hover = false;
+  bool _reactOpen = false;
+
+  Widget _chip(ColorScheme scheme, Widget child) => Container(
+        width: 26,
+        height: 26,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          shape: BoxShape.circle,
+          border:
+              Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.28),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: child,
+      );
+
+  Widget _reactRow(ColorScheme scheme) => MouseRegion(
+        onExit: (_) => setState(() => _reactOpen = false),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+                color: scheme.outlineVariant.withValues(alpha: 0.55)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.28),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            for (final e in widget.reactions)
+              InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () {
+                  setState(() => _reactOpen = false);
+                  widget.onReact?.call(e);
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: e == widget.mine
+                      ? BoxDecoration(
+                          color: scheme.primary.withValues(alpha: 0.18),
+                          shape: BoxShape.circle)
+                      : null,
+                  child: Text(e, style: const TextStyle(fontSize: 18)),
+                ),
+              ),
+          ]),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -7956,11 +8222,33 @@ class _HoverChevronState extends State<_HoverChevron> {
     final scheme = Theme.of(context).colorScheme;
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
+      onExit: (_) => setState(() {
+        _hover = false;
+        _reactOpen = false;
+      }),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           _HoverScope(hovering: _hover, child: widget.child),
+          // 😊 → hover unfolds the quick reactions above the bubble.
+          if (_hover && widget.onReact != null && widget.reactions.isNotEmpty)
+            Positioned(
+              top: _reactOpen ? -34 : 0,
+              left: widget.isMe ? null : 72,
+              right: widget.isMe ? 38 : null,
+              child: _reactOpen
+                  ? _reactRow(scheme)
+                  : MouseRegion(
+                      onEnter: (_) => setState(() => _reactOpen = true),
+                      child: GestureDetector(
+                        onTap: () => setState(() => _reactOpen = true),
+                        child: _chip(
+                            scheme,
+                            const Text('😊',
+                                style: TextStyle(fontSize: 14, height: 1))),
+                      ),
+                    ),
+            ),
           if (_hover)
             Positioned(
               // Sit ON the bubble's rounded top corner (overlapping inward),

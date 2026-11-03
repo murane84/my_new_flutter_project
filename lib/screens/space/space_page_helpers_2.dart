@@ -255,7 +255,10 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
           curve: Curves.easeOutCubic);
     }
 
-    return Padding(
+    return GestureDetector(
+      // Double-tap the page → ❤️ (again → take it back).
+      onDoubleTap: () => _doubleTapHeart(e, () => _reactDiary(e, '❤️')),
+      child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       child: Stack(
         children: [
@@ -533,6 +536,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
             ),
         ],
       ),
+    ),
     );
   }
 

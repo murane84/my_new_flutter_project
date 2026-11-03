@@ -618,6 +618,8 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
 
     return GestureDetector(
       key: _momentKeys.putIfAbsent(id, () => GlobalKey()),
+      // Double-tap → ❤️ (again → take it back).
+      onDoubleTap: () => _doubleTapHeart(m, () => _reactMoment(id, '❤️')),
       onLongPress: mine ? () => _confirmDeleteMoment(id) : null,
       // Right-click on desktop opens the same delete, matching comments.
       onSecondaryTap: mine ? () => _confirmDeleteMoment(id) : null,
@@ -1045,6 +1047,18 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
     return DateFormat('MMM d').format(dt.toLocal());
   }
 
+  /// Double-tap a moment / memory / plan → ❤️ (the fountain plays when the
+  /// heart is ADDED; a second double-tap takes it back quietly).
+  void _doubleTapHeart(Map<String, dynamic> item, VoidCallback react) {
+    final mineR = ((item['my_reactions'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .toSet();
+    final has = mineR.any(HeartBurst.isHeart);
+    HapticFeedback.lightImpact();
+    if (!has) HeartBurst.react(context, '❤️');
+    react();
+  }
+
   Future<void> _reactMoment(int momentId, String emoji) async {
     final res = await ApiService().reactMoment(_id, momentId, emoji);
     if (!mounted) return;
@@ -1362,7 +1376,9 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
     final when = d != null
         ? '${DateFormat('EEE, MMM d').format(d)} · ${_relDay(DateTime(d.year, d.month, d.day))}'
         : 'No date yet';
-    return Container(
+    return GestureDetector(
+      onDoubleTap: () => _doubleTapHeart(e, () => _reactDiary(e, '❤️')),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -1441,6 +1457,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
           _diaryEngagement(scheme, e),
         ],
       ),
+    ),
     );
   }
 

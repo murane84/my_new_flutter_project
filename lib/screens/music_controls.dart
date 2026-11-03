@@ -46,6 +46,7 @@ import 'chat/song_cache.dart';
 import 'music/song_identifier.dart' show showSongIdentifier;
 import '../widgets/genie_menu.dart';
 import '../widgets/tap_chip.dart';
+import '../widgets/heart_burst.dart';
 import '../widgets/person_avatar.dart';
 import '../widgets/playing_bars.dart';
 import '../widgets/song_feel_strip.dart';
@@ -1871,9 +1872,13 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // ── Favorites ──────────────────────────────────────────────────────────────
 
   void _toggleFavorite(String path) {
+    final liking = !_favorites.contains(path);
     setState(() => _favorites.contains(path)
         ? _favorites.remove(path)
         : _favorites.add(path));
+    // Instagram-style: a fountain of hearts shoots up from wherever the
+    // like came from (double-tap on the record, a heart button, the bar).
+    if (liking && mounted) HeartBurst.at(context, gLastTapDownGlobal);
     _saveFavorites();
     _syncFavoriteAmbient();
   }

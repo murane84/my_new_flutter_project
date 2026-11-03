@@ -577,6 +577,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _sleepTimer?.cancel();
     _sleepTick?.cancel();
     _lastTrackTimer?.cancel();
+    _busyTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _saveLastTrack();
     _discCtrl.dispose();
@@ -793,6 +794,32 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   /// The Glow partner, when bonded — null otherwise.
   int? get _partnerId => SongBridge.instance.partnerId?.call();
+
+  // ── Honest "is it loading?" ────────────────────────────────────────────
+  static const Duration _kMaxLoad = Duration(seconds: 12);
+  DateTime? _busySince;
+  Timer? _busyTimer;
+
+  /// True only while a song is REALLY on its way: the player is loading /
+  /// buffering AND it started less than [_kMaxLoad] ago. A load that hangs
+  /// (or nothing loaded at all) shows the idle play button, not a spinner.
+  bool get _loadingNow {
+    final s = _player.processingState;
+    if (s != ProcessingState.loading && s != ProcessingState.buffering) {
+      return false;
+    }
+    final since = _busySince;
+    return since == null || DateTime.now().difference(since) < _kMaxLoad;
+  }
+
+  /// Nothing real is loaded (idle, or a load that never finished).
+  bool get _nothingLoaded {
+    final s = _player.processingState;
+    if (s == ProcessingState.idle) return true;
+    return (s == ProcessingState.loading || s == ProcessingState.buffering) &&
+        !_loadingNow &&
+        (_player.duration == null || _player.duration == Duration.zero);
+  }
 
   // ── Hero card extras ────────────────────────────────────────────────────
   String get _partnerFirst {
@@ -1260,6 +1287,24 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
     // Completion is handled separately — avoids calling _play() synchronously
     // inside a stream callback, which causes just_audio race conditions.
+    // Track how long the player has been "loading": a load that never
+    // finishes (missing file, stuck engine) must not spin forever.
+    _player.processingStateStream.listen((state) {
+      final busy = state == ProcessingState.loading ||
+          state == ProcessingState.buffering;
+      if (busy) {
+        if (_busySince == null) {
+          _busySince = DateTime.now();
+          _busyTimer?.cancel();
+          _busyTimer = Timer(_kMaxLoad, () {
+            if (mounted) setState(() {}); // re-evaluate → spinner stops
+          });
+        }
+      } else {
+        _busySince = null;
+        _busyTimer?.cancel();
+      }
+    });
     _player.processingStateStream.listen((state) {
       if (state == ProcessingState.completed) {
         // Ignore the spurious "completed" emitted while we swap the source for
@@ -1619,6 +1664,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     }
     if (_currentIndex < 0) {
       _play(0);
+      return;
+    }
+    // Nothing actually loaded (cold start restore failed, a hung load):
+    // open the current song afresh instead of "playing" an empty player.
+    if (!_player.playing && _nothingLoaded) {
+      _play(_currentIndex);
       return;
     }
     _player.playing ? await _player.pause() : await _player.play();

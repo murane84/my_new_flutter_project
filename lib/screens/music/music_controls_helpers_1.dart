@@ -663,12 +663,8 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                                       : (st == null
                                           ? _player.playing
                                           : realPlaying);
-                                  final buffering = !live &&
-                                      st != null &&
-                                      (st.processingState ==
-                                              ProcessingState.loading ||
-                                          st.processingState ==
-                                              ProcessingState.buffering);
+                                  // Honest: a hung / empty load never spins.
+                                  final buffering = !live && _loadingNow;
                                   // Same key as the music card: the icon turns
                                   // play ↔ pause and a light ring orbits it
                                   // while playing.

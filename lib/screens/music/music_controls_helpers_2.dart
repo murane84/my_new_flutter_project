@@ -227,12 +227,23 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
     } on TimeoutException catch (_) {
       // Treat a stuck open as unplayable so the UI recovers instead of
       // spinning; _pruneIfMissing decides whether the file is actually gone.
+      // Stop the engine too, or it stays "loading" (spinner) forever.
+      await _settleIdle();
       return 'missing';
     } on PlayerException catch (e) {
+      await _settleIdle();
       return e.message ?? 'format';
     } catch (_) {
+      await _settleIdle();
       return 'format';
     }
+  }
+
+  /// After a failed open: drop to a clean idle state so nothing spins.
+  Future<void> _settleIdle() async {
+    try {
+      await _player.stop();
+    } catch (_) {}
   }
 
   /// Whether [path] still exists on disk. Web has no real files, so assume yes.
@@ -327,8 +338,14 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
     // and drives the LIVE track instead of the local library.
     final live = _liveActive;
     final lc = _live;
-    final isPlaying =
-        live ? (lc?.player.playing ?? false) : _player.playing;
+    // Really playing = the player says so AND a song is actually loaded
+    // (not idle, not finished, not a hung load) — so the disc, orbit ring
+    // and equalizer never animate over silence.
+    final isPlaying = live
+        ? (lc?.player.playing ?? false)
+        : (_player.playing &&
+            _player.processingState != ProcessingState.completed &&
+            !_nothingLoaded);
     final hasTrack = _currentIndex >= 0 && _playlist.isNotEmpty; // local
     final controlsOn = live || hasTrack;
     final position =
@@ -339,8 +356,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
     final buffering = live
         ? (lc?.player.processingState == ProcessingState.buffering ||
             lc?.player.processingState == ProcessingState.loading)
-        : (_player.processingState == ProcessingState.buffering ||
-            _player.processingState == ProcessingState.loading);
+        : _loadingNow;
     final sliderMax = duration.inMilliseconds > 0
         ? duration.inMilliseconds.toDouble()
         : 1.0;
@@ -975,8 +991,10 @@ Column(
                   return Center(
                     child: VisibilityDetector(
                       key: const ValueKey('aluta-hero-disc'),
-                      onVisibilityChanged: (v) =>
-                          _setHostingBusy(v.visibleFraction > 0.5),
+                      // The record no longer stands in for app-busy (only a
+                      // real song load sweeps its ring), so the app's own
+                      // loader shows as on every other page.
+                      onVisibilityChanged: (_) => _setHostingBusy(false),
                       child: SizedBox(
                         width: side + 18,
                         height: side + 18,
@@ -984,13 +1002,13 @@ Column(
                           alignment: Alignment.center,
                           children: [
                             discWidget(side),
-                            ValueListenableBuilder<int>(
-                              valueListenable: appBusy.major,
-                              builder: (_, major, _) => _DiscLoadRing(
-                                active: buffering || major > 0,
-                                side: side + 18,
-                                accent: accent,
-                              ),
+                            // Only a song that's REALLY loading sweeps the
+                            // ring — not app work (reconnecting etc. has its
+                            // own indicator), and never a hung / empty load.
+                            _DiscLoadRing(
+                              active: buffering,
+                              side: side + 18,
+                              accent: accent,
                             ),
                           ],
                         ),

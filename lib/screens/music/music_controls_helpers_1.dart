@@ -405,12 +405,21 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                                         cc.maxHeight - 64 - lyrH)
                                     .clamp(0.0, 360.0)
                                     .toDouble()
-                                : (cc.maxWidth < cc.maxHeight
-                                        ? cc.maxWidth
-                                        : cc.maxHeight)
+                                : min(
+                                        cc.maxWidth,
+                                        // Phone: room under the record for
+                                        // the previous / next names (eases
+                                        // away as the queue opens).
+                                        cc.maxHeight -
+                                            64 *
+                                                (1 - openT.clamp(0.0, 1.0)))
                                     .clamp(0.0,
                                         360.0 - 210.0 * openT.clamp(0.0, 1.0))
                                     .toDouble();
+                            // Phone, queue closed: the same peek stage as
+                            // the wide screen — previous / next names (tap
+                            // to skip) and the place-in-list dots.
+                            final peekPhone = !split && openT < 0.05;
                             final discW = AnimatedBuilder(
                               animation: PlayerStyleController.instance,
                               builder: (context, _) {
@@ -449,7 +458,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                                 );
                               },
                             );
-                            return split
+                            return (split || peekPhone)
                                 ? _peekStage(discW, side, cc.maxWidth, accent,
                                     scheme, setFull,
                                     lyricH: lyrH)
@@ -502,6 +511,9 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                               )
                             : null,
                       ),
+                      // Partner listening too (tap → tune in), else this
+                      // song's memory: first heard · with whom · plays.
+                      if (openT < 0.5) _songStoryLine(scheme, accent),
                       // Dedicate this song ❤ — phones and desktop (web plays
                       // in-memory files, nothing to send). Slot always held.
                       if (!kIsWeb && !live && hasTrack)
@@ -1668,6 +1680,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
           setFull(() {});
         }
       },
+      onLongPress: _recordMenu,
       onHorizontalDragEnd: (d) {
         final v = d.primaryVelocity ?? 0;
         if (v < -120) {

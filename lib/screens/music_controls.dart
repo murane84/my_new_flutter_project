@@ -34,6 +34,8 @@ import 'package:on_audio_query/on_audio_query.dart';
 import 'package:palette_generator/palette_generator.dart';
 import '../services/song_library.dart';
 import '../services/song_insights.dart';
+import '../services/now_playing_presence.dart';
+import '../widgets/tune_in_ask.dart';
 import '../utils/bounce_tap.dart';
 import 'music/player_disc_style.dart';
 import 'listening_audience_sheet.dart';
@@ -792,6 +794,247 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   /// The Glow partner, when bonded — null otherwise.
   int? get _partnerId => SongBridge.instance.partnerId?.call();
 
+  // ── Hero card extras ────────────────────────────────────────────────────
+  String get _partnerFirst {
+    final n = (SongBridge.instance.partnerName?.call() ?? '').trim();
+    return n.isEmpty ? 'Your partner' : n.split(RegExp(r'\s+')).first;
+  }
+
+  /// What my partner is playing right now (null = not listening / no bond).
+  ({String title, bool same})? get _partnerPlaying {
+    final pid = _partnerId;
+    if (pid == null) return null;
+    final t = NowPlayingPresence.instance.trackFor(pid);
+    if (t == null) return null;
+    final title = (t['title'] ?? '').toString().trim();
+    if (title.isEmpty) return null;
+    return (
+      title: title,
+      same: title.toLowerCase() == _trackName.trim().toLowerCase()
+    );
+  }
+
+  void _tuneInPartner() {
+    final pid = _partnerId;
+    final p = _partnerPlaying;
+    if (pid == null || p == null || p.same) return;
+    askToTuneIn(context, friendId: pid, name: _partnerFirst, title: p.title);
+  }
+
+  /// Home card: a tiny badge by the broadcast icon while my partner is
+  /// listening — their initial with a small pulsing ring. Tap → tune in.
+  /// Nothing at all when they aren't.
+  Widget _partnerBadge(Color accent) {
+    return AnimatedBuilder(
+      animation: NowPlayingPresence.instance,
+      builder: (context, _) {
+        final p = _partnerPlaying;
+        if (p == null || _liveActive) return const SizedBox.shrink();
+        final name = _partnerFirst;
+        return Tooltip(
+          message: p.same
+              ? 'You\'re both on this song 💞'
+              : '$name is listening to “${p.title}” · tap to tune in',
+          child: BounceTap(
+            onTap: _tuneInPartner,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Stack(clipBehavior: Clip.none, children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: accent.withValues(alpha: 0.22),
+                    border: Border.all(color: accent, width: 1.4),
+                  ),
+                  child: Text(name.characters.first.toUpperCase(),
+                      style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          color: accent)),
+                ),
+                Positioned(
+                  right: -3,
+                  bottom: -3,
+                  child: Container(
+                    padding: const EdgeInsets.all(1.5),
+                    decoration: BoxDecoration(
+                        color: accent, shape: BoxShape.circle),
+                    child: Icon(
+                        p.same
+                            ? Icons.favorite_rounded
+                            : Icons.headphones_rounded,
+                        size: 9,
+                        color: onAccent(accent)),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Full Now Playing: ONE quiet line under the artist — my partner
+  /// listening (tap to tune in) wins; else this song's memory ("First heard
+  /// 29 Oct · together with Wifey · played 14 times"). Fixed height.
+  Widget _songStoryLine(ColorScheme scheme, Color accent) {
+    return SizedBox(
+      height: 20,
+      child: AnimatedBuilder(
+        animation: Listenable.merge(
+            [NowPlayingPresence.instance, SongInsights.instance.feelsRev]),
+        builder: (context, _) {
+          final p = _liveActive ? null : _partnerPlaying;
+          if (p != null) {
+            return Center(
+              child: GestureDetector(
+                onTap: p.same ? null : _tuneInPartner,
+                child: Text(
+                  p.same
+                      ? 'You and $_partnerFirst are both on this song 💞'
+                      : '🎧 $_partnerFirst is listening too · Tune in',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: accent),
+                ),
+              ),
+            );
+          }
+          if (_liveActive || _trackName.trim().isEmpty) {
+            return const SizedBox.shrink();
+          }
+          final st = SongInsights.instance.songStats(_trackName);
+          if (st == null) return const SizedBox.shrink();
+          final parts = <String>[];
+          final at = st.firstAt;
+          if (at != null) {
+            const mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul',
+                'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            final now = DateTime.now();
+            final gap = DateTime(now.year, now.month, now.day)
+                .difference(DateTime(at.year, at.month, at.day))
+                .inDays;
+            final when = gap == 0
+                ? 'today'
+                : gap == 1
+                    ? 'yesterday'
+                    : '${at.day} ${mo[at.month - 1]}'
+                        '${at.year == now.year ? '' : ' ${at.year}'}';
+            final w = (st.firstWith ?? '').split(RegExp(r'\s+')).first;
+            parts.add(w.isEmpty
+                ? 'First heard $when'
+                : 'First heard $when with $w');
+          }
+          if (st.total > 1) parts.add('played ${st.total} times');
+          if (parts.isEmpty) return const SizedBox.shrink();
+          return Center(
+            child: Text('✨ ${parts.join(' · ')}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurfaceVariant)),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Long-press the record (home card or Now Playing): the song's quick
+  /// actions, hidden until wanted.
+  Future<void> _recordMenu() async {
+    if (_liveActive || _currentIndex < 0 || _currentIndex >= _playlist.length) {
+      return;
+    }
+    final path = _playlist[_currentIndex];
+    final scheme = Theme.of(context).colorScheme;
+    final hasPartner = _partnerId != null;
+    HapticFeedback.mediumImpact();
+    final pick = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        Widget item(IconData i, String label, String v) => ListTile(
+              leading: Icon(i, color: scheme.primary),
+              title: Text(label),
+              onTap: () => Navigator.pop(ctx, v),
+            );
+        return SafeArea(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              margin: const EdgeInsets.only(top: 8, bottom: 6),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: scheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 2, 20, 6),
+              child: Text(_trackName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: scheme.onSurface)),
+            ),
+            if (!kIsWeb) item(Icons.volunteer_activism_rounded,
+                'Dedicate this song', 'dedicate'),
+            if (hasPartner) item(Icons.playlist_add_rounded,
+                'Add to Our Playlist', 'ours'),
+            if (hasPartner) item(Icons.favorite_rounded,
+                'Set as our song', 'oursong'),
+            item(Icons.lyrics_rounded, 'Lyrics', 'lyrics'),
+            item(Icons.share_rounded, 'Share', 'share'),
+            const SizedBox(height: 6),
+          ]),
+        );
+      },
+    );
+    if (!mounted || pick == null) return;
+    switch (pick) {
+      case 'dedicate':
+        showSongDedicate(
+          context,
+          fileName: path.replaceAll('\\', '/').split('/').last,
+          title: metadataStore.title(path, _nameFromPath(path)),
+          artist: metadataStore.artist(path, ''),
+          loadBytes: () => readFileBytes(path),
+          durationMs: _player.duration?.inMilliseconds,
+        );
+      case 'ours':
+        final ok = await SongBridge.instance.addToOurs
+                ?.call(_trackName, _artistName) ??
+            false;
+        if (mounted) {
+          showToast(context,
+              ok ? 'Added to Our Playlist 💞' : "Couldn't add it right now",
+              type: ok ? ToastType.success : ToastType.error);
+        }
+      case 'oursong':
+        SongInsights.instance.markOurs(_trackName);
+        if (mounted) {
+          showToast(context, 'Saved as your song with $_partnerFirst 💞',
+              type: ToastType.success);
+        }
+      case 'lyrics':
+        _openLyrics();
+      case 'share':
+        _shareSong(path);
+    }
+  }
+
   /// Fill [_durMs] once from the device library (mobile has lengths there);
   /// songs played elsewhere get theirs as they load.
   Future<void> _loadQueueDurations(StateSetter setFull) async {
@@ -1227,7 +1470,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _switching = true;
 
     final initTitle = metadataStore.title(path, _nameFromPath(path));
-    final initArtist = metadataStore.artist(path, '');
+    final initArtist = _cleanArtist(metadataStore.artist(path, ''));
     // Aluta learns what you play (on-device only) → gentle music nudges.
     SongInsights.instance.recordPlay(initTitle, artist: initArtist);
     setState(() {
@@ -1298,6 +1541,18 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     return true;
   }
 
+  static bool _blankTag(String? s) {
+    final t = (s ?? '').trim().toLowerCase();
+    return t.isEmpty || t == '<unknown>' || t == 'unknown' ||
+        t == 'unknown artist';
+  }
+
+  String _cleanArtist(String? artist, [String? album]) {
+    if (!_blankTag(artist)) return artist!.trim();
+    if (!_blankTag(album)) return album!.trim();
+    return '';
+  }
+
   Future<void> _fetchMetadata(String path) async {
     try {
       final songs = await SongLibrary.songs();
@@ -1308,7 +1563,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         // User overrides win over the file's own tags.
         final t = metadataStore.title(
             path, m.title.isNotEmpty ? m.title : _nameFromPath(path));
-        final a = metadataStore.artist(path, m.artist ?? '');
+        // "<unknown>" (no artist tag) → the album name, else nothing — the
+        // card never shows the raw "<unknown>".
+        final a = _cleanArtist(
+            metadataStore.artist(path, m.artist ?? ''), m.album);
         setState(() {
           _trackName = t;
           _artistName = a;
@@ -1496,7 +1754,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       final idx = _playlist.indexOf(path);
       if (idx < 0) return; // track no longer in the playlist — skip
       final initTitle = metadataStore.title(path, _nameFromPath(path));
-      final initArtist = metadataStore.artist(path, '');
+      final initArtist = _cleanArtist(metadataStore.artist(path, ''));
       if (!mounted) return;
       setState(() {
         _currentIndex = idx;

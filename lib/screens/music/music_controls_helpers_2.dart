@@ -842,6 +842,8 @@ GestureDetector(
                     onDoubleTap: (!live && hasTrack)
                         ? () => _toggleFavorite(_playlist[_currentIndex])
                         : null,
+                    // Long-press → the song's quick actions.
+                    onLongPress: (!live && hasTrack) ? _recordMenu : null,
                     onHorizontalDragEnd: controlsOn
                         ? (d) {
                             final v = d.primaryVelocity ?? 0;
@@ -1026,6 +1028,8 @@ Column(
                     ),
                   ),
                   const Spacer(),
+                  // Partner listening right now → their tiny badge.
+                  _partnerBadge(accent),
                   PresenceShareButton(color: accent, size: 20),
                   if (!live && hasTrack) BounceTap(
                           onTap: () =>

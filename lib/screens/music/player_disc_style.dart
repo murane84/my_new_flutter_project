@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../utils/readable.dart';
+import '../home_page.dart' show playProgressNotifier;
 
 /// The look of the big rotating "now playing" glyph. The user can switch
 /// between these from the player; the choice is remembered across launches.
@@ -1023,9 +1024,13 @@ class _ClassicVinylState extends State<_ClassicVinyl>
         // Tonearm — fixed save for the lift swing around its pivot.
         Positioned.fill(
           child: AnimatedBuilder(
-            animation: _lift,
+            // Like a real turntable, the resting arm creeps from the outer
+            // groove (song start) toward the centre (song end).
+            animation: Listenable.merge([_lift, playProgressNotifier]),
             builder: (_, _) => Transform.rotate(
-              angle: -_lift.value * 1.25,
+              angle: -_lift.value * 1.25 +
+                  (1 - _lift.value) *
+                      (0.12 - 0.24 * playProgressNotifier.value.clamp(0.0, 1.0)),
               // Must match the painter's pivot (0.89, 0.17) in -1..1 space.
               alignment: const Alignment(0.78, -0.66),
               child: CustomPaint(

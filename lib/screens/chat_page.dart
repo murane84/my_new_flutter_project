@@ -7776,6 +7776,9 @@ class _MsgActionMenuState extends State<_MsgActionMenu> {
 class _ReactSlide {
   static bool _active = false;
   static final ValueNotifier<String?> hovered = ValueNotifier<String?>(null);
+  // True while the finger that opened the menu is still down (shows the
+  // "slide to an emoji" hint in the strip).
+  static final ValueNotifier<bool> sliding = ValueNotifier<bool>(false);
   // The emoji targets currently on screen (registered by [_SlideTarget]).
   static final Map<String, BuildContext> targets = {};
   static void Function(String emoji)? pick;
@@ -7784,6 +7787,7 @@ class _ReactSlide {
   static void begin() {
     _active = true;
     hovered.value = null;
+    sliding.value = true;
   }
 
   static void move(Offset global) {
@@ -7806,6 +7810,7 @@ class _ReactSlide {
   static void end() {
     if (!_active) return;
     _active = false;
+    sliding.value = false;
     final e = hovered.value;
     hovered.value = null;
     if (e != null) pick?.call(e);
@@ -7857,7 +7862,8 @@ class _ReactionStrip extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
-      child: Row(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           for (var i = 0; i < reactions.length; i++)
@@ -7902,6 +7908,34 @@ class _ReactionStrip extends StatelessWidget {
             ),
         ],
       ),
+      // While the finger that opened the menu is still down: say what to
+      // do, then name the emoji under it.
+      ValueListenableBuilder<bool>(
+        valueListenable: _ReactSlide.sliding,
+        builder: (_, sliding, _) => AnimatedSize(
+          duration: const Duration(milliseconds: 160),
+          child: !sliding
+              ? const SizedBox(width: double.infinity)
+              : ValueListenableBuilder<String?>(
+                  valueListenable: _ReactSlide.hovered,
+                  builder: (_, hov, _) => Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      hov == null
+                          ? 'Slide onto an emoji · let go to react'
+                          : 'Let go to react $hov',
+                      style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: hov == null
+                              ? scheme.onSurfaceVariant
+                              : scheme.primary),
+                    ),
+                  ),
+                ),
+        ),
+      ),
+      ]),
     );
   }
 }
@@ -8332,7 +8366,43 @@ class _HoverChevron extends StatefulWidget {
 
 class _HoverChevronState extends State<_HoverChevron> {
   bool _hover = false;
-  bool _reactOpen = false;
+  // Desktop quick reactions float in an overlay ABOVE the bubble (a child
+  // positioned outside the bubble can't be hovered or clicked), anchored to
+  // it: a 😊 chip that unfolds into the emoji row.
+  final _link = LayerLink();
+  final _portal = OverlayPortalController();
+  bool _rowOpen = false; // the full emoji row (vs. the 😊 chip)
+  bool _overFloat = false; // pointer is on the floating chip / row
+  Timer? _hideTimer;
+
+  bool get _canReact =>
+      widget.onReact != null && widget.reactions.isNotEmpty;
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    super.dispose();
+  }
+
+  void _enterBubble() {
+    _hideTimer?.cancel();
+    if (!_hover) setState(() => _hover = true);
+    if (_canReact && !_portal.isShowing) _portal.show();
+  }
+
+  // Leaving the bubble toward the floating chip must not close it: wait a
+  // beat, and only close if the pointer didn't land on the chip / row.
+  void _leaveSoon() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(milliseconds: 220), () {
+      if (!mounted || _overFloat) return;
+      setState(() {
+        _hover = false;
+        _rowOpen = false;
+      });
+      if (_portal.isShowing) _portal.hide();
+    });
+  }
 
   Widget _chip(ColorScheme scheme, Widget child) => Container(
         width: 26,
@@ -8354,113 +8424,153 @@ class _HoverChevronState extends State<_HoverChevron> {
         child: child,
       );
 
-  Widget _reactRow(ColorScheme scheme) => MouseRegion(
-        onExit: (_) => setState(() => _reactOpen = false),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          decoration: BoxDecoration(
-            color: scheme.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-                color: scheme.outlineVariant.withValues(alpha: 0.55)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.28),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            for (final e in widget.reactions)
-              InkWell(
-                customBorder: const CircleBorder(),
-                onTap: () {
-                  setState(() => _reactOpen = false);
-                  widget.onReact?.call(e);
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: e == widget.mine
-                      ? BoxDecoration(
-                          color: scheme.primary.withValues(alpha: 0.18),
-                          shape: BoxShape.circle)
-                      : null,
-                  child: Text(e, style: const TextStyle(fontSize: 18)),
+  Widget _floating(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final content = _rowOpen
+        ? Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.55)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.28),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
-              ),
-          ]),
+              ],
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              for (final e in widget.reactions)
+                _HoverEmoji(
+                  emoji: e,
+                  mine: e == widget.mine,
+                  scheme: scheme,
+                  onTap: () {
+                    setState(() => _rowOpen = false);
+                    widget.onReact?.call(e);
+                  },
+                ),
+            ]),
+          )
+        : GestureDetector(
+            onTap: () => setState(() => _rowOpen = true),
+            child: _chip(
+                scheme,
+                const Text('😊', style: TextStyle(fontSize: 14, height: 1))),
+          );
+    return CompositedTransformFollower(
+      link: _link,
+      showWhenUnlinked: false,
+      // Just above the bubble's top corner (outside it — never over the
+      // text): right corner for my bubbles, left for theirs.
+      targetAnchor: widget.isMe ? Alignment.topRight : Alignment.topLeft,
+      followerAnchor:
+          widget.isMe ? Alignment.bottomRight : Alignment.bottomLeft,
+      offset: Offset(widget.isMe ? -8 : 40, 4),
+      child: Align(
+        alignment: widget.isMe ? Alignment.bottomRight : Alignment.bottomLeft,
+        widthFactor: 1,
+        heightFactor: 1,
+        child: MouseRegion(
+          onEnter: (_) {
+            _overFloat = true;
+            _hideTimer?.cancel();
+            if (!_rowOpen) setState(() => _rowOpen = true);
+          },
+          onExit: (_) {
+            _overFloat = false;
+            _leaveSoon();
+          },
+          child: Material(type: MaterialType.transparency, child: content),
         ),
-      );
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     if (!widget.enabled) return widget.child;
     final scheme = Theme.of(context).colorScheme;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() {
-        _hover = false;
-        _reactOpen = false;
-      }),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          _HoverScope(hovering: _hover, child: widget.child),
-          // 😊 → hover unfolds the quick reactions above the bubble.
-          if (_hover && widget.onReact != null && widget.reactions.isNotEmpty)
-            Positioned(
-              top: _reactOpen ? -34 : 0,
-              left: widget.isMe ? null : 72,
-              right: widget.isMe ? 38 : null,
-              child: _reactOpen
-                  ? _reactRow(scheme)
-                  : MouseRegion(
-                      onEnter: (_) => setState(() => _reactOpen = true),
-                      child: GestureDetector(
-                        onTap: () => setState(() => _reactOpen = true),
-                        child: _chip(
-                            scheme,
-                            const Text('😊',
-                                style: TextStyle(fontSize: 14, height: 1))),
-                      ),
-                    ),
-            ),
-          if (_hover)
-            Positioned(
-              // Sit ON the bubble's rounded top corner (overlapping inward),
-              // not floating above it — so it hugs the corner and never looks
-              // like it overflows its own bubble or hits the tail above.
-              top: 0,
-              left: widget.isMe ? null : 42,
-              right: widget.isMe ? 8 : null,
-              child: GestureDetector(
-                onTapDown: (d) => widget.onOpen(d.globalPosition),
-                child: Container(
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    // Its OWN solid chip (theme surface + outline + shadow), so
-                    // it's immune to the bubble colour — a bright/neon bubble
-                    // can't swallow it, and it reads in both light and dark.
-                    color: scheme.surface,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                        color: scheme.outlineVariant.withValues(alpha: 0.55)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.28),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+    return OverlayPortal(
+      controller: _portal,
+      overlayChildBuilder: _floating,
+      child: CompositedTransformTarget(
+        link: _link,
+        child: MouseRegion(
+          onEnter: (_) => _enterBubble(),
+          onHover: (_) {
+            if (!_hover) _enterBubble();
+          },
+          onExit: (_) => _leaveSoon(),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              _HoverScope(hovering: _hover, child: widget.child),
+              if (_hover)
+                Positioned(
+                  // Sit ON the bubble's rounded top corner (overlapping
+                  // inward), so it hugs the corner.
+                  top: 0,
+                  left: widget.isMe ? null : 42,
+                  right: widget.isMe ? 8 : null,
+                  child: GestureDetector(
+                    onTapDown: (d) => widget.onOpen(d.globalPosition),
+                    child: _chip(
+                        scheme,
+                        Icon(Icons.expand_more_rounded,
+                            size: 18, color: scheme.primary)),
                   ),
-                  child: Icon(Icons.expand_more_rounded,
-                      size: 18, color: scheme.primary),
                 ),
-              ),
-            ),
-        ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One emoji in the desktop hover row: grows a little under the pointer.
+class _HoverEmoji extends StatefulWidget {
+  const _HoverEmoji({
+    required this.emoji,
+    required this.mine,
+    required this.scheme,
+    required this.onTap,
+  });
+  final String emoji;
+  final bool mine;
+  final ColorScheme scheme;
+  final VoidCallback onTap;
+  @override
+  State<_HoverEmoji> createState() => _HoverEmojiState();
+}
+
+class _HoverEmojiState extends State<_HoverEmoji> {
+  bool _on = false;
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _on = true),
+      onExit: (_) => setState(() => _on = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          duration: const Duration(milliseconds: 120),
+          scale: _on ? 1.35 : 1,
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: widget.mine
+                ? BoxDecoration(
+                    color: widget.scheme.primary.withValues(alpha: 0.18),
+                    shape: BoxShape.circle)
+                : null,
+            child: Text(widget.emoji, style: const TextStyle(fontSize: 19)),
+          ),
+        ),
       ),
     );
   }

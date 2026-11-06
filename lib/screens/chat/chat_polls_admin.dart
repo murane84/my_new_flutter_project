@@ -1017,7 +1017,9 @@ extension _ChatPollsAdmin on _ChatPageState {
     }
     if (hostingHere) {
       if (path == null) {
-        return note('“$title” isn’t in your loaded songs — load it to play.');
+        return note(s.controller.allowContributions
+            ? '“$title” isn’t on your phone — a member who has it can send it in.'
+            : '“$title” isn’t in your loaded songs — load it to play.');
       }
       return Padding(
         padding: const EdgeInsets.only(top: 8),
@@ -1033,7 +1035,27 @@ extension _ChatPollsAdmin on _ChatPageState {
         ),
       );
     }
-    if (listeningHere) return note('The host plays the winner next 🎧');
+    if (listeningHere) {
+      // I'm in THIS group's jam room and the winner is on MY phone → send
+      // it to the host, straight in after the current song.
+      final inThisRoom = s.controller.conversationId == _cid;
+      if (inThisRoom && path != null && s.controller.remoteContribAllowed) {
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: OutlinedButton.icon(
+            onPressed: () => _jamSendWinner(msg, title, path),
+            icon: const Icon(Icons.upload_rounded, size: 18),
+            label: const Text('Send the winner to the room'),
+            style: OutlinedButton.styleFrom(
+                foregroundColor: accent,
+                side: BorderSide(color: accent.withValues(alpha: 0.6)),
+                minimumSize: const Size.fromHeight(38),
+                shape: const StadiumBorder()),
+          ),
+        );
+      }
+      return note('The host plays the winner next 🎧');
+    }
     // A member's jam room is live here → join it (they play the winner).
     final live = LiveRoomsRegistry.instance.roomForConversation(_cid);
     final join = LiveRoomsRegistry.instance.joinRoom;
@@ -1089,6 +1111,34 @@ extension _ChatPollsAdmin on _ChatPageState {
     showToast(context, '“${options[winner]}” is up next for everyone 🎶',
         type: ToastType.success);
     _jamRollOn(options, winner);
+  }
+
+  /// Listener in the group's jam room: upload the winner from my phone to
+  /// the host — it plays right after the current song.
+  Future<void> _jamSendWinner(
+      Map<String, dynamic> msg, String title, String path) async {
+    final s = activeLiveSession;
+    if (s == null) return;
+    Uint8List bytes;
+    try {
+      bytes = Uint8List.fromList(await readFileBytes(path));
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not read that song.', type: ToastType.error);
+      }
+      return;
+    }
+    final ok = await s.controller.contributeTrack(bytes, title,
+        by: _myName.isEmpty ? null : _myName, next: true);
+    if (!mounted) return;
+    if (ok) {
+      rebuildWith(() => _jamPlayed.add(msg['id'].toString()));
+      showToast(context, 'Sent — “$title” plays next for everyone 🎶',
+          type: ToastType.success);
+    } else {
+      showToast(context, 'Couldn’t send it — the host may have songs off.',
+          type: ToastType.error);
+    }
   }
 
   Future<void> _jamStartRoom(

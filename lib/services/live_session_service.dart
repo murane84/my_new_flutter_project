@@ -176,8 +176,22 @@ class LiveSessionController {
   int? _logConversationId; // … or group conversation
 
   /// The group conversation this session is running in, if any (the Circle
-  /// list rings that group's photo while it's live).
-  int? get conversationId => _logConversationId;
+  /// list rings that group's photo while it's live). Host: set at start;
+  /// listener: learned from the room roster.
+  int? get conversationId => _logConversationId ?? _rosterConv;
+
+  // What kind of session this is — drives privacy of the "together" ring.
+  bool _openRoom = false; // host: a circle / group room (vs a private 1:1)
+  bool? _rosterOpen; // listener: from the roster (null = not known yet)
+  int? _rosterConv; // listener: the group a jam room runs in
+
+  /// A PRIVATE pair (DM listen together, tune-in, Our Space): only then do
+  /// the two people show each other the "together" ring on their photos.
+  /// Rooms (circle / group jam) never mark individual friends — a group jam
+  /// shows on the GROUP's photo only. Unknown yet (listener before the
+  /// roster) counts as not private, so nothing leaks early.
+  bool get isPrivatePair =>
+      role == LiveRole.host ? !_openRoom : _rosterOpen == false;
   DateTime? _sessionStartAt;
   bool _hadListener = false;
   bool _outcomeLogged = false;
@@ -432,6 +446,7 @@ class LiveSessionController {
     int startPositionMs = 0,
   }) async {
     role = LiveRole.host;
+    _openRoom = false; // a private pair
     // History: remember who to log to and when we started.
     _logReceiverId = receiverId;
     _logConversationId = null;
@@ -491,6 +506,10 @@ class LiveSessionController {
     int? conversationId,
   }) async {
     role = LiveRole.host;
+    _openRoom = true;
+    // A GROUP jam room lets members send songs in (the vote's winner may be
+    // on THEIR phone, not mine) — the host can still switch it off.
+    if (conversationId != null) allowContributions = true;
     // A circle room has no thread to log to; a GROUP room ([conversationId])
     // logs its outcome into that group, and is joinable by its members.
     _logReceiverId = null;
@@ -724,7 +743,7 @@ class LiveSessionController {
   /// (contribute_start → binary frames → contribute_eos). No-op unless guest
   /// contributions are enabled and the channel is open.
   Future<bool> contributeTrack(Uint8List bytes, String title,
-      {String mime = 'audio/mpeg', String? by}) async {
+      {String mime = 'audio/mpeg', String? by, bool next = false}) async {
     if (role != LiveRole.listener) return false;
     if (!remoteContribAllowed) return false;
     final ch = _lchan;
@@ -736,6 +755,8 @@ class LiveSessionController {
         'title': title,
         'mime': mime,
         'by': ?by,
+        // Group Jam winner → straight after the current song.
+        if (next) 'next': true,
       })));
       const chunkSize = 16 * 1024;
       const framesPerBurst = 8;
@@ -1289,6 +1310,7 @@ class LiveSessionController {
           p.contribTitle = (j['title'] as String?)?.trim();
           p.contribMime = (j['mime'] as String?) ?? 'audio/mpeg';
           p.contribBy = (j['by'] as String?)?.trim();
+          p.contribNext = j['next'] == true;
           break;
         case 'contribute_eos':
           if (!p.contribbing) return;
@@ -1311,12 +1333,13 @@ class LiveSessionController {
               : 'A guest track';
           final by =
               (p.contribBy?.isNotEmpty ?? false) ? p.contribBy! : 'a guest';
-          unawaited(addTrack(LiveTrack(
+          final track = LiveTrack(
             bytes: bytes,
             title: title,
             mime: p.contribMime ?? 'audio/mpeg',
             contributor: by,
-          )));
+          );
+          unawaited(p.contribNext ? playNext(track) : addTrack(track));
           liveHostNotify?.call('$by added "$title" to the queue');
           break;
         case 'have':
@@ -1737,6 +1760,8 @@ class LiveSessionController {
     role = LiveRole.listener;
     this.sessionId = sessionId;
     _lHostId = null;
+    _rosterOpen = null;
+    _rosterConv = null;
     await _closeListenerPc();
     _incoming.clear();
     _listenerStarted = false;
@@ -2020,6 +2045,13 @@ class LiveSessionController {
 
   Future<void> _handleControl(Map<String, dynamic> msg) async {
     final type = msg['type'] as String?;
+    if (type == 'session_roster') {
+      final d = msg['data'];
+      if (d is Map) {
+        _rosterOpen = d['open'] == true;
+        _rosterConv = (d['conversation_id'] as num?)?.toInt();
+      }
+    }
     onEvent?.call(msg);
 
     // WebRTC signaling is peer-addressed and handled the same way regardless of
@@ -2420,6 +2452,7 @@ class _Peer {
   final List<Uint8List> contribChunks = [];
   int contribBytes = 0;
   String? contribTitle;
+  bool contribNext = false;
   String? contribMime;
   String? contribBy;
 }

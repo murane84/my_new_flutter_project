@@ -19,7 +19,7 @@ from jose import JWTError, jwt
 
 from config import SECRET_KEY, ALGORITHM
 from database import SessionLocal, get_db
-from models import User, Friend, ConversationMember
+from models import User, Friend, ConversationMember, SpaceMember
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
@@ -40,6 +40,42 @@ def _friend_ids(db: Session, uid: int) -> list:
         if other != uid:
             ids.add(int(other))
     return list(ids)
+
+
+def _in_group(uid: int, cid: int) -> bool:
+    """Live membership check for a GROUP jam room — re-read on every join so
+    someone removed from the group can't keep dropping in."""
+    db = SessionLocal()
+    try:
+        return db.query(ConversationMember).filter(
+            ConversationMember.conversation_id == cid,
+            ConversationMember.user_id == uid).first() is not None
+    except Exception:
+        return False
+    finally:
+        db.close()
+
+
+def _related(db: Session, a: int, b: int) -> bool:
+    """May [a] invite [b] to a private 1:1 Listen Together? Friends, or people
+    who already share a chat / group / Our Space — never a stranger."""
+    if db.query(Friend).filter(
+            ((Friend.user_id == a) & (Friend.friend_id == b))
+            | ((Friend.user_id == b) & (Friend.friend_id == a))).first():
+        return True
+    mine = {r[0] for r in db.query(ConversationMember.conversation_id)
+            .filter(ConversationMember.user_id == a).all()}
+    if mine and db.query(ConversationMember).filter(
+            ConversationMember.user_id == b,
+            ConversationMember.conversation_id.in_(mine)).first():
+        return True
+    spaces = {r[0] for r in db.query(SpaceMember.space_id)
+              .filter(SpaceMember.user_id == a).all()}
+    if spaces and db.query(SpaceMember).filter(
+            SpaceMember.user_id == b,
+            SpaceMember.space_id.in_(spaces)).first():
+        return True
+    return False
 
 
 def _are_friends(a: int, b: int) -> bool:
@@ -96,6 +132,10 @@ def create_session(
     receiver = db.query(User).filter(User.id == body.receiver_id).first()
     if not receiver:
         raise HTTPException(status_code=404, detail="Receiver not found")
+    # Private 1:1 (DM / tune-in / Our Space): only someone you already know.
+    if not _related(db, current_user.id, body.receiver_id):
+        raise HTTPException(status_code=403,
+                            detail="You can only listen together with people you know")
 
     session_id = uuid.uuid4().hex
     track = body.track.model_dump()
@@ -184,7 +224,13 @@ def create_room(
     # GROUP jam room: members whose app is closed still hear about it — the
     # same push a 1:1 Listen Together invite uses (tapping it joins).
     if cid is not None:
+        try:
+            from websocket_manager import connected_users
+        except Exception:
+            connected_users = {}
         for fid in audience:
+            if connected_users.get(fid):
+                continue  # app open — the in-group Join bar already shows
             try:
                 send_push_to_user(fid, {
                     "type": "live_invite",
@@ -321,6 +367,7 @@ def _roster_payload(session) -> dict:
         "type": "session_roster",
         "data": {"people": people, "host_id": session.host_id,
                  "count": len(people), "waiting": waiting,
+                 "open": bool(session.open),
                  "conversation_id": getattr(session, "conversation_id", None)},
     }
 
@@ -356,18 +403,25 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
     if session is None:
         await websocket.close(code=4404)  # no such session
         return
-    # Membership: an explicitly-allowed user (host or invited listener), OR — for
-    # an OPEN "Listening Room" — any friend of the host (drop-in). The friendship
-    # check opens its own DB session so it's safe here.
-    allowed = user.id in session.allowed_ids or (
-        session.open and (user.id in session.group_ids
-                          or _are_friends(user.id, session.host_id)))
+    # Membership — strictly by kind (privacy):
+    #  • GROUP jam room → the host + CURRENT members of that group only
+    #    (re-checked live; the host's other friends are NOT let in).
+    #  • circle room (open) → the host + the host's friends.
+    #  • 1:1 (DM / tune-in / Our Space) → exactly the host + the invited one.
+    if session.conversation_id is not None:
+        allowed = (user.id == session.host_id
+                   or _in_group(user.id, session.conversation_id))
+    elif session.open:
+        allowed = (user.id in session.allowed_ids
+                   or _are_friends(user.id, session.host_id))
+    else:
+        allowed = user.id in session.allowed_ids
     if not allowed:
         await websocket.close(code=4403)  # not allowed in this room
         return
-    # Remember an open-room drop-in so re-delivery / bookkeeping treats them as
-    # a member for the rest of the session.
-    if session.open:
+    # Remember a circle-room drop-in so re-delivery / bookkeeping treats them
+    # as a member for the rest of the session (group rooms re-check live).
+    if session.open and session.conversation_id is None:
         session.allowed_ids.add(user.id)
 
     is_host = (user.id == session.host_id)

@@ -103,8 +103,12 @@ class LiveSessionManager:
         friends = set(int(f) for f in friend_ids)
         out: List[LiveSession] = []
         for s in self.sessions.values():
+            # Group jam rooms → that group's members only; circle rooms →
+            # the host's friends only. Never both, never everyone.
+            visible = (user_id in s.group_ids if s.conversation_id is not None
+                       else s.host_id in friends)
             if (s.open
-                    and (s.host_id in friends or user_id in s.group_ids)
+                    and visible
                     and s.host_id != user_id
                     and s.host_id in s.connections):
                 out.append(s)

@@ -1702,8 +1702,11 @@ extension _HomePageHelpers1 on HomePageState {
     // Priority: together › same song › listening › typing › paused ›
     // unseen story › bond › quiet (music is live; stories also have their
     // own row above the list).
+    // Only a PRIVATE pair (DM / tune-in / Our Space) marks the friend's
+    // photo; rooms (circle, group jam) never ring individual members.
+    final ls = activeLiveSession?.controller;
     final together =
-        activeLiveSession?.controller.partnerIds.contains(id) ?? false;
+        ls != null && ls.isPrivatePair && ls.partnerIds.contains(id);
     final track = presence.trackFor(id);
     final sameSong = !together && _onSameSong(id);
     final listening = !together && track != null;

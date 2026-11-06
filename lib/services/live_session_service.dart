@@ -223,12 +223,12 @@ class LiveSessionController {
   final Map<int, _Peer> _peers = {}; // host side
   int? _lHostId; // listener side: who's hosting me
 
-  /// The people I'm listening WITH right now (host: invited friend + every
-  /// connected listener; listener: the host) — the friend list weaves the
-  /// "together" ring around their photos.
+  /// The people I'm actually listening WITH right now (host: every
+  /// connected listener — an invite nobody answered yet doesn't count;
+  /// listener: the host) — the friend list weaves the "together" ring
+  /// around their photos.
   Set<int> get partnerIds => {
         ..._peers.keys,
-        ?_logReceiverId,
         ?_lHostId,
       };
   RTCPeerConnection? _lpc; // listener side

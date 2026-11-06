@@ -125,13 +125,13 @@ class NowPlayingPresence extends ChangeNotifier {
     final pos = (t['pos'] as num?)?.toDouble();
     final at = (t['at'] as num?)?.toInt();
     if (dur == null || dur <= 0 || pos == null) return null;
-    // Their clock and mine may differ; when the stamp looks off, count from
-    // when the update reached me instead.
-    var sent = at ?? (t['_rx'] as int? ?? DateTime.now().millisecondsSinceEpoch);
+    // A live event reaches me within moments, so count from when it
+    // ARRIVED (immune to their phone's clock being off). Only a snapshot
+    // (loaded later, no arrival stamp) uses their send time — and only if
+    // it looks sane.
     final now = DateTime.now().millisecondsSinceEpoch;
-    if ((now - sent).abs() > 6 * 3600 * 1000) {
-      sent = t['_rx'] as int? ?? now;
-    }
+    var sent = t['_rx'] as int? ?? at ?? now;
+    if ((now - sent).abs() > 6 * 3600 * 1000) sent = now;
     final cur = pos + (now - sent).clamp(0, dur.toInt() * 2);
     return (cur / dur).clamp(0.0, 1.0);
   }

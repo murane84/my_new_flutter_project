@@ -1330,12 +1330,13 @@ extension _ChatPollsAdmin on _ChatPageState {
                   fontStyle: FontStyle.italic,
                   color: textColor.withValues(alpha: 0.7))),
         );
-    if (_jamDone.containsKey(mid)) return note(_jamDone[mid]!);
-    // Someone (anyone in the group) already played this jam's winner — the
-    // 🏆 line is in the chat after the poll → no second "Play".
+    // Someone (anyone in the group, me included) already played this jam's
+    // winner — the 🏆 line is in the chat after the poll → a settled
+    // "played" (not a stale "playing in the room" after the room ended).
     if (_jamWinnerPosted(msg, title)) {
       return note('Played for the group — chosen by $votes 🎶');
     }
+    if (_jamDone.containsKey(mid)) return note(_jamDone[mid]!);
     // A jam left for a day is over; nothing to act on any more.
     final at = DateTime.tryParse((msg['timestamp'] ?? '').toString());
     if (at != null &&

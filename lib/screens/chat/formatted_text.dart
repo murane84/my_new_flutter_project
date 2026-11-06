@@ -911,6 +911,26 @@ List<InlineSpan> previewSpans(
           ),
         ),
       ),
+      // A voice note gets a tiny waveform beside the mic: "🎤 ▁▃▅▂▄ 0:12".
+      if (e.key == '🎤')
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 5),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              for (final h in const [0.35, 0.7, 1.0, 0.55, 0.85, 0.4, 0.65])
+                Container(
+                  width: 2,
+                  height: size * 0.8 * h,
+                  margin: const EdgeInsets.symmetric(horizontal: 0.75),
+                  decoration: BoxDecoration(
+                    color: iconColor,
+                    borderRadius: BorderRadius.circular(1),
+                  ),
+                ),
+            ]),
+          ),
+        ),
       ..._previewInline(rest, base, codeBg: codeBg, highlightBg: highlightBg),
     ];
   }

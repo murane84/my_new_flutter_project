@@ -1497,6 +1497,12 @@ extension _HomeFriendListView on HomePageState {
       }
     }
     final isTyping = _typingTimers.containsKey((f['id'] as num).toInt());
+    final songColor = NowPlayingPresence.instance
+                .colorFor((f['id'] as num).toInt()) !=
+            null
+        ? Color(NowPlayingPresence.instance.colorFor((f['id'] as num).toInt())!)
+        : scheme.primary;
+    final pinned = _pinnedChats.contains(_pinKeyOf(f));
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // The photo stands OUTSIDE the card so the circle around it can carry
@@ -1512,15 +1518,73 @@ extension _HomeFriendListView on HomePageState {
       _storyRingAvatar(f, name, isOnline, face: face),
       SizedBox(width: narrow ? 3 : 4),
       Expanded(
+      child: _PressDip(
       child: Container(
         constraints: const BoxConstraints(minHeight: 64),
-        decoration: _circleTileDecoration(scheme, isDark),
+        // Unread → a thin accent edge so it stands out at a glance.
+        decoration: hasUnread
+            ? _circleTileDecoration(scheme, isDark).copyWith(
+                border: Border.all(
+                    color: scheme.primary.withValues(alpha: 0.40)))
+            : _circleTileDecoration(scheme, isDark),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
+          child: Stack(children: [
+          // Card moods, under the content: unread tint · the song's colour
+          // washing in from the left while they listen · a pinned strip.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: npTrack != null
+                      ? LinearGradient(colors: [
+                          songColor.withValues(alpha: isDark ? 0.20 : 0.12),
+                          songColor.withValues(alpha: 0.0),
+                        ], stops: const [0.0, 0.75])
+                      : null,
+                  color: npTrack == null && hasUnread
+                      ? scheme.primary.withValues(alpha: isDark ? 0.07 : 0.045)
+                      : null,
+                ),
+              ),
+            ),
+          ),
+          if (pinned)
+            Positioned(
+              left: 0,
+              top: 12,
+              bottom: 12,
+              child: IgnorePointer(
+                child: Container(
+                  width: 3,
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.85),
+                    borderRadius: const BorderRadius.horizontal(
+                        right: Radius.circular(3)),
+                  ),
+                ),
+              ),
+            ),
+          // While they listen: a hairline along the bottom fills with the
+          // song's progress (frozen when paused).
+          if (npTrack != null)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: IgnorePointer(
+                child: _CardProgressLine(
+                  progress: () => NowPlayingPresence.instance
+                      .progressFor((f['id'] as num).toInt()),
+                  color: songColor,
+                  track: textColor.withValues(alpha: 0.08),
+                ),
+              ),
+            ),
           // Samsung-style: swipe RIGHT → call, swipe LEFT → open the chat.
           // The colour blooms across the tile and the action fires on its
           // own a beat later (no second tap on an exposed button).
-          child: SwipeActionTile(
+          SwipeActionTile(
       key: ValueKey('friend-${f['id']}'),
       // Online → the Aluta call starts straight away (like a phone's swipe to
       // dial). Offline → the Aluta / carrier choice, since Aluta can't ring.
@@ -1541,6 +1605,8 @@ extension _HomeFriendListView on HomePageState {
       child: Material(
       color: Colors.transparent,
       child: InkWell(
+      splashColor: scheme.primary.withValues(alpha: 0.12),
+      highlightColor: scheme.primary.withValues(alpha: 0.05),
       onTap: () => _isSharing ? _sendShareTo(friend: f) : openChat(f),
       onLongPress: _isSharing ? null : () => _showFriendQuickSheet(f, name),
       child: ConstrainedBox(
@@ -1566,14 +1632,6 @@ extension _HomeFriendListView on HomePageState {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    // How good their internet is for Listen Together (from
-                    // their last check) — see before you invite.
-                    if (_netDot(isOnline ? f['net_grade'] : null)
-                        case final dot?)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 5),
-                        child: dot,
-                      ),
                     // Their quick status ("📞 Free to talk"), while it lasts.
                     if (QuickStatus.instance
                             .statusOf((f['id'] as num).toInt()) case final st?)
@@ -1584,7 +1642,15 @@ extension _HomeFriendListView on HomePageState {
                   ]),
                   const SizedBox(height: 2),
                   _tileSubtitle(
-                      scheme, textColor, npLine, isTyping, lastMsg, hasUnread),
+                      scheme, textColor, npLine, isTyping, lastMsg, hasUnread,
+                      mine: (f['last_sender_id'] as num?)?.toInt() ==
+                                  _myUserId &&
+                              _myUserId != null
+                          ? (
+                              delivered: f['last_message_delivered'] == true,
+                              read: f['last_message_read'] == true,
+                            )
+                          : null),
                 ],
               ),
             ),
@@ -1658,8 +1724,13 @@ extension _HomeFriendListView on HomePageState {
                 visualDensity: VisualDensity.compact,
                 constraints: const BoxConstraints.tightFor(width: 38, height: 38),
                 padding: EdgeInsets.zero,
+                // Pin its real size to the 38 box (M3's 40 px minimum made
+                // the tinted circle spill over the time beside it).
                 style: IconButton.styleFrom(
-                    backgroundColor: scheme.primary.withValues(alpha: 0.10)),
+                    backgroundColor: scheme.primary.withValues(alpha: 0.10),
+                    minimumSize: const Size(38, 38),
+                    fixedSize: const Size(38, 38),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                 onPressed: () =>
                     _tuneInto(int.tryParse(f['id'].toString()) ?? -1, name),
               )
@@ -1671,6 +1742,10 @@ extension _HomeFriendListView on HomePageState {
                 visualDensity: VisualDensity.compact,
                 constraints: const BoxConstraints.tightFor(width: 38, height: 38),
                 padding: EdgeInsets.zero,
+                style: IconButton.styleFrom(
+                    minimumSize: const Size(38, 38),
+                    fixedSize: const Size(38, 38),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                 onPressed: () => _showCallChoice(
                   friendId: int.tryParse(f['id'].toString()) ?? -1,
                   name: name,
@@ -1684,10 +1759,12 @@ extension _HomeFriendListView on HomePageState {
       ),
       ),
       ),
-      ),
-      ),
-      ),
-      ),
+      ), // SwipeActionTile
+          ]), // card moods Stack
+      ), // ClipRRect
+      ), // Container
+      ), // _PressDip
+      ), // Expanded
       ]);
       }),
     );
@@ -2042,6 +2119,7 @@ extension _HomeFriendListView on HomePageState {
       Expanded(
       // Same swipes as a friend's tile: RIGHT starts the group call, LEFT
       // opens the group — the colour blooms across and it fires on its own.
+      child: _PressDip(
       child: ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: SwipeActionTile(
@@ -2059,7 +2137,23 @@ extension _HomeFriendListView on HomePageState {
       borderRadius: BorderRadius.circular(16),
       child: Container(
         constraints: const BoxConstraints(minHeight: 64),
-        decoration: _circleTileDecoration(scheme, isDark),
+        // Unread (and not muted) → the same accent edge + tint as a friend.
+        foregroundDecoration: hasUnread && !muted
+            ? BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color: scheme.primary.withValues(alpha: 0.40)),
+              )
+            : null,
+        decoration: hasUnread && !muted
+            ? BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: Color.alphaBlend(
+                    scheme.primary.withValues(alpha: isDark ? 0.07 : 0.045),
+                    isDark ? scheme.surfaceContainerHigh : scheme.surface),
+                boxShadow: _circleTileDecoration(scheme, isDark).boxShadow,
+              )
+            : _circleTileDecoration(scheme, isDark),
         child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 9, 0, 9),
         child: Row(
@@ -2235,6 +2329,10 @@ extension _HomeFriendListView on HomePageState {
               visualDensity: VisualDensity.compact,
               constraints: const BoxConstraints.tightFor(width: 38, height: 38),
               padding: EdgeInsets.zero,
+              style: IconButton.styleFrom(
+                  minimumSize: const Size(38, 38),
+                  fixedSize: const Size(38, 38),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap),
               onPressed: () => _startGroupCall(g),
             ),
           ],
@@ -2243,6 +2341,7 @@ extension _HomeFriendListView on HomePageState {
       ),
       ),
       ))),
+      ), // _PressDip
       ),
       ]);
       }),
@@ -2845,19 +2944,78 @@ class _RefreshSpinButtonState extends State<_RefreshSpinButton>
   }
 }
 
-/// A friend's last Listen Together network grade as a tiny signal mark:
-/// green = strong, amber = okay, grey = too weak right now. Null = unknown.
-Widget? _netDot(Object? grade) {
-  final (Color c, String tip) = switch (grade) {
-    'good' => (const Color(0xFF2BB673), 'Strong connection — great for Listen Together'),
-    'fair' => (const Color(0xFFFFA000), 'Okay connection for Listen Together'),
-    'weak' || 'offline' =>
-      (const Color(0xFF9E9E9E), 'Weak connection right now — Listen Together may not start'),
-    _ => (Colors.transparent, ''),
-  };
-  if (tip.isEmpty) return null;
-  return Tooltip(
-    message: tip,
-    child: Icon(Icons.signal_cellular_alt_rounded, size: 13, color: c),
-  );
+/// A Circle card dips a touch under the finger (Aluta's tactile press, like
+/// the music keys) — purely visual; taps/swipes pass straight through.
+class _PressDip extends StatefulWidget {
+  const _PressDip({required this.child});
+  final Widget child;
+  @override
+  State<_PressDip> createState() => _PressDipState();
+}
+
+class _PressDipState extends State<_PressDip> {
+  bool _down = false;
+  void _set(bool v) {
+    if (_down != v && mounted) setState(() => _down = v);
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+        onPointerDown: (_) => _set(true),
+        onPointerUp: (_) => _set(false),
+        onPointerCancel: (_) => _set(false),
+        child: AnimatedScale(
+          scale: _down ? 0.98 : 1,
+          duration: const Duration(milliseconds: 110),
+          curve: Curves.easeOut,
+          child: widget.child,
+        ),
+      );
+}
+
+/// The hairline along the bottom of a listening friend's card: their song's
+/// progress, ticking once a second (holds still when it can't be known).
+class _CardProgressLine extends StatefulWidget {
+  const _CardProgressLine(
+      {required this.progress, required this.color, required this.track});
+  final double? Function() progress;
+  final Color color;
+  final Color track;
+  @override
+  State<_CardProgressLine> createState() => _CardProgressLineState();
+}
+
+class _CardProgressLineState extends State<_CardProgressLine> {
+  Timer? _t;
+  @override
+  void initState() {
+    super.initState();
+    _t = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _t?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = widget.progress();
+    if (v == null) return const SizedBox.shrink();
+    return SizedBox(
+      height: 2.5,
+      child: Stack(children: [
+        Positioned.fill(child: ColoredBox(color: widget.track)),
+        FractionallySizedBox(
+          widthFactor: v.clamp(0.0, 1.0),
+          heightFactor: 1,
+          alignment: Alignment.centerLeft,
+          child: ColoredBox(color: widget.color),
+        ),
+      ]),
+    );
+  }
 }

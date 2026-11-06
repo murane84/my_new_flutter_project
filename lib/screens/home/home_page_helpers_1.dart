@@ -1063,6 +1063,12 @@ extension _HomePageHelpers1 on HomePageState {
         final mime = (m['media_mime'] ?? '').toString();
         return withText(mime.contains('gif') ? '🎞️ GIF' : '📷 Photo');
       case 'audio':
+        // "🎤 0:12" — same as the server's preview.
+        final ms = (m['media_duration'] as num?)?.toInt() ?? 0;
+        if (ms > 0) {
+          final s = (ms / 1000).round();
+          return withText('🎤 ${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}');
+        }
         return withText('🎤 Voice note');
       case 'video':
         return withText('🎬 Video');
@@ -1363,7 +1369,8 @@ extension _HomePageHelpers1 on HomePageState {
   /// The single contextual line under a friend's name, in priority order:
   /// live track → typing… → last message (styled for unread).
   Widget _tileSubtitle(ColorScheme scheme, Color textColor, String? npLine,
-      bool typing, String lastMsg, bool hasUnread) {
+      bool typing, String lastMsg, bool hasUnread,
+      {({bool delivered, bool read})? mine}) {
     if (npLine != null) {
       final npStyle = TextStyle(
           fontSize: 12.5,
@@ -1392,13 +1399,36 @@ extension _HomePageHelpers1 on HomePageState {
       color: hasUnread ? textColor.withAlpha(200) : textColor.withAlpha(110),
       fontWeight: hasUnread ? FontWeight.w500 : FontWeight.normal,
     );
+    // My own last message: "You:" + its ticks (✓ sent · ✓✓ delivered ·
+    // accent ✓✓ read) — know if they've seen it without opening the chat.
+    final m = mine;
     // Render the message's formatting (*bold* _italic_ …) right in the preview.
     return Text.rich(
-      TextSpan(
-          style: base,
-          children: previewSpans(lastMsg, base,
-              codeBg: textColor.withValues(alpha: 0.12),
-              highlightBg: const Color(0x66FFC107))),
+      TextSpan(style: base, children: [
+        if (m != null) ...[
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 3),
+              child: Icon(
+                m.delivered || m.read
+                    ? Icons.done_all_rounded
+                    : Icons.done_rounded,
+                size: 14,
+                color: m.read ? scheme.primary : textColor.withAlpha(120),
+              ),
+            ),
+          ),
+          TextSpan(
+              text: 'You: ',
+              style: base.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: textColor.withAlpha(150))),
+        ],
+        ...previewSpans(lastMsg, base,
+            codeBg: textColor.withValues(alpha: 0.12),
+            highlightBg: const Color(0x66FFC107)),
+      ]),
       overflow: TextOverflow.ellipsis,
       maxLines: 1,
     );
@@ -1727,12 +1757,24 @@ extension _HomePageHelpers1 on HomePageState {
     final songColor = presence.colorFor(id);
     final ringColor = songColor != null ? Color(songColor) : scheme.primary;
     final story = _friendStory(f['id']);
+    // The online dot also says how good their connection is for Listen
+    // Together (was a separate signal icon by the name).
+    final grade = isOnline ? f['net_grade'] : null;
+    final (Color? dotColor, String? dotTip) = switch (grade) {
+      'good' => (const Color(0xFF2BB673), 'Online · strong connection'),
+      'fair' => (const Color(0xFFFFA000), 'Online · okay connection'),
+      'weak' || 'offline' =>
+        (const Color(0xFF9E9E9E), 'Online · weak connection right now'),
+      _ => (null, 'Online'),
+    };
     final avatar = InitialsAvatar(
       name: name,
       radius: face / 2,
       // A music ring already says "here now" — the dot would crowd it.
       isOnline: isOnline && mode == RingMode.none,
       imageUrl: _avatarFull(f['avatar_url']),
+      onlineColor: dotColor,
+      onlineTip: dotTip,
     );
     // ONE fixed geometry: photo [face] inside a [slot] whose 4 px rim is
     // either the quiet grey plate (matching the card) or — when there's

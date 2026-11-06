@@ -11,12 +11,20 @@ class InitialsAvatar extends StatelessWidget {
   /// to load) the coloured initials are shown instead.
   final String? imageUrl;
 
+  /// The online dot's colour (default green). The Circle list tints it by
+  /// Listen-Together connection quality (green strong · amber okay · grey
+  /// weak) instead of a separate signal icon by the name.
+  final Color? onlineColor;
+  final String? onlineTip;
+
   const InitialsAvatar({
     super.key,
     required this.name,
     this.radius = 22,
     this.isOnline = false,
     this.imageUrl,
+    this.onlineColor,
+    this.onlineTip,
   });
 
   Color _colorFromName(String name) {
@@ -84,15 +92,18 @@ class InitialsAvatar extends StatelessWidget {
           Positioned(
             right: -1,
             bottom: -1,
-            child: Container(
-              width: radius * 0.55,
-              height: radius * 0.55,
-              decoration: BoxDecoration(
-                color: Colors.green,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.surface,
-                  width: 2,
+            child: Tooltip(
+              message: onlineTip ?? '',
+              child: Container(
+                width: radius * 0.55,
+                height: radius * 0.55,
+                decoration: BoxDecoration(
+                  color: onlineColor ?? Colors.green,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.surface,
+                    width: 2,
+                  ),
                 ),
               ),
             ),

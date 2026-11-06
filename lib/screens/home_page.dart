@@ -146,8 +146,12 @@ String _formatFriendTimestamp(String raw) {
     final diff = now.difference(dt);
     if (diff.inMinutes < 1) return 'now';
     if (diff.inHours < 1) return '${diff.inMinutes}m';
-    if (diff.inDays < 1) return DateFormat('h:mm a').format(dt);
-    if (diff.inDays < 7) return DateFormat('EEE').format(dt);
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(dt.year, dt.month, dt.day);
+    final days = today.difference(day).inDays;
+    if (days <= 0) return DateFormat('h:mm a').format(dt);
+    if (days == 1) return 'Yesterday';
+    if (days < 7) return DateFormat('EEE').format(dt);
     return DateFormat('d MMM').format(dt);
   } catch (_) {
     return '';

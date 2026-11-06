@@ -316,8 +316,15 @@ def list_preview(msg) -> str:
         if name:
             return "🎵 " + (name.rsplit(".", 1)[0] if "." in name else name)
         return "🎵 Song"
-    if content and mtype == "audio":
-        return f"🎤 Voice note · {content}"
+    if mtype == "audio":
+        # "🎤 0:12" — the length reads better than the words "Voice note".
+        ms = getattr(msg, "media_duration", None) or 0
+        dur = ""
+        if ms and ms > 0:
+            s = int(round(ms / 1000))
+            dur = f"{s // 60}:{s % 60:02d}"
+        label = f"🎤 {dur}" if dur else "🎤 Voice note"
+        return f"{label} · {content}" if content else label
     if content and mtype == "image":
         return f"{'🎞️ GIF' if 'gif' in mime else '📷 Photo'} · {content}"
     if content and mtype == "video":

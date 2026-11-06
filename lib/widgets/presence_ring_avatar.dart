@@ -13,6 +13,10 @@ enum RingMode {
 
   /// Listening together with ME: two arcs weave in opposite directions.
   together,
+
+  /// A call is live (group call): a full theme ring that breathes, with a
+  /// small call badge at the corner.
+  call,
 }
 
 /// A friend's photo with its status ring, sized to a fixed [slot] so a row
@@ -139,6 +143,23 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
                   ),
                 ),
               SizedBox(width: widget.face, height: widget.face, child: child),
+              if (widget.mode == RingMode.call)
+                Positioned(
+                  right: -3,
+                  bottom: -3,
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: widget.color,
+                      border: Border.all(color: gap, width: 2),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.call_rounded,
+                        size: 11, color: Colors.white),
+                  ),
+                ),
               if (listening)
                 Positioned(
                   right: -3,
@@ -227,6 +248,11 @@ class _RingPainter extends CustomPainter {
           canvas.drawArc(rect, top + full * t, full * 0.7, false, p);
           p.shader = null;
         }
+      case RingMode.call:
+        // A live call: the whole ring breathes (a heartbeat every 1.5 s).
+        final a = 0.45 + 0.55 * (0.5 - 0.5 * math.cos(t * full * 4));
+        canvas.drawCircle(
+            rect.center, r, p..color = color.withValues(alpha: a));
       case RingMode.together:
         // Two pairs of arcs, turning opposite ways, weaving.
         final a = top + full * t;

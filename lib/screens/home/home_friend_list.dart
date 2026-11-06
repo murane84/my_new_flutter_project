@@ -1712,23 +1712,45 @@ extension _HomeFriendListView on HomePageState {
         behavior: HitTestBehavior.opaque,
         onTap: () =>
             _isSharing ? _sendShareTo(group: g) : openGroupInPanel(g),
-        child: _circlePlate(scheme, isDark, SizedBox(
-        width: face + 8,
-        height: face + 8,
-        child: Center(
-          child: CircleAvatar(
-            radius: face / 2,
-            backgroundColor: scheme.primaryContainer,
-            backgroundImage: avatar != null
-                ? authNetworkImageProvider(avatar, mediaAuthHeaders(avatar))
-                : null,
-            child: avatar == null
-                ? Icon(Icons.groups_rounded,
-                    color: scheme.onPrimaryContainer, size: face * 0.55)
-                : null,
-          ),
+        // A group call or a group Listen Together live in this group →
+        // the live ring takes the photo's rim (same slot, no size change);
+        // otherwise the quiet grey plate.
+        child: ValueListenableBuilder<Map<int, String>>(
+          valueListenable: GroupCallService.instance.ongoingCalls,
+          builder: (context, calls, _) {
+            final gcs = GroupCallService.instance;
+            final inCall = calls.containsKey(gid) ||
+                (gcs.room == gid && gcs.phase != GroupCallPhase.idle);
+            final listening =
+                activeLiveSession?.controller.conversationId == gid;
+            final mode = inCall
+                ? RingMode.call
+                : (listening ? RingMode.together : RingMode.none);
+            final photo = PresenceRingAvatar(
+              key: ValueKey('gring-$gid'),
+              face: face,
+              mode: mode,
+              color: scheme.primary,
+              color2: const Color(0xFFF2A541),
+              gapColor: scheme.surface,
+              child: CircleAvatar(
+                radius: face / 2,
+                backgroundColor: scheme.primaryContainer,
+                backgroundImage: avatar != null
+                    ? authNetworkImageProvider(
+                        avatar, mediaAuthHeaders(avatar))
+                    : null,
+                child: avatar == null
+                    ? Icon(Icons.groups_rounded,
+                        color: scheme.onPrimaryContainer, size: face * 0.55)
+                    : null,
+              ),
+            );
+            return mode == RingMode.none
+                ? _circlePlate(scheme, isDark, photo)
+                : photo;
+          },
         ),
-        )),
       ),
       SizedBox(width: narrow ? 4 : 6),
       Expanded(

@@ -174,6 +174,10 @@ class LiveSessionController {
   // session ends, recording the outcome (listened / declined / no-answer).
   int? _logReceiverId; // DM friend (1:1) …
   int? _logConversationId; // … or group conversation
+
+  /// The group conversation this session is running in, if any (the Circle
+  /// list rings that group's photo while it's live).
+  int? get conversationId => _logConversationId;
   DateTime? _sessionStartAt;
   bool _hadListener = false;
   bool _outcomeLogged = false;

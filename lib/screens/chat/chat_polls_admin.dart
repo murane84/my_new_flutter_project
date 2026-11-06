@@ -13,6 +13,9 @@ final ValueNotifier<int> chatJamRequest = ValueNotifier<int>(0);
 // the leader gets a soft heart-pulse ring — Aluta, not a spreadsheet.
 
 extension _ChatPollsAdmin on _ChatPageState {
+  /// Poll message id → sequence of my latest in-flight vote on it.
+  static final Map<String, int> _pollVoteSeq = <String, int>{};
+
   bool _isMemberAdmin(Object? userId) {
     final id = userId?.toString();
     if (id == null) return false;
@@ -96,6 +99,10 @@ extension _ChatPollsAdmin on _ChatPageState {
     if (event['conversation_id']?.toString() != _cid.toString()) return false;
     if (type == 'poll_updated') {
       final mid = event['message_id']?.toString();
+      // My own vote on this poll is still in flight: this broadcast may be
+      // OLDER than what I just tapped (the double snap 3 → 2 → 3 → 2).
+      // Hold it; my vote's response — the server's newest state — wins.
+      if (mid != null && _pollVoteSeq.containsKey(mid)) return true;
       final idx = _messages.indexWhere((m) => m['id'].toString() == mid);
       if (idx != -1) {
         rebuildWith(() {
@@ -162,8 +169,15 @@ extension _ChatPollsAdmin on _ChatPageState {
       votes[_myId!] = next..sort();
     }
     setPoll(jsonEncode({...poll, 'votes': votes}));
+    // Only the LATEST tap's response may paint (quick re-taps / un-votes
+    // otherwise land out of order and the bar jumps back and forth).
+    final key = '$mid';
+    final seq = (_pollVoteSeq[key] ?? 0) + 1;
+    _pollVoteSeq[key] = seq;
     final res = await ApiService().votePoll(_cid, mid, next);
-    if (!mounted) return;
+    final latest = _pollVoteSeq[key] == seq;
+    if (latest) _pollVoteSeq.remove(key);
+    if (!mounted || !latest) return;
     if (res == null) {
       setPoll(before);
       _showErrorSnack('Vote not sent — check your connection.');

@@ -1517,27 +1517,84 @@ extension _HomePageHelpers1 on HomePageState {
     );
   }
 
+  /// A friend's photo in the Circle list, standing OUTSIDE its card, with
+  /// the ring around it saying what's happening (strongest first):
+  ///   together with me › listening (song progress + mini vinyl) › unseen
+  ///   story › bonded glow › online dot.
+  /// Always [face] + 8 px square, so the row never shifts as rings come and
+  /// go. Tap: their story when there's one, else their profile.
   Widget _storyRingAvatar(
-      Map<String, dynamic> f, String name, bool isOnline) {
+      Map<String, dynamic> f, String name, bool isOnline,
+      {double face = 44}) {
+    final scheme = Theme.of(context).colorScheme;
+    final id = (f['id'] as num?)?.toInt() ?? -1;
+    final presence = NowPlayingPresence.instance;
+    final together =
+        activeLiveSession?.controller.partnerIds.contains(id) ?? false;
+    final listening = !together && presence.trackFor(id) != null;
+    final mode = together
+        ? RingMode.together
+        : (listening ? RingMode.listening : RingMode.none);
+    final story = _friendStory(f['id']);
     final avatar = InitialsAvatar(
       name: name,
-      radius: 22,
-      isOnline: isOnline,
+      radius: face / 2,
+      // A music ring already says "here now" — the dot would crowd it.
+      isOnline: isOnline && mode == RingMode.none,
       imageUrl: _avatarFull(f['avatar_url']),
     );
-    final story = _friendStory(f['id']);
-    Widget core = story == null
-        ? avatar
-        : GestureDetector(
-            onTap: () => _openFriendStory(story),
-            child: _statusRing(avatar, story),
-          );
-    // Listening right now → wrap in a slowly spinning coral "record" ring.
-    final id = (f['id'] as num?)?.toInt();
-    if (id != null && NowPlayingPresence.instance.trackFor(id) != null) {
-      core = SpinningVinylRing(key: ValueKey('np-$id'), child: core);
+    final slot = face + 8;
+    Widget core;
+    if (mode == RingMode.none && story != null) {
+      core = SizedBox(
+        width: slot,
+        height: slot,
+        child: Center(child: _statusRing(avatar, story)),
+      );
+    } else {
+      core = PresenceRingAvatar(
+        key: ValueKey('ring-$id'),
+        face: face,
+        mode: mode,
+        color: scheme.primary,
+        color2: const Color(0xFFF2A541),
+        progress: listening ? () => presence.progressFor(id) : null,
+        glow: _isBondedFriend(id),
+        gapColor: scheme.surface,
+        child: avatar,
+      );
     }
-    return core;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        if (story != null) {
+          _openFriendStory(story);
+          return;
+        }
+        final space = _spaceWithFriend(id);
+        showUserProfile(
+          context,
+          username: (f['username'] ?? '').toString(),
+          userId: id,
+          phone: f['phone']?.toString(),
+          avatarUrl: _avatarFull(f['avatar_url']),
+          isOnline: isOnline,
+          statusLine: isOnline ? 'Online' : null,
+          spaceId: (space?['id'] as num?)?.toInt(),
+          spaceName: space?['name']?.toString(),
+          onOpenSpace: space == null ? null : () => _openSpace(space),
+          onTuneIn: () => _tuneInto(id, name),
+          showHearts: true,
+          onCall: () => _showCallChoice(
+            friendId: id,
+            name: name,
+            avatar: f['avatar_url'] as String?,
+            phone: f['phone'] as String?,
+          ),
+        );
+      },
+      child: core,
+    );
   }
 
   /// Poll the backend for whether a group call is live in [conv] and seed the

@@ -1448,9 +1448,21 @@ extension _HomeFriendListView on HomePageState {
     final isTyping = _typingTimers.containsKey((f['id'] as num).toInt());
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // The photo stands OUTSIDE the card so the circle around it can carry
+    // the friend's live status (music ring, story, bond glow). Same row
+    // height and photo size as before; only the card flexes when the list
+    // is squeezed or stretched (the photo shrinks a touch on tiny screens).
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+      child: LayoutBuilder(builder: (context, box) {
+      final narrow = box.maxWidth < 330;
+      final face = narrow ? 40.0 : 44.0;
+      return Row(children: [
+      _storyRingAvatar(f, name, isOnline, face: face),
+      SizedBox(width: narrow ? 4 : 6),
+      Expanded(
       child: Container(
+        constraints: const BoxConstraints(minHeight: 64),
         decoration: _circleTileDecoration(scheme, isDark),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
@@ -1480,12 +1492,12 @@ extension _HomeFriendListView on HomePageState {
       child: InkWell(
       onTap: () => _isSharing ? _sendShareTo(friend: f) : openChat(f),
       onLongPress: _isSharing ? null : () => _showFriendQuickSheet(f, name),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 64),
+        child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 9, 4, 9),
         child: Row(
           children: [
-            _storyRingAvatar(f, name, isOnline),
-            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1585,27 +1597,32 @@ extension _HomeFriendListView on HomePageState {
               ],
             ),
             // BRIDGE — when this friend is playing right now, a one-tap "tune
-            // in" jumps to Harmony and opens the Space you share (their room).
+            // in" takes the call button's place (calling stays one swipe
+            // right away, and in the chat).
             if (npLine != null)
               IconButton(
                 tooltip: 'Tune in with $name',
                 icon: Icon(Icons.headphones_rounded,
                     color: scheme.primary, size: 20),
                 visualDensity: VisualDensity.compact,
+                style: IconButton.styleFrom(
+                    backgroundColor: scheme.primary.withValues(alpha: 0.10)),
                 onPressed: () =>
                     _tuneInto(int.tryParse(f['id'].toString()) ?? -1, name),
+              )
+            else
+              IconButton(
+                tooltip: 'Call $name',
+                icon:
+                    Icon(Icons.call_rounded, color: scheme.primary, size: 20),
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _showCallChoice(
+                  friendId: int.tryParse(f['id'].toString()) ?? -1,
+                  name: name,
+                  avatar: f['avatar_url'] as String?,
+                  phone: f['phone'] as String?,
+                ),
               ),
-            IconButton(
-              tooltip: 'Call $name',
-              icon: Icon(Icons.call_rounded, color: scheme.primary, size: 20),
-              visualDensity: VisualDensity.compact,
-              onPressed: () => _showCallChoice(
-                friendId: int.tryParse(f['id'].toString()) ?? -1,
-                name: name,
-                avatar: f['avatar_url'] as String?,
-                phone: f['phone'] as String?,
-              ),
-            ),
           ],
         ),
       ),
@@ -1614,6 +1631,10 @@ extension _HomeFriendListView on HomePageState {
       ),
       ),
       ),
+      ),
+      ),
+      ]);
+      }),
     );
   }
 
@@ -1666,6 +1687,35 @@ extension _HomeFriendListView on HomePageState {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+      // Photo outside the card, like a friend's row (same geometry).
+      child: LayoutBuilder(builder: (context, box) {
+      final narrow = box.maxWidth < 330;
+      final face = narrow ? 40.0 : 44.0;
+      return Row(children: [
+      GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () =>
+            _isSharing ? _sendShareTo(group: g) : openGroupInPanel(g),
+        child: SizedBox(
+        width: face + 8,
+        height: face + 8,
+        child: Center(
+          child: CircleAvatar(
+            radius: face / 2,
+            backgroundColor: scheme.primaryContainer,
+            backgroundImage: avatar != null
+                ? authNetworkImageProvider(avatar, mediaAuthHeaders(avatar))
+                : null,
+            child: avatar == null
+                ? Icon(Icons.groups_rounded,
+                    color: scheme.onPrimaryContainer, size: face * 0.55)
+                : null,
+          ),
+        ),
+        ),
+      ),
+      SizedBox(width: narrow ? 4 : 6),
+      Expanded(
       // Same swipes as a friend's tile: RIGHT starts the group call, LEFT
       // opens the group — the colour blooms across and it fires on its own.
       child: ClipRRect(
@@ -1684,23 +1734,12 @@ extension _HomeFriendListView on HomePageState {
       onLongPress: _isSharing ? null : () => _togglePinChat(g),
       borderRadius: BorderRadius.circular(16),
       child: Container(
+        constraints: const BoxConstraints(minHeight: 64),
         decoration: _circleTileDecoration(scheme, isDark),
         child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+        padding: const EdgeInsets.fromLTRB(12, 9, 4, 9),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 22,
-              backgroundColor: scheme.primaryContainer,
-              backgroundImage: avatar != null
-                  ? authNetworkImageProvider(avatar, mediaAuthHeaders(avatar))
-                  : null,
-              child: avatar == null
-                  ? Icon(Icons.groups_rounded,
-                      color: scheme.onPrimaryContainer, size: 24)
-                  : null,
-            ),
-            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1833,6 +1872,9 @@ extension _HomeFriendListView on HomePageState {
       ),
       ),
       ))),
+      ),
+      ]);
+      }),
     );
   }
 

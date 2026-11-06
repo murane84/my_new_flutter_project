@@ -217,6 +217,16 @@ class LiveSessionController {
   // HOST: one peer connection + data channel per listener, keyed by their user
   // id (room-ready). LISTENER: a single connection back to the host.
   final Map<int, _Peer> _peers = {}; // host side
+  int? _lHostId; // listener side: who's hosting me
+
+  /// The people I'm listening WITH right now (host: invited friend + every
+  /// connected listener; listener: the host) — the friend list weaves the
+  /// "together" ring around their photos.
+  Set<int> get partnerIds => {
+        ..._peers.keys,
+        ?_logReceiverId,
+        ?_lHostId,
+      };
   RTCPeerConnection? _lpc; // listener side
   RTCDataChannel? _lchan;
   bool _lRemoteSet = false;
@@ -1344,6 +1354,7 @@ class LiveSessionController {
   /// LISTENER: answer the host's offer — build the peer connection, wire the
   /// inbound data channel, and send the answer back. Replaces any stale one.
   Future<void> _listenerAnswer(int hostId, String? sdp) async {
+    _lHostId = hostId;
     // Drop stale ICE from any prior offer SYNCHRONOUSLY, before the first await,
     // so candidates that trickle in for THIS offer (they arrive right after it)
     // queue into a clean list and survive until the remote SDP is applied.
@@ -1702,6 +1713,7 @@ class LiveSessionController {
   }) async {
     role = LiveRole.listener;
     this.sessionId = sessionId;
+    _lHostId = null;
     await _closeListenerPc();
     _incoming.clear();
     _listenerStarted = false;

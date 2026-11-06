@@ -93,6 +93,7 @@ import 'stories/story_viewer.dart';
 import 'policy_gate.dart';
 import 'add_friend_sheet.dart';
 import 'spinning_vinyl_ring.dart';
+import '../widgets/presence_ring_avatar.dart';
 import '../services/connected_contacts_service.dart';
 import '../services/now_playing_presence.dart';
 import '../services/online_watch.dart';

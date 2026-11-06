@@ -115,6 +115,26 @@ class NowPlayingPresence extends ChangeNotifier {
 
   /// The track a friend is playing right now, or null.
   Map<String, dynamic>? trackFor(int id) => _friends[id];
+
+  /// How far into their song a friend is right now (0..1), extrapolated from
+  /// the position they last sent; null when they didn't send one.
+  double? progressFor(int id) {
+    final t = _friends[id];
+    if (t == null) return null;
+    final dur = (t['dur'] as num?)?.toDouble();
+    final pos = (t['pos'] as num?)?.toDouble();
+    final at = (t['at'] as num?)?.toInt();
+    if (dur == null || dur <= 0 || pos == null) return null;
+    // Their clock and mine may differ; when the stamp looks off, count from
+    // when the update reached me instead.
+    var sent = at ?? (t['_rx'] as int? ?? DateTime.now().millisecondsSinceEpoch);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if ((now - sent).abs() > 6 * 3600 * 1000) {
+      sent = t['_rx'] as int? ?? now;
+    }
+    final cur = pos + (now - sent).clamp(0, dur.toInt() * 2);
+    return (cur / dur).clamp(0.0, 1.0);
+  }
   bool get anyListening => _friends.isNotEmpty;
   int get listeningCount => _friends.length;
 
@@ -125,7 +145,8 @@ class NowPlayingPresence extends ChangeNotifier {
     final playing = e['playing'] == true;
     final track = e['track'];
     if (playing && track is Map) {
-      _friends[id] = Map<String, dynamic>.from(track);
+      _friends[id] = Map<String, dynamic>.from(track)
+        ..['_rx'] = DateTime.now().millisecondsSinceEpoch;
     } else {
       _friends.remove(id);
     }
@@ -260,11 +281,15 @@ class NowPlayingPresence extends ChangeNotifier {
     final String title;
     final String artist;
     final bool localPlaying;
+    int? posMs;
+    int? durMs;
     if (!kIsWeb && h != null) {
       final mi = h.mediaItem.value;
       title = (mi?.title ?? '').trim();
       artist = (mi?.artist ?? '').trim();
       localPlaying = h.playbackState.value.playing;
+      posMs = h.playbackState.value.position.inMilliseconds;
+      durMs = mi?.duration?.inMilliseconds;
     } else if (_manualActive) {
       title = _manualTitle;
       artist = _manualArtist;
@@ -294,7 +319,16 @@ class NowPlayingPresence extends ChangeNotifier {
       'type': 'now_playing',
       'playing': playing,
       'track': playing
-          ? {'title': title, 'artist': artist == 'Aluta' ? '' : artist}
+          ? {
+              'title': title,
+              'artist': artist == 'Aluta' ? '' : artist,
+              // Where the song was when this went out — friends' lists fill
+              // the ring around my photo with the song's progress.
+              if (durMs != null && durMs > 0) 'dur': durMs,
+              if (durMs != null && durMs > 0 && posMs != null) 'pos': posMs,
+              if (durMs != null && durMs > 0)
+                'at': DateTime.now().millisecondsSinceEpoch,
+            }
           : null,
       // null = every friend; a list = only these friend ids may see it.
       'audience': (playing && _shareMode == 'selected')

@@ -7,8 +7,8 @@ enum RingMode {
   /// No music ring (story ring / online dot are drawn by the caller).
   none,
 
-  /// They're playing music: the ring fills with song progress (or, when the
-  /// progress isn't known, a slow sweep turns), plus a mini spinning vinyl.
+  /// They're playing music: the play key's orbiting comet circles the rim
+  /// (progress shows on the card's bottom line), plus a mini spinning vinyl.
   listening,
 
   /// Listening together with ME: two arcs weave in opposite directions.
@@ -296,22 +296,34 @@ class _RingPainter extends CustomPainter {
       case RingMode.none:
         return;
       case RingMode.listening:
+        // The play key's orbit, on their photo: a comet of light circling
+        // the rim with a bright head — "music is playing here". (The song's
+        // PROGRESS lives on the card's bottom line now, so the ring doesn't
+        // repeat it.) Paused: the comet holds still and dims.
         canvas.drawCircle(rect.center, r, p..color = track);
-        final prog = progress;
-        if (prog != null) {
-          final v = prog.clamp(0.0, 1.0);
-          if (v > 0.005) {
-            canvas.drawArc(rect, top, full * v, false, p..color = color);
-          }
-        } else {
-          // Unknown progress: a soft comet sweeps round.
-          p.shader = SweepGradient(
-            colors: [color.withValues(alpha: 0), color],
-            transform: GradientRotation(top + full * t),
-          ).createShader(rect);
-          canvas.drawArc(rect, top + full * t, full * 0.7, false, p);
-          p.shader = null;
-        }
+        final a = top + full * t * 2; // a lap every 3 s, like the play key
+        canvas.save();
+        canvas.translate(rect.center.dx, rect.center.dy);
+        canvas.rotate(a);
+        canvas.translate(-rect.center.dx, -rect.center.dy);
+        p.shader = SweepGradient(colors: [
+          color.withValues(alpha: 0),
+          color.withValues(alpha: 0.18),
+          Color.lerp(color, Colors.white, 0.35)!,
+        ], stops: const [0.0, 0.55, 1.0])
+            .createShader(rect);
+        canvas.drawArc(rect, 0, full * 0.92, false, p);
+        p.shader = null;
+        // The comet's head: a bright dot at the leading end.
+        final head = rect.center +
+            Offset(math.cos(full * 0.92), math.sin(full * 0.92)) * r;
+        canvas.drawCircle(
+            head,
+            w * 0.85,
+            Paint()
+              ..color = Color.lerp(color, Colors.white, 0.45)!
+              ..style = PaintingStyle.fill);
+        canvas.restore();
       case RingMode.sameSong:
         // A matched pair: two equal arcs, opposite each other, turning in
         // step — "we're on the same song".

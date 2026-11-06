@@ -1408,11 +1408,39 @@ extension _HomeFriendListView on HomePageState {
   /// in both themes (the status ring draws on its rim).
   Widget _circlePlate(ColorScheme scheme, bool isDark, Widget child) {
     final d = _circleTileDecoration(scheme, isDark);
+    // The rim is only 4 px wide, so it needs a touch MORE presence than the
+    // card's big surface to read as the same material: a slightly lifted
+    // tone and a clearer edge (dark), a deeper edge + shadow (light).
+    final gradient = isDark
+        ? LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.alphaBlend(Colors.white.withValues(alpha: 0.10),
+                  scheme.surfaceContainerHighest),
+              Color.alphaBlend(Colors.white.withValues(alpha: 0.04),
+                  scheme.surfaceContainerHigh),
+            ],
+          )
+        : LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white,
+              Color.alphaBlend(
+                  Colors.black.withValues(alpha: 0.07), scheme.surface),
+            ],
+          );
     return DecoratedBox(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: d.gradient,
-        border: d.border,
+        gradient: gradient,
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.16)
+              : Colors.black.withValues(alpha: 0.12),
+          width: 1.2,
+        ),
         boxShadow: d.boxShadow,
       ),
       child: child,

@@ -1843,41 +1843,10 @@ extension _HomeFriendListView on HomePageState {
                 children: [
                   Row(
                     children: [
-                      // Members count as a small pill: 👥 4
-                      if (((g['members'] as List?) ?? const []).isNotEmpty)
-                        Tooltip(
-                          message:
-                              '${(g['members'] as List).length} members',
-                          child: Container(
-                            margin: const EdgeInsets.only(right: 6),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 1.5),
-                            decoration: BoxDecoration(
-                              color: scheme.primary.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(9),
-                              border: Border.all(
-                                  color: scheme.primary
-                                      .withValues(alpha: 0.30)),
-                            ),
-                            child: Row(mainAxisSize: MainAxisSize.min, children: [
-                              Icon(Icons.groups_rounded,
-                                  size: 12, color: scheme.primary),
-                              const SizedBox(width: 3),
-                              Text('${(g['members'] as List).length}',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      height: 1.1,
-                                      fontWeight: FontWeight.w800,
-                                      color: scheme.primary)),
-                            ]),
-                          ),
-                        )
-                      else ...[
-                        Icon(Icons.groups_rounded,
-                            size: 14, color: textColor.withAlpha(120)),
-                        const SizedBox(width: 4),
-                      ],
-                      Expanded(
+                      // The group's NAME first (its identity), then a quiet
+                      // members count after it — smaller, muted, so it reads
+                      // as a detail of the name, not part of it: Family · 👥 4
+                      Flexible(
                         child: Text(
                           name,
                           style: TextStyle(
@@ -1886,9 +1855,44 @@ extension _HomeFriendListView on HomePageState {
                             fontSize: 14,
                             color: textColor,
                           ),
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      if (((g['members'] as List?) ?? const []).isNotEmpty)
+                        Tooltip(
+                          message:
+                              '${(g['members'] as List).length} members',
+                          child: Container(
+                            margin: const EdgeInsets.only(left: 6),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: textColor.withValues(alpha: 0.07),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              Icon(Icons.groups_rounded,
+                                  size: 11,
+                                  color: textColor.withValues(alpha: 0.55)),
+                              const SizedBox(width: 3),
+                              Text('${(g['members'] as List).length}',
+                                  style: TextStyle(
+                                      fontSize: 10.5,
+                                      height: 1.1,
+                                      fontWeight: FontWeight.w700,
+                                      color:
+                                          textColor.withValues(alpha: 0.60))),
+                            ]),
+                          ),
+                        )
+                      else
+                        Padding(
+                          padding: const EdgeInsets.only(left: 5),
+                          child: Icon(Icons.groups_rounded,
+                              size: 13,
+                              color: textColor.withValues(alpha: 0.45)),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 2),

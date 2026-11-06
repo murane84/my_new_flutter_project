@@ -385,13 +385,24 @@ Future<void> _sendInlineReply(Map<String, dynamic> p, String? input) async {
   try {
     if (!_ready) await initNotifications();
     if (sent != null) {
-      if (cid != null) {
-        await api.markConversationRead(cid);
-      } else if (fid != null) {
-        await api.markMessagesAsReadPatch(fid);
-      }
+      // Clear the banner THE MOMENT it's sent — Android keeps the Reply
+      // button spinning until the notification is updated/removed, so doing
+      // the read-receipt calls first (they can be slow) left it "sending…"
+      // long after the message was delivered.
       await _fln.cancel(id: notifId);
       await _tidyPersonSummaries();
+      // Then mark the thread read (best-effort, never holds anything up).
+      try {
+        if (cid != null) {
+          await api
+              .markConversationRead(cid)
+              .timeout(const Duration(seconds: 8));
+        } else if (fid != null) {
+          await api
+              .markMessagesAsReadPatch(fid)
+              .timeout(const Duration(seconds: 8));
+        }
+      } catch (_) {}
     } else {
       await _fln.show(
         id: notifId,

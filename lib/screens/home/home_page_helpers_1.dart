@@ -1858,6 +1858,12 @@ extension _HomePageHelpers1 on HomePageState {
       // without leaving the list.
       onLongPress: _isSharing ? null : () => _showPhotoPeek(f, name, isOnline),
       onTap: () {
+        // Music on their photo → the tap goes where the motion points: the
+        // quick peek with Tune in.
+        if (mode != RingMode.none && mode != RingMode.typing) {
+          _showPhotoPeek(f, name, isOnline);
+          return;
+        }
         if (story != null) {
           _openFriendStory(story);
           return;

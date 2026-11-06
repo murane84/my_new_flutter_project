@@ -204,6 +204,26 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
                         size: 10, color: Colors.white),
                   ),
                 ),
+              // Listening WITH me: the 🎧 badge (the ring itself is a closed,
+              // breathing two-tone circle — connected).
+              if (widget.mode == RingMode.together)
+                Positioned(
+                  right: -3,
+                  bottom: -3,
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                          colors: [widget.color, widget.color2]),
+                      border: Border.all(color: gap, width: 2),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.headphones_rounded,
+                        size: 11, color: Colors.white),
+                  ),
+                ),
               if (widget.mode == RingMode.call)
                 Positioned(
                   right: -3,
@@ -227,8 +247,9 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
                   bottom: -3,
                   child: Opacity(
                     opacity: widget.paused ? 0.6 : 1,
+                    // A STILL badge: only the comet moves on the photo.
                     child: Transform.rotate(
-                    angle: t * math.pi * 2 * 2, // ~3 s a turn
+                    angle: 0,
                     child: Container(
                       width: 20,
                       height: 20,
@@ -300,37 +321,11 @@ class _RingPainter extends CustomPainter {
         // the rim with a bright head — "music is playing here". (The song's
         // PROGRESS lives on the card's bottom line now, so the ring doesn't
         // repeat it.) Paused: the comet holds still and dims.
-        canvas.drawCircle(rect.center, r, p..color = track);
-        final a = top + full * t * 2; // a lap every 3 s, like the play key
-        canvas.save();
-        canvas.translate(rect.center.dx, rect.center.dy);
-        canvas.rotate(a);
-        canvas.translate(-rect.center.dx, -rect.center.dy);
-        p.shader = SweepGradient(colors: [
-          color.withValues(alpha: 0),
-          color.withValues(alpha: 0.18),
-          Color.lerp(color, Colors.white, 0.35)!,
-        ], stops: const [0.0, 0.55, 1.0])
-            .createShader(rect);
-        canvas.drawArc(rect, 0, full * 0.92, false, p);
-        p.shader = null;
-        // The comet's head: a bright dot at the leading end.
-        final head = rect.center +
-            Offset(math.cos(full * 0.92), math.sin(full * 0.92)) * r;
-        canvas.drawCircle(
-            head,
-            w * 0.85,
-            Paint()
-              ..color = Color.lerp(color, Colors.white, 0.45)!
-              ..style = PaintingStyle.fill);
-        canvas.restore();
+        _comet(canvas, rect, r, w, p);
       case RingMode.sameSong:
-        // A matched pair: two equal arcs, opposite each other, turning in
-        // step — "we're on the same song".
-        final a = top + full * t;
-        p.color = color;
-        canvas.drawArc(rect, a, full * 0.40, false, p);
-        canvas.drawArc(rect, a + full * 0.5, full * 0.40, false, p);
+        // Same motion as listening (they ARE just listening) — the ❤️ badge
+        // says "the same song as you".
+        _comet(canvas, rect, r, w, p);
       case RingMode.typing:
         // Twelve dots round the rim; a soft wave of brightness travels.
         const n = 12;
@@ -350,19 +345,48 @@ class _RingPainter extends CustomPainter {
         canvas.drawCircle(
             rect.center, r, p..color = color.withValues(alpha: a));
       case RingMode.together:
-        // Two pairs of arcs, turning opposite ways, weaving.
-        final a = top + full * t;
-        final b = top - full * t * 0.66;
-        p.color = color;
-        canvas.drawArc(rect, a, full * 0.36, false, p);
-        canvas.drawArc(rect, a + full * 0.5, full * 0.36, false, p);
-        final inner = rect.deflate(1.6);
-        p
-          ..color = color2
-          ..strokeWidth = 2.2;
-        canvas.drawArc(inner, b + full * 0.12, full * 0.26, false, p);
-        canvas.drawArc(inner, b + full * 0.62, full * 0.26, false, p);
+        // CONNECTED: a closed, unbroken ring in your colour + the song's,
+        // breathing slowly — no comet, so it can never be mistaken for
+        // "just listening". (The 🎧 badge says why.)
+        final breath = 0.70 + 0.30 * (0.5 - 0.5 * math.cos(full * t * 2));
+        p.shader = SweepGradient(colors: [
+          color.withValues(alpha: breath),
+          color2.withValues(alpha: breath),
+          color.withValues(alpha: breath),
+        ]).createShader(rect);
+        p.strokeWidth = w + 0.6 * breath;
+        canvas.drawCircle(rect.center, r, p);
+        p.shader = null;
     }
+  }
+
+  /// The play key's orbiting comet: faint track + a sweep of light with a
+  /// bright head, lapping every 3 s.
+  void _comet(Canvas canvas, Rect rect, double r, double w, Paint p) {
+    const full = math.pi * 2;
+    canvas.drawCircle(rect.center, r, p..color = track);
+    final a = -math.pi / 2 + full * t * 2;
+    canvas.save();
+    canvas.translate(rect.center.dx, rect.center.dy);
+    canvas.rotate(a);
+    canvas.translate(-rect.center.dx, -rect.center.dy);
+    p.shader = SweepGradient(colors: [
+      color.withValues(alpha: 0),
+      color.withValues(alpha: 0.18),
+      Color.lerp(color, Colors.white, 0.35)!,
+    ], stops: const [0.0, 0.55, 1.0])
+        .createShader(rect);
+    canvas.drawArc(rect, 0, full * 0.92, false, p);
+    p.shader = null;
+    final head =
+        rect.center + Offset(math.cos(full * 0.92), math.sin(full * 0.92)) * r;
+    canvas.drawCircle(
+        head,
+        w * 0.85,
+        Paint()
+          ..color = Color.lerp(color, Colors.white, 0.45)!
+          ..style = PaintingStyle.fill);
+    canvas.restore();
   }
 
   @override

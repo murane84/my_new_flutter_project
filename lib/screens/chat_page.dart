@@ -41,7 +41,7 @@ import '../utils/marquee_text.dart';
 import '../utils/prefs_now.dart';
 import 'live_session_screen.dart';
 import '../services/live_session_service.dart'
-    show activeLiveSession, LiveTrack;
+    show activeLiveSession, LiveTrack, LiveSessionController;
 import '../services/live_rooms_registry.dart';
 import '../utils/on_accent.dart';
 import 'gif_picker.dart';
@@ -5869,6 +5869,14 @@ class _ChatPageState extends State<ChatPage>
                                             msg['sender_id'])) ...[
                                           const SizedBox(width: 6),
                                           _adminTag(scheme, on: bubbleColor),
+                                        ],
+                                        // 👑 the group's jam DJ this week.
+                                        if (_isGroup &&
+                                            _jamDjId() ==
+                                                msg['sender_id']
+                                                    ?.toString()) ...[
+                                          const SizedBox(width: 6),
+                                          _djTag(scheme, on: bubbleColor),
                                         ],
                                         if (!inPhonebook &&
                                             rxPhone.isNotEmpty) ...[

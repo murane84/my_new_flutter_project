@@ -389,8 +389,53 @@ class LiveSessionController {
 
   /// Sets the live title and keeps the global session title in sync so every
   /// surface (popup, music panel, banner) reflects the current song.
+  // ── Group Jam: count the room's reactions to a winning song ─────────────
+  // When a jam winner plays in a group room, the HOST counts the reactions
+  // while it's on; when it ends (next song / session over) a line goes to
+  // the group: "🔥 “Song” got 12 reactions in the jam room".
+  static String? pendingJamTitle; // set just before opening a room for a winner
+  String? _jamTitle;
+  int _jamReacts = 0;
+  bool _jamSeen = false; // the winner actually started
+
+  /// HOST: watch [title] (a jam winner) for reactions.
+  void watchJam(String title) {
+    _flushJam();
+    _jamTitle = title;
+    _jamReacts = 0;
+    _jamSeen = currentTitle == title;
+  }
+
+  void _countJamReaction() {
+    if (_jamTitle != null && _jamSeen && currentTitle == _jamTitle) {
+      _jamReacts++;
+    }
+  }
+
+  void _flushJam() {
+    final t = _jamTitle;
+    final n = _jamReacts;
+    final cid = _logConversationId;
+    _jamTitle = null;
+    _jamReacts = 0;
+    if (t == null || !_jamSeen || n <= 0 || cid == null) return;
+    if (role != LiveRole.host) return;
+    unawaited(ApiService()
+        .sendMessage(0,
+            '🔥 “$t” got $n reaction${n == 1 ? '' : 's'} in the jam room',
+            conversationId: cid)
+        .catchError((_) => null));
+  }
+
   void _setCurrentTitle(String? t) {
     if (t == null || t.isEmpty) return;
+    if (_jamTitle != null) {
+      if (t == _jamTitle) {
+        _jamSeen = true;
+      } else if (_jamSeen && currentTitle == _jamTitle) {
+        _flushJam(); // the winner just ended
+      }
+    }
     // A listener hears the song through the session, not their own player —
     // count it in their listening history here (the host's player counts it).
     if (t != currentTitle && role == LiveRole.listener) {
@@ -514,6 +559,14 @@ class LiveSessionController {
     // logs its outcome into that group, and is joinable by its members.
     _logReceiverId = null;
     _logConversationId = conversationId;
+    // Opened to play a jam winner → count its reactions.
+    final jt = pendingJamTitle;
+    pendingJamTitle = null;
+    if (jt != null && conversationId != null) {
+      _jamTitle = jt;
+      _jamReacts = 0;
+      _jamSeen = false;
+    }
     _sessionStartAt = DateTime.now();
     _hadListener = false;
     _outcomeLogged = false;
@@ -757,6 +810,7 @@ class LiveSessionController {
         'by': ?by,
         // Group Jam winner → straight after the current song.
         if (next) 'next': true,
+        if (next) 'jam': true,
       })));
       const chunkSize = 16 * 1024;
       const framesPerBurst = 8;
@@ -1311,6 +1365,7 @@ class LiveSessionController {
           p.contribMime = (j['mime'] as String?) ?? 'audio/mpeg';
           p.contribBy = (j['by'] as String?)?.trim();
           p.contribNext = j['next'] == true;
+          p.contribJam = j['jam'] == true;
           break;
         case 'contribute_eos':
           if (!p.contribbing) return;
@@ -1339,6 +1394,7 @@ class LiveSessionController {
             mime: p.contribMime ?? 'audio/mpeg',
             contributor: by,
           );
+          if (p.contribJam) watchJam(title); // a member sent a jam winner
           unawaited(p.contribNext ? playNext(track) : addTrack(track));
           liveHostNotify?.call('$by added "$title" to the queue');
           break;
@@ -2045,6 +2101,7 @@ class LiveSessionController {
 
   Future<void> _handleControl(Map<String, dynamic> msg) async {
     final type = msg['type'] as String?;
+    if (type == 'reaction') _countJamReaction();
     if (type == 'session_roster') {
       final d = msg['data'];
       if (d is Map) {
@@ -2351,8 +2408,10 @@ class LiveSessionController {
   /// Either partner → the other: a live "concert-lighter" reaction. Relayed by
   /// the server like any control message (no `to`), so it just floats on the
   /// other screen. Ephemeral — nothing is stored.
-  void sendReaction(String emoji) => _sendControl(
-      {'type': 'reaction', 'emoji': emoji, 'from_id': _myUserId});
+  void sendReaction(String emoji) {
+    _countJamReaction();
+    _sendControl({'type': 'reaction', 'emoji': emoji, 'from_id': _myUserId});
+  }
 
   /// A GIF/sticker reaction — relayed like an emoji reaction (no `to`), carrying
   /// the GIF url instead of an emoji. Ephemeral.
@@ -2373,6 +2432,7 @@ class LiveSessionController {
   // ---------------------------------------------------------------------------
   /// Host: tell the server to end the session for everyone. Then clean up.
   Future<void> endSession(String token) async {
+    _flushJam();
     if (role == LiveRole.host && sessionId != null) {
       try {
         final base = await AppConfig.baseUrl;
@@ -2453,6 +2513,7 @@ class _Peer {
   int contribBytes = 0;
   String? contribTitle;
   bool contribNext = false;
+  bool contribJam = false;
   String? contribMime;
   String? contribBy;
 }

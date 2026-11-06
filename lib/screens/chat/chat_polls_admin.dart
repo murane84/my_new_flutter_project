@@ -216,6 +216,7 @@ extension _ChatPollsAdmin on _ChatPageState {
     if (seeds.length == 2) opts.add(TextEditingController());
     var multi = false;
     var jam = startJam;
+    var closeMin = 0; // jam countdown (0 = until more than half vote)
     var showWhy = false; // tapped the button before it was ready
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
@@ -408,12 +409,35 @@ extension _ChatPollsAdmin on _ChatPageState {
                             .copyWith(counterText: ''),
                       ),
                     ),
-                  SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    value: multi,
-                    onChanged: (v) => setS(() => multi = v),
-                    title: const Text('Allow several answers'),
-                  ),
+                  // A jam is one vote each; instead it can race a clock.
+                  if (!jam)
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      value: multi,
+                      onChanged: (v) => setS(() => multi = v),
+                      title: const Text('Allow several answers'),
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2, bottom: 6),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text('Voting closes',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  color: scheme.onSurfaceVariant)),
+                          for (final m in const [0, 1, 2, 5])
+                            ChoiceChip(
+                              label: Text(m == 0 ? 'when half vote' : 'in $m min'),
+                              selected: closeMin == m,
+                              onSelected: (_) => setS(() => closeMin = m),
+                            ),
+                        ],
+                      ),
+                    ),
                   // What's still needed — always shown once tapped, and the
                   // "different" clash as soon as it happens.
                   if (why != null &&
@@ -445,6 +469,10 @@ extension _ChatPollsAdmin on _ChatPageState {
                         'options': clean,
                         'multi': jam ? false : multi,
                         if (jam) 'kind': 'jam',
+                        if (jam && closeMin > 0)
+                          'closes_at':
+                              DateTime.now().millisecondsSinceEpoch ~/ 1000 +
+                                  closeMin * 60,
                       });
                     },
                     icon: const Icon(Icons.send_rounded, size: 18),
@@ -908,6 +936,19 @@ extension _ChatPollsAdmin on _ChatPageState {
     final isJam = isJamPoll;
     // Jam: ONE winner — the first song (in order) holding the top count.
     final winner = top > 0 ? counts.indexOf(top) : -1;
+    // Jam game state: countdown, majority race, ties.
+    final closesAt = (poll['closes_at'] as num?)?.toInt();
+    final nowS = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final jamClosed = isJam && closesAt != null && nowS >= closesAt;
+    final members = _groupMembers.isNotEmpty
+        ? _groupMembers.length
+        : (widget.memberCount > 0 ? widget.memberCount : 0);
+    final need = members <= 0 ? 1 : members ~/ 2 + 1;
+    final decided = isJam && top > 0 && (voters >= need || jamClosed);
+    final tied = isJam && top > 0 && counts.where((c) => c == top).length > 1;
+    final sorted = [...counts]..sort((a, b) => b.compareTo(a));
+    final score = sorted.length > 1 ? '${sorted[0]}–${sorted[1]}' : '$top–0';
+    if (isJam) _jamCelebrate(msg['id'].toString(), decided);
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 220, maxWidth: 300),
       child: Column(
@@ -949,24 +990,33 @@ extension _ChatPollsAdmin on _ChatPageState {
                 jam: isJam,
                 textColor: textColor,
                 accent: accent,
-                onTap: pending ? null : () => _votePoll(msg, i),
+                onTap: (pending || jamClosed) ? null : () => _votePoll(msg, i),
               ),
             ),
-          Text(
-            voters == 0
-                ? 'No votes yet · tap to vote'
-                : '$voters vote${voters == 1 ? '' : 's'}'
-                    '${mine.isEmpty ? ' · tap to vote' : ''}',
-            style:
-                TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.6)),
-          ),
-          if (isJam && winner >= 0 && !pending)
+          if (isJam)
+            _jamRace(voters, need, closesAt, jamClosed, decided, textColor,
+                accent)
+          else
+            Text(
+              voters == 0
+                  ? 'No votes yet · tap to vote'
+                  : '$voters vote${voters == 1 ? '' : 's'}'
+                      '${mine.isEmpty ? ' · tap to vote' : ''}',
+              style: TextStyle(
+                  fontSize: 11, color: textColor.withValues(alpha: 0.6)),
+            ),
+          if (isJam && winner >= 0 && !pending && decided)
             // Rebuilds when a jam room opens / closes in the group.
             ListenableBuilder(
               listenable: LiveRoomsRegistry.instance,
               builder: (_, _) => _jamAction(msg, options, winner,
                   counts[winner], textColor, accent,
-                  voters: voters),
+                  tied: tied && poll['decider'] != true,
+                  tiedSongs: [
+                    for (var i = 0; i < options.length; i++)
+                      if (counts[i] == top) options[i],
+                  ],
+                  score: score),
             ),
         ],
       ),
@@ -980,8 +1030,151 @@ extension _ChatPollsAdmin on _ChatPageState {
   // and I have the song → "🎧 Start the jam room" with the winner. Otherwise
   // a hint that whoever hosts plays it. Songs come from the HOST's device.
 
-  /// Message ids of jams whose winner I already queued (this session).
-  static final Set<String> _jamPlayed = <String>{};
+  /// Jam message id → what already happened to it (queued / decider…).
+  static final Map<String, String> _jamDone = <String, String>{};
+  static final Map<String, String> _jamScore = <String, String>{};
+  // Jams I've seen undecided this session (so a crossing celebrates once).
+  static final Set<String> _jamSeenOpen = <String>{};
+  static final Set<String> _jamCheered = <String>{};
+
+  /// 🎉 when a jam crosses the line while I'm watching (not on reopen).
+  void _jamCelebrate(String mid, bool decided) {
+    if (!decided) {
+      _jamSeenOpen.add(mid);
+      return;
+    }
+    if (_jamSeenOpen.contains(mid) && _jamCheered.add(mid)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        HapticFeedback.mediumImpact();
+        HeartBurst.react(context, '🎉');
+      });
+    }
+  }
+
+  /// The race to a decision: a bar filling toward "more than half", and the
+  /// countdown when the jam has one.
+  Widget _jamRace(int voters, int need, int? closesAt, bool closed,
+      bool decided, Color textColor, Color accent) {
+    Widget build() {
+      final nowS = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final left = closesAt == null ? null : (closesAt - nowS);
+      final frac = (voters / need).clamp(0.0, 1.0);
+      String label;
+      if (decided) {
+        label = closed && voters < need
+            ? '⏱ Time’s up · $voters vote${voters == 1 ? '' : 's'}'
+            : '🏁 Decided · $voters vote${voters == 1 ? '' : 's'}';
+      } else {
+        final mm = left == null
+            ? ''
+            : ' · ⏳ ${left ~/ 60}:${(left % 60).toString().padLeft(2, '0')}';
+        label = '$voters of $need votes to decide$mm';
+      }
+      return Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(end: decided ? 1.0 : frac),
+                duration: const Duration(milliseconds: 450),
+                curve: Curves.easeOutCubic,
+                builder: (_, v, _) => LinearProgressIndicator(
+                  value: v,
+                  minHeight: 5,
+                  color: accent,
+                  backgroundColor: textColor.withValues(alpha: 0.12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: decided ? FontWeight.w700 : FontWeight.w500,
+                    color: decided
+                        ? accent
+                        : textColor.withValues(alpha: 0.65))),
+          ],
+        ),
+      );
+    }
+
+    if (closesAt == null || closed) return build();
+    // Tick the countdown each second; rebuild the whole poll when it ends.
+    return StreamBuilder<int>(
+      stream: Stream<int>.periodic(const Duration(seconds: 1), (i) => i),
+      builder: (_, _) {
+        final nowS = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        if (nowS >= closesAt) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) rebuildWith(() {});
+          });
+        }
+        return build();
+      },
+    );
+  }
+
+  /// 🏆 the result line in the group when a winner starts playing (its
+  /// sender is the jam's DJ for that round).
+  void _postJamResult(String mid, String title) {
+    final score = _jamScore[mid] ?? '';
+    unawaited(_sendStructured(
+        'text',
+        '🏆 “$title” won${score.isEmpty ? '' : ' $score'}'
+        ' — now playing for the group 🎶'));
+  }
+
+  /// This week's jam DJ: the member whose phone played the most jam winners
+  /// (🏆 lines) in the last 7 days — null when none.
+  String? _jamDjId() {
+    if (_jamDjCacheLen == _messages.length) return _jamDjCache;
+    _jamDjCacheLen = _messages.length;
+    final since = DateTime.now().subtract(const Duration(days: 7));
+    final wins = <String, int>{};
+    for (final m in _messages) {
+      final c = (m['content'] ?? '').toString();
+      if (!c.startsWith('🏆 “')) continue;
+      final ts = DateTime.tryParse((m['timestamp'] ?? '').toString());
+      if (ts != null && ts.isBefore(since)) continue;
+      final id = m['sender_id']?.toString();
+      if (id != null) wins[id] = (wins[id] ?? 0) + 1;
+    }
+    String? best;
+    var n = 0;
+    wins.forEach((id, c) {
+      if (c > n) {
+        n = c;
+        best = id;
+      }
+    });
+    return _jamDjCache = best;
+  }
+
+  static int _jamDjCacheLen = -1;
+  static String? _jamDjCache;
+
+  Widget _djTag(ColorScheme scheme, {Color? on}) {
+    final c = on == null ? scheme.primary : bubbleTintOn(scheme.primary, on);
+    return Tooltip(
+      message: 'Jam DJ of the week — most winners played',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+        decoration: BoxDecoration(
+          color: c.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: c.withValues(alpha: 0.45)),
+        ),
+        child: Text('👑 DJ',
+            style: TextStyle(
+                fontSize: 10, fontWeight: FontWeight.w800, color: c)),
+      ),
+    );
+  }
 
   /// The local file for a jam song title (matched against my loaded songs).
   String? _jamPathFor(String title) {
@@ -1011,17 +1204,13 @@ extension _ChatPollsAdmin on _ChatPageState {
 
   Widget _jamAction(Map<String, dynamic> msg, List<String> options, int winner,
       int votes, Color textColor, Color accent,
-      {int voters = 0}) {
+      {bool tied = false,
+      List<String> tiedSongs = const [],
+      String score = ''}) {
     final mid = msg['id'].toString();
-    // The group decides: the winner plays once MORE THAN HALF the members
-    // have voted — then "Play the winner" appears on its own for whoever has
-    // the song on their phone (the host of the room, or anyone, who then
-    // opens the jam room with it).
-    final members = _groupMembers.isNotEmpty
-        ? _groupMembers.length
-        : (widget.memberCount > 0 ? widget.memberCount : 0);
-    final majority = members <= 0 || voters * 2 > members;
-    final need = members <= 0 ? 0 : members ~/ 2 + 1;
+    // Shown only once the group has DECIDED (more than half voted, or the
+    // countdown ran out): then "Play the winner" appears on its own for
+    // whoever has the song on their phone.
     final title = options[winner];
     final s = activeLiveSession;
     final hostingHere =
@@ -1036,12 +1225,35 @@ extension _ChatPollsAdmin on _ChatPageState {
                   fontStyle: FontStyle.italic,
                   color: textColor.withValues(alpha: 0.7))),
         );
-    if (_jamPlayed.contains(mid)) {
-      return note('Queued for the group — chosen by $votes 🎶');
+    if (_jamDone.containsKey(mid)) return note(_jamDone[mid]!);
+    // A dead heat → sudden death: a 30-second decider between the tied songs.
+    if (tied) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: FilledButton.icon(
+          onPressed: () {
+            rebuildWith(() => _jamDone[mid] = 'Tie! A 30-second decider is on ⚡');
+            _sendPoll({
+              'q': '⚡ Decider: ${tiedSongs.join(' vs ')}',
+              'options': tiedSongs,
+              'multi': false,
+              'kind': 'jam',
+              'decider': true,
+              'closes_at':
+                  DateTime.now().millisecondsSinceEpoch ~/ 1000 + 30,
+            });
+          },
+          icon: const Icon(Icons.bolt_rounded, size: 18),
+          label: const Text('It’s a tie — 30-second decider'),
+          style: FilledButton.styleFrom(
+              backgroundColor: accent,
+              foregroundColor: onAccent(accent),
+              minimumSize: const Size.fromHeight(38),
+              shape: const StadiumBorder()),
+        ),
+      );
     }
-    if (!majority) {
-      return note('Plays once more than half vote · $voters of $need needed');
-    }
+    _jamScore[mid] = score;
     if (hostingHere) {
       if (path == null) {
         return note(s.controller.allowContributions
@@ -1129,6 +1341,7 @@ extension _ChatPollsAdmin on _ChatPageState {
     try {
       final bytes = Uint8List.fromList(await readFileBytes(path));
       if (bytes.isEmpty) throw StateError('empty');
+      s.controller.watchJam(options[winner]); // count its reactions
       await s.controller.playNext(LiveTrack(bytes: bytes, title: options[winner]));
     } catch (_) {
       if (mounted) {
@@ -1137,9 +1350,11 @@ extension _ChatPollsAdmin on _ChatPageState {
       return;
     }
     if (!mounted) return;
-    rebuildWith(() => _jamPlayed.add(msg['id'].toString()));
+    final mid = msg['id'].toString();
+    rebuildWith(() => _jamDone[mid] = 'Queued for the group 🎶');
     showToast(context, '“${options[winner]}” is up next for everyone 🎶',
         type: ToastType.success);
+    _postJamResult(mid, options[winner]);
     _jamRollOn(options, winner);
   }
 
@@ -1162,7 +1377,9 @@ extension _ChatPollsAdmin on _ChatPageState {
         by: _myName.isEmpty ? null : _myName, next: true);
     if (!mounted) return;
     if (ok) {
-      rebuildWith(() => _jamPlayed.add(msg['id'].toString()));
+      final mid = msg['id'].toString();
+      rebuildWith(() => _jamDone[mid] = 'Sent to the room — plays next 🎶');
+      _postJamResult(mid, title);
       showToast(context, 'Sent — “$title” plays next for everyone 🎶',
           type: ToastType.success);
     } else {
@@ -1187,7 +1404,11 @@ extension _ChatPollsAdmin on _ChatPageState {
     }
     if (bytes.isEmpty || !mounted) return;
     playbackBus.onPause?.call();
-    rebuildWith(() => _jamPlayed.add(msg['id'].toString()));
+    final mid = msg['id'].toString();
+    rebuildWith(() => _jamDone[mid] = 'Playing in the jam room 🎶');
+    _postJamResult(mid, title);
+    // The room counts this winner's reactions for the group.
+    LiveSessionController.pendingJamTitle = title;
     Navigator.of(context).push(MaterialPageRoute<void>(
       fullscreenDialog: true,
       builder: (_) => LiveSessionScreen.roomHost(

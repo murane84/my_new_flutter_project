@@ -1865,8 +1865,8 @@ extension _HomeFriendListView on HomePageState {
                 : const Text('No alerts from this group; it stays in the list'),
             onTap: () {
               Navigator.pop(ctx);
+              // Home listens to GroupMeta and repaints the row itself.
               GroupMeta.instance.toggleMute(gid);
-              if (mounted) setState(() {});
             },
           ),
           const SizedBox(height: 8),

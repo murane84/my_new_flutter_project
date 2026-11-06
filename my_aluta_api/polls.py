@@ -68,6 +68,9 @@ def start_countdown(msg, minutes: int) -> str:
     poll = load(msg)
     if poll.get("kind") != "jam":
         raise ValueError("Only a jam has a countdown")
+    ca = poll.get("closes_at")
+    if ca and int(time.time()) > int(ca):
+        raise ValueError("This jam has already closed")
     m = max(1, min(int(minutes), 60))
     poll["closes_at"] = int(time.time()) + m * 60
     msg.poll = json.dumps(poll, separators=(",", ":"))

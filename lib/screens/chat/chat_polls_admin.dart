@@ -1125,10 +1125,13 @@ extension _ChatPollsAdmin on _ChatPageState {
         label = closed && voters < need
             ? '⏱ Time’s up · $voters vote${voters == 1 ? '' : 's'}'
             : '🏁 Decided · $voters vote${voters == 1 ? '' : 's'}';
+      } else if (closed) {
+        label = '⏱ Time’s up · no votes — nothing plays';
       } else {
-        final mm = left == null
+        final l = left == null ? null : (left < 0 ? 0 : left);
+        final mm = l == null
             ? ''
-            : ' · ⏳ ${left ~/ 60}:${(left % 60).toString().padLeft(2, '0')}';
+            : ' · ⏳ ${l ~/ 60}:${(l % 60).toString().padLeft(2, '0')}';
         label = waitAll && left == null
             ? '$voters of $need · waiting for everyone'
             : '$voters of $need votes to decide$mm';
@@ -1199,6 +1202,20 @@ extension _ChatPollsAdmin on _ChatPageState {
         return build();
       },
     );
+  }
+
+  /// True when a "🏆 “title” won…" line was posted AFTER this jam poll — the
+  /// winner was played by someone, so nobody else should play it again.
+  bool _jamWinnerPosted(Map<String, dynamic> poll, String title) {
+    final pAt = DateTime.tryParse((poll['timestamp'] ?? '').toString());
+    final head = '🏆 “$title”';
+    for (final m in _messages) {
+      final c = (m['content'] ?? '').toString();
+      if (!c.startsWith(head)) continue;
+      final at = DateTime.tryParse((m['timestamp'] ?? '').toString());
+      if (pAt == null || at == null || !at.isBefore(pAt)) return true;
+    }
+    return false;
   }
 
   /// 🏆 the result line in the group when a winner starts playing (its
@@ -1308,6 +1325,17 @@ extension _ChatPollsAdmin on _ChatPageState {
                   color: textColor.withValues(alpha: 0.7))),
         );
     if (_jamDone.containsKey(mid)) return note(_jamDone[mid]!);
+    // Someone (anyone in the group) already played this jam's winner — the
+    // 🏆 line is in the chat after the poll → no second "Play".
+    if (_jamWinnerPosted(msg, title)) {
+      return note('Played for the group — chosen by $votes 🎶');
+    }
+    // A jam left for a day is over; nothing to act on any more.
+    final at = DateTime.tryParse((msg['timestamp'] ?? '').toString());
+    if (at != null &&
+        DateTime.now().difference(at.toLocal()) > const Duration(hours: 24)) {
+      return note('This jam has ended');
+    }
     // A dead heat → sudden death: a 30-second decider between the tied songs.
     if (tied) {
       return Padding(

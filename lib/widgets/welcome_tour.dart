@@ -195,23 +195,38 @@ class _TourPagesState extends State<_TourPages>
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),
                     child: Row(children: [
+                      // Footer pieces never wrap or overflow: on a small
+                      // screen or with a large system font they scale down
+                      // as a whole (FittedBox) instead of breaking "Back"
+                      // onto two lines.
                       SizedBox(
-                        width: 84,
+                        width: 96,
                         child: AnimatedOpacity(
                           opacity: _i == 0 ? 0 : 1,
                           duration: const Duration(milliseconds: 200),
-                          child: TextButton.icon(
-                            onPressed: _i == 0 ? null : () => _go(_i - 1),
-                            icon: const Icon(Icons.arrow_back_rounded,
-                                size: 18),
-                            label: const Text('Back'),
-                            style: TextButton.styleFrom(
-                                foregroundColor: scheme.onSurfaceVariant),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: _i == 0 ? null : () => _go(_i - 1),
+                              icon: const Icon(Icons.arrow_back_rounded,
+                                  size: 18),
+                              label: const Text('Back',
+                                  maxLines: 1, softWrap: false),
+                              style: TextButton.styleFrom(
+                                foregroundColor: scheme.onSurfaceVariant,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10),
+                              ),
+                            ),
                           ),
                         ),
                       ),
                       Expanded(
-                        child: Row(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             for (var k = 0; k < _pages.length; k++)
@@ -234,9 +249,13 @@ class _TourPagesState extends State<_TourPages>
                               ),
                           ],
                         ),
+                        ),
                       ),
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 150),
+                        child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
                         child: FilledButton(
                           onPressed: () => _go(_i + 1),
                           style: FilledButton.styleFrom(
@@ -253,7 +272,8 @@ class _TourPagesState extends State<_TourPages>
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(last ? 'Let’s go' : 'Next'),
+                              Text(last ? 'Let’s go' : 'Next',
+                                  maxLines: 1, softWrap: false),
                               const SizedBox(width: 6),
                               Icon(
                                   last
@@ -262,6 +282,7 @@ class _TourPagesState extends State<_TourPages>
                                   size: 18),
                             ],
                           ),
+                        ),
                         ),
                       ),
                     ]),

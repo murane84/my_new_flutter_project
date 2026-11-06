@@ -17,6 +17,13 @@ enum RingMode {
   /// A call is live (group call): a full theme ring that breathes, with a
   /// small call badge at the corner.
   call,
+
+  /// They're playing the SAME song I am right now: a matched pair of arcs
+  /// turning in step, with a tiny heart at the corner.
+  sameSong,
+
+  /// They're typing to me: a ring of dots shimmering round the rim.
+  typing,
 }
 
 /// A friend's photo with its status ring, sized to a fixed [slot] so a row
@@ -32,8 +39,12 @@ class PresenceRingAvatar extends StatefulWidget {
     this.color2 = const Color(0xFFF2A541),
     this.progress,
     this.glow = false,
+    this.paused = false,
     this.gapColor,
   });
+
+  /// Listening, but paused: the ring freezes and dims, the vinyl stops.
+  final bool paused;
 
   /// The photo, already [face] px wide.
   final Widget child;
@@ -67,7 +78,8 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
   late final AnimationController _c =
       AnimationController(vsync: this, duration: const Duration(seconds: 6));
 
-  bool get _moving => widget.mode != RingMode.none || widget.glow;
+  bool get _moving =>
+      (widget.mode != RingMode.none || widget.glow) && !widget.paused;
 
   @override
   void initState() {
@@ -101,7 +113,9 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
     return SizedBox(
       width: slot,
       height: slot,
-      child: AnimatedBuilder(
+      child: Opacity(
+        opacity: widget.paused ? 0.55 : 1,
+        child: AnimatedBuilder(
         animation: _c,
         builder: (context, child) {
           final t = _c.value;
@@ -143,6 +157,23 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
                   ),
                 ),
               SizedBox(width: widget.face, height: widget.face, child: child),
+              if (widget.mode == RingMode.sameSong)
+                Positioned(
+                  right: -3,
+                  bottom: -3,
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: widget.color,
+                      border: Border.all(color: gap, width: 2),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.favorite_rounded,
+                        size: 10, color: Colors.white),
+                  ),
+                ),
               if (widget.mode == RingMode.call)
                 Positioned(
                   right: -3,
@@ -198,6 +229,7 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
         },
         child: widget.child,
       ),
+      ),
     );
   }
 }
@@ -247,6 +279,26 @@ class _RingPainter extends CustomPainter {
           ).createShader(rect);
           canvas.drawArc(rect, top + full * t, full * 0.7, false, p);
           p.shader = null;
+        }
+      case RingMode.sameSong:
+        // A matched pair: two equal arcs, opposite each other, turning in
+        // step — "we're on the same song".
+        final a = top + full * t;
+        p.color = color;
+        canvas.drawArc(rect, a, full * 0.40, false, p);
+        canvas.drawArc(rect, a + full * 0.5, full * 0.40, false, p);
+      case RingMode.typing:
+        // Twelve dots round the rim; a soft wave of brightness travels.
+        const n = 12;
+        final dot = Paint()..style = PaintingStyle.fill;
+        for (var i = 0; i < n; i++) {
+          final ang = top + full * i / n;
+          final wave = 0.5 + 0.5 * math.cos(full * (i / n - t * 3));
+          dot.color = color.withValues(alpha: 0.25 + 0.75 * wave);
+          canvas.drawCircle(
+              rect.center + Offset(math.cos(ang), math.sin(ang)) * r,
+              1.6 + 0.6 * wave,
+              dot);
         }
       case RingMode.call:
         // A live call: the whole ring breathes (a heartbeat every 1.5 s).

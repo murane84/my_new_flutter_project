@@ -1491,6 +1491,10 @@ extension _HomeFriendListView on HomePageState {
       final t = (npTrack['title'] ?? '').toString().trim();
       final a = (npTrack['artist'] ?? '').toString().trim();
       if (t.isNotEmpty) npLine = a.isNotEmpty ? '$t — $a' : t;
+      // Same song as me right now → say so (the ring shows a matched pair).
+      if (npLine != null && _onSameSong((f['id'] as num).toInt())) {
+        npLine = 'You’re both on this song · $npLine';
+      }
     }
     final isTyping = _typingTimers.containsKey((f['id'] as num).toInt());
     final isDark = Theme.of(context).brightness == Brightness.dark;

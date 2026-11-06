@@ -1517,6 +1517,18 @@ extension _HomePageHelpers1 on HomePageState {
     );
   }
 
+  /// True when friend [id] is playing the very song I'm playing right now.
+  bool _onSameSong(int id) {
+    final presence = NowPlayingPresence.instance;
+    final track = presence.trackFor(id);
+    final mine = presence.myTrack;
+    if (track == null || mine == null) return false;
+    bool same(String? a, String b) =>
+        (a ?? '').trim().toLowerCase() == b.trim().toLowerCase();
+    return same(track['title']?.toString(), mine.title) &&
+        same(track['artist']?.toString(), mine.artist);
+  }
+
   /// A friend's photo in the Circle list, standing OUTSIDE its card, with
   /// the ring around it saying what's happening (strongest first):
   ///   together with me › listening (song progress + mini vinyl) › unseen
@@ -1529,12 +1541,30 @@ extension _HomePageHelpers1 on HomePageState {
     final scheme = Theme.of(context).colorScheme;
     final id = (f['id'] as num?)?.toInt() ?? -1;
     final presence = NowPlayingPresence.instance;
+    // Priority: together › same song › listening › typing › paused ›
+    // unseen story › bond › quiet (music is live; stories also have their
+    // own row above the list).
     final together =
         activeLiveSession?.controller.partnerIds.contains(id) ?? false;
-    final listening = !together && presence.trackFor(id) != null;
+    final track = presence.trackFor(id);
+    final sameSong = !together && _onSameSong(id);
+    final listening = !together && track != null;
+    final typing = _typingTimers.containsKey(id);
+    final paused = !together &&
+        track == null &&
+        !typing &&
+        presence.pausedTrackFor(id) != null;
     final mode = together
         ? RingMode.together
-        : (listening ? RingMode.listening : RingMode.none);
+        : sameSong
+            ? RingMode.sameSong
+            : (listening || paused)
+                ? RingMode.listening
+                : typing
+                    ? RingMode.typing
+                    : RingMode.none;
+    final songColor = presence.colorFor(id);
+    final ringColor = songColor != null ? Color(songColor) : scheme.primary;
     final story = _friendStory(f['id']);
     final avatar = InitialsAvatar(
       name: name,
@@ -1601,9 +1631,10 @@ extension _HomePageHelpers1 on HomePageState {
         key: ValueKey('ring-$id'),
         face: face,
         mode: mode,
-        color: scheme.primary,
+        color: mode == RingMode.typing ? scheme.primary : ringColor,
         color2: const Color(0xFFF2A541),
-        progress: listening ? () => presence.progressFor(id) : null,
+        paused: paused && mode == RingMode.listening,
+        progress: (listening || paused) ? () => presence.progressFor(id) : null,
         gapColor: scheme.surface,
         child: avatar,
       );

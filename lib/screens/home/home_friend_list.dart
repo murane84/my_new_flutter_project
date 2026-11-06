@@ -1762,14 +1762,22 @@ extension _HomeFriendListView on HomePageState {
         // A group call or a group Listen Together live in this group →
         // the live ring takes the photo's rim (same slot, no size change);
         // otherwise the quiet grey plate.
-        child: ValueListenableBuilder<Map<int, String>>(
-          valueListenable: GroupCallService.instance.ongoingCalls,
-          builder: (context, calls, _) {
+        child: ListenableBuilder(
+          listenable: Listenable.merge([
+            GroupCallService.instance.ongoingCalls,
+            LiveRoomsRegistry.instance,
+          ]),
+          builder: (context, _) {
+            final calls = GroupCallService.instance.ongoingCalls.value;
             final gcs = GroupCallService.instance;
             final inCall = calls.containsKey(gid) ||
                 (gcs.room == gid && gcs.phase != GroupCallPhase.idle);
+            // A Listen Together room live in this group — mine, or a
+            // member's I could drop into.
             final listening =
-                activeLiveSession?.controller.conversationId == gid;
+                activeLiveSession?.controller.conversationId == gid ||
+                    LiveRoomsRegistry.instance.roomForConversation(gid) !=
+                        null;
             final mode = inCall
                 ? RingMode.call
                 : (listening ? RingMode.together : RingMode.none);

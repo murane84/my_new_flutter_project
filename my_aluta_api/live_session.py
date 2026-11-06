@@ -52,6 +52,10 @@ class LiveSession:
         # we can tell them "room ended" even from the host-timeout path (which
         # has no DB/request context). Set by the room-create route.
         self.notify_ids: set[int] = set()
+        # GROUP Listen Together: the group conversation this room runs in, and
+        # its members (who may join even if they aren't the host's friends).
+        self.conversation_id: Optional[int] = None
+        self.group_ids: set[int] = set()
         # Metadata only — title/duration/mime. NOT the audio itself.
         self.track: dict = track or {}
         # Live socket connections, keyed by user id.
@@ -75,6 +79,7 @@ class LiveSession:
             "host_username": self.host_username,
             "track": self.track,
             "listeners": max(0, len(self.connections) - (1 if self.host_id in self.connections else 0)),
+            "conversation_id": self.conversation_id,
         }
 
 
@@ -99,7 +104,7 @@ class LiveSessionManager:
         out: List[LiveSession] = []
         for s in self.sessions.values():
             if (s.open
-                    and s.host_id in friends
+                    and (s.host_id in friends or user_id in s.group_ids)
                     and s.host_id != user_id
                     and s.host_id in s.connections):
                 out.append(s)
@@ -206,7 +211,8 @@ class LiveSessionManager:
             return
         payload = {"type": "live_room_ended",
                    "data": {"session_id": session.session_id,
-                            "host_id": session.host_id}}
+                            "host_id": session.host_id,
+                            "conversation_id": session.conversation_id}}
         for uid in session.notify_ids:
             safe_notify_user(uid, payload)
 

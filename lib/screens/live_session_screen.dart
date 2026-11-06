@@ -60,7 +60,11 @@ class LiveSessionScreen extends StatefulWidget {
     this.startPositionMs = 0,
     this.isRoom = false,
     this.myName,
+    this.conversationId,
   });
+
+  /// Host-only: a GROUP Listen Together room opened inside this group.
+  final int? conversationId;
 
   final LiveRole role;
   final String token;
@@ -121,17 +125,20 @@ class LiveSessionScreen extends StatefulWidget {
     required String title,
     int? durationMs,
     int startPositionMs = 0,
+    int? conversationId,
+    String? groupName,
   }) =>
       LiveSessionScreen._(
         role: LiveRole.host,
         token: token,
         myUserId: myUserId,
-        peerName: 'your circle',
+        peerName: groupName ?? 'your circle',
         audioBytes: audioBytes,
         title: title,
         durationMs: durationMs,
         startPositionMs: startPositionMs,
         isRoom: true,
+        conversationId: conversationId,
       );
 
   factory LiveSessionScreen.listener({
@@ -460,6 +467,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
             title: _title,
             durationMs: widget.durationMs,
             startPositionMs: widget.startPositionMs,
+            conversationId: widget.conversationId,
           );
         } else {
           await _c.startHost(

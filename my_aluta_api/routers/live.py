@@ -19,7 +19,7 @@ from jose import JWTError, jwt
 
 from config import SECRET_KEY, ALGORITHM
 from database import SessionLocal, get_db
-from models import User, Friend
+from models import User, Friend, ConversationMember
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
@@ -77,6 +77,9 @@ class CreateRoomRequest(BaseModel):
     # An open "Listening Room" — no single receiver; the host's whole circle can
     # drop in. Only the track metadata is needed to seed it.
     track: TrackMeta = TrackMeta()
+    # GROUP Listen Together: open the room inside this group conversation —
+    # announced to (and joinable by) its members instead of the host's friends.
+    conversation_id: Optional[int] = None
 
 
 # ------------------------------ HTTP ------------------------------
@@ -144,13 +147,26 @@ def create_room(
     reconnect re-delivery)."""
     session_id = uuid.uuid4().hex
     track = body.track.model_dump()
-    friend_ids = _friend_ids(db, current_user.id)
+    cid = body.conversation_id
+    group_ids: list = []
+    if cid is not None:
+        rows = (db.query(ConversationMember.user_id)
+                .filter(ConversationMember.conversation_id == cid).all())
+        group_ids = [int(r[0]) for r in rows]
+        if current_user.id not in group_ids:
+            raise HTTPException(status_code=403,
+                                detail="Not a member of this group")
+        audience = [u for u in group_ids if u != current_user.id]
+    else:
+        audience = _friend_ids(db, current_user.id)
     session = MANAGER.create(
         session_id, host_id=current_user.id, invited_ids=[], track=track,
         host_username=current_user.username or "", open=True)
+    session.conversation_id = cid
+    session.group_ids = set(group_ids)
     # Remember the circle we told, so we can also announce when the room ends
     # (including from the host-timeout path, which has no request context).
-    session.notify_ids = set(friend_ids)
+    session.notify_ids = set(audience)
 
     payload = {
         "type": "live_room_available",
@@ -159,13 +175,14 @@ def create_room(
             "host_id": current_user.id,
             "host_username": current_user.username,
             "track": track,
+            "conversation_id": cid,
         },
     }
-    for fid in friend_ids:
+    for fid in audience:
         safe_notify_user(fid, payload)
 
     return {"session_id": session_id, "host_id": current_user.id,
-            "track": track, "open": True}
+            "track": track, "open": True, "conversation_id": cid}
 
 
 @router.get("/rooms")
@@ -314,7 +331,8 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
     # an OPEN "Listening Room" — any friend of the host (drop-in). The friendship
     # check opens its own DB session so it's safe here.
     allowed = user.id in session.allowed_ids or (
-        session.open and _are_friends(user.id, session.host_id))
+        session.open and (user.id in session.group_ids
+                          or _are_friends(user.id, session.host_id)))
     if not allowed:
         await websocket.close(code=4403)  # not allowed in this room
         return

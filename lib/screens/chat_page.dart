@@ -1548,15 +1548,27 @@ class _ChatPageState extends State<ChatPage>
     if (!mounted) return;
     Navigator.of(context).push(MaterialPageRoute<void>(
       fullscreenDialog: true,
-      builder: (_) => LiveSessionScreen.host(
-        token: token,
-        myUserId: myUserId,
-        receiverId: widget.friendId,
-        audioBytes: bytes,
-        title: _titleFromPath(chosenPath),
-        peerName: _livePeerLabel,
-        startPositionMs: startPositionMs,
-      ),
+      // In a GROUP: open a Listen Together room inside the group — every
+      // member can drop in (the group's photo rings in their Circle list).
+      builder: (_) => _isGroup
+          ? LiveSessionScreen.roomHost(
+              token: token,
+              myUserId: myUserId,
+              audioBytes: bytes,
+              title: _titleFromPath(chosenPath),
+              startPositionMs: startPositionMs,
+              conversationId: widget.conversationId,
+              groupName: widget.groupTitle.isEmpty ? 'the group' : widget.groupTitle,
+            )
+          : LiveSessionScreen.host(
+              token: token,
+              myUserId: myUserId,
+              receiverId: widget.friendId,
+              audioBytes: bytes,
+              title: _titleFromPath(chosenPath),
+              peerName: _livePeerLabel,
+              startPositionMs: startPositionMs,
+            ),
     ));
   }
 
@@ -7581,12 +7593,11 @@ class _ChatPageState extends State<ChatPage>
               icon: const Icon(Icons.call_rounded),
               onPressed: _showCallChoice,
             ),
-          if (!_isGroup)
-            IconButton(
-              tooltip: 'Listen together',
-              icon: const Icon(Icons.headphones_rounded),
-              onPressed: _startListenTogether,
-            ),
+          IconButton(
+            tooltip: _isGroup ? 'Listen together in the group' : 'Listen together',
+            icon: const Icon(Icons.headphones_rounded),
+            onPressed: _startListenTogether,
+          ),
           IconButton(
             tooltip: 'Search in chat',
             icon: const Icon(Icons.search_rounded),

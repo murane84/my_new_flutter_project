@@ -488,11 +488,13 @@ class LiveSessionController {
     int? durationMs,
     String mime = 'audio/mpeg',
     int startPositionMs = 0,
+    int? conversationId,
   }) async {
     role = LiveRole.host;
-    // A room isn't a 1:1 conversation, so there's no per-friend history to log.
+    // A circle room has no thread to log to; a GROUP room ([conversationId])
+    // logs its outcome into that group, and is joinable by its members.
     _logReceiverId = null;
-    _logConversationId = null;
+    _logConversationId = conversationId;
     _sessionStartAt = DateTime.now();
     _hadListener = false;
     _outcomeLogged = false;
@@ -511,6 +513,7 @@ class LiveSessionController {
           'duration_ms': durationMs,
           'mime': mime,
         },
+        'conversation_id': ?conversationId,
       }),
     );
     if (res.statusCode != 200) {

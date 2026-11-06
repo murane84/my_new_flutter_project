@@ -1205,14 +1205,24 @@ extension _ChatPageHelpers1 on _ChatPageState {
     if (!mounted) return;
     Navigator.of(context).push(MaterialPageRoute<void>(
       fullscreenDialog: true,
-      builder: (_) => LiveSessionScreen.host(
-        token: token,
-        myUserId: myUserId,
-        receiverId: widget.friendId,
-        audioBytes: bytes,
-        title: picked.name,
-        peerName: _livePeerLabel,
-      ),
+      builder: (_) => _isGroup
+          ? LiveSessionScreen.roomHost(
+              token: token,
+              myUserId: myUserId,
+              audioBytes: bytes,
+              title: picked.name,
+              conversationId: widget.conversationId,
+              groupName:
+                  widget.groupTitle.isEmpty ? 'the group' : widget.groupTitle,
+            )
+          : LiveSessionScreen.host(
+              token: token,
+              myUserId: myUserId,
+              receiverId: widget.friendId,
+              audioBytes: bytes,
+              title: picked.name,
+              peerName: _livePeerLabel,
+            ),
     ));
   }
 }

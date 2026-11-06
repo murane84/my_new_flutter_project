@@ -351,6 +351,79 @@ extension _HomePageHelpers2 on HomePageState {
     if (g == null) return const SizedBox.shrink();
     final room = (g['id'] as num?)?.toInt();
     if (room == null) return const SizedBox.shrink();
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      _groupCallJoinBar(g, room),
+      _groupListenJoinBar(room),
+    ]);
+  }
+
+  /// "🎧 <host> is playing <song> · Join" — a member's Listen Together room
+  /// live in this group (hidden once I'm in it, or when it's mine).
+  Widget _groupListenJoinBar(int room) {
+    return ListenableBuilder(
+      listenable: LiveRoomsRegistry.instance,
+      builder: (context, _) {
+        final r = LiveRoomsRegistry.instance.roomForConversation(room);
+        if (r == null) return const SizedBox.shrink();
+        final sid = (r['session_id'] ?? '').toString();
+        if (activeLiveSession?.controller.sessionId == sid) {
+          return const SizedBox.shrink();
+        }
+        final scheme = Theme.of(context).colorScheme;
+        final host = ContactNames.instance.displayName(
+            userId: r['host_id'],
+            registered: (r['host_username'] ?? 'Someone').toString());
+        final t = (r['track'] as Map?)?['title']?.toString().trim() ?? '';
+        return Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Material(
+            color: scheme.primary,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => _dropIntoRoom(r),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                child: Row(children: [
+                  Icon(Icons.headphones_rounded,
+                      size: 18, color: scheme.onPrimary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      t.isEmpty
+                          ? '$host is playing for the group'
+                          : '$host is playing “$t”',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: scheme.onPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => _dropIntoRoom(r),
+                    style: TextButton.styleFrom(
+                      foregroundColor: scheme.onPrimary,
+                      backgroundColor: scheme.onPrimary.withAlpha(38),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      minimumSize: const Size(0, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Join',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ]),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _groupCallJoinBar(Map<String, dynamic> g, int room) {
     return ValueListenableBuilder<Map<int, String>>(
       valueListenable: GroupCallService.instance.ongoingCalls,
       builder: (context, ongoing, _) {

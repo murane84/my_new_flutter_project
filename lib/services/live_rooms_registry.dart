@@ -44,8 +44,18 @@ class LiveRoomsRegistry extends ChangeNotifier {
       'host_id': hostId,
       'host_username': (data['host_username'] ?? '').toString(),
       'track': data['track'],
+      'conversation_id': (data['conversation_id'] as num?)?.toInt(),
       '_seq': _seq++,
     };
+  }
+
+  /// A live GROUP Listen Together room running in conversation [cid]
+  /// (hosted by someone else), or null.
+  Map<String, dynamic>? roomForConversation(int cid) {
+    for (final r in _rooms.values) {
+      if (r['conversation_id'] == cid) return r;
+    }
+    return null;
   }
 
   /// A friend opened (or updated) a room.

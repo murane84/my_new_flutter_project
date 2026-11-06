@@ -90,7 +90,7 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
   @override
   void didUpdateWidget(PresenceRingAvatar old) {
     super.didUpdateWidget(old);
-    if (_moving && !_c.isAnimating) {
+    if (_moving && !_c.isAnimating && !_scrolling) {
       _c.repeat();
     } else if (!_moving && _c.isAnimating) {
       _c.stop();
@@ -99,8 +99,36 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
 
   @override
   void dispose() {
+    _scroll?.isScrollingNotifier.removeListener(_onScrolling);
     _c.dispose();
     super.dispose();
+  }
+
+  // Calm motion: while the list is being scrolled every ring holds still
+  // (no wasted frames, nothing swimming under the thumb), then resumes.
+  ScrollPosition? _scroll;
+  bool _scrolling = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final pos = Scrollable.maybeOf(context)?.position;
+    if (pos != _scroll) {
+      _scroll?.isScrollingNotifier.removeListener(_onScrolling);
+      _scroll = pos;
+      _scroll?.isScrollingNotifier.addListener(_onScrolling);
+    }
+  }
+
+  void _onScrolling() {
+    final s = _scroll?.isScrollingNotifier.value ?? false;
+    if (s == _scrolling) return;
+    _scrolling = s;
+    if (s) {
+      _c.stop();
+    } else if (_moving) {
+      _c.repeat();
+    }
   }
 
   @override

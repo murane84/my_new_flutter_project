@@ -1620,7 +1620,7 @@ extension _HomePageHelpers1 on HomePageState {
       final plate = PresenceRingAvatar(
         key: ValueKey('ring-$id'),
         face: face,
-        glow: _isBondedFriend(id),
+        glow: _isHarmonyPartner(id),
         color: scheme.primary,
         gapColor: scheme.surface,
         child: avatar,

@@ -1701,6 +1701,18 @@ extension _HomeFriendListView on HomePageState {
     return false;
   }
 
+  /// True when [friendId] is my Harmony partner — the other member of my
+  /// primary (hero) Space. Only they get the bond ring around their photo,
+  /// so it stays special however many Spaces I share.
+  bool _isHarmonyPartner(int friendId) {
+    final s = _primarySpace;
+    if (s == null) return false;
+    for (final m in ((s['members'] as List?) ?? const []).whereType<Map>()) {
+      if ((m['id'] as num?)?.toInt() == friendId) return true;
+    }
+    return false;
+  }
+
   /// Small mark before the tile's time for a pinned chat: a heart for a
   /// bonded partner (Aluta's signature), a pin for everyone else.
   Widget _pinMark(Map<String, dynamic> m, ColorScheme scheme) {

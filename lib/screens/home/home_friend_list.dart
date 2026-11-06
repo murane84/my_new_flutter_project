@@ -1403,6 +1403,22 @@ extension _HomeFriendListView on HomePageState {
     );
   }
 
+  /// The round "plate" behind a photo in the Circle list — the same surface,
+  /// edge and shadow as the card beside it, so photo + card read as one row
+  /// in both themes (the status ring draws on its rim).
+  Widget _circlePlate(ColorScheme scheme, bool isDark, Widget child) {
+    final d = _circleTileDecoration(scheme, isDark);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: d.gradient,
+        border: d.border,
+        boxShadow: d.boxShadow,
+      ),
+      child: child,
+    );
+  }
+
   /// "📞 Free to talk" — a tiny pill next to a friend's name.
   Widget _quickStatusChip(String st, ColorScheme scheme) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
@@ -1458,7 +1474,8 @@ extension _HomeFriendListView on HomePageState {
       final narrow = box.maxWidth < 330;
       final face = narrow ? 40.0 : 44.0;
       return Row(children: [
-      _storyRingAvatar(f, name, isOnline, face: face),
+      _circlePlate(scheme, isDark,
+          _storyRingAvatar(f, name, isOnline, face: face)),
       SizedBox(width: narrow ? 4 : 6),
       Expanded(
       child: Container(
@@ -1696,7 +1713,7 @@ extension _HomeFriendListView on HomePageState {
         behavior: HitTestBehavior.opaque,
         onTap: () =>
             _isSharing ? _sendShareTo(group: g) : openGroupInPanel(g),
-        child: SizedBox(
+        child: _circlePlate(scheme, isDark, SizedBox(
         width: face + 8,
         height: face + 8,
         child: Center(
@@ -1712,7 +1729,7 @@ extension _HomeFriendListView on HomePageState {
                 : null,
           ),
         ),
-        ),
+        )),
       ),
       SizedBox(width: narrow ? 4 : 6),
       Expanded(

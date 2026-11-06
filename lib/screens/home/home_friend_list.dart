@@ -1507,7 +1507,7 @@ extension _HomeFriendListView on HomePageState {
       padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
       child: LayoutBuilder(builder: (context, box) {
       final narrow = box.maxWidth < 330;
-      final face = narrow ? 40.0 : 44.0;
+      final face = narrow ? 50.0 : 56.0; // slot = face + 8 = the card's 64 px height
       return Row(children: [
       _storyRingAvatar(f, name, isOnline, face: face),
       SizedBox(width: narrow ? 4 : 6),
@@ -1753,7 +1753,7 @@ extension _HomeFriendListView on HomePageState {
       // Photo outside the card, like a friend's row (same geometry).
       child: LayoutBuilder(builder: (context, box) {
       final narrow = box.maxWidth < 330;
-      final face = narrow ? 40.0 : 44.0;
+      final face = narrow ? 50.0 : 56.0; // slot = face + 8 = the card's 64 px height
       return Row(children: [
       GestureDetector(
         behavior: HitTestBehavior.opaque,

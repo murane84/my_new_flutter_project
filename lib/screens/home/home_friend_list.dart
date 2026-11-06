@@ -1474,6 +1474,9 @@ extension _HomeFriendListView on HomePageState {
         f['phone']?.toString(), f['username'] as String? ?? '');
     // Online dot now comes from Riverpod (single source of truth for presence).
     final isOnline = ref.watch(presenceProvider).isOnline((f['id'] as num).toInt());
+    // Repaint when a Listen Together session starts / ends, so the
+    // "together" ring around this photo comes and goes with it.
+    ref.watch(liveSessionProvider);
     final lastMsg = _previewText(f['last_message'] as String? ?? '');
     final lastTime = f['last_timestamp'] as String? ?? '';
     // Unread now comes from Riverpod (single source of truth for the badge).

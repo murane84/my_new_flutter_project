@@ -403,6 +403,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     WidgetsBinding.instance.addObserver(this);
     // App open: incoming chat messages show Aluta's reply banner.
     ReplyBanner.onIncoming = _showReplyBanner;
+    LiveRoomsRegistry.instance.joinRoom = _dropIntoRoom;
     // Our Space reads its saved copy synchronously → opens complete.
     warmSpacePrefs();
     _loadPinnedChats();
@@ -568,6 +569,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void dispose() {
     if (ReplyBanner.onIncoming == _showReplyBanner) {
       ReplyBanner.onIncoming = null;
+      LiveRoomsRegistry.instance.joinRoom = null;
     }
     ReplyBanner.hide();
     _glowTimer?.cancel();

@@ -2112,10 +2112,25 @@ extension _HomeFriendListView on HomePageState {
         registered: (room['host_username'] ?? 'A friend').toString());
     final track = room['track'] as Map?;
     final title = (track?['title'] ?? '').toString();
+    // A GROUP jam room says which group it's playing for.
+    final cid = room['conversation_id'];
+    String? group;
+    if (cid != null) {
+      for (final g in _groups) {
+        if (g['id'] == cid) {
+          final t = (g['title'] ?? '').toString().trim();
+          group = t.isEmpty ? 'your group' : t;
+          break;
+        }
+      }
+      group ??= 'a group';
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('$host is hosting a room',
+        Text(group == null
+                ? '$host is hosting a room'
+                : '$host is playing for $group',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(

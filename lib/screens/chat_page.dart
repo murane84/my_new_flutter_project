@@ -42,6 +42,7 @@ import '../utils/prefs_now.dart';
 import 'live_session_screen.dart';
 import '../services/live_session_service.dart'
     show activeLiveSession, LiveTrack;
+import '../services/live_rooms_registry.dart';
 import '../utils/on_accent.dart';
 import 'gif_picker.dart';
 import '../services/call_service.dart';
@@ -1483,6 +1484,18 @@ class _ChatPageState extends State<ChatPage>
   /// music player's already-loaded playlist (falling back to the file browser
   /// only when nothing is loaded yet).
   Future<void> _startListenTogether() async {
+    // A member's jam room is already live in this group → JOIN it rather
+    // than opening a second room.
+    if (_isGroup) {
+      final live = LiveRoomsRegistry.instance.roomForConversation(_cid);
+      final join = LiveRoomsRegistry.instance.joinRoom;
+      if (live != null &&
+          join != null &&
+          activeLiveSession?.controller.sessionId != live['session_id']) {
+        join(live);
+        return;
+      }
+    }
     final token = await getToken();
     final myUserId = int.tryParse(_myId ?? '');
     if (token == null || myUserId == null) {

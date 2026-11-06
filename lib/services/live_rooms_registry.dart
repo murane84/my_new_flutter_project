@@ -49,6 +49,10 @@ class LiveRoomsRegistry extends ChangeNotifier {
     };
   }
 
+  /// Opens the drop-in flow for [room] (set by Home, which owns it) — lets a
+  /// group chat / jam poll JOIN a member's room instead of starting another.
+  void Function(Map<String, dynamic> room)? joinRoom;
+
   /// A live GROUP Listen Together room running in conversation [cid]
   /// (hosted by someone else), or null.
   Map<String, dynamic>? roomForConversation(int cid) {

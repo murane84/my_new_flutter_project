@@ -961,8 +961,12 @@ extension _ChatPollsAdmin on _ChatPageState {
                 TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.6)),
           ),
           if (isJam && winner >= 0 && !pending)
-            _jamAction(msg, options, winner, counts[winner], textColor,
-                accent),
+            // Rebuilds when a jam room opens / closes in the group.
+            ListenableBuilder(
+              listenable: LiveRoomsRegistry.instance,
+              builder: (_, _) => _jamAction(
+                  msg, options, winner, counts[winner], textColor, accent),
+            ),
         ],
       ),
     );
@@ -1030,6 +1034,24 @@ extension _ChatPollsAdmin on _ChatPageState {
       );
     }
     if (listeningHere) return note('The host plays the winner next 🎧');
+    // A member's jam room is live here → join it (they play the winner).
+    final live = LiveRoomsRegistry.instance.roomForConversation(_cid);
+    final join = LiveRoomsRegistry.instance.joinRoom;
+    if (s == null && live != null && join != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: OutlinedButton.icon(
+          onPressed: () => join(live),
+          icon: const Icon(Icons.headphones_rounded, size: 18),
+          label: const Text('Join the jam room'),
+          style: OutlinedButton.styleFrom(
+              foregroundColor: accent,
+              side: BorderSide(color: accent.withValues(alpha: 0.6)),
+              minimumSize: const Size.fromHeight(38),
+              shape: const StadiumBorder()),
+        ),
+      );
+    }
     if (s == null && path != null) {
       return Padding(
         padding: const EdgeInsets.only(top: 8),

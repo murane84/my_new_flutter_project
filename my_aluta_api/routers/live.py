@@ -181,6 +181,22 @@ def create_room(
     for fid in audience:
         safe_notify_user(fid, payload)
 
+    # GROUP jam room: members whose app is closed still hear about it — the
+    # same push a 1:1 Listen Together invite uses (tapping it joins).
+    if cid is not None:
+        for fid in audience:
+            try:
+                send_push_to_user(fid, {
+                    "type": "live_invite",
+                    "host_username": current_user.username or "Someone",
+                    "host_id": str(current_user.id),
+                    "session_id": session_id,
+                    "track_title": str((track or {}).get("title") or "")[:120],
+                    "conversation_id": str(cid),
+                })
+            except Exception:
+                pass
+
     return {"session_id": session_id, "host_id": current_user.id,
             "track": track, "open": True, "conversation_id": cid}
 

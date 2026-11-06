@@ -1228,6 +1228,12 @@ extension _ChatPollsAdmin on _ChatPageState {
         ' — now playing for the group 🎶'));
   }
 
+  /// The other songs of a decider's original jam (carried on afterwards).
+  List<String> _jamRestOf(Map<String, dynamic> msg) =>
+      ((_pollOf(msg)?['rest'] as List?) ?? const [])
+          .map((e) => e.toString())
+          .toList();
+
   /// This week's jam DJ: the member whose phone played the most jam winners
   /// (🏆 lines) in the last 7 days — null when none.
   String? _jamDjId() {
@@ -1349,6 +1355,13 @@ extension _ChatPollsAdmin on _ChatPageState {
               'multi': false,
               'kind': 'jam',
               'decider': true,
+              // The rest of this jam's songs come back after the decider.
+              'rest': [
+                for (final o in options)
+                  if (!tiedSongs.contains(o)) o,
+                for (final r in _jamRestOf(msg))
+                  if (!tiedSongs.contains(r)) r,
+              ],
               'closes_at':
                   DateTime.now().millisecondsSinceEpoch ~/ 1000 + 30,
             });
@@ -1465,7 +1478,7 @@ extension _ChatPollsAdmin on _ChatPageState {
     showToast(context, '“${options[winner]}” is up next for everyone 🎶',
         type: ToastType.success);
     _postJamResult(mid, options[winner]);
-    _jamRollOn(options, winner);
+    _jamRollOn(options, winner, rest: _jamRestOf(msg));
   }
 
   /// Listener in the group's jam room: upload the winner from my phone to
@@ -1490,6 +1503,12 @@ extension _ChatPollsAdmin on _ChatPageState {
       final mid = msg['id'].toString();
       rebuildWith(() => _jamDone[mid] = 'Sent to the room — plays next 🎶');
       _postJamResult(mid, title);
+      // The jam rolls on from whoever played the winner, room host or not.
+      final opts = ((_pollOf(msg)?['options'] as List?) ?? const [])
+          .map((e) => e.toString())
+          .toList();
+      final w = opts.indexOf(title);
+      if (w >= 0) _jamRollOn(opts, w, rest: _jamRestOf(msg));
       showToast(context, 'Sent — “$title” plays next for everyone 🎶',
           type: ToastType.success);
     } else {
@@ -1515,10 +1534,22 @@ extension _ChatPollsAdmin on _ChatPageState {
     if (bytes.isEmpty || !mounted) return;
     playbackBus.onPause?.call();
     final mid = msg['id'].toString();
-    rebuildWith(() => _jamDone[mid] = 'Playing in the jam room 🎶');
-    _postJamResult(mid, title);
+    rebuildWith(() => _jamDone[mid] = 'Opening the jam room 🎶');
     // The room counts this winner's reactions for the group.
     LiveSessionController.pendingJamTitle = title;
+    // Only once the room is REALLY live: the 🏆 line + the next vote.
+    final poll0 = _pollOf(msg);
+    final opts0 = ((poll0?['options'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .toList();
+    final rest0 = _jamRestOf(msg);
+    LiveSessionController.pendingJamOnLive = () {
+      if (!mounted) return;
+      rebuildWith(() => _jamDone[mid] = 'Playing in the jam room 🎶');
+      _postJamResult(mid, title);
+      final w = opts0.indexOf(title);
+      if (w >= 0) _jamRollOn(opts0, w, rest: rest0);
+    };
     Navigator.of(context).push(MaterialPageRoute<void>(
       fullscreenDialog: true,
       builder: (_) => LiveSessionScreen.roomHost(
@@ -1530,21 +1561,21 @@ extension _ChatPollsAdmin on _ChatPageState {
         groupName: widget.groupTitle.isEmpty ? 'the group' : widget.groupTitle,
       ),
     ));
-    final poll = _pollOf(msg);
-    final options = ((poll?['options'] as List?) ?? const [])
-        .map((e) => e.toString())
-        .toList();
-    final w = options.indexOf(title);
-    if (w >= 0) _jamRollOn(options, w);
   }
 
   /// Rolling jam: the moment a winner is queued, a fresh vote goes up with
   /// the songs that are left (when there are still two or more).
-  void _jamRollOn(List<String> options, int winner) {
-    final left = [
-      for (var i = 0; i < options.length; i++)
-        if (i != winner) options[i],
-    ];
+  void _jamRollOn(List<String> options, int winner,
+      {List<String> rest = const []}) {
+    // After a decider, the songs of the ORIGINAL jam that weren't in the tie
+    // ([rest]) come back too — the jam carries on, not just the loser.
+    final left = <String>[];
+    for (var i = 0; i < options.length; i++) {
+      if (i != winner && !left.contains(options[i])) left.add(options[i]);
+    }
+    for (final r in rest) {
+      if (r != options[winner] && !left.contains(r)) left.add(r);
+    }
     if (left.length < 2) return;
     _sendPoll({
       'q': 'After “${options[winner]}”, what next? 🎶',

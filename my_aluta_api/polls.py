@@ -53,9 +53,17 @@ def clean_poll(raw) -> dict:
         now = int(time.time())
         if ca > now:
             out["closes_at"] = min(ca, now + 3600)
-        # A sudden-death decider between tied songs.
+        # A sudden-death decider between tied songs; `rest` keeps the other
+        # songs of the original jam so the vote after it can carry on.
         if data.get("decider"):
             out["decider"] = True
+            rest = []
+            for o in data.get("rest") or []:
+                t = str(o or "").strip()[:MAX_OPTION_LEN]
+                if t and t.lower() not in seen and t not in rest:
+                    rest.append(t)
+            if rest:
+                out["rest"] = rest[:MAX_OPTIONS]
         # When the jam is decided without a clock: more than half ('half',
         # default) or only once EVERY member has voted ('all').
         if data.get("until") == "all":

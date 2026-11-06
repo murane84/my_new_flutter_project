@@ -394,6 +394,9 @@ class LiveSessionController {
   // while it's on; when it ends (next song / session over) a line goes to
   // the group: "🔥 “Song” got 12 reactions in the jam room".
   static String? pendingJamTitle; // set just before opening a room for a winner
+  /// Runs once the jam room is really live (created on the server) — posts
+  /// the 🏆 line and the next vote only then, never for a room that failed.
+  static void Function()? pendingJamOnLive;
   String? _jamTitle;
   int _jamReacts = 0;
   bool _jamSeen = false; // the winner actually started
@@ -589,9 +592,17 @@ class LiveSessionController {
       }),
     );
     if (res.statusCode != 200) {
+      pendingJamOnLive = null;
       throw Exception('Failed to create room: ${res.statusCode} ${res.body}');
     }
     sessionId = jsonDecode(res.body)['session_id'] as String;
+    final onLive = pendingJamOnLive;
+    pendingJamOnLive = null;
+    if (onLive != null && conversationId != null) {
+      try {
+        onLive();
+      } catch (_) {}
+    }
 
     await _beginHostPlayback(
       myUserId: myUserId,

@@ -415,10 +415,12 @@ class MyApp extends StatelessWidget {
           brightness: Brightness.dark,
         ).copyWith(
           // Exact accent here too — a neon stays neon on the dark surface.
-          primary: customAccent ? accent : const Color(0xFFFF5A5F),
-          onPrimary: customAccent
-              ? readableOn(accent)
-              : const Color(0xFF3A0007),
+          // Default = the EXACT Aluta red, same as its swatch and as every
+          // other accent is used on dark. (It used to be #FF5A5F — which is
+          // exactly the *Coral* swatch — so in dark mode "Aluta red" painted
+          // the app coral/pinkish while "Crimson" looked deeper: swapped.)
+          primary: customAccent ? accent : ThemeProvider.defaultAccent,
+          onPrimary: customAccent ? readableOn(accent) : Colors.white,
           primaryContainer: darkP?.primaryContainer ?? const Color(0xFF8E1420),
           onPrimaryContainer:
               darkP?.onPrimaryContainer ?? const Color(0xFFFFDAD7),

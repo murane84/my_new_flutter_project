@@ -17,7 +17,8 @@ class BrandTheme extends StatelessWidget {
 
   // The exact brand primaries used by the default (accent-free) app theme.
   static const Color _lightPrimary = Color(0xFFD90429);
-  static const Color _darkPrimary = Color(0xFFFF5A5F);
+  // Same exact brand red on dark (was #FF5A5F = the Coral swatch).
+  static const Color _darkPrimary = Color(0xFFD90429);
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +26,7 @@ class BrandTheme extends StatelessWidget {
     final dark = base.brightness == Brightness.dark;
 
     final primary = dark ? _darkPrimary : _lightPrimary;
-    final onPrimary = dark ? const Color(0xFF3A0007) : Colors.white;
+    const onPrimary = Colors.white;
     final primaryContainer =
         dark ? const Color(0xFF8E1420) : const Color(0xFFFFDAD7);
     final onPrimaryContainer =

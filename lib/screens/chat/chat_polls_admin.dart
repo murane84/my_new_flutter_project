@@ -964,8 +964,9 @@ extension _ChatPollsAdmin on _ChatPageState {
             // Rebuilds when a jam room opens / closes in the group.
             ListenableBuilder(
               listenable: LiveRoomsRegistry.instance,
-              builder: (_, _) => _jamAction(
-                  msg, options, winner, counts[winner], textColor, accent),
+              builder: (_, _) => _jamAction(msg, options, winner,
+                  counts[winner], textColor, accent,
+                  voters: voters),
             ),
         ],
       ),
@@ -984,20 +985,43 @@ extension _ChatPollsAdmin on _ChatPageState {
 
   /// The local file for a jam song title (matched against my loaded songs).
   String? _jamPathFor(String title) {
-    final want = title.trim().toLowerCase();
+    // Jam titles come from file names OR from what members are playing
+    // ("African Vibe" while the file is "African Vibe - DHDMusic.mp3"), so
+    // compare loosely: letters/digits only; exact first, then "file name
+    // starts with / contains the title" (long-enough titles only).
+    String norm(String s) =>
+        s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
+    final want = norm(title);
+    if (want.isEmpty) return null;
+    String? starts, contains;
     try {
       for (final p in playlistNotifier.value) {
         var name = p.split(RegExp(r'[\\/]')).last;
         name = name.replaceAll(RegExp(r'\.[A-Za-z0-9]{2,4}$'), '');
-        if (name.trim().toLowerCase() == want) return p;
+        final n = norm(name);
+        if (n == want) return p;
+        if (want.length >= 4) {
+          if (n.startsWith(want)) starts ??= p;
+          if (n.contains(want)) contains ??= p;
+        }
       }
     } catch (_) {}
-    return null;
+    return starts ?? contains;
   }
 
   Widget _jamAction(Map<String, dynamic> msg, List<String> options, int winner,
-      int votes, Color textColor, Color accent) {
+      int votes, Color textColor, Color accent,
+      {int voters = 0}) {
     final mid = msg['id'].toString();
+    // The group decides: the winner plays once MORE THAN HALF the members
+    // have voted — then "Play the winner" appears on its own for whoever has
+    // the song on their phone (the host of the room, or anyone, who then
+    // opens the jam room with it).
+    final members = _groupMembers.isNotEmpty
+        ? _groupMembers.length
+        : (widget.memberCount > 0 ? widget.memberCount : 0);
+    final majority = members <= 0 || voters * 2 > members;
+    final need = members <= 0 ? 0 : members ~/ 2 + 1;
     final title = options[winner];
     final s = activeLiveSession;
     final hostingHere =
@@ -1014,6 +1038,9 @@ extension _ChatPollsAdmin on _ChatPageState {
         );
     if (_jamPlayed.contains(mid)) {
       return note('Queued for the group — chosen by $votes 🎶');
+    }
+    if (!majority) {
+      return note('Plays once more than half vote · $voters of $need needed');
     }
     if (hostingHere) {
       if (path == null) {
@@ -1075,21 +1102,24 @@ extension _ChatPollsAdmin on _ChatPageState {
       );
     }
     if (s == null && path != null) {
+      // The song is on MY phone and the group has decided → play it: this
+      // opens the group's jam room starting with the winner.
       return Padding(
         padding: const EdgeInsets.only(top: 8),
-        child: OutlinedButton.icon(
+        child: FilledButton.icon(
           onPressed: () => _jamStartRoom(msg, title, path),
-          icon: const Icon(Icons.headphones_rounded, size: 18),
-          label: const Text('Start the jam room'),
-          style: OutlinedButton.styleFrom(
-              foregroundColor: accent,
-              side: BorderSide(color: accent.withValues(alpha: 0.6)),
+          icon: const Icon(Icons.play_arrow_rounded, size: 18),
+          label: const Text('Play the winner'),
+          style: FilledButton.styleFrom(
+              backgroundColor: accent,
+              foregroundColor: onAccent(accent),
               minimumSize: const Size.fromHeight(38),
               shape: const StadiumBorder()),
         ),
       );
     }
-    return note('Whoever hosts the jam room plays the winner 🎧');
+    return note('The group chose “$title” — whoever has it on their phone '
+        'can play it 🎧');
   }
 
   Future<void> _jamPlayWinner(Map<String, dynamic> msg, List<String> options,

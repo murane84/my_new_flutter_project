@@ -796,6 +796,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
       }
     });
     for (final g in _groups) {
+      final gid = (g['id'] as num?)?.toInt();
+      if (gid != null && GroupMeta.instance.isMuted(gid)) continue; // muted
       final c = (g['unread_count'] as num?)?.toInt() ?? 0;
       if (c > 0) {
         others += c;

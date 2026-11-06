@@ -1713,15 +1713,9 @@ extension _HomeFriendListView on HomePageState {
         String text = memberN > 0 ? '$memberN' : '';
         String tip = '$memberN members';
         var live = false;
-        if (jam) {
-          live = true;
-          icon = Icons.headphones_rounded;
-          final n = myJam
-              ? activeLiveSession!.controller.partnerIds.length + 1
-              : (room?['listeners'] as num?)?.toInt();
-          text = n != null && n > 0 ? 'jam · $n' : 'jam';
-          tip = 'Jam room live';
-        } else if (inCall) {
+        // Same priority as the ring on the group's photo: a call first,
+        // then a jam room.
+        if (inCall) {
           live = true;
           icon = Icons.call_rounded;
           final n = gcs.room == gid && gcs.phase != GroupCallPhase.idle
@@ -1729,6 +1723,15 @@ extension _HomeFriendListView on HomePageState {
               : null;
           text = n != null ? 'call · $n' : 'call';
           tip = 'Group call on';
+        } else if (jam) {
+          live = true;
+          icon = Icons.headphones_rounded;
+          // In the room: the real head-count from its roster; otherwise the
+          // server's listener count when known.
+          final rc = myJam ? activeLiveSession!.controller.rosterCount : 0;
+          final n = rc > 0 ? rc : (room?['listeners'] as num?)?.toInt();
+          text = n != null && n > 0 ? 'jam · $n' : 'jam';
+          tip = 'Jam room live';
         }
         if (text.isEmpty) {
           return Padding(

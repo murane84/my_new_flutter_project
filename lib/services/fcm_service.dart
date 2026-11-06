@@ -468,6 +468,9 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         conversationId: convId.isEmpty ? null : convId,
         groupTitle: groupTitle.isEmpty ? null : groupTitle,
         messageId: messageId.isEmpty ? null : messageId,
+        // Someone @-mentioned ME → it gets through even a muted group
+        // (an @all doesn't).
+        bypassMute: mentioned && !everyone,
       );
     }
   } catch (_) {/* best-effort */}

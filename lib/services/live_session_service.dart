@@ -184,6 +184,8 @@ class LiveSessionController {
   // What kind of session this is — drives privacy of the "together" ring.
   bool _openRoom = false; // host: a circle / group room (vs a private 1:1)
   bool? _rosterOpen; // listener: from the roster (null = not known yet)
+  /// How many people are in the session (from the latest roster; 0 = unknown).
+  int rosterCount = 0;
   int? _rosterConv; // listener: the group a jam room runs in
 
   /// A PRIVATE pair (DM listen together, tune-in, Our Space): only then do
@@ -2126,6 +2128,7 @@ class LiveSessionController {
       if (d is Map) {
         _rosterOpen = d['open'] == true;
         _rosterConv = (d['conversation_id'] as num?)?.toInt();
+        rosterCount = (d['count'] as num?)?.toInt() ?? rosterCount;
       }
     }
     onEvent?.call(msg);

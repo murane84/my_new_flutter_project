@@ -320,6 +320,9 @@ extension _HomeHub on HomePageState {
       if (id != null) total += u.countFor(id);
     }
     for (final g in _groups) {
+      // A muted group doesn't shout on the Circle tab either.
+      final gid = (g['id'] as num?)?.toInt();
+      if (gid != null && GroupMeta.instance.isMuted(gid)) continue;
       total += (g['unread_count'] as num?)?.toInt() ?? 0;
     }
     return total;

@@ -746,11 +746,15 @@ Future<void> showMessageNotification({
   String? groupTitle,
   // When set, tapping scrolls to + highlights this exact message in the thread.
   String? messageId,
+  // A personal @-mention: shown even when the group is muted.
+  bool bypassMute = false,
 }) async {
   if (kIsWeb) return;
-  // A group the user muted stays quiet.
+  // A group the user muted stays quiet (except a mention of me).
   final gid = int.tryParse(conversationId ?? '');
-  if (gid != null && await GroupMeta.isMutedStored(gid)) return;
+  if (!bypassMute && gid != null && await GroupMeta.isMutedStored(gid)) {
+    return;
+  }
   try {
     if (!_ready) await initNotifications();
     String? payload;

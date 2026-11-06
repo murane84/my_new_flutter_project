@@ -1257,6 +1257,20 @@ extension _ChatPollsAdmin on _ChatPageState {
         best = id;
       }
     });
+    // Remember it for the group's row in the Circle list ("👑 Lorraine").
+    if (_isGroup) {
+      String? djName;
+      for (final m in _groupMembers) {
+        if (m['user_id']?.toString() == best) {
+          djName = _memberName(m);
+          break;
+        }
+      }
+      if (best == _myId) djName = 'You';
+      final cid = _cid;
+      WidgetsBinding.instance.addPostFrameCallback(
+          (_) => GroupMeta.instance.setDj(cid, djName));
+    }
     return _jamDjCache = best;
   }
 

@@ -43,6 +43,7 @@ import 'live_session_screen.dart';
 import '../services/live_session_service.dart'
     show activeLiveSession, LiveTrack, LiveSessionController;
 import '../services/live_rooms_registry.dart';
+import '../services/group_meta.dart';
 import '../utils/on_accent.dart';
 import 'gif_picker.dart';
 import '../services/call_service.dart';

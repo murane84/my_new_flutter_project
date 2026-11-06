@@ -43,6 +43,8 @@ class AccountPrefs {
     'send_heart_receipts', 'lock_secret_hearts',
     // Pinned chats (home)
     'pinned_chats_v1',
+    // Muted groups (services/group_meta)
+    'muted_groups_v1',
     // Music nudges (services/song_insights)
     'music_nudges_on',
     // Equalizer (screens/equalizer_screen + music controls)

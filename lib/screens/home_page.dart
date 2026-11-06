@@ -100,6 +100,7 @@ import '../services/online_watch.dart';
 import '../services/quick_status.dart';
 import '../services/live_inbox.dart';
 import '../services/live_rooms_registry.dart';
+import '../services/group_meta.dart';
 import '../services/telecom_service.dart';
 import '../utils/file_bytes.dart';
 import '../main.dart' show navigatorKey;
@@ -404,6 +405,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // App open: incoming chat messages show Aluta's reply banner.
     ReplyBanner.onIncoming = _showReplyBanner;
     LiveRoomsRegistry.instance.joinRoom = _dropIntoRoom;
+    GroupMeta.instance.addListener(_onGroupMeta);
     // Our Space reads its saved copy synchronously → opens complete.
     warmSpacePrefs();
     _loadPinnedChats();
@@ -570,6 +572,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     if (ReplyBanner.onIncoming == _showReplyBanner) {
       ReplyBanner.onIncoming = null;
       LiveRoomsRegistry.instance.joinRoom = null;
+      GroupMeta.instance.removeListener(_onGroupMeta);
     }
     ReplyBanner.hide();
     _glowTimer?.cancel();
@@ -1927,6 +1930,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// minimal record from the payload — ChatPage fetches the rest by id.
   /// Aluta's own message banner (app open): reply in it — text or voice —
   /// without leaving the screen; tap it to open the chat.
+  // A group was muted / its DJ changed → repaint the Circle list rows.
+  void _onGroupMeta() {
+    if (mounted) setState(() {});
+  }
+
   bool _showReplyBanner({
     required String title,
     required String body,
@@ -1936,6 +1944,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
     String? messageId,
   }) {
     if (!mounted) return false;
+    // A muted group: no banner — and report it handled so no notification
+    // pops instead.
+    final mutedGid = int.tryParse(conversationId ?? '');
+    if (mutedGid != null && GroupMeta.instance.isMuted(mutedGid)) return true;
     final payload = <String, dynamic>{
       'type': 'message',
       'friend_id': ?senderId,

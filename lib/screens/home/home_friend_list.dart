@@ -1693,6 +1693,181 @@ extension _HomeFriendListView on HomePageState {
     );
   }
 
+  /// The group row's status pill: "👥 4 · ● 2" (members · online) — or,
+  /// while something is live in the group, "🎧 jam · 3" / "📞 call · 2".
+  Widget _groupStatusPill(int gid, int memberN, int onlineN, Color textColor,
+      ColorScheme scheme) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        GroupCallService.instance.ongoingCalls,
+        LiveRoomsRegistry.instance,
+      ]),
+      builder: (context, _) {
+        final gcs = GroupCallService.instance;
+        final inCall = gcs.ongoingCalls.value.containsKey(gid) ||
+            (gcs.room == gid && gcs.phase != GroupCallPhase.idle);
+        final room = LiveRoomsRegistry.instance.roomForConversation(gid);
+        final myJam = activeLiveSession?.controller.conversationId == gid;
+        final jam = room != null || myJam;
+        IconData icon = Icons.groups_rounded;
+        String text = memberN > 0 ? '$memberN' : '';
+        String tip = '$memberN members';
+        var live = false;
+        if (jam) {
+          live = true;
+          icon = Icons.headphones_rounded;
+          final n = myJam
+              ? activeLiveSession!.controller.partnerIds.length + 1
+              : (room?['listeners'] as num?)?.toInt();
+          text = n != null && n > 0 ? 'jam · $n' : 'jam';
+          tip = 'Jam room live';
+        } else if (inCall) {
+          live = true;
+          icon = Icons.call_rounded;
+          final n = gcs.room == gid && gcs.phase != GroupCallPhase.idle
+              ? gcs.participants.length + 1
+              : null;
+          text = n != null ? 'call · $n' : 'call';
+          tip = 'Group call on';
+        }
+        if (text.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.only(left: 5),
+            child: Icon(Icons.groups_rounded,
+                size: 13, color: textColor.withValues(alpha: 0.45)),
+          );
+        }
+        final fg = live ? scheme.primary : textColor.withValues(alpha: 0.60);
+        return Tooltip(
+          message: !live && onlineN > 0 ? '$tip · $onlineN online' : tip,
+          child: Container(
+            margin: const EdgeInsets.only(left: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: live
+                  ? scheme.primary.withValues(alpha: 0.14)
+                  : textColor.withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(8),
+              border: live
+                  ? Border.all(color: scheme.primary.withValues(alpha: 0.35))
+                  : null,
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon, size: 11, color: fg),
+              const SizedBox(width: 3),
+              Text(text,
+                  style: TextStyle(
+                      fontSize: 10.5,
+                      height: 1.1,
+                      fontWeight: FontWeight.w700,
+                      color: fg)),
+              if (!live && onlineN > 0) ...[
+                const SizedBox(width: 4),
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                      color: Color(0xFF34C759), shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 2),
+                Text('$onlineN',
+                    style: TextStyle(
+                        fontSize: 10.5,
+                        height: 1.1,
+                        fontWeight: FontWeight.w700,
+                        color: fg)),
+              ],
+            ]),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Up to three member photos overlapping on a photo-less group's plate.
+  Widget _groupFacePile(List<Map> people, double face, ColorScheme scheme) {
+    final shown = people.take(3).toList();
+    final r = face * (shown.length == 1 ? 0.5 : 0.32);
+    final spots = shown.length == 1
+        ? const [Alignment.center]
+        : shown.length == 2
+            ? const [Alignment(-0.45, -0.25), Alignment(0.45, 0.25)]
+            : const [
+                Alignment(-0.5, -0.4),
+                Alignment(0.5, -0.4),
+                Alignment(0, 0.5),
+              ];
+    return SizedBox(
+      width: face,
+      height: face,
+      child: Stack(children: [
+        for (var i = 0; i < shown.length; i++)
+          Align(
+            alignment: spots[i],
+            child: Container(
+              padding: const EdgeInsets.all(1.5),
+              decoration:
+                  BoxDecoration(color: scheme.surface, shape: BoxShape.circle),
+              child: InitialsAvatar(
+                name: ContactNames.instance.displayName(
+                    of: shown[i].cast<String, dynamic>(),
+                    registered: (shown[i]['username'] ?? '?').toString()),
+                radius: r,
+                imageUrl: _avatarFull(shown[i]['avatar_url']),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
+
+  /// Long-press on a group row: pin / mute.
+  void _groupRowMenu(Map<String, dynamic> g, String name) {
+    final gid = (g['id'] as num?)?.toInt() ?? -1;
+    final pinned = _pinnedChats.contains(_pinKeyOf(g));
+    final muted = GroupMeta.instance.isMuted(gid);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
+            child: Text(name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          ),
+          ListTile(
+            leading: Icon(
+                pinned ? Icons.push_pin_outlined : Icons.push_pin_rounded),
+            title: Text(pinned ? 'Unpin' : 'Pin to top'),
+            onTap: () {
+              Navigator.pop(ctx);
+              _togglePinChat(g);
+            },
+          ),
+          ListTile(
+            leading: Icon(muted
+                ? Icons.notifications_active_rounded
+                : Icons.notifications_off_rounded),
+            title: Text(muted ? 'Unmute' : 'Mute notifications'),
+            subtitle: muted
+                ? null
+                : const Text('No alerts from this group; it stays in the list'),
+            onTap: () {
+              Navigator.pop(ctx);
+              GroupMeta.instance.toggleMute(gid);
+              if (mounted) setState(() {});
+            },
+          ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+  }
+
   /// A group conversation row in the unified chat list. Tapping opens the group
   /// inside the chat panel (never a full-window route).
   /// True when [friendId] shares a Space (bond) with me.
@@ -1751,6 +1926,40 @@ extension _HomeFriendListView on HomePageState {
     final gid = (g['id'] as num?)?.toInt() ?? -1;
     final isTyping = _groupTypingTimers.containsKey(gid);
     final typingName = _groupTypingNames[gid] ?? '';
+    // ── What the row tells at a glance ──
+    final members = ((g['members'] as List?) ?? const [])
+        .whereType<Map>()
+        .toList();
+    final others = members
+        .where((m) => (m['user_id'] as num?)?.toInt() != _myUserId)
+        .toList();
+    final presence = ref.watch(presenceProvider);
+    final onlineN = others.where((m) {
+      final id = (m['user_id'] as num?)?.toInt();
+      return (id != null && presence.isOnline(id)) || m['is_online'] == true;
+    }).length;
+    // Who wrote the last message ("Lorraine: …" / "You: …").
+    final lastSenderId = (g['last_sender_id'] as num?)?.toInt();
+    String lastWho = '';
+    if (lastSenderId != null && lastMsg.isNotEmpty) {
+      if (lastSenderId == _myUserId) {
+        lastWho = 'You';
+      } else {
+        for (final m in members) {
+          if ((m['user_id'] as num?)?.toInt() == lastSenderId) {
+            lastWho = ContactNames.instance
+                .displayName(
+                    of: m.cast<String, dynamic>(),
+                    registered: (m['username'] ?? '').toString())
+                .split(' ')
+                .first;
+            break;
+          }
+        }
+      }
+    }
+    final muted = GroupMeta.instance.isMuted(gid);
+    final dj = GroupMeta.instance.djOf(gid);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
@@ -1792,18 +2001,23 @@ extension _HomeFriendListView on HomePageState {
               color: scheme.primary,
               color2: const Color(0xFFF2A541),
               gapColor: scheme.surface,
-              child: CircleAvatar(
-                radius: face / 2,
-                backgroundColor: scheme.primaryContainer,
-                backgroundImage: avatar != null
-                    ? authNetworkImageProvider(
-                        avatar, mediaAuthHeaders(avatar))
-                    : null,
-                child: avatar == null
-                    ? Icon(Icons.groups_rounded,
-                        color: scheme.onPrimaryContainer, size: face * 0.55)
-                    : null,
-              ),
+              // No group photo → a face pile of up to three members, so a
+              // photo-less group is still recognisable.
+              child: avatar == null && others.isNotEmpty
+                  ? _groupFacePile(others, face, scheme)
+                  : CircleAvatar(
+                      radius: face / 2,
+                      backgroundColor: scheme.primaryContainer,
+                      backgroundImage: avatar != null
+                          ? authNetworkImageProvider(
+                              avatar, mediaAuthHeaders(avatar))
+                          : null,
+                      child: avatar == null
+                          ? Icon(Icons.groups_rounded,
+                              color: scheme.onPrimaryContainer,
+                              size: face * 0.55)
+                          : null,
+                    ),
             );
             return mode == RingMode.none
                 ? _circlePlate(scheme, isDark, photo)
@@ -1828,7 +2042,7 @@ extension _HomeFriendListView on HomePageState {
       color: Colors.transparent,
       child: InkWell(
       onTap: () => _isSharing ? _sendShareTo(group: g) : openGroupInPanel(g),
-      onLongPress: _isSharing ? null : () => _togglePinChat(g),
+      onLongPress: _isSharing ? null : () => _groupRowMenu(g, name),
       borderRadius: BorderRadius.circular(16),
       child: Container(
         constraints: const BoxConstraints(minHeight: 64),
@@ -1859,39 +2073,36 @@ extension _HomeFriendListView on HomePageState {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (((g['members'] as List?) ?? const []).isNotEmpty)
-                        Tooltip(
-                          message:
-                              '${(g['members'] as List).length} members',
-                          child: Container(
-                            margin: const EdgeInsets.only(left: 6),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 5, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: textColor.withValues(alpha: 0.07),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(mainAxisSize: MainAxisSize.min, children: [
-                              Icon(Icons.groups_rounded,
-                                  size: 11,
-                                  color: textColor.withValues(alpha: 0.55)),
-                              const SizedBox(width: 3),
-                              Text('${(g['members'] as List).length}',
+                      if (muted)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: Tooltip(
+                            message: 'Muted',
+                            child: Icon(Icons.notifications_off_rounded,
+                                size: 13,
+                                color: textColor.withValues(alpha: 0.45)),
+                          ),
+                        ),
+                      // Members · online — or, while something is live in
+                      // the group, what's on (🎧 jam / 📞 call).
+                      _groupStatusPill(gid, members.length, onlineN,
+                          textColor, scheme),
+                      if (dj != null)
+                        Flexible(
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 5),
+                            child: Tooltip(
+                              message: 'Jam DJ of the week',
+                              child: Text('👑 ${dj.split(' ').first}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                       fontSize: 10.5,
-                                      height: 1.1,
                                       fontWeight: FontWeight.w700,
                                       color:
-                                          textColor.withValues(alpha: 0.60))),
-                            ]),
+                                          textColor.withValues(alpha: 0.6))),
+                            ),
                           ),
-                        )
-                      else
-                        Padding(
-                          padding: const EdgeInsets.only(left: 5),
-                          child: Icon(Icons.groups_rounded,
-                              size: 13,
-                              color: textColor.withValues(alpha: 0.45)),
                         ),
                     ],
                   ),
@@ -1924,11 +2135,19 @@ extension _HomeFriendListView on HomePageState {
                       lastMsg.isEmpty
                           ? TextSpan(
                               text: 'Tap to open the group', style: base)
-                          : TextSpan(
-                              style: base,
-                              children: previewSpans(lastMsg, base,
+                          : TextSpan(style: base, children: [
+                              // Who said it, like every group chat list.
+                              if (lastWho.isNotEmpty)
+                                TextSpan(
+                                    text: '$lastWho: ',
+                                    style: base.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                        color: textColor.withAlpha(
+                                            hasUnread ? 220 : 150))),
+                              ...previewSpans(lastMsg, base,
                                   codeBg: textColor.withValues(alpha: 0.12),
-                                  highlightBg: const Color(0x66FFC107))),
+                                  highlightBg: const Color(0x66FFC107)),
+                            ]),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     );
@@ -1974,13 +2193,18 @@ extension _HomeFriendListView on HomePageState {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: scheme.primary,
+                      // Muted: a soft grey count instead of the loud accent.
+                      color: muted
+                          ? textColor.withValues(alpha: 0.18)
+                          : scheme.primary,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
                       unread > 99 ? '99+' : '$unread',
                       style: TextStyle(
-                        color: scheme.onPrimary,
+                        color: muted
+                            ? textColor.withValues(alpha: 0.75)
+                            : scheme.onPrimary,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                       ),

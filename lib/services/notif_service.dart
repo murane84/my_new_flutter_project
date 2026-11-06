@@ -10,6 +10,7 @@ import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../screens/api_service.dart';
+import 'group_meta.dart' show GroupMeta;
 
 /// Native bridge (see android MainActivity) for OS state the notification
 /// plugin can't report — currently the full-screen-intent grant.
@@ -747,6 +748,9 @@ Future<void> showMessageNotification({
   String? messageId,
 }) async {
   if (kIsWeb) return;
+  // A group the user muted stays quiet.
+  final gid = int.tryParse(conversationId ?? '');
+  if (gid != null && await GroupMeta.isMutedStored(gid)) return;
   try {
     if (!_ready) await initNotifications();
     String? payload;

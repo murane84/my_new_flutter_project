@@ -16,6 +16,7 @@ import '../screens/api_service.dart';
 import 'audio_handler.dart';
 import 'ice_config.dart';
 import 'live_audio_cache.dart';
+import 'live_rooms_registry.dart';
 import 'song_insights.dart';
 import '../screens/web_fs/blob_url.dart';
 
@@ -2038,6 +2039,11 @@ class LiveSessionController {
       onDone: () {
         final code = ch.closeCode;
         final terminal = code == 4404 || code == 4403 || code == 4401;
+        // A room that's gone / closed to me must not keep a "Join" bar or a
+        // ring alive anywhere.
+        if (terminal && sessionId != null) {
+          LiveRoomsRegistry.instance.removeSession(sessionId!);
+        }
         onEnded?.call(terminal ? 'session_gone' : 'disconnected');
       },
       cancelOnError: false,
@@ -2369,6 +2375,10 @@ class LiveSessionController {
         break;
       case 'end':
         final reason = (msg['reason'] as String?) ?? 'ended';
+        // The host ended it → drop its Join bar / ring right away (don't wait
+        // for the separate "room ended" notice, which can be missed).
+        final sid = sessionId;
+        if (sid != null) LiveRoomsRegistry.instance.removeSession(sid);
         await _teardown();
         onEnded?.call(reason);
         break;

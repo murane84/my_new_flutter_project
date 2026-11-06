@@ -2393,6 +2393,15 @@ extension _HomeFriendListView on HomePageState {
     if (token == null || myUserId == null || !mounted) return;
     final sid = (room['session_id'] ?? '').toString();
     if (sid.isEmpty) return;
+    // Make sure it's still live before joining (a missed "ended" notice
+    // would otherwise open a dead room).
+    await LiveRoomsRegistry.instance.loadSnapshot();
+    if (!mounted) return;
+    if (!LiveRoomsRegistry.instance.hasSession(sid) &&
+        activeLiveSession?.controller.sessionId != sid) {
+      showToast(context, 'That session has ended', type: ToastType.info);
+      return;
+    }
     final host = ContactNames.instance.displayName(
         userId: room['host_id'],
         registered: (room['host_username'] ?? 'Your friend').toString());

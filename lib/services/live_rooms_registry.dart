@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -66,6 +67,27 @@ class LiveRoomsRegistry extends ChangeNotifier {
   void applyAvailable(Map data) {
     _put(data);
     notifyListeners();
+    _keepFresh();
+  }
+
+  // While any room is listed, re-check with the server every 45 s: a missed
+  // "room ended" notice (socket blip, app in background) otherwise leaves a
+  // dead room's Join bar and rings up forever.
+  Timer? _fresh;
+  void _keepFresh() {
+    if (_rooms.isEmpty) {
+      _fresh?.cancel();
+      _fresh = null;
+      return;
+    }
+    _fresh ??= Timer.periodic(const Duration(seconds: 45), (_) {
+      if (_rooms.isEmpty) {
+        _fresh?.cancel();
+        _fresh = null;
+        return;
+      }
+      loadSnapshot();
+    });
   }
 
   /// A friend's room ended. Removes only if the ended session matches the one we
@@ -86,6 +108,10 @@ class LiveRoomsRegistry extends ChangeNotifier {
     }
     if (changed) notifyListeners();
   }
+
+  /// Is a room with [sessionId] still listed?
+  bool hasSession(String sessionId) =>
+      _rooms.values.any((v) => v['session_id'] == sessionId);
 
   /// Drop a room by its session id (e.g. after we join/leave it).
   void removeSession(String sessionId) {
@@ -114,6 +140,7 @@ class LiveRoomsRegistry extends ChangeNotifier {
             if (r is Map) _put(r);
           }
           notifyListeners();
+          _keepFresh();
         }
       }
     } catch (_) {

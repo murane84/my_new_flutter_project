@@ -3284,6 +3284,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Ask the server whether a call is already live in this group, so the
     // "call in progress · Join" banner shows even if we missed the ring.
     _refreshGroupCallState(conv);
+    // Same for a jam room: re-check what's really live (prunes a room whose
+    // "ended" notice was missed, so no dead Join bar).
+    LiveRoomsRegistry.instance.loadSnapshot();
   }
 
   void _closeGroupPanel() => setState(() => _activeGroup = null);

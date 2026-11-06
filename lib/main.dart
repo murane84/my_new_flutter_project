@@ -419,8 +419,12 @@ class MyApp extends StatelessWidget {
           // other accent is used on dark. (It used to be #FF5A5F — which is
           // exactly the *Coral* swatch — so in dark mode "Aluta red" painted
           // the app coral/pinkish while "Crimson" looked deeper: swapped.)
-          primary: customAccent ? accent : ThemeProvider.defaultAccent,
-          onPrimary: customAccent ? readableOn(accent) : Colors.white,
+          // …lifted just enough to READ on the near-black surface (text,
+          // thin icons, the song line): deep reds were only ~3.6:1 there.
+          primary: liftForDark(
+              customAccent ? accent : ThemeProvider.defaultAccent),
+          onPrimary: readableOn(liftForDark(
+              customAccent ? accent : ThemeProvider.defaultAccent)),
           primaryContainer: darkP?.primaryContainer ?? const Color(0xFF8E1420),
           onPrimaryContainer:
               darkP?.onPrimaryContainer ?? const Color(0xFFFFDAD7),

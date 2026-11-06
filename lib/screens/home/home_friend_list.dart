@@ -1545,11 +1545,13 @@ extension _HomeFriendListView on HomePageState {
                 decoration: BoxDecoration(
                   gradient: songOn
                       ? LinearGradient(colors: [
+                          // Softer on dark: the wash was flooding the whole
+                          // card red and drowning the red song line.
                           songColor.withValues(
-                              alpha: (isDark ? 0.20 : 0.12) *
+                              alpha: (isDark ? 0.11 : 0.12) *
                                   (npTrack != null ? 1 : 0.5)),
                           songColor.withValues(alpha: 0.0),
-                        ], stops: const [0.0, 0.75])
+                        ], stops: [0.0, isDark ? 0.55 : 0.75])
                       : null,
                   color: !songOn && hasUnread
                       ? scheme.primary.withValues(alpha: isDark ? 0.07 : 0.045)

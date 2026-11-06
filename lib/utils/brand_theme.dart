@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../screens/theme_provider.dart';
+import 'readable.dart' show liftForDark, readableOn;
 
 /// Wraps pre-login / auth surfaces (welcome, sign in, register, splash, password
 /// reset) so they ALWAYS wear the Aluta brand red — independent of the in-app
@@ -17,8 +18,9 @@ class BrandTheme extends StatelessWidget {
 
   // The exact brand primaries used by the default (accent-free) app theme.
   static const Color _lightPrimary = Color(0xFFD90429);
-  // Same exact brand red on dark (was #FF5A5F = the Coral swatch).
-  static const Color _darkPrimary = Color(0xFFD90429);
+  // The brand red on dark, lifted to read on the near-black surface (was
+  // #FF5A5F = the Coral swatch).
+  static final Color _darkPrimary = liftForDark(const Color(0xFFD90429));
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +28,7 @@ class BrandTheme extends StatelessWidget {
     final dark = base.brightness == Brightness.dark;
 
     final primary = dark ? _darkPrimary : _lightPrimary;
-    const onPrimary = Colors.white;
+    final onPrimary = dark ? readableOn(_darkPrimary) : Colors.white;
     final primaryContainer =
         dark ? const Color(0xFF8E1420) : const Color(0xFFFFDAD7);
     final onPrimaryContainer =
@@ -93,9 +95,11 @@ class PlayerTheme extends StatelessWidget {
     // Follow the app's Light/Dark theme (surfaces + text come straight from the
     // base scheme, like the chat area) and only re-brand the accent family with
     // the EXACT chosen colour so a vivid pick stays vivid.
-    final primary = custom ? accent : baseScheme.primary;
+    // On dark, the same legibility lift the app theme uses.
+    final picked = isDark ? liftForDark(accent) : accent;
+    final primary = custom ? picked : baseScheme.primary;
     final onPrimary = custom
-        ? (ThemeData.estimateBrightnessForColor(accent) == Brightness.dark
+        ? (ThemeData.estimateBrightnessForColor(picked) == Brightness.dark
             ? Colors.white
             : Colors.black)
         : baseScheme.onPrimary;

@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:just_audio/just_audio.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../services/live_session_service.dart';
 import 'api_service.dart';
@@ -596,6 +597,12 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         final cFrom = (e['from_id'] as num?)?.toInt();
         if (txt.trim().isNotEmpty) _logComment(txt, cFrom);
         break;
+      case 'song_request':
+        if (_isHost) _onSongRequest(e);
+        break;
+      case 'song_share':
+        if (!_isHost) _onSongShare(e);
+        break;
       case 'session_roster':
         final data = (e['data'] as Map?) ?? const {};
         final people = (data['people'] as List?) ?? const [];
@@ -1141,6 +1148,97 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   Future<void> _pickMoreReaction() async {
     final em = await pickDiaryReaction(context, Theme.of(context).colorScheme.primary);
     if (em != null && em.isNotEmpty) _spawnReaction(em, mine: true);
+  }
+
+  // ── Ask the host for the song playing now ───────────────────────────────
+  String? _songAsked; // title I asked for (waiting on the host)
+
+  void _askForSong() {
+    final title = _title;
+    if (!_c.requestSongFile()) {
+      _snack('The song isn’t ready yet — try in a moment');
+      return;
+    }
+    setState(() => _songAsked = title);
+    _snack('Asked the host for “$title” 🎵');
+    // No answer in a while → let them ask again.
+    Future<void>.delayed(const Duration(seconds: 60), () {
+      if (mounted && _songAsked == title) setState(() => _songAsked = null);
+    });
+  }
+
+  /// HOST: a listener asked for the song — the host decides.
+  Future<void> _onSongRequest(Map<String, dynamic> e) async {
+    final from = (e['from_id'] as num?)?.toInt();
+    final hash = (e['hash'] ?? '').toString();
+    final title = (e['title'] ?? 'this song').toString();
+    if (from == null || hash.isEmpty || !mounted) return;
+    final i = _participants.indexWhere((x) => x.id == from);
+    final who = i == -1 ? 'A listener' : _participants[i].name;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.music_note_rounded),
+        title: Text('$who loved this song'),
+        content: Text('Send them “$title” to keep?\n'
+            'It goes only to them, over this session.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Not now')),
+          FilledButton.icon(
+              onPressed: () => Navigator.pop(ctx, true),
+              icon: const Icon(Icons.send_rounded, size: 18),
+              label: const Text('Send it')),
+        ],
+      ),
+    );
+    _c.answerSongRequest(from, hash, title, ok == true);
+    if (ok == true) _snack('Sending “$title” to $who 🎵');
+  }
+
+  /// LISTENER: the host answered.
+  Future<void> _onSongShare(Map<String, dynamic> e) async {
+    final title = (e['title'] ?? _songAsked ?? 'the song').toString();
+    if (mounted) setState(() => _songAsked = null);
+    if (e['ok'] != true) {
+      _snack('The host said not now for “$title”');
+      return;
+    }
+    final hash = (e['hash'] ?? '').toString();
+    _snack('Getting “$title”…');
+    final bytes = await _c.takeSharedSong(hash);
+    if (!mounted) return;
+    if (bytes == null || bytes.isEmpty) {
+      _snack('Couldn’t get the song — try again', type: ToastType.error);
+      return;
+    }
+    final mime = _c.currentMime;
+    final ext = mime.contains('mp4') || mime.contains('m4a')
+        ? 'm4a'
+        : mime.contains('aac')
+            ? 'aac'
+            : mime.contains('ogg')
+                ? 'ogg'
+                : mime.contains('flac')
+                    ? 'flac'
+                    : mime.contains('wav')
+                        ? 'wav'
+                        : 'mp3';
+    final safe = title.replaceAll(RegExp(r'[\\/:*?"<>|]+'), '_').trim();
+    try {
+      final saved = await FilePicker.saveFile(
+        dialogTitle: 'Save the song',
+        fileName: '${safe.isEmpty ? 'song' : safe}.$ext',
+        bytes: bytes,
+      );
+      if (!mounted) return;
+      if (saved != null || kIsWeb) {
+        _snack('Saved “$title” 🎶', type: ToastType.success);
+      }
+    } catch (_) {
+      _snack('Couldn’t save the song', type: ToastType.error);
+    }
   }
 
   void _snack(String m, {ToastType type = ToastType.info}) {
@@ -2579,6 +2677,26 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               textAlign: TextAlign.center,
               style: TextStyle(
                   fontSize: 10.5, color: scheme.onSurfaceVariant),
+            ),
+            // Loved it? Ask the host for this song to keep.
+            TextButton.icon(
+              onPressed: (!_ready || _songAsked != null) ? null : _askForSong,
+              icon: Icon(
+                  _songAsked != null
+                      ? Icons.hourglass_top_rounded
+                      : Icons.download_rounded,
+                  size: 16),
+              label: Text(
+                  _songAsked != null
+                      ? 'Asked the host…'
+                      : 'Ask for this song',
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w700)),
+              style: TextButton.styleFrom(
+                foregroundColor: scheme.primary,
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ],
         );

@@ -1640,6 +1640,8 @@ class LiveSessionController {
               _prefetchHash = null;
               if (h != null && h.isNotEmpty && bytes.isNotEmpty) {
                 unawaited(LiveAudioCache.instance.put(h, bytes));
+                // A shared song I asked to keep arrived → hand it over.
+                _songWaiters.remove(h)?.complete(bytes);
               }
             }
             break;
@@ -1665,6 +1667,8 @@ class LiveSessionController {
     if (playing is bool) _hostPlaying = playing;
     _incomingMime = mime;
     if (hash.isEmpty) return;
+    currentHash = hash;
+    currentMime = mime;
     final cached = await LiveAudioCache.instance.get(hash);
     final ch = _lchan;
     if (cached != null && cached.isNotEmpty) {
@@ -2401,6 +2405,70 @@ class LiveSessionController {
       _channel?.sink.add(jsonEncode(data));
     } catch (e) {
       onError?.call(e);
+    }
+  }
+
+  // ── "Can I have this song?" ─────────────────────────────────────────────
+  // A listener asks the HOST (only the host — the request is addressed to
+  // them) for the song playing now. The host decides; on yes, the listener
+  // keeps the copy it already received (or the host sends it over the same
+  // private peer channel). Nothing goes through the server or to anyone else.
+
+  /// Listener: the song playing now (from the host's offer).
+  String? currentHash;
+  String currentMime = 'audio/mpeg';
+  final Map<String, Completer<Uint8List>> _songWaiters = {};
+
+  /// LISTENER → host: may I keep this song?
+  bool requestSongFile() {
+    if (role != LiveRole.listener) return false;
+    final host = _lHostId;
+    final h = currentHash;
+    if (host == null || h == null || h.isEmpty) return false;
+    _sendControl({
+      'type': 'song_request',
+      'to': host,
+      'from_id': _myUserId,
+      'hash': h,
+      'title': currentTitle,
+    });
+    return true;
+  }
+
+  /// HOST → that listener only: yes / not now.
+  void answerSongRequest(int toId, String hash, String title, bool ok) {
+    if (role != LiveRole.host) return;
+    // Only a song that's really in my queue can be given.
+    if (ok && _trackByHash(hash) == null) ok = false;
+    _sendControl({
+      'type': 'song_share',
+      'to': toId,
+      'ok': ok,
+      'hash': hash,
+      'title': title,
+    });
+  }
+
+  /// LISTENER (after a yes): the song's bytes — from my cache, or fetched from
+  /// the host over our private channel when I only heard part of it.
+  Future<Uint8List?> takeSharedSong(String hash) async {
+    final cached = await LiveAudioCache.instance.get(hash);
+    if (cached != null && cached.isNotEmpty) return cached;
+    final ch = _lchan;
+    if (ch == null) return null;
+    final c = _songWaiters.putIfAbsent(hash, () => Completer<Uint8List>());
+    try {
+      ch.send(RTCDataChannelMessage(
+          jsonEncode({'t': 'prefetch_need', 'hash': hash})));
+    } catch (_) {
+      _songWaiters.remove(hash);
+      return null;
+    }
+    try {
+      return await c.future.timeout(const Duration(seconds: 90));
+    } catch (_) {
+      _songWaiters.remove(hash);
+      return null;
     }
   }
 

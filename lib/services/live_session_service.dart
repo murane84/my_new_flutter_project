@@ -2041,9 +2041,7 @@ class LiveSessionController {
         final terminal = code == 4404 || code == 4403 || code == 4401;
         // A room that's gone / closed to me must not keep a "Join" bar or a
         // ring alive anywhere.
-        if (terminal && sessionId != null) {
-          LiveRoomsRegistry.instance.removeSession(sessionId!);
-        }
+        if (terminal) LiveRoomsRegistry.instance.removeSession(sessionId);
         onEnded?.call(terminal ? 'session_gone' : 'disconnected');
       },
       cancelOnError: false,

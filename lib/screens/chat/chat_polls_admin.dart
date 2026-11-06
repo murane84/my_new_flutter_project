@@ -138,7 +138,8 @@ extension _ChatPollsAdmin on _ChatPageState {
         .map((e) => (e as num).toInt())
         .toList();
     List<int> next;
-    if (poll['multi'] == true) {
+    // A jam is always ONE vote per person, so it can name a single winner.
+    if (poll['multi'] == true && poll['kind'] != 'jam') {
       next = mine.contains(option)
           ? (mine.where((e) => e != option).toList())
           : [...mine, option];
@@ -428,7 +429,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                       Navigator.pop(ctx, {
                         'q': q.text.trim(),
                         'options': clean,
-                        'multi': multi,
+                        'multi': jam ? false : multi,
                         if (jam) 'kind': 'jam',
                       });
                     },
@@ -874,7 +875,8 @@ extension _ChatPollsAdmin on _ChatPageState {
         .map((e) => e.toString())
         .toList();
     final votes = (poll['votes'] as Map?) ?? const {};
-    final multi = poll['multi'] == true;
+    final isJamPoll = poll['kind'] == 'jam';
+    final multi = poll['multi'] == true && !isJamPoll;
     final counts = List<int>.filled(options.length, 0);
     for (final v in votes.values) {
       for (final i in (v as List? ?? const [])) {
@@ -889,7 +891,9 @@ extension _ChatPollsAdmin on _ChatPageState {
     final top = counts.isEmpty ? 0 : counts.reduce(math.max);
     final pending = msg['__pending'] == true;
     final accent = isMe ? textColor : scheme.primary;
-    final isJam = poll['kind'] == 'jam';
+    final isJam = isJamPoll;
+    // Jam: ONE winner — the first song (in order) holding the top count.
+    final winner = top > 0 ? counts.indexOf(top) : -1;
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 220, maxWidth: 300),
       child: Column(
@@ -926,7 +930,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                 count: counts[i],
                 frac: voters == 0 ? 0 : counts[i] / voters,
                 picked: mine.contains(i),
-                leading: top > 0 && counts[i] == top,
+                leading: isJam ? i == winner : (top > 0 && counts[i] == top),
                 multi: multi,
                 jam: isJam,
                 textColor: textColor,
@@ -942,9 +946,165 @@ extension _ChatPollsAdmin on _ChatPageState {
             style:
                 TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.6)),
           ),
+          if (isJam && winner >= 0 && !pending)
+            _jamAction(msg, options, winner, counts[winner], textColor,
+                accent),
         ],
       ),
     );
+  }
+
+  // ── Group Jam → actually play the winner ──────────────────────────────────
+  // The vote names the next song; the GROUP Listen Together room plays it.
+  // Host of the room live here → "▶ Play the winner" (queued right after the
+  // current song for everyone) + a fresh vote on the songs left. No room yet
+  // and I have the song → "🎧 Start the jam room" with the winner. Otherwise
+  // a hint that whoever hosts plays it. Songs come from the HOST's device.
+
+  /// Message ids of jams whose winner I already queued (this session).
+  static final Set<String> _jamPlayed = <String>{};
+
+  /// The local file for a jam song title (matched against my loaded songs).
+  String? _jamPathFor(String title) {
+    final want = title.trim().toLowerCase();
+    try {
+      for (final p in playlistNotifier.value) {
+        var name = p.split(RegExp(r'[\\/]')).last;
+        name = name.replaceAll(RegExp(r'\.[A-Za-z0-9]{2,4}$'), '');
+        if (name.trim().toLowerCase() == want) return p;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Widget _jamAction(Map<String, dynamic> msg, List<String> options, int winner,
+      int votes, Color textColor, Color accent) {
+    final mid = msg['id'].toString();
+    final title = options[winner];
+    final s = activeLiveSession;
+    final hostingHere =
+        s != null && s.isHost && s.controller.conversationId == _cid;
+    final listeningHere = s != null && !s.isHost;
+    final path = kIsWeb ? null : _jamPathFor(title);
+    Widget note(String t) => Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(t,
+              style: TextStyle(
+                  fontSize: 11.5,
+                  fontStyle: FontStyle.italic,
+                  color: textColor.withValues(alpha: 0.7))),
+        );
+    if (_jamPlayed.contains(mid)) {
+      return note('Queued for the group — chosen by $votes 🎶');
+    }
+    if (hostingHere) {
+      if (path == null) {
+        return note('“$title” isn’t in your loaded songs — load it to play.');
+      }
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: FilledButton.icon(
+          onPressed: () => _jamPlayWinner(msg, options, winner, path),
+          icon: const Icon(Icons.play_arrow_rounded, size: 18),
+          label: const Text('Play the winner'),
+          style: FilledButton.styleFrom(
+              backgroundColor: accent,
+              foregroundColor: onAccent(accent),
+              minimumSize: const Size.fromHeight(38),
+              shape: const StadiumBorder()),
+        ),
+      );
+    }
+    if (listeningHere) return note('The host plays the winner next 🎧');
+    if (s == null && path != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: OutlinedButton.icon(
+          onPressed: () => _jamStartRoom(msg, title, path),
+          icon: const Icon(Icons.headphones_rounded, size: 18),
+          label: const Text('Start the jam room'),
+          style: OutlinedButton.styleFrom(
+              foregroundColor: accent,
+              side: BorderSide(color: accent.withValues(alpha: 0.6)),
+              minimumSize: const Size.fromHeight(38),
+              shape: const StadiumBorder()),
+        ),
+      );
+    }
+    return note('Whoever hosts the jam room plays the winner 🎧');
+  }
+
+  Future<void> _jamPlayWinner(Map<String, dynamic> msg, List<String> options,
+      int winner, String path) async {
+    final s = activeLiveSession;
+    if (s == null) return;
+    try {
+      final bytes = Uint8List.fromList(await readFileBytes(path));
+      if (bytes.isEmpty) throw StateError('empty');
+      await s.controller.playNext(LiveTrack(bytes: bytes, title: options[winner]));
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not read that song.', type: ToastType.error);
+      }
+      return;
+    }
+    if (!mounted) return;
+    rebuildWith(() => _jamPlayed.add(msg['id'].toString()));
+    showToast(context, '“${options[winner]}” is up next for everyone 🎶',
+        type: ToastType.success);
+    _jamRollOn(options, winner);
+  }
+
+  Future<void> _jamStartRoom(
+      Map<String, dynamic> msg, String title, String path) async {
+    final token = await getToken();
+    final myUserId = int.tryParse(_myId ?? '');
+    if (token == null || myUserId == null || !mounted) return;
+    Uint8List bytes;
+    try {
+      bytes = Uint8List.fromList(await readFileBytes(path));
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not read that song.', type: ToastType.error);
+      }
+      return;
+    }
+    if (bytes.isEmpty || !mounted) return;
+    playbackBus.onPause?.call();
+    rebuildWith(() => _jamPlayed.add(msg['id'].toString()));
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      fullscreenDialog: true,
+      builder: (_) => LiveSessionScreen.roomHost(
+        token: token,
+        myUserId: myUserId,
+        audioBytes: bytes,
+        title: title,
+        conversationId: widget.conversationId,
+        groupName: widget.groupTitle.isEmpty ? 'the group' : widget.groupTitle,
+      ),
+    ));
+    final poll = _pollOf(msg);
+    final options = ((poll?['options'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .toList();
+    final w = options.indexOf(title);
+    if (w >= 0) _jamRollOn(options, w);
+  }
+
+  /// Rolling jam: the moment a winner is queued, a fresh vote goes up with
+  /// the songs that are left (when there are still two or more).
+  void _jamRollOn(List<String> options, int winner) {
+    final left = [
+      for (var i = 0; i < options.length; i++)
+        if (i != winner) options[i],
+    ];
+    if (left.length < 2) return;
+    _sendPoll({
+      'q': 'After “${options[winner]}”, what next? 🎶',
+      'options': left,
+      'multi': false,
+      'kind': 'jam',
+    });
   }
 
   Widget _pollOption({

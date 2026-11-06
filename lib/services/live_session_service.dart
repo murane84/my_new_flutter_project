@@ -626,6 +626,22 @@ class LiveSessionController {
     }
   }
 
+  /// Put a song RIGHT AFTER the one playing (Group Jam winner). Starts it at
+  /// once if nothing is playing.
+  Future<void> playNext(LiveTrack t) async {
+    if (role == LiveRole.host && !_hostStarted) {
+      _earlyAdds.insert(0, t);
+      return;
+    }
+    final at = (currentIndex + 1).clamp(0, queue.length);
+    queue.insert(at, t);
+    onQueueChanged?.call();
+    _broadcastQueue();
+    final ended = player.processingState == ProcessingState.completed ||
+        player.processingState == ProcessingState.idle;
+    if (ended) await playIndex(at);
+  }
+
   /// Remove an UP-NEXT track (cannot remove the one currently playing).
   Future<void> removeUpcoming(int index) async {
     if (index <= currentIndex || index >= queue.length) return;

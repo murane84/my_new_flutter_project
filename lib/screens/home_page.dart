@@ -83,7 +83,7 @@ import '../services/call_service.dart';
 import '../services/call_lock.dart';
 import 'lock_screen.dart';
 import '../services/group_call_service.dart';
-import '../state/group_call_state.dart' show groupCallProvider;
+import '../state/group_call_state.dart' show groupCallProvider, GroupCallPhase;
 import '../state/call_state.dart' show callProvider, CallSnapshot;
 import 'call_screen.dart';
 import 'group_call_screen.dart';

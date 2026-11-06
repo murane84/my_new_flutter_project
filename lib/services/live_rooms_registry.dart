@@ -46,6 +46,9 @@ class LiveRoomsRegistry extends ChangeNotifier {
       'host_username': (data['host_username'] ?? '').toString(),
       'track': data['track'],
       'conversation_id': (data['conversation_id'] as num?)?.toInt(),
+      // Listeners in the room right now (host not counted), kept live by
+      // the server's roster updates.
+      'listeners': (data['listeners'] as num?)?.toInt(),
       '_seq': _seq++,
     };
   }

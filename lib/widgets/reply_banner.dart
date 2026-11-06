@@ -38,6 +38,7 @@ class ReplyBanner {
     String? conversationId,
     String? groupTitle,
     String? messageId,
+    bool mention,
   })? onIncoming;
 
   /// True while the user is writing / recording a reply in the banner.

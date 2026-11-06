@@ -1729,7 +1729,9 @@ extension _HomeFriendListView on HomePageState {
           // In the room: the real head-count from its roster; otherwise the
           // server's listener count when known.
           final rc = myJam ? activeLiveSession!.controller.rosterCount : 0;
-          final n = rc > 0 ? rc : (room?['listeners'] as num?)?.toInt();
+          final ls = (room?['listeners'] as num?)?.toInt();
+          // Everyone in the room — listeners + the host (= the roster).
+          final n = rc > 0 ? rc : (ls == null ? null : ls + 1);
           text = n != null && n > 0 ? 'jam · $n' : 'jam';
           tip = 'Jam room live';
         }
@@ -1742,7 +1744,9 @@ extension _HomeFriendListView on HomePageState {
         }
         final fg = live ? scheme.primary : textColor.withValues(alpha: 0.60);
         return Tooltip(
-          message: !live && onlineN > 0 ? '$tip · $onlineN online' : tip,
+          message: !live && onlineN > 0
+              ? '$tip · $onlineN of your friends here online'
+              : tip,
           child: Container(
             margin: const EdgeInsets.only(left: 6),
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
@@ -1936,10 +1940,16 @@ extension _HomeFriendListView on HomePageState {
     final others = members
         .where((m) => (m['user_id'] as num?)?.toInt() != _myUserId)
         .toList();
+    // Online = members who are MY FRIENDS and online right now. Aluta only
+    // shares presence between friends (privacy), so a non-friend member is
+    // never shown online from a stale snapshot — the count is live and true.
     final presence = ref.watch(presenceProvider);
+    final friendIds = {
+      for (final f in _allFriends) (f['id'] as num?)?.toInt(),
+    };
     final onlineN = others.where((m) {
       final id = (m['user_id'] as num?)?.toInt();
-      return (id != null && presence.isOnline(id)) || m['is_online'] == true;
+      return id != null && friendIds.contains(id) && presence.isOnline(id);
     }).length;
     // Who wrote the last message ("Lorraine: …" / "You: …").
     final lastSenderId = (g['last_sender_id'] as num?)?.toInt();

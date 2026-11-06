@@ -381,6 +381,16 @@ async def _broadcast_roster(session_id: str) -> None:
         await MANAGER.broadcast_text(session_id, json.dumps(_roster_payload(session)))
     except Exception:
         pass
+    # An OPEN room (circle / group jam): also tell its audience the new
+    # head-count, so "🎧 jam · 3" on the group row stays live for people who
+    # haven't joined (same audience it was announced to — nobody else).
+    if session.open and session.notify_ids:
+        try:
+            upd = {"type": "live_room_available", "data": session.snapshot()}
+            for uid in session.notify_ids:
+                safe_notify_user(uid, upd)
+        except Exception:
+            pass
 
 
 @router.websocket("/ws/{session_id}")

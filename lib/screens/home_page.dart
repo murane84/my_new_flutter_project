@@ -1944,12 +1944,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
     String? conversationId,
     String? groupTitle,
     String? messageId,
+    bool mention = false,
   }) {
     if (!mounted) return false;
     // A muted group: no banner — and report it handled so no notification
-    // pops instead.
+    // pops instead. A personal @-mention of me still comes through.
     final mutedGid = int.tryParse(conversationId ?? '');
-    if (mutedGid != null && GroupMeta.instance.isMuted(mutedGid)) return true;
+    if (!mention &&
+        mutedGid != null &&
+        GroupMeta.instance.isMuted(mutedGid)) {
+      return true;
+    }
     final payload = <String, dynamic>{
       'type': 'message',
       'friend_id': ?senderId,
@@ -2411,6 +2416,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
             conversationId: cid.toString(),
             groupTitle: gTitle.isEmpty ? null : gTitle,
             messageId: mid.isEmpty ? null : mid,
+            bypassMute: !everyone, // a mention of me pierces a mute
           );
         }
       }

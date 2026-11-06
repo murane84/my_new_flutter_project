@@ -424,6 +424,10 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       final groupTitle = (data['group_title'] ?? '').toString();
       final messageId = (data['message_id'] ?? '').toString();
       final isGroup = convId.isNotEmpty;
+      // A personal @-mention gets through a muted group (banner + alert).
+      final mentionMe = (data['type'] == 'mention' ||
+              data['mentioned'] == '1') &&
+          data['mention_all'] != '1';
       // If the app is in the foreground AND the user is already reading this
       // exact conversation, don't pop a redundant banner for it — they were
       // notified in-app the instant it arrived. All other chats still notify.
@@ -445,6 +449,7 @@ Future<void> handleFcmData(Map<String, dynamic> data,
           conversationId: convId.isEmpty ? null : convId,
           groupTitle: groupTitle.isEmpty ? null : groupTitle,
           messageId: messageId.isEmpty ? null : messageId,
+          mention: mentionMe,
           )) {
         return;
       }

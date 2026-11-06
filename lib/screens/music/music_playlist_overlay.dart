@@ -2547,7 +2547,10 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                         onPressed: widget.onNext,
                       ),
                       // More: find the playing song (+ like, on a narrow card).
-                      PopupMenuButton<String>(
+                      // Aluta's genie menu (same as every other ⋮): it opens
+                      // from the button, stays inside the window on any
+                      // screen and never sits on top of the controls.
+                      GeniePopupMenuButton<String>(
                         tooltip: 'More',
                         icon: Icon(Icons.more_vert_rounded,
                             size: 20, color: scheme.onSurfaceVariant),
@@ -2559,26 +2562,20 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                           }
                         },
                         itemBuilder: (_) => [
-                          const PopupMenuItem(
+                          PopupMenuItem<String>(
                             value: 'find',
-                            child: ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: Icon(Icons.my_location_rounded),
-                              title: Text('Find playing song'),
-                            ),
+                            child: _miniMenuRow(Icons.my_location_rounded,
+                                'Find playing song', scheme),
                           ),
                           if (path != null && !roomy)
-                            PopupMenuItem(
+                            PopupMenuItem<String>(
                               value: 'like',
-                              child: ListTile(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                leading: Icon(fav
-                                    ? Icons.favorite_rounded
-                                    : Icons.favorite_border_rounded),
-                                title: Text(fav ? 'Unlike' : 'Like'),
-                              ),
+                              child: _miniMenuRow(
+                                  fav
+                                      ? Icons.favorite_rounded
+                                      : Icons.favorite_border_rounded,
+                                  fav ? 'Unlike' : 'Like',
+                                  scheme),
                             ),
                         ],
                       ),
@@ -2591,6 +2588,33 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     });
   }
 }
+
+/// One row of the mini player's ⋮ menu: accent icon in a soft round chip +
+/// a one-line label that never wraps (scales down a touch when tight).
+Widget _miniMenuRow(IconData icon, String label, ColorScheme scheme) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 30,
+          height: 30,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: scheme.primary.withValues(alpha: 0.14),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 17, color: accentInk(scheme)),
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(label,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 14.5, fontWeight: FontWeight.w600)),
+        ),
+      ],
+    );
 
 /// The mini player's cover, turning slowly like a little record while music
 /// plays (and easing to a stop on pause).

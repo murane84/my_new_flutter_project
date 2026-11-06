@@ -1510,7 +1510,7 @@ extension _HomeFriendListView on HomePageState {
       final face = narrow ? 50.0 : 56.0; // slot = face + 8 = the card's 64 px height
       return Row(children: [
       _storyRingAvatar(f, name, isOnline, face: face),
-      SizedBox(width: narrow ? 4 : 6),
+      SizedBox(width: narrow ? 3 : 4),
       Expanded(
       child: Container(
         constraints: const BoxConstraints(minHeight: 64),
@@ -1546,7 +1546,7 @@ extension _HomeFriendListView on HomePageState {
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 64),
         child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 9, 4, 9),
+        padding: const EdgeInsets.fromLTRB(10, 9, 0, 9),
         child: Row(
           children: [
             Expanded(
@@ -1607,7 +1607,7 @@ extension _HomeFriendListView on HomePageState {
                 ),
               ),
             ],
-            const SizedBox(width: 6),
+            const SizedBox(width: 4),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -1656,6 +1656,8 @@ extension _HomeFriendListView on HomePageState {
                 icon: Icon(Icons.headphones_rounded,
                     color: scheme.primary, size: 20),
                 visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints.tightFor(width: 38, height: 38),
+                padding: EdgeInsets.zero,
                 style: IconButton.styleFrom(
                     backgroundColor: scheme.primary.withValues(alpha: 0.10)),
                 onPressed: () =>
@@ -1667,6 +1669,8 @@ extension _HomeFriendListView on HomePageState {
                 icon:
                     Icon(Icons.call_rounded, color: scheme.primary, size: 20),
                 visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints.tightFor(width: 38, height: 38),
+                padding: EdgeInsets.zero,
                 onPressed: () => _showCallChoice(
                   friendId: int.tryParse(f['id'].toString()) ?? -1,
                   name: name,
@@ -1807,7 +1811,7 @@ extension _HomeFriendListView on HomePageState {
           },
         ),
       ),
-      SizedBox(width: narrow ? 4 : 6),
+      SizedBox(width: narrow ? 3 : 4),
       Expanded(
       // Same swipes as a friend's tile: RIGHT starts the group call, LEFT
       // opens the group — the colour blooms across and it fires on its own.
@@ -1830,7 +1834,7 @@ extension _HomeFriendListView on HomePageState {
         constraints: const BoxConstraints(minHeight: 64),
         decoration: _circleTileDecoration(scheme, isDark),
         child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 9, 4, 9),
+        padding: const EdgeInsets.fromLTRB(10, 9, 0, 9),
         child: Row(
           children: [
             Expanded(
@@ -1897,7 +1901,7 @@ extension _HomeFriendListView on HomePageState {
                 ],
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 4),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -1957,6 +1961,8 @@ extension _HomeFriendListView on HomePageState {
               tooltip: 'Group call · $name',
               icon: Icon(Icons.call_rounded, color: scheme.primary, size: 20),
               visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints.tightFor(width: 38, height: 38),
+              padding: EdgeInsets.zero,
               onPressed: () => _startGroupCall(g),
             ),
           ],

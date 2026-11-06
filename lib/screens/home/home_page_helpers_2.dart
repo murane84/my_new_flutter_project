@@ -357,7 +357,7 @@ extension _HomePageHelpers2 on HomePageState {
     ]);
   }
 
-  /// "🎧 <host> is playing <song> · Join" — a member's Listen Together room
+  /// "🎧 `host` is playing `song` · Join" — a member's Listen Together room
   /// live in this group (hidden once I'm in it, or when it's mine).
   Widget _groupListenJoinBar(int room) {
     return ListenableBuilder(

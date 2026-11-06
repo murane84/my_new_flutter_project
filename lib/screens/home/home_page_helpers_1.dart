@@ -1195,6 +1195,16 @@ extension _HomePageHelpers1 on HomePageState {
         f['last_message'] = localPrev;
         final ts = (m['timestamp'] ?? m['created_at'] ?? '').toString();
         if (ts.isNotEmpty) f['last_timestamp'] = ts;
+        // Keep WHO sent it (and its ticks) in step with the preview, or a
+        // newer local message of mine would show without "You: ✓✓" — or a
+        // friend's message would wear my ticks.
+        final sid = int.tryParse((m['sender_id'] ?? '').toString());
+        if (sid != null) {
+          f['last_sender_id'] = sid;
+          f['last_message_delivered'] =
+              m['delivered'] == true || m['is_read'] == true;
+          f['last_message_read'] = m['is_read'] == true;
+        }
       }
     } catch (_) {}
   }

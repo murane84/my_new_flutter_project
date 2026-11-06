@@ -410,6 +410,19 @@ class HomePageState extends rp.ConsumerState<HomePage>
     ReplyBanner.onIncoming = _showReplyBanner;
     LiveRoomsRegistry.instance.joinRoom = _dropIntoRoom;
     GroupMeta.instance.addListener(_onGroupMeta);
+    // Replied from a notification while the app is alive → refresh that card
+    // (its preview becomes "✓ You: …" and the unread clears).
+    onInlineReplySent = (fid, cid) {
+      if (!mounted) return;
+      if (fid != null && cid == null) {
+        ref.read(unreadProvider.notifier).clear(fid);
+      }
+      Future<void>.delayed(const Duration(milliseconds: 600), () {
+        if (!mounted) return;
+        _fetchFriends(quiet: true);
+        _fetchGroups();
+      });
+    };
     // Our Space reads its saved copy synchronously → opens complete.
     warmSpacePrefs();
     _loadPinnedChats();
@@ -577,6 +590,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       ReplyBanner.onIncoming = null;
       LiveRoomsRegistry.instance.joinRoom = null;
       GroupMeta.instance.removeListener(_onGroupMeta);
+      onInlineReplySent = null;
     }
     ReplyBanner.hide();
     _glowTimer?.cancel();
@@ -2427,6 +2441,26 @@ class HomePageState extends rp.ConsumerState<HomePage>
       return;
     }
     // A friend is typing to me → show a live "typing…" line on their tile.
+    // My message was read / delivered → the card's ✓✓ updates live.
+    if (type == 'messages_read' || type == 'message_delivered') {
+      final d = (event['data'] as Map?) ?? const {};
+      final who = type == 'messages_read'
+          ? (d['reader_id'] as num?)?.toInt()
+          : (d['receiver_id'] as num?)?.toInt();
+      if (who == null) return;
+      for (final f in _allFriends) {
+        if ((f['id'] as num?)?.toInt() != who) continue;
+        if ((f['last_sender_id'] as num?)?.toInt() != _myUserId) break;
+        if (mounted) {
+          setState(() {
+            f['last_message_delivered'] = true;
+            if (type == 'messages_read') f['last_message_read'] = true;
+          });
+        }
+        break;
+      }
+      // (the open chat handles its own bubbles — don't swallow the event)
+    }
     if (type == 'typing') {
       // Group typing carries a conversation_id → light the GROUP tile, not the
       // sender's DM row (which would wrongly suggest the reply lands in the DM).

@@ -1503,6 +1503,13 @@ extension _HomeFriendListView on HomePageState {
         ? Color(NowPlayingPresence.instance.colorFor((f['id'] as num).toInt())!)
         : scheme.primary;
     final pinned = _pinnedChats.contains(_pinKeyOf(f));
+    // Paused (5-min grace): the card keeps a faint wash + a frozen line, like
+    // the dimmed ring on the photo.
+    final pausedTrack = npTrack == null
+        ? NowPlayingPresence.instance
+            .pausedTrackFor((f['id'] as num).toInt())
+        : null;
+    final songOn = npTrack != null || pausedTrack != null;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // The photo stands OUTSIDE the card so the circle around it can carry
@@ -1536,13 +1543,15 @@ extension _HomeFriendListView on HomePageState {
             child: IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  gradient: npTrack != null
+                  gradient: songOn
                       ? LinearGradient(colors: [
-                          songColor.withValues(alpha: isDark ? 0.20 : 0.12),
+                          songColor.withValues(
+                              alpha: (isDark ? 0.20 : 0.12) *
+                                  (npTrack != null ? 1 : 0.5)),
                           songColor.withValues(alpha: 0.0),
                         ], stops: const [0.0, 0.75])
                       : null,
-                  color: npTrack == null && hasUnread
+                  color: !songOn && hasUnread
                       ? scheme.primary.withValues(alpha: isDark ? 0.07 : 0.045)
                       : null,
                 ),
@@ -1567,7 +1576,7 @@ extension _HomeFriendListView on HomePageState {
             ),
           // While they listen: a hairline along the bottom fills with the
           // song's progress (frozen when paused).
-          if (npTrack != null)
+          if (songOn)
             Positioned(
               left: 0,
               right: 0,
@@ -2154,7 +2163,25 @@ extension _HomeFriendListView on HomePageState {
                 boxShadow: _circleTileDecoration(scheme, isDark).boxShadow,
               )
             : _circleTileDecoration(scheme, isDark),
-        child: Padding(
+        child: Stack(children: [
+        // Pinned → the same short accent strip as a friend's card.
+        if (_pinnedChats.contains(_pinKeyOf(g)))
+          Positioned(
+            left: 0,
+            top: 12,
+            bottom: 12,
+            child: IgnorePointer(
+              child: Container(
+                width: 3,
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: 0.85),
+                  borderRadius:
+                      const BorderRadius.horizontal(right: Radius.circular(3)),
+                ),
+              ),
+            ),
+          ),
+        Padding(
         padding: const EdgeInsets.fromLTRB(10, 9, 0, 9),
         child: Row(
           children: [
@@ -2338,6 +2365,7 @@ extension _HomeFriendListView on HomePageState {
           ],
         ),
       ),
+        ]), // pinned strip Stack
       ),
       ),
       ))),

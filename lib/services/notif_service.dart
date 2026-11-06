@@ -364,6 +364,10 @@ void _onNotifResponse(NotificationResponse r) {
   }
 }
 
+/// Fired (main isolate, app alive) after a notification inline reply was
+/// sent — Home refreshes that card ("✓ You: …", unread cleared).
+void Function(int? friendId, int? conversationId)? onInlineReplySent;
+
 /// Send what was typed into a notification's Reply box to that DM / group,
 /// mark the thread read, and clear the banner. Works from the background
 /// isolate too (app closed). On failure the banner says so — tap opens chat.
@@ -391,6 +395,7 @@ Future<void> _sendInlineReply(Map<String, dynamic> p, String? input) async {
       // long after the message was delivered.
       await _fln.cancel(id: notifId);
       await _tidyPersonSummaries();
+      onInlineReplySent?.call(fid, cid);
       // Then mark the thread read (best-effort, never holds anything up).
       try {
         if (cid != null) {

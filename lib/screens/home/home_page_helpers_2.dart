@@ -740,7 +740,7 @@ extension _HomePageHelpers2 on HomePageState {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.person_rounded,
-                            size: 14, color: scheme.primary),
+                            size: 14, color: accentInk(scheme)),
                         const SizedBox(width: 5),
                         Text(
                           // Narrow layouts (phones, or a shrunk web window)

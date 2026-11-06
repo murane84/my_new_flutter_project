@@ -359,7 +359,7 @@ class _LiveInviteDialog extends StatelessWidget {
                             Border.all(color: scheme.primary.withAlpha(90)),
                       ),
                       child: Icon(Icons.headphones_rounded,
-                          size: 30, color: scheme.primary),
+                          size: 30, color: accentInk(scheme)),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -418,7 +418,7 @@ class _LiveInviteDialog extends StatelessWidget {
                     child: Row(
                       children: [
                         Icon(Icons.music_note_rounded,
-                            size: 18, color: scheme.primary),
+                            size: 18, color: accentInk(scheme)),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(

@@ -608,7 +608,7 @@ class _DedicateFriendPickerState extends State<_DedicateFriendPicker> {
                     child: Row(
                       children: [
                         Icon(Icons.favorite_rounded,
-                            color: scheme.primary, size: 22),
+                            color: accentInk(scheme), size: 22),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
@@ -711,7 +711,7 @@ class _DedicateFriendPickerState extends State<_DedicateFriendPicker> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis),
                               trailing: Icon(Icons.favorite_border_rounded,
-                                  color: scheme.primary, size: 20),
+                                  color: accentInk(scheme), size: 20),
                               onTap: () => Navigator.of(context).pop(f),
                             );
                           },

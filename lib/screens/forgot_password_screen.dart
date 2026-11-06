@@ -250,7 +250,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           emailMode
                               ? Icons.mark_email_read_outlined
                               : Icons.shield_outlined,
-                          color: scheme.primary,
+                          color: accentInk(scheme),
                           size: 22),
                       const SizedBox(width: 12),
                       Expanded(
@@ -314,7 +314,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                 : 'Send code',
                       ),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: scheme.primary,
+                        foregroundColor: accentInk(scheme),
                         side: BorderSide(color: scheme.primary.withAlpha(120)),
                       ),
                     ),

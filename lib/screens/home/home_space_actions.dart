@@ -231,7 +231,7 @@ extension _HomeSpaceActions on HomePageState {
             ),
             ListTile(
               leading:
-                  Icon(Icons.chat_bubble_rounded, color: scheme.primary),
+                  Icon(Icons.chat_bubble_rounded, color: accentInk(scheme)),
               title: const Text('Message'),
               subtitle: const Text('Open your chat with them'),
               onTap: () {
@@ -240,7 +240,7 @@ extension _HomeSpaceActions on HomePageState {
               },
             ),
             ListTile(
-              leading: Icon(Icons.open_in_full_rounded, color: scheme.primary),
+              leading: Icon(Icons.open_in_full_rounded, color: accentInk(scheme)),
               title: const Text('Open Space'),
               onTap: () {
                 Navigator.pop(ctx);
@@ -249,7 +249,7 @@ extension _HomeSpaceActions on HomePageState {
             ),
             if (!isPrimary)
               ListTile(
-                leading: Icon(Icons.push_pin_rounded, color: scheme.primary),
+                leading: Icon(Icons.push_pin_rounded, color: accentInk(scheme)),
                 title: const Text('Make hero'),
                 subtitle: const Text('Show at the top of your list'),
                 onTap: () async {
@@ -531,7 +531,7 @@ extension _HomeSpaceActions on HomePageState {
                     pinned
                         ? Icons.push_pin_outlined
                         : Icons.push_pin_rounded,
-                    color: scheme.primary),
+                    color: accentInk(scheme)),
                 title: Text(pinned ? 'Unpin chat' : 'Pin chat to the top'),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -540,7 +540,7 @@ extension _HomeSpaceActions on HomePageState {
               );
             }),
             ListTile(
-              leading: Icon(Icons.favorite_rounded, color: scheme.primary),
+              leading: Icon(Icons.favorite_rounded, color: accentInk(scheme)),
               title: const Text('Pin as Our Space'),
               subtitle: const Text('Send a bond request — they confirm to pin'),
               onTap: () {
@@ -550,7 +550,7 @@ extension _HomeSpaceActions on HomePageState {
             ),
             ListTile(
               leading:
-                  Icon(Icons.card_giftcard_rounded, color: scheme.primary),
+                  Icon(Icons.card_giftcard_rounded, color: accentInk(scheme)),
               title: const Text('Send a moment'),
               subtitle: const Text('Dedicate a song or a note to them'),
               onTap: () {
@@ -559,7 +559,7 @@ extension _HomeSpaceActions on HomePageState {
               },
             ),
             ListTile(
-              leading: Icon(Icons.call_rounded, color: scheme.primary),
+              leading: Icon(Icons.call_rounded, color: accentInk(scheme)),
               title: const Text('Call'),
               onTap: () {
                 Navigator.pop(ctx);
@@ -572,7 +572,7 @@ extension _HomeSpaceActions on HomePageState {
               },
             ),
             ListTile(
-              leading: Icon(Icons.chat_bubble_rounded, color: scheme.primary),
+              leading: Icon(Icons.chat_bubble_rounded, color: accentInk(scheme)),
               title: const Text('Open chat'),
               onTap: () {
                 Navigator.pop(ctx);
@@ -591,7 +591,7 @@ extension _HomeSpaceActions on HomePageState {
                       on
                           ? Icons.notifications_off_outlined
                           : Icons.notifications_active_outlined,
-                      color: scheme.primary),
+                      color: accentInk(scheme)),
                   title: Text(on
                       ? 'Stop waiting for $first'
                       : 'Let me know when $first is online'),

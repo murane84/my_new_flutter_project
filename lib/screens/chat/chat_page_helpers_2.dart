@@ -178,7 +178,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
                                     name.isNotEmpty
                                         ? name[0].toUpperCase()
                                         : '?',
-                                    style: TextStyle(color: scheme.primary))
+                                    style: TextStyle(color: accentInk(scheme)))
                                 : null,
                           ),
                           title: Text(name),
@@ -883,7 +883,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
                       Text(
                         determinate ? 'Uploading $pctInt%' : 'Uploading\u2026',
                         style: TextStyle(
-                            color: scheme.primary,
+                            color: accentInk(scheme),
                             fontSize: 11,
                             fontWeight: FontWeight.w600),
                       ),
@@ -1229,7 +1229,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
                       ],
                     ),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.send_rounded, color: scheme.primary),
+                      Icon(Icons.send_rounded, color: accentInk(scheme)),
                       const SizedBox(width: 10),
                       ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 280),
@@ -1381,7 +1381,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(Icons.insert_drive_file_rounded,
-                      color: scheme.primary, size: 20),
+                      color: accentInk(scheme), size: 20),
                 ),
                 const SizedBox(width: 10),
                 Expanded(

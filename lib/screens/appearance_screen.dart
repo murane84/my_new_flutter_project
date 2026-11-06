@@ -225,7 +225,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
               child: Row(
                 children: [
                   Icon(Icons.favorite_rounded,
-                      color: scheme.primary, size: 20),
+                      color: accentInk(scheme), size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -251,7 +251,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
           fontSize: 11,
           fontWeight: FontWeight.w800,
           letterSpacing: 1.2,
-          color: scheme.primary,
+          color: accentInk(scheme),
         ),
       );
 
@@ -442,7 +442,7 @@ class _BackdropSlidersCard extends StatelessWidget {
                       style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
-                          color: scheme.primary)),
+                          color: accentInk(scheme))),
                 ),
               ],
             ),
@@ -592,7 +592,7 @@ Widget _accentIconChip(ColorScheme scheme, IconData icon) => Container(
           ),
         ],
       ),
-      child: Icon(icon, color: scheme.primary, size: 20),
+      child: Icon(icon, color: accentInk(scheme), size: 20),
     );
 
 class _ChatWallpaperSection extends StatefulWidget {
@@ -1460,7 +1460,7 @@ class _BubbleThemeSection extends StatelessWidget {
               Row(
                 children: [
                   Icon(Icons.chat_bubble_outline_rounded,
-                      size: 20, color: scheme.primary),
+                      size: 20, color: accentInk(scheme)),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -1718,7 +1718,7 @@ class _GalleryAutoSaveSectionState extends State<_GalleryAutoSaveSection> {
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          icon: Icon(Icons.photo_library_rounded, color: scheme.primary),
+          icon: Icon(Icons.photo_library_rounded, color: accentInk(scheme)),
           title: const Text('Save to your Gallery?'),
           content: const Text(
               'Photos and videos people send you leave Aluta\'s server after '

@@ -249,6 +249,12 @@ class MyApp extends StatelessWidget {
           fontWeight: FontWeight.w700,
         ),
       ),
+      // Text buttons are WORDS in the accent → the readable ink on dark
+      // (a washed tint of a deep accent); filled buttons keep its strength.
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(foregroundColor: accentInk(scheme)),
+      ),
+      tabBarTheme: TabBarThemeData(labelColor: accentInk(scheme)),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: scheme.primary,
@@ -419,12 +425,10 @@ class MyApp extends StatelessWidget {
           // other accent is used on dark. (It used to be #FF5A5F — which is
           // exactly the *Coral* swatch — so in dark mode "Aluta red" painted
           // the app coral/pinkish while "Crimson" looked deeper: swapped.)
-          // …lifted just enough to READ on the near-black surface (text,
-          // thin icons, the song line): deep reds were only ~3.6:1 there.
-          primary: liftForDark(
-              customAccent ? accent : ThemeProvider.defaultAccent),
-          onPrimary: readableOn(liftForDark(
-              customAccent ? accent : ThemeProvider.defaultAccent)),
+          // Fills keep the accent's full strength; WORDS / thin icons in the
+          // accent use accentInk() — a washed tint that reads on near-black.
+          primary: customAccent ? accent : ThemeProvider.defaultAccent,
+          onPrimary: customAccent ? readableOn(accent) : Colors.white,
           primaryContainer: darkP?.primaryContainer ?? const Color(0xFF8E1420),
           onPrimaryContainer:
               darkP?.onPrimaryContainer ?? const Color(0xFFFFDAD7),
@@ -667,7 +671,7 @@ class SplashScreenState extends State<SplashScreen>
         'assets/images/logo.png',
         gaplessPlayback: true,
         errorBuilder: (_, _, _) =>
-            Icon(Icons.forum_rounded, size: 72, color: scheme.primary),
+            Icon(Icons.forum_rounded, size: 72, color: accentInk(scheme)),
       ),
     );
   }

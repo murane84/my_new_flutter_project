@@ -1999,7 +1999,7 @@ class _ChatPageState extends State<ChatPage>
                 height: 48,
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => Icon(Icons.chat_bubble_rounded,
-                    size: 40, color: scheme.primary)),
+                    size: 40, color: accentInk(scheme))),
           ),
           const SizedBox(height: 12),
           Text(
@@ -4978,7 +4978,7 @@ class _ChatPageState extends State<ChatPage>
                     tooltip: 'Call back',
                     visualDensity: VisualDensity.compact,
                     icon: Icon(Icons.call_rounded,
-                        size: 18, color: scheme.primary),
+                        size: 18, color: accentInk(scheme)),
                     onPressed: _callFriend,
                   ),
               ]),
@@ -6493,7 +6493,7 @@ class _ChatPageState extends State<ChatPage>
                   Row(
                     children: [
                       Icon(Icons.reply_rounded,
-                          size: 13, color: scheme.primary),
+                          size: 13, color: accentInk(scheme)),
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
@@ -6503,7 +6503,7 @@ class _ChatPageState extends State<ChatPage>
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: scheme.primary,
+                            color: accentInk(scheme),
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                           ),
@@ -7344,7 +7344,7 @@ class _ChatPageState extends State<ChatPage>
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(_pill!.icon,
-                                        size: 16, color: scheme.primary),
+                                        size: 16, color: accentInk(scheme)),
                                     const SizedBox(width: 6),
                                     Flexible(
                                       child: Text(_pill!.label,
@@ -7455,7 +7455,7 @@ class _ChatPageState extends State<ChatPage>
                                       Icon(
                                           Icons
                                               .keyboard_double_arrow_down_rounded,
-                                          color: scheme.primary,
+                                          color: accentInk(scheme),
                                           size: 24),
                                       if (_hasNewMsg)
                                         Positioned(
@@ -8750,7 +8750,7 @@ class _HoverChevronState extends State<_HoverChevron> {
                     child: _chip(
                         scheme,
                         Icon(Icons.expand_more_rounded,
-                            size: 18, color: scheme.primary)),
+                            size: 18, color: accentInk(scheme))),
                   ),
                 ),
             ],

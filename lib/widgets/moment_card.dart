@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
+import '../utils/readable.dart' show accentInk;
 
 /// One action on a [showMomentCard].
 class MomentAction {
@@ -272,7 +273,7 @@ class _MomentCardState extends State<_MomentCard>
                                                       fontSize: 11,
                                                       fontWeight:
                                                           FontWeight.w700,
-                                                      color: scheme.primary)),
+                                                      color: accentInk(scheme))),
                                               Icon(
                                                   widget.onTap != null
                                                       ? Icons
@@ -283,7 +284,7 @@ class _MomentCardState extends State<_MomentCard>
                                                           : Icons
                                                               .expand_more_rounded),
                                                   size: 15,
-                                                  color: scheme.primary),
+                                                  color: accentInk(scheme)),
                                             ]),
                                       ],
                                     ],

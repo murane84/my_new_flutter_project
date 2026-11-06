@@ -12,6 +12,7 @@ import '../utils/time_utils.dart';
 import '../utils/toast_helper.dart';
 import '../widgets/avatar_flight.dart';
 import '../widgets/photo_viewer.dart';
+import '../utils/readable.dart' show accentInk;
 
 /// A read-only profile card for ANOTHER user (a friend or a group member).
 /// Opens from a tap on their name/avatar. Shows the photo, the name (their saved
@@ -551,7 +552,7 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
                 child: Row(
                   children: [
                     Icon(Icons.phone_rounded,
-                        size: 18, color: scheme.primary),
+                        size: 18, color: accentInk(scheme)),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -612,7 +613,7 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
                     child: Row(
                       children: [
                         Icon(Icons.person_add_alt_1_rounded,
-                            size: 20, color: scheme.primary),
+                            size: 20, color: accentInk(scheme)),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text('Add to contacts',

@@ -5,6 +5,7 @@ import '../screens/home_page.dart' show playbackBus;
 import '../services/online_watch.dart';
 import '../utils/toast_helper.dart';
 import 'net_gate.dart';
+import '../utils/readable.dart' show accentInk;
 
 /// Before going live with Listen Together: is the partner actually here?
 ///  • online (or we can't tell) → true, start as usual;
@@ -58,7 +59,7 @@ Future<bool> _presenceGate(BuildContext context,
               color: scheme.primary.withValues(alpha: 0.12),
             ),
             child: Icon(Icons.headphones_rounded,
-                color: scheme.primary, size: 28),
+                color: accentInk(scheme), size: 28),
           ),
           const SizedBox(height: 12),
           Text('$first is offline right now',

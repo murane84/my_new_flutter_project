@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../utils/toast_helper.dart';
+import '../utils/readable.dart' show accentInk;
 
 /// Front-end SHELL for the upcoming Listening Rooms (build stage C1).
 ///
@@ -64,7 +65,7 @@ class LiveRoomHeroShell extends StatelessWidget {
                   fontSize: 10.5,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 1.1,
-                  color: scheme.primary,
+                  color: accentInk(scheme),
                 ),
               ),
               const Spacer(),
@@ -82,7 +83,7 @@ class LiveRoomHeroShell extends StatelessWidget {
                     fontSize: 9.5,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.8,
-                    color: scheme.primary,
+                    color: accentInk(scheme),
                   ),
                 ),
               ),

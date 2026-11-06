@@ -1136,7 +1136,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                   shape: BoxShape.circle,
                 ),
                 child: Icon(Icons.add_reaction_outlined,
-                    size: 17, color: scheme.primary),
+                    size: 17, color: accentInk(scheme)),
               ),
             ),
           ],
@@ -1329,7 +1329,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
           titleSpacing: 0,
           title: Row(
             children: [
-              Icon(Icons.headphones_rounded, color: scheme.primary, size: 20),
+              Icon(Icons.headphones_rounded, color: accentInk(scheme), size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
@@ -1507,7 +1507,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               shape: BoxShape.circle,
             ),
             child: Icon(Icons.graphic_eq_rounded,
-                size: 16, color: scheme.primary),
+                size: 16, color: accentInk(scheme)),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1802,7 +1802,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                   ),
                 ),
                 Icon(Icons.add_circle_rounded,
-                    size: 22, color: scheme.primary),
+                    size: 22, color: accentInk(scheme)),
               ],
             ),
           ),
@@ -1833,7 +1833,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
             padding: const EdgeInsets.fromLTRB(14, 10, 10, 6),
             child: Row(
               children: [
-                Icon(Icons.group_rounded, size: 16, color: scheme.primary),
+                Icon(Icons.group_rounded, size: 16, color: accentInk(scheme)),
                 const SizedBox(width: 6),
                 Text('In the room',
                     style: TextStyle(
@@ -1852,7 +1852,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                       style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: scheme.primary)),
+                          color: accentInk(scheme))),
                 ),
                 const Spacer(),
                 // When collapsed, a compact stack of who's here so you still
@@ -1935,7 +1935,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
           padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
           child: Row(
             children: [
-              Icon(Icons.forum_rounded, size: 15, color: scheme.primary),
+              Icon(Icons.forum_rounded, size: 15, color: accentInk(scheme)),
               const SizedBox(width: 6),
               Text('Chat & reactions',
                   style: TextStyle(
@@ -2131,7 +2131,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                       shape: BoxShape.circle,
                     ),
                     child: Icon(Icons.headphones_rounded,
-                        size: 12, color: scheme.primary),
+                        size: 12, color: accentInk(scheme)),
                   ),
                 ),
               if (p.lastReaction != null)
@@ -2693,7 +2693,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                   style: const TextStyle(
                       fontSize: 12, fontWeight: FontWeight.w700)),
               style: TextButton.styleFrom(
-                foregroundColor: scheme.primary,
+                foregroundColor: accentInk(scheme),
                 minimumSize: const Size(0, 32),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
@@ -2751,7 +2751,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
           ),
           subtitle: isCurrent
               ? Text('Now playing',
-                  style: TextStyle(fontSize: 10.5, color: scheme.primary))
+                  style: TextStyle(fontSize: 10.5, color: accentInk(scheme)))
               : Text(hasBy ? 'added by $by · tap to play' : 'Tap to play',
                   style: TextStyle(
                       fontSize: 10.5, color: scheme.onSurfaceVariant)),
@@ -2806,7 +2806,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       padding: const EdgeInsets.fromLTRB(14, 10, 6, 0),
       child: Row(
         children: [
-          Icon(Icons.queue_music_rounded, size: 16, color: scheme.primary),
+          Icon(Icons.queue_music_rounded, size: 16, color: accentInk(scheme)),
           const SizedBox(width: 6),
           Text('Up next',
               style: TextStyle(
@@ -2824,7 +2824,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                 style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: scheme.primary)),
+                    color: accentInk(scheme))),
           ),
           const Spacer(),
           // Host of a room: toggle whether guests may add songs (Stage C).
@@ -2938,7 +2938,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
           ),
           subtitle: isCurrent
               ? Text('Now playing',
-                  style: TextStyle(fontSize: 10.5, color: scheme.primary))
+                  style: TextStyle(fontSize: 10.5, color: accentInk(scheme)))
               : (t.contributor != null
                   ? Text('added by ${t.contributor}',
                       style: TextStyle(
@@ -2951,7 +2951,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               if (t.contributor != null)
                 IconButton(
                   icon: Icon(Icons.favorite_border_rounded,
-                      size: 18, color: scheme.primary),
+                      size: 18, color: accentInk(scheme)),
                   tooltip: 'Thank ${t.contributor}',
                   visualDensity: VisualDensity.compact,
                   onPressed: () => _thankContributor(t),
@@ -3045,7 +3045,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                             (playbackBus.isPlaying?.call() ?? false)
                         ? PlayingBars(color: scheme.primary, scale: 0.65)
                         : Icon(Icons.music_note_rounded,
-                            color: scheme.primary),
+                            color: accentInk(scheme)),
                   ),
                   title: Text(items[i].title,
                       maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -3109,7 +3109,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                           child: now
                               ? PlayingBars(color: scheme.primary, scale: 0.65)
                               : Icon(Icons.music_note_rounded,
-                                  color: scheme.primary),
+                                  color: accentInk(scheme)),
                         ),
                         title: Text(_titleFromPath(p),
                             maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -3125,13 +3125,13 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(Icons.bolt_rounded,
-                                        size: 14, color: scheme.primary),
+                                        size: 14, color: accentInk(scheme)),
                                     const SizedBox(width: 2),
                                     Text('Instant',
                                         style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.w600,
-                                            color: scheme.primary)),
+                                            color: accentInk(scheme))),
                                   ],
                                 ),
                               )

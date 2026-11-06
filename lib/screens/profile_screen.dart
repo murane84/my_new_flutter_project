@@ -607,7 +607,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(Icons.lock_reset_rounded,
-                      color: scheme.primary, size: 22),
+                      color: accentInk(scheme), size: 22),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -941,7 +941,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         child: Row(
           children: [
-            Icon(Icons.phonelink_lock_rounded, color: scheme.primary),
+            Icon(Icons.phonelink_lock_rounded, color: accentInk(scheme)),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -995,7 +995,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         child: Row(
           children: [
-            Icon(Icons.shield_outlined, color: scheme.primary),
+            Icon(Icons.shield_outlined, color: accentInk(scheme)),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -1055,7 +1055,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       child: Row(
         children: [
-          Icon(Icons.fingerprint_rounded, color: scheme.primary),
+          Icon(Icons.fingerprint_rounded, color: accentInk(scheme)),
           const SizedBox(width: 14),
           Expanded(
             child: Column(

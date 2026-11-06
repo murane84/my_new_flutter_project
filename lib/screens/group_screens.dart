@@ -767,7 +767,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           SwitchListTile.adaptive(
             dense: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-            secondary: Icon(Icons.shield_rounded, color: scheme.primary),
+            secondary: Icon(Icons.shield_rounded, color: accentInk(scheme)),
             title: const Text('Only admins can send messages'),
             subtitle: const Text('Everyone can still read, react and vote'),
             value: _conv?['admins_only'] == true,
@@ -777,7 +777,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
             child: Row(children: [
-              Icon(Icons.shield_outlined, size: 16, color: scheme.primary),
+              Icon(Icons.shield_outlined, size: 16, color: accentInk(scheme)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text('Only admins can send messages in this group',
@@ -875,13 +875,13 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                   Border.all(color: scheme.primary.withValues(alpha: 0.35)),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.shield_rounded, size: 10, color: scheme.primary),
+              Icon(Icons.shield_rounded, size: 10, color: accentInk(scheme)),
               const SizedBox(width: 3),
               Text('Admin',
                   style: TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w800,
-                      color: scheme.primary)),
+                      color: accentInk(scheme))),
             ]),
           ),
         ],

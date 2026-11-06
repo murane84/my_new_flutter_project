@@ -88,7 +88,7 @@ extension _HomePageHelpers1 on HomePageState {
                       color: scheme.primary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(9),
                     ),
-                    child: Icon(icon, size: 17, color: scheme.primary),
+                    child: Icon(icon, size: 17, color: accentInk(scheme)),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -141,7 +141,7 @@ extension _HomePageHelpers1 on HomePageState {
                           shape: BoxShape.circle,
                         ),
                         child: Icon(Icons.shield_moon_rounded,
-                            color: scheme.primary, size: 32),
+                            color: accentInk(scheme), size: 32),
                       ),
                       const SizedBox(height: 14),
                       Text(
@@ -637,7 +637,7 @@ extension _HomePageHelpers1 on HomePageState {
   /// One row inside the group header's ⋮ options menu.
   Widget _groupMenuRow(IconData icon, String label, ColorScheme scheme) => Row(
         children: [
-          Icon(icon, size: 20, color: scheme.primary),
+          Icon(icon, size: 20, color: accentInk(scheme)),
           const SizedBox(width: 12),
           Text(label),
         ],
@@ -1384,11 +1384,11 @@ extension _HomePageHelpers1 on HomePageState {
     if (npLine != null) {
       final npStyle = TextStyle(
           fontSize: 12.5,
-          color: scheme.primary,
+          color: accentInk(scheme),
           fontWeight: FontWeight.w600);
       return Row(
         children: [
-          Icon(Icons.graphic_eq_rounded, size: 14, color: scheme.primary),
+          Icon(Icons.graphic_eq_rounded, size: 14, color: accentInk(scheme)),
           const SizedBox(width: 5),
           Expanded(child: _scrollingText(npLine, npStyle)),
         ],
@@ -1399,7 +1399,7 @@ extension _HomePageHelpers1 on HomePageState {
         'typing…',
         style: TextStyle(
             fontSize: 12.5,
-            color: scheme.primary,
+            color: accentInk(scheme),
             fontStyle: FontStyle.italic,
             fontWeight: FontWeight.w600),
       );

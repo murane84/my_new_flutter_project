@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/app_busy.dart';
+import '../utils/readable.dart' show accentInk;
 
 // ─── Genie menus ────────────────────────────────────────────────────────────
 // One menu motion for the whole app: a menu GROWS out of the button that
@@ -585,10 +586,10 @@ class _GenieMenuListState extends State<_GenieMenuList> {
               child: Row(
                 children: [
                   Icon(Icons.chevron_left_rounded,
-                      size: 24, color: scheme.primary),
+                      size: 24, color: accentInk(scheme)),
                   const SizedBox(width: 4),
                   if (p.icon != null) ...[
-                    Icon(p.icon, size: 18, color: scheme.primary),
+                    Icon(p.icon, size: 18, color: accentInk(scheme)),
                     const SizedBox(width: 8),
                   ],
                   Expanded(

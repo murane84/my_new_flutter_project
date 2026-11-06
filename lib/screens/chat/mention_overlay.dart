@@ -324,7 +324,7 @@ extension _ChatMentions on _ChatPageState {
             child: Row(
               children: [
                 Icon(Icons.alternate_email_rounded,
-                    size: 16, color: scheme.primary),
+                    size: 16, color: accentInk(scheme)),
                 const SizedBox(width: 7),
                 Text(
                     ticked.isEmpty
@@ -384,7 +384,7 @@ extension _ChatMentions on _ChatPageState {
                                   backgroundColor:
                                       scheme.primary.withValues(alpha: 0.16),
                                   child: Icon(Icons.groups_rounded,
-                                      size: 18, color: scheme.primary),
+                                      size: 18, color: accentInk(scheme)),
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
@@ -396,7 +396,7 @@ extension _ChatMentions on _ChatPageState {
                                       Text('@all',
                                           style: TextStyle(
                                               fontWeight: FontWeight.w700,
-                                              color: scheme.primary)),
+                                              color: accentInk(scheme))),
                                       Text('Notify everyone in this group',
                                           style: TextStyle(
                                               fontSize: 11.5,

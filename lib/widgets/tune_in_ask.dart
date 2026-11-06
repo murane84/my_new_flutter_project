@@ -4,6 +4,7 @@ import '../services/tune_in.dart';
 import '../utils/toast_helper.dart';
 import 'net_gate.dart';
 import 'person_avatar.dart';
+import '../utils/readable.dart' show accentInk;
 
 /// Tap "Tune in" on a friend who's listening: ASK to join their song (they
 /// keep their rhythm; you join right where they are). A small waiting card
@@ -185,7 +186,7 @@ class _TuneInWaitingState extends State<_TuneInWaiting> {
                       child: Row(
                         children: [
                           Icon(Icons.graphic_eq_rounded,
-                              size: 16, color: scheme.primary),
+                              size: 16, color: accentInk(scheme)),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(song,

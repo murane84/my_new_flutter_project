@@ -235,7 +235,7 @@ extension _ChatRituals on _ChatPageState {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(icon, size: 16, color: scheme.primary),
+                    Icon(icon, size: 16, color: accentInk(scheme)),
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(label,

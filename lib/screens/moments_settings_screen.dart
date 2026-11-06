@@ -6,6 +6,7 @@ import '../services/moment_prefs.dart';
 import '../services/song_insights.dart';
 import '../utils/popup_shell.dart';
 import '../widgets/welcome_tour.dart';
+import '../utils/readable.dart' show accentInk;
 
 /// Moments & nudges — every warm, app-initiated touch in one place, each with
 /// its own switch. Everything here is on-device.
@@ -63,7 +64,7 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
               color: scheme.primary.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(11),
             ),
-            child: Icon(icon, size: 19, color: scheme.primary),
+            child: Icon(icon, size: 19, color: accentInk(scheme)),
           ),
           title: Text(title,
               style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),

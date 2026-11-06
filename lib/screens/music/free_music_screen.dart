@@ -16,6 +16,7 @@ import '../../utils/toast_helper.dart';
 import '../../widgets/tap_chip.dart';
 import '../home_page.dart' show freeMusicInbox, playbackBus;
 import '../token_helper.dart';
+import '../../utils/readable.dart' show accentInk;
 
 /// Free music: search songs artists released to be downloaded for free —
 /// Jamendo (Creative Commons) and the Internet Archive (CC / public domain).
@@ -270,7 +271,7 @@ class _FreeMusicPanelState extends State<FreeMusicPanel> {
               onTap: widget.onBack,
             ),
             const SizedBox(width: 6),
-            Icon(Icons.travel_explore_rounded, color: scheme.primary, size: 18),
+            Icon(Icons.travel_explore_rounded, color: accentInk(scheme), size: 18),
             const SizedBox(width: 6),
             const Flexible(
               child: Text('Free music',
@@ -290,7 +291,7 @@ class _FreeMusicPanelState extends State<FreeMusicPanel> {
                     style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w800,
-                        color: scheme.primary)),
+                        color: accentInk(scheme))),
               ),
             ],
             const Spacer(),
@@ -410,13 +411,13 @@ class _FreeMusicPanelState extends State<FreeMusicPanel> {
                       ? ColoredBox(
                           color: scheme.primary.withValues(alpha: 0.15),
                           child: Icon(Icons.music_note_rounded,
-                              color: scheme.primary))
+                              color: accentInk(scheme)))
                       : Image.network(cover,
                           fit: BoxFit.cover,
                           errorBuilder: (_, _, _) => ColoredBox(
                               color: scheme.primary.withValues(alpha: 0.15),
                               child: Icon(Icons.music_note_rounded,
-                                  color: scheme.primary))),
+                                  color: accentInk(scheme)))),
                 ),
               ),
               Container(
@@ -459,7 +460,7 @@ class _FreeMusicPanelState extends State<FreeMusicPanel> {
                   '${t['license'] ?? 'Free licence'} · ${t['source'] ?? ''}',
                   style: TextStyle(
                       fontSize: 11,
-                      color: scheme.primary,
+                      color: accentInk(scheme),
                       decoration: TextDecoration.underline,
                       decorationColor: scheme.primary.withValues(alpha: 0.5)),
                 ),
@@ -479,7 +480,7 @@ class _FreeMusicPanelState extends State<FreeMusicPanel> {
                           strokeWidth: 3, value: prog > 0 ? prog : null))
                   : IconButton(
                       tooltip: 'Download to my playlist',
-                      icon: Icon(Icons.download_rounded, color: scheme.primary),
+                      icon: Icon(Icons.download_rounded, color: accentInk(scheme)),
                       onPressed: () => _download(t),
                     ),
           onTap: () => _togglePreview(t),

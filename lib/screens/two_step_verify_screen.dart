@@ -172,7 +172,7 @@ class _TwoStepVerifyScreenState extends State<TwoStepVerifyScreen> {
               style: TextStyle(
                   fontSize: 52,
                   fontWeight: FontWeight.w800,
-                  color: scheme.primary),
+                  color: accentInk(scheme)),
             ),
           ),
         ),

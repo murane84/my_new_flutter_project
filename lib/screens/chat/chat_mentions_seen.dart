@@ -137,7 +137,7 @@ extension _ChatMentionsSeen on _ChatPageState {
                               style: TextStyle(
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.w800,
-                                  color: scheme.primary)),
+                                  color: accentInk(scheme))),
                         ),
                       ),
                   ],

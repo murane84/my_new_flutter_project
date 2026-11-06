@@ -328,7 +328,7 @@ class _ShareSheetState extends State<_ShareSheet> {
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                   child: Row(
                     children: [
-                      Icon(Icons.share_rounded, color: scheme.primary, size: 20),
+                      Icon(Icons.share_rounded, color: accentInk(scheme), size: 20),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -383,7 +383,7 @@ class _ShareSheetState extends State<_ShareSheet> {
                                 ? PlayingBars(
                                     color: scheme.primary, scale: 0.6)
                                 : Icon(Icons.music_note_rounded,
-                                    size: 16, color: scheme.primary),
+                                    size: 16, color: accentInk(scheme)),
                             label: ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 170),
                               child: Text(_label(p),
@@ -398,7 +398,7 @@ class _ShareSheetState extends State<_ShareSheet> {
                         padding: const EdgeInsets.only(top: 4),
                         child: ActionChip(
                           avatar: Icon(Icons.add_rounded,
-                              size: 18, color: scheme.primary),
+                              size: 18, color: accentInk(scheme)),
                           label: const Text('Add songs'),
                           onPressed: _sending ? null : _addSongs,
                         ),
@@ -483,7 +483,7 @@ class _ShareSheetState extends State<_ShareSheet> {
                                       ? Text('Already sent this song',
                                           style: TextStyle(
                                               fontSize: 11.5,
-                                              color: scheme.primary))
+                                              color: accentInk(scheme)))
                                       : (fid != null &&
                                               _recent.take(3).contains(fid)
                                           ? Text('Recent',

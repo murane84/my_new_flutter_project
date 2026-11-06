@@ -166,7 +166,7 @@ extension _HomePhoneBody on HomePageState {
                     ),
                     const SizedBox(width: 10),
                     Icon(Icons.music_note_rounded,
-                        color: scheme.primary, size: 20),
+                        color: accentInk(scheme), size: 20),
                     const SizedBox(width: 6),
                     // Theme-aware so the title stays legible in dark mode (an
                     // uncoloured Text here fell back to black → invisible on the

@@ -13,6 +13,7 @@ import 'home_page.dart';
 import '../services/contact_names.dart';
 import '../utils/toast_helper.dart';
 import '../utils/popup_shell.dart';
+import '../utils/readable.dart' show accentInk;
 
 /// A friendly label + platform tag for THIS device (used when it links itself).
 ({String label, String platform}) _describeThisDevice() {
@@ -583,7 +584,7 @@ class _LinkedDevicesScreenState extends State<LinkedDevicesScreen> {
                         style: TextStyle(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w700,
-                            color: scheme.primary)),
+                            color: accentInk(scheme))),
                   ),
                 ],
               ],

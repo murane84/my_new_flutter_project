@@ -998,7 +998,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) {
         Widget item(IconData i, String label, String v) => ListTile(
-              leading: Icon(i, color: scheme.primary),
+              leading: Icon(i, color: accentInk(scheme)),
               title: Text(label),
               onTap: () => Navigator.pop(ctx, v),
             );

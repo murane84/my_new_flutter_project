@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../utils/popup_shell.dart'
     show HeaderActionButton, gPanelBottomY, kAppFooterHeight;
+import '../utils/readable.dart' show accentInk;
 
 // Height of the Aluta app header (toolbar). The full-page legal views start
 // just under it, so the "Aluta" title + overflow (⋮) menu stay visible above.
@@ -191,7 +192,7 @@ class _LegalHubState extends State<_LegalHub> {
                         color: scheme.primary.withAlpha(28),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(doc.icon, size: 19, color: scheme.primary),
+                      child: Icon(doc.icon, size: 19, color: accentInk(scheme)),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -428,7 +429,7 @@ List<Widget> _legalBody(BuildContext context, String raw) {
             style: TextStyle(
               fontSize: 14.5,
               fontWeight: FontWeight.w700,
-              color: scheme.primary,
+              color: accentInk(scheme),
             ),
           ),
         ));

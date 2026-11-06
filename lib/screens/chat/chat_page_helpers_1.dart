@@ -64,12 +64,12 @@ extension _ChatPageHelpers1 on _ChatPageState {
                     radius: 20,
                     backgroundColor: scheme.primaryContainer,
                     child: Icon(Icons.favorite_rounded,
-                        size: 18, color: scheme.primary),
+                        size: 18, color: accentInk(scheme)),
                   ),
                   title: Text(_spaceTitle(s)),
                   trailing: (s['id'] as num?)?.toInt() == def
                       ? Icon(Icons.star_rounded,
-                          size: 18, color: scheme.primary)
+                          size: 18, color: accentInk(scheme))
                       : null,
                   onTap: () =>
                       Navigator.pop(bctx, (s['id'] as num?)?.toInt()),
@@ -404,7 +404,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
             ),
             child: Row(
               children: [
-                Icon(icon, color: scheme.primary),
+                Icon(icon, color: accentInk(scheme)),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(label,
@@ -432,7 +432,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
                     Row(
                       children: [
                         Icon(Icons.auto_awesome_rounded,
-                            size: 20, color: scheme.primary),
+                            size: 20, color: accentInk(scheme)),
                         const SizedBox(width: 8),
                         const Expanded(
                           child: Text('Keep in Our Space',
@@ -481,7 +481,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
                               showEmoji
                                   ? Icons.keyboard_rounded
                                   : Icons.emoji_emotions_outlined,
-                              color: scheme.primary),
+                              color: accentInk(scheme)),
                           onPressed: () {
                             if (!showEmoji) {
                               FocusManager.instance.primaryFocus?.unfocus();
@@ -607,7 +607,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
               Row(
                 children: [
                   Icon(Icons.music_note_rounded,
-                      size: 18, color: scheme.primary),
+                      size: 18, color: accentInk(scheme)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(title,
@@ -1041,7 +1041,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
                             color: scheme.primary.withAlpha(28),
                           ),
                           child: Icon(Icons.headphones_rounded,
-                              color: scheme.primary, size: 22),
+                              color: accentInk(scheme), size: 22),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -1120,7 +1120,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
                           subtitle: isNow
                               ? Text('Now playing — share from here',
                                   style: TextStyle(
-                                      fontSize: 11, color: scheme.primary))
+                                      fontSize: 11, color: accentInk(scheme)))
                               : null,
                           trailing: Icon(Icons.sensors_rounded,
                               size: 18,

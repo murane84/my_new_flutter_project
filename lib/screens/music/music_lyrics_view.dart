@@ -208,7 +208,7 @@ class _LyricsViewState extends State<_LyricsView> {
               padding: const EdgeInsets.fromLTRB(16, 4, 8, 6),
               child: Row(
                 children: [
-                  Icon(Icons.lyrics_rounded, color: scheme.primary, size: 20),
+                  Icon(Icons.lyrics_rounded, color: accentInk(scheme), size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Column(
@@ -234,7 +234,7 @@ class _LyricsViewState extends State<_LyricsView> {
                   if (!_editing && !_syncing && _plain.isNotEmpty)
                     PopupMenuButton<String>(
                       tooltip: 'Timing',
-                      icon: Icon(Icons.timer_outlined, color: scheme.primary),
+                      icon: Icon(Icons.timer_outlined, color: accentInk(scheme)),
                       onSelected: (v) {
                         if (v == 'sync') _startSync();
                         if (v == 'earlier') _shiftAll(-500);
@@ -286,7 +286,7 @@ class _LyricsViewState extends State<_LyricsView> {
                   IconButton(
                     icon: Icon(
                         _editing ? Icons.check_rounded : Icons.edit_rounded,
-                        color: scheme.primary),
+                        color: accentInk(scheme)),
                     tooltip: _editing ? 'Save' : 'Edit lyrics',
                     onPressed: () {
                       if (_editing) {
@@ -697,7 +697,7 @@ class _LyricsViewState extends State<_LyricsView> {
             style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: scheme.primary)),
+                color: accentInk(scheme))),
         const Spacer(),
         Text(at(i - 1),
             textAlign: TextAlign.center,
@@ -709,7 +709,7 @@ class _LyricsViewState extends State<_LyricsView> {
             style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
-                color: scheme.primary)),
+                color: accentInk(scheme))),
         const SizedBox(height: 14),
         Text(at(i + 1),
             textAlign: TextAlign.center,

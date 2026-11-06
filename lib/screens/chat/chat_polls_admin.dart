@@ -73,7 +73,7 @@ extension _ChatPollsAdmin on _ChatPageState {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.shield_outlined, size: 17, color: scheme.primary),
+                Icon(Icons.shield_outlined, size: 17, color: accentInk(scheme)),
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
@@ -299,7 +299,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                   const SizedBox(height: 12),
                   Row(children: [
                     Icon(jam ? Icons.queue_music_rounded : Icons.poll_rounded,
-                        color: scheme.primary),
+                        color: accentInk(scheme)),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(jam ? 'Group jam' : 'New poll',

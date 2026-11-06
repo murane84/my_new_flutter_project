@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
+import '../utils/readable.dart' show accentInk;
 
 /// What the person chose in [showRecentPhotoPicker].
 class PhotoPick {
@@ -338,7 +339,7 @@ class _RecentPhotoSheetState extends State<_RecentPhotoSheet> {
 
   Widget _chip(ColorScheme scheme, IconData icon, String label, String action) {
     return ActionChip(
-      avatar: Icon(icon, size: 18, color: scheme.primary),
+      avatar: Icon(icon, size: 18, color: accentInk(scheme)),
       label: Text(label),
       labelStyle: TextStyle(
           fontWeight: FontWeight.w700, color: scheme.onSurface, fontSize: 13),

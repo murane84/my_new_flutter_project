@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
+import '../../utils/readable.dart' show accentInk;
 
 /// Fast, searchable phone-book picker for sharing a contact.
 ///
@@ -85,7 +86,7 @@ class _ContactPickerSheetState extends State<ContactPickerSheet> {
               padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
               child: Row(
                 children: [
-                  Icon(Icons.person_rounded, color: scheme.primary),
+                  Icon(Icons.person_rounded, color: accentInk(scheme)),
                   const SizedBox(width: 8),
                   const Text('Share a contact',
                       style:
@@ -162,7 +163,7 @@ class _ContactPickerSheetState extends State<ContactPickerSheet> {
             backgroundColor: scheme.primary.withAlpha(35),
             child: Text(initial,
                 style: TextStyle(
-                    color: scheme.primary, fontWeight: FontWeight.bold)),
+                    color: accentInk(scheme), fontWeight: FontWeight.bold)),
           ),
           title:
               Text(c.displayName, maxLines: 1, overflow: TextOverflow.ellipsis),

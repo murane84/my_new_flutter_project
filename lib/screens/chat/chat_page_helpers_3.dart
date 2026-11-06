@@ -121,7 +121,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 color: scheme.primary.withAlpha(40),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(_fileIcon(name), color: scheme.primary, size: 22),
+              child: Icon(_fileIcon(name), color: accentInk(scheme), size: 22),
             ),
             const SizedBox(width: 10),
             Flexible(
@@ -142,7 +142,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                           ? 'Downloading\u2026'
                           : 'Downloading ${(dlP * 100).round()}%',
                       style: TextStyle(
-                          color: scheme.primary,
+                          color: accentInk(scheme),
                           fontSize: 11,
                           fontWeight: FontWeight.w600),
                     )
@@ -213,7 +213,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 // already says "file"): a tick over a tray = it's on this
                 // device. Tap to save another copy.
                 icon: Icon(Icons.download_done_rounded,
-                    size: 22, color: scheme.primary),
+                    size: 22, color: accentInk(scheme)),
                 onPressed: () => _downloadMediaWithProgress(msg),
               )
             else
@@ -1132,7 +1132,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                             color: scheme.primary.withValues(alpha: 0.14),
                           ),
                           child: Icon(Icons.done_all_rounded,
-                              size: 15, color: scheme.primary),
+                              size: 15, color: accentInk(scheme)),
                         ),
                         const SizedBox(width: 8),
                         Text('Message info',
@@ -1168,7 +1168,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                             ? Icons.favorite_rounded
                             : Icons.visibility_rounded,
                         size: 13,
-                        color: scheme.primary),
+                        color: accentInk(scheme)),
                     const SizedBox(width: 6),
                     Text(
                         heart
@@ -1177,7 +1177,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                         style: TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w700,
-                            color: scheme.primary)),
+                            color: accentInk(scheme))),
                   ],
                 ),
               );
@@ -1742,7 +1742,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 child: Row(
                   children: [
                     Icon(Icons.push_pin_rounded,
-                        size: 20, color: scheme.primary),
+                        size: 20, color: accentInk(scheme)),
                     const SizedBox(width: 10),
                     Text('Pin this message for…',
                         style: TextStyle(
@@ -1805,7 +1805,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
           padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
           child: Row(
             children: [
-              Icon(Icons.push_pin_rounded, size: 18, color: scheme.primary),
+              Icon(Icons.push_pin_rounded, size: 18, color: accentInk(scheme)),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -1816,7 +1816,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                         style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: scheme.primary)),
+                            color: accentInk(scheme))),
                     const SizedBox(height: 2),
                     Text(
                       _replyQuoteText(pinned),
@@ -2342,7 +2342,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
           child: Row(
             children: [
               Icon(Icons.person_add_alt_1_rounded,
-                  size: 20, color: scheme.primary),
+                  size: 20, color: accentInk(scheme)),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(

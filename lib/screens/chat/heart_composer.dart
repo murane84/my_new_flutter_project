@@ -1063,7 +1063,7 @@ extension _ChatHeartComposer on _ChatPageState {
             mainAxisSize: MainAxisSize.min,
             children: [
               const SizedBox(height: 14),
-              Icon(Icons.hourglass_top_rounded, color: scheme.primary),
+              Icon(Icons.hourglass_top_rounded, color: accentInk(scheme)),
               const SizedBox(height: 6),
               Text('When should it open?',
                   style: TextStyle(
@@ -1082,12 +1082,12 @@ extension _ChatHeartComposer on _ChatPageState {
               ),
               for (final p in presets)
                 ListTile(
-                  leading: Icon(p.$2, color: scheme.primary),
+                  leading: Icon(p.$2, color: accentInk(scheme)),
                   title: Text(p.$1),
                   onTap: () => Navigator.pop(ctx, p.$3),
                 ),
               ListTile(
-                leading: Icon(Icons.celebration_rounded, color: scheme.primary),
+                leading: Icon(Icons.celebration_rounded, color: accentInk(scheme)),
                 title: Text(anniv == null
                     ? 'On our anniversary…'
                     : 'On our anniversary · ${DateFormat('d MMM').format(anniv)}'),
@@ -1098,7 +1098,7 @@ extension _ChatHeartComposer on _ChatPageState {
                 onLongPress: () => Navigator.pop(ctx, 'anniv'),
               ),
               ListTile(
-                leading: Icon(Icons.event_rounded, color: scheme.primary),
+                leading: Icon(Icons.event_rounded, color: accentInk(scheme)),
                 title: const Text('Pick a date & time…'),
                 subtitle: const Text('An anniversary, a birthday, a reunion'),
                 onTap: () => Navigator.pop(ctx, 'pick'),

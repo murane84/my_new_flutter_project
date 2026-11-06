@@ -249,7 +249,7 @@ class _LinkOzilaneScreenState extends State<LinkOzilaneScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Icon(icon, size: 54, color: scheme.primary),
+        Icon(icon, size: 54, color: accentInk(scheme)),
         const SizedBox(height: 14),
         Text(title,
             textAlign: TextAlign.center,

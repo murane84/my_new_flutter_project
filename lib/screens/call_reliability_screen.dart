@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../services/notif_service.dart';
+import '../utils/readable.dart' show accentInk;
 
 /// "Call reliability" — a mobile setup screen that walks the user through the
 /// three OS permissions an incoming Aluta call needs in order to actually ring
@@ -246,7 +247,7 @@ class _CallReliabilityScreenState extends State<CallReliabilityScreen>
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: scheme.primary),
+            Icon(icon, color: accentInk(scheme)),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -317,7 +318,7 @@ class _CallReliabilityScreenState extends State<CallReliabilityScreen>
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: scheme.primary),
+            Icon(icon, color: accentInk(scheme)),
             const SizedBox(width: 14),
             Expanded(
               child: Column(

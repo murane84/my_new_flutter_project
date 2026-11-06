@@ -118,7 +118,7 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Icon(Icons.lock_reset_rounded,
-                        size: 54, color: scheme.primary),
+                        size: 54, color: accentInk(scheme)),
                     const SizedBox(height: 14),
                     const Text(
                       'Choose your own password',

@@ -113,7 +113,7 @@ extension _ChatMusicMoments on _ChatPageState {
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 4, 18, 8),
             child: Row(children: [
-              Icon(Icons.card_giftcard_rounded, color: scheme.primary),
+              Icon(Icons.card_giftcard_rounded, color: accentInk(scheme)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text('Dedicate “${_clip(title, 34)}” to…',

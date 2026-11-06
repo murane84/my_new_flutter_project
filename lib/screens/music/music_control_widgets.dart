@@ -587,7 +587,7 @@ class _SpeedPanelState extends State<_SpeedPanel> {
                       style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w900,
-                          color: scheme.primary),
+                          color: accentInk(scheme)),
                     ),
                   ),
                 ),

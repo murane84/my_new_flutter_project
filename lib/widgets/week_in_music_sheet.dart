@@ -3,6 +3,7 @@ import 'package:flutter/services.dart' show HapticFeedback;
 
 import '../services/aluta_mood.dart' show AlutaMoment;
 import '../services/song_insights.dart';
+import '../utils/readable.dart' show accentInk;
 
 const _momentLabel = {
   AlutaMoment.dawn: ('🌄', 'Dawn'),
@@ -72,7 +73,7 @@ Future<void> showWeekInMusic(
                 style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
-                    color: scheme.primary)),
+                    color: accentInk(scheme))),
             const SizedBox(height: 2),
             Text(small,
                 maxLines: 1,

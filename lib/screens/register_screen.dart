@@ -499,7 +499,7 @@ class RegisterPageState extends State<RegisterPage> {
                               child: Text(
                                 'Sign In',
                                 style: TextStyle(
-                                  color: scheme.primary,
+                                  color: accentInk(scheme),
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
                                 ),

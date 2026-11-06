@@ -113,7 +113,7 @@ class _PolicyGateDialogState extends State<_PolicyGateDialog> {
                         shape: BoxShape.circle,
                       ),
                       child: Icon(Icons.verified_user_rounded,
-                          color: scheme.primary, size: 24),
+                          color: accentInk(scheme), size: 24),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -252,7 +252,7 @@ class _PolicyGateDialogState extends State<_PolicyGateDialog> {
                       'Questions? Ask us here · or support@ozilane.com',
                       style: TextStyle(
                         fontSize: 12.5,
-                        color: scheme.primary,
+                        color: accentInk(scheme),
                       ),
                     ),
                   ),
@@ -294,7 +294,7 @@ class _DocLink extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: scheme.primary),
+          Icon(icon, size: 20, color: accentInk(scheme)),
           const SizedBox(width: 12),
           Expanded(
             child: Text(

@@ -102,7 +102,7 @@ class _EditBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.edit_rounded, size: 15, color: scheme.primary),
+          Icon(Icons.edit_rounded, size: 15, color: accentInk(scheme)),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -111,7 +111,7 @@ class _EditBanner extends StatelessWidget {
                 Text(
                   'Editing message',
                   style: TextStyle(
-                    color: scheme.primary,
+                    color: accentInk(scheme),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),

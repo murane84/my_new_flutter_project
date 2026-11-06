@@ -587,7 +587,7 @@ class LoginPageState extends State<LoginPage> {
                                               ),
                                             ),
                                     style: TextButton.styleFrom(
-                                      foregroundColor: scheme.primary,
+                                      foregroundColor: accentInk(scheme),
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 4),
                                       minimumSize: const Size(0, 36),
@@ -695,7 +695,7 @@ class LoginPageState extends State<LoginPage> {
                                         label: const Text(
                                             'Approve on Ozilane Key'),
                                         style: OutlinedButton.styleFrom(
-                                          foregroundColor: scheme.primary,
+                                          foregroundColor: accentInk(scheme),
                                           side: BorderSide(
                                               color: scheme.primary
                                                   .withAlpha(150)),
@@ -784,7 +784,7 @@ class LoginPageState extends State<LoginPage> {
                                       label:
                                           const Text('Log in with your phone'),
                                       style: OutlinedButton.styleFrom(
-                                        foregroundColor: scheme.primary,
+                                        foregroundColor: accentInk(scheme),
                                         side: BorderSide(
                                             color:
                                                 scheme.primary.withAlpha(120)),
@@ -829,7 +829,7 @@ class LoginPageState extends State<LoginPage> {
                               child: Text(
                                 'Sign Up',
                                 style: TextStyle(
-                                  color: scheme.primary,
+                                  color: accentInk(scheme),
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
                                 ),

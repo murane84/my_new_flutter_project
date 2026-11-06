@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'readable.dart' show accentInk;
 
 /// The global-space position of the most recent pointer-down anywhere in the
 /// app, recorded by [GlobalTapOrigin] near the app root. Every [showAppPopup]
@@ -314,7 +315,7 @@ class AppPopupShell extends StatelessWidget {
               color: scheme.primary.withAlpha(28),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, size: 19, color: scheme.primary),
+            child: Icon(icon, size: 19, color: accentInk(scheme)),
           ),
           const SizedBox(width: 12),
           Expanded(

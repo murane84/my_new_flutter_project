@@ -254,7 +254,7 @@ class _TwoFactorSetupScreenState extends State<TwoFactorSetupScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Icon(Icons.shield_moon_outlined, size: 56, color: scheme.primary),
+        Icon(Icons.shield_moon_outlined, size: 56, color: accentInk(scheme)),
         const SizedBox(height: 16),
         const Text(
           'Protect your account',
@@ -386,7 +386,7 @@ class _TwoFactorSetupScreenState extends State<TwoFactorSetupScreen> {
               showToast(context, 'Setup link copied', type: ToastType.info);
             },
             style: TextButton.styleFrom(
-              foregroundColor: scheme.primary,
+              foregroundColor: accentInk(scheme),
               padding: const EdgeInsets.symmetric(horizontal: 4),
               minimumSize: const Size(0, 36),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,

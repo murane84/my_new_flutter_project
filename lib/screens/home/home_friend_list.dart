@@ -366,7 +366,7 @@ extension _HomeFriendListView on HomePageState {
         children: [
           Row(
             children: [
-              Icon(icon, size: 17, color: scheme.primary),
+              Icon(icon, size: 17, color: accentInk(scheme)),
               const SizedBox(width: 8),
               Text(
                 name.toUpperCase(),
@@ -421,7 +421,7 @@ extension _HomeFriendListView on HomePageState {
           Row(
             children: [
               Icon(Icons.favorite_border_rounded,
-                  size: 18, color: scheme.primary),
+                  size: 18, color: accentInk(scheme)),
               const SizedBox(width: 8),
               Text('No spaces yet',
                   style: TextStyle(
@@ -546,7 +546,7 @@ extension _HomeFriendListView on HomePageState {
               style: TextStyle(
                 fontSize: 10.5,
                 fontWeight: FontWeight.w800,
-                color: scheme.primary,
+                color: accentInk(scheme),
               ),
             ),
           ],
@@ -1111,7 +1111,7 @@ extension _HomeFriendListView on HomePageState {
                     border: Border.all(
                         color: scheme.outlineVariant.withValues(alpha: 0.6)),
                   ),
-                  child: Icon(Icons.add_rounded, color: scheme.primary),
+                  child: Icon(Icons.add_rounded, color: accentInk(scheme)),
                 ),
               ),
             ),
@@ -1731,7 +1731,7 @@ extension _HomeFriendListView on HomePageState {
               IconButton(
                 tooltip: 'Tune in with $name',
                 icon: Icon(Icons.headphones_rounded,
-                    color: scheme.primary, size: 20),
+                    color: accentInk(scheme), size: 20),
                 visualDensity: VisualDensity.compact,
                 constraints: const BoxConstraints.tightFor(width: 38, height: 38),
                 padding: EdgeInsets.zero,
@@ -1749,7 +1749,7 @@ extension _HomeFriendListView on HomePageState {
               IconButton(
                 tooltip: 'Call $name',
                 icon:
-                    Icon(Icons.call_rounded, color: scheme.primary, size: 20),
+                    Icon(Icons.call_rounded, color: accentInk(scheme), size: 20),
                 visualDensity: VisualDensity.compact,
                 constraints: const BoxConstraints.tightFor(width: 38, height: 38),
                 padding: EdgeInsets.zero,
@@ -2253,7 +2253,7 @@ extension _HomeFriendListView on HomePageState {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 12.5,
-                          color: scheme.primary,
+                          color: accentInk(scheme),
                           fontStyle: FontStyle.italic,
                           fontWeight: FontWeight.w600,
                         ),
@@ -2354,7 +2354,7 @@ extension _HomeFriendListView on HomePageState {
             // group (rings every member, opens the group-call screen).
             IconButton(
               tooltip: 'Group call · $name',
-              icon: Icon(Icons.call_rounded, color: scheme.primary, size: 20),
+              icon: Icon(Icons.call_rounded, color: accentInk(scheme), size: 20),
               visualDensity: VisualDensity.compact,
               constraints: const BoxConstraints.tightFor(width: 38, height: 38),
               padding: EdgeInsets.zero,
@@ -2463,7 +2463,7 @@ extension _HomeFriendListView on HomePageState {
                   fontSize: 10.5,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 1.1,
-                  color: scheme.primary,
+                  color: accentInk(scheme),
                 ),
               ),
             ],
@@ -2542,7 +2542,7 @@ extension _HomeFriendListView on HomePageState {
           const SizedBox(height: 3),
           Row(
             children: [
-              Icon(Icons.graphic_eq_rounded, size: 14, color: scheme.primary),
+              Icon(Icons.graphic_eq_rounded, size: 14, color: accentInk(scheme)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(title,
@@ -2774,7 +2774,7 @@ extension _HomeFriendListView on HomePageState {
                 itemCount: paths.length,
                 itemBuilder: (c, i) => ListTile(
                   leading:
-                      Icon(Icons.music_note_rounded, color: scheme.primary),
+                      Icon(Icons.music_note_rounded, color: accentInk(scheme)),
                   title: Text(_roomTitleFromPath(paths[i]),
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                   onTap: () => Navigator.pop(ctx, paths[i]),
@@ -2886,7 +2886,7 @@ extension _HomeFriendListView on HomePageState {
                   registered: (r['host_username'] ?? 'Friend').toString());
               final tt = ((r['track'] as Map?)?['title'] ?? '').toString();
               return ListTile(
-                leading: Icon(Icons.headphones_rounded, color: scheme.primary),
+                leading: Icon(Icons.headphones_rounded, color: accentInk(scheme)),
                 title:
                     Text(host, maxLines: 1, overflow: TextOverflow.ellipsis),
                 subtitle: tt.isEmpty

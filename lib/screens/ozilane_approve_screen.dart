@@ -225,7 +225,7 @@ class _OzilaneApproveScreenState extends State<OzilaneApproveScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Icon(Icons.phonelink_ring_rounded, size: 54, color: scheme.primary),
+        Icon(Icons.phonelink_ring_rounded, size: 54, color: accentInk(scheme)),
         const SizedBox(height: 14),
         Text(
           _isSignIn ? 'Sign in with Ozilane Key' : 'Reset with Ozilane Key',
@@ -308,7 +308,7 @@ class _OzilaneApproveScreenState extends State<OzilaneApproveScreen> {
               style: TextStyle(
                   fontSize: 52,
                   fontWeight: FontWeight.w800,
-                  color: scheme.primary),
+                  color: accentInk(scheme)),
             ),
           ),
         ),

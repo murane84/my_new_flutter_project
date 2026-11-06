@@ -2007,7 +2007,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                   color: _sleepMinutes == minutes ? scheme.primary : null),
               title: Text(label),
               trailing: _sleepMinutes == minutes
-                  ? Icon(Icons.check_rounded, color: scheme.primary)
+                  ? Icon(Icons.check_rounded, color: accentInk(scheme))
                   : null,
               onTap: () {
                 _setSleep(minutes);
@@ -2096,7 +2096,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     messenger.showMaterialBanner(
       MaterialBanner(
         backgroundColor: scheme.surfaceContainerHighest,
-        leading: Icon(Icons.phonelink_rounded, color: scheme.primary),
+        leading: Icon(Icons.phonelink_rounded, color: accentInk(scheme)),
         content: Text(
           '$feature is only available in the Windows or Android app — '
           'open Aluta there to use it.',

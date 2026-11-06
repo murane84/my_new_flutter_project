@@ -53,7 +53,7 @@ extension _ChatMorning on _ChatPageState {
               },
             ),
             ListTile(
-              leading: Icon(Icons.send_rounded, color: scheme.primary),
+              leading: Icon(Icons.send_rounded, color: accentInk(scheme)),
               title: const Text('Send now'),
               onTap: () {
                 Navigator.pop(ctx);

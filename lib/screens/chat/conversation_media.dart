@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../utils/net_image.dart' show authNetworkImageProvider;
+import '../../utils/readable.dart' show accentInk;
 
 /// One shared photo/video in the Media tab.
 class MediaItem {
@@ -578,7 +579,7 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
           title: Text(l.url,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: scheme.primary, fontSize: 13.5)),
+              style: TextStyle(color: accentInk(scheme), fontSize: 13.5)),
           subtitle: Text(
             l.snippet.isEmpty ? l.dateLabel : l.snippet,
             maxLines: 1,
@@ -660,7 +661,7 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
           child: Row(children: [
-            Icon(Icons.favorite_rounded, size: 15, color: scheme.primary),
+            Icon(Icons.favorite_rounded, size: 15, color: accentInk(scheme)),
             const SizedBox(width: 6),
             Expanded(
               child: Text(

@@ -42,7 +42,7 @@ extension _HomeBanners on HomePageState {
             child: Text(
               asHost ? 'Streaming to $peer' : 'Listening with $peer',
               style: TextStyle(
-                color: scheme.primary,
+                color: accentInk(scheme),
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
               ),

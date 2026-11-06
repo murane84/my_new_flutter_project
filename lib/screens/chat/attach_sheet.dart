@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
+import '../../utils/readable.dart' show accentInk;
 
 /// The chat "attach" bottom sheet — a compact, content-hugging sheet with a
 /// vibrant grid of share options and, on Android/iOS, a horizontally-scrolling
@@ -327,7 +328,7 @@ class _AttachSheetState extends State<AttachSheet> {
       padding: const EdgeInsets.fromLTRB(22, 8, 14, 8),
       child: Row(
         children: [
-          Icon(Icons.image_rounded, size: 16, color: scheme.primary),
+          Icon(Icons.image_rounded, size: 16, color: accentInk(scheme)),
           const SizedBox(width: 7),
           Text(
             'Recent',
@@ -342,7 +343,7 @@ class _AttachSheetState extends State<AttachSheet> {
             TextButton(
               onPressed: widget.onGallery,
               style: TextButton.styleFrom(
-                foregroundColor: scheme.primary,
+                foregroundColor: accentInk(scheme),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 minimumSize: Size.zero,
@@ -436,7 +437,7 @@ class _AttachSheetState extends State<AttachSheet> {
             child: Row(
               children: [
                 Icon(Icons.photo_library_rounded,
-                    size: 20, color: scheme.primary),
+                    size: 20, color: accentInk(scheme)),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -454,7 +455,7 @@ class _AttachSheetState extends State<AttachSheet> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: scheme.primary,
+                    color: accentInk(scheme),
                   ),
                 ),
               ],

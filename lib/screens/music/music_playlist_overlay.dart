@@ -830,9 +830,9 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
               ),
               Divider(height: 1, color: scheme.outlineVariant.withAlpha(70)),
               ListTile(
-                leading: Icon(Icons.add_rounded, color: scheme.primary),
+                leading: Icon(Icons.add_rounded, color: accentInk(scheme)),
                 title: Text('New group…',
-                    style: TextStyle(color: scheme.primary)),
+                    style: TextStyle(color: accentInk(scheme))),
                 onTap: () {
                   Navigator.pop(ctx);
                   _promptCreateGroup(context, addPaths: [path]);
@@ -886,7 +886,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                   for (final g in widget.groups.keys)
                     ListTile(
                       dense: true,
-                      leading: Icon(Icons.folder_rounded, color: scheme.primary),
+                      leading: Icon(Icons.folder_rounded, color: accentInk(scheme)),
                       title: Text(g),
                       onTap: () {
                         widget.onAddManyToGroup(paths, g);
@@ -899,9 +899,9 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             ),
             Divider(height: 1, color: scheme.outlineVariant.withAlpha(70)),
             ListTile(
-              leading: Icon(Icons.add_rounded, color: scheme.primary),
+              leading: Icon(Icons.add_rounded, color: accentInk(scheme)),
               title:
-                  Text('New group…', style: TextStyle(color: scheme.primary)),
+                  Text('New group…', style: TextStyle(color: accentInk(scheme))),
               onTap: () {
                 Navigator.pop(ctx);
                 _promptCreateGroup(context, addPaths: paths);
@@ -934,7 +934,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 color: on ? scheme.primary : null,
                 fontWeight: on ? FontWeight.w700 : FontWeight.w500)),
         trailing: on
-            ? Icon(Icons.check_rounded, color: scheme.primary)
+            ? Icon(Icons.check_rounded, color: accentInk(scheme))
             : null,
         onTap: () {
           setState(() => _sort = mode);
@@ -980,7 +980,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 children: [
                   const SizedBox(width: 6),
                   Icon(Icons.swap_vert_rounded,
-                      size: 18, color: scheme.primary),
+                      size: 18, color: accentInk(scheme)),
                   const SizedBox(width: 8),
                   Text('Sort by',
                       style: TextStyle(
@@ -1249,7 +1249,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
               ),
               Row(
                 children: [
-                  Icon(Icons.edit_note_rounded, color: scheme.primary),
+                  Icon(Icons.edit_note_rounded, color: accentInk(scheme)),
                   const SizedBox(width: 8),
                   const Expanded(
                     child: Text('Edit details',
@@ -1555,7 +1555,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             : Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: Icon(Icons.queue_music_rounded,
-                    color: scheme.primary, size: 20),
+                    color: accentInk(scheme), size: 20),
               );
         final trailing = widget.fullPage
             ? null
@@ -1583,7 +1583,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
-                    color: scheme.primary)),
+                    color: accentInk(scheme))),
           ),
         ]);
 
@@ -1643,7 +1643,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                             ? Icons.arrow_back_rounded
                             : Icons.queue_music_rounded,
                         size: 20,
-                        color: scheme.primary),
+                        color: accentInk(scheme)),
                     const SizedBox(width: 5),
                     // Count badge: never wider than ~5 characters —
                     // 93 · 999 · 5,000 · 12.3k · 250k · 1.2M — and it
@@ -1664,7 +1664,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                               style: TextStyle(
                                   fontSize: 11.5,
                                   fontWeight: FontWeight.w800,
-                                  color: scheme.primary,
+                                  color: accentInk(scheme),
                                   fontFeatures: const [
                                     FontFeature.tabularFigures()
                                   ])),
@@ -1777,7 +1777,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           child: ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.phone_android_rounded, color: scheme.primary),
+            leading: Icon(Icons.phone_android_rounded, color: accentInk(scheme)),
             title: const Text('From this device'),
             subtitle: const Text('Find new songs saved here'),
           ),
@@ -1788,7 +1788,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             dense: true,
             contentPadding: EdgeInsets.zero,
             leading:
-                Icon(Icons.travel_explore_rounded, color: scheme.primary),
+                Icon(Icons.travel_explore_rounded, color: accentInk(scheme)),
             title: const Text('Free music'),
             subtitle: const Text('Songs artists share for free'),
           ),
@@ -2035,7 +2035,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 color: active ? scheme.primary : null,
                 fontWeight: active ? FontWeight.w700 : FontWeight.w500)),
         trailing: trailing ??
-            (active ? Icon(Icons.check_rounded, color: scheme.primary) : null),
+            (active ? Icon(Icons.check_rounded, color: accentInk(scheme)) : null),
         onTap: onTap,
       );
     }
@@ -2077,7 +2077,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 children: [
                   const SizedBox(width: 6),
                   Icon(Icons.filter_list_rounded,
-                      size: 18, color: scheme.primary),
+                      size: 18, color: accentInk(scheme)),
                   const SizedBox(width: 8),
                   Text('Show',
                       style: TextStyle(
@@ -2147,9 +2147,9 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                   ListTile(
                     dense: true,
                     leading: Icon(Icons.create_new_folder_rounded,
-                        color: scheme.primary),
+                        color: accentInk(scheme)),
                     title: Text('New group…',
-                        style: TextStyle(color: scheme.primary)),
+                        style: TextStyle(color: accentInk(scheme))),
                     onTap: () {
                       Navigator.pop(ctx);
                       _promptCreateGroup(context);

@@ -11,6 +11,7 @@ import '../../services/audio_capture.dart';
 import '../../utils/toast_helper.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_picker/file_picker.dart';
+import '../../utils/readable.dart' show accentInk;
 
 /// Shazam-style "what's this song?" flow. The user first picks a SOURCE:
 ///  - "From this phone" — captures the device's own audio output (what another
@@ -383,7 +384,7 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.graphic_eq_rounded, size: 40, color: scheme.primary),
+        Icon(Icons.graphic_eq_rounded, size: 40, color: accentInk(scheme)),
         const SizedBox(height: 10),
         Text('Identify a song',
             style: TextStyle(
@@ -472,7 +473,7 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
                   color: scheme.primary.withAlpha(30),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: scheme.primary),
+                child: Icon(icon, color: accentInk(scheme)),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -743,7 +744,7 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
       ColorScheme scheme, IconData icon, String label, VoidCallback onTap) {
     return ActionChip(
       onPressed: onTap,
-      avatar: Icon(icon, size: 18, color: scheme.primary),
+      avatar: Icon(icon, size: 18, color: accentInk(scheme)),
       label: Text(label),
       side: BorderSide(color: scheme.outlineVariant.withAlpha(120)),
     );
@@ -755,7 +756,7 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
       mainAxisSize: MainAxisSize.min,
       children: [
         const SizedBox(height: 6),
-        Icon(icon, size: 46, color: scheme.primary),
+        Icon(icon, size: 46, color: accentInk(scheme)),
         const SizedBox(height: 12),
         Text(title,
             style: TextStyle(

@@ -108,7 +108,7 @@ class _AddFriendSheetState extends State<_AddFriendSheet> {
         children: [
           Row(
             children: [
-              Icon(Icons.person_add_alt_1_rounded, color: scheme.primary),
+              Icon(Icons.person_add_alt_1_rounded, color: accentInk(scheme)),
               const SizedBox(width: 10),
               Text('Add a friend',
                   style: TextStyle(
@@ -207,7 +207,7 @@ class _AddFriendSheetState extends State<_AddFriendSheet> {
           if (_isFriend)
             Chip(
               avatar: Icon(Icons.check_rounded,
-                  size: 16, color: scheme.primary),
+                  size: 16, color: accentInk(scheme)),
               label: const Text('In your circle'),
               visualDensity: VisualDensity.compact,
             )

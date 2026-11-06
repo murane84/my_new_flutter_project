@@ -158,7 +158,7 @@ extension _HomeHub on HomePageState {
                     style: TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w700,
-                      color: scheme.primary,
+                      color: accentInk(scheme),
                     ),
                   ),
                   const SizedBox(width: 2),
@@ -166,7 +166,7 @@ extension _HomeHub on HomePageState {
                     turns: _storiesExpanded ? 0.0 : 0.5,
                     duration: const Duration(milliseconds: 200),
                     child: Icon(Icons.keyboard_arrow_up_rounded,
-                        size: 20, color: scheme.primary),
+                        size: 20, color: accentInk(scheme)),
                   ),
                 ],
               ),

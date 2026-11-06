@@ -3474,7 +3474,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       shape: BoxShape.circle,
                     ),
                     child: Icon(Icons.logout_rounded,
-                        color: scheme.primary, size: 26),
+                        color: accentInk(scheme), size: 26),
                   ),
                   const SizedBox(height: 14),
                   Text('Sign out?',
@@ -3572,7 +3572,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           },
         ),
         const SizedBox(width: 10),
-        Icon(Icons.music_note_rounded, color: scheme.primary, size: 20),
+        Icon(Icons.music_note_rounded, color: accentInk(scheme), size: 20),
         const SizedBox(width: 6),
         const Text(
           'Music',
@@ -3747,7 +3747,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                                   style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
-                                      color: scheme.primary),
+                                      color: accentInk(scheme)),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -3939,7 +3939,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                               style: TextStyle(
                                   fontSize: 11.5,
                                   fontWeight: FontWeight.w800,
-                                  color: scheme.primary)),
+                                  color: accentInk(scheme))),
                         ),
                       );
                     }),
@@ -4069,7 +4069,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
               fit: BoxFit.contain,
               errorBuilder: (_, _, _) => Icon(
                 Icons.chat_bubble_outline_rounded,
-                color: scheme.primary,
+                color: accentInk(scheme),
                 size: 20,
               ),
             ),
@@ -4426,7 +4426,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final style = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w600,
-      color: scheme.primary,
+      color: accentInk(scheme),
     );
     // Jump straight to the full player panel — remembering it came from the
     // pill, so closing it returns here (bar stays dismissed).
@@ -4461,7 +4461,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.music_note_rounded, size: 15, color: scheme.primary),
+            Icon(Icons.music_note_rounded, size: 15, color: accentInk(scheme)),
             const SizedBox(width: 5),
             // Marquee the title (only scrolls when it overflows) so long song
             // names stay readable inside the compact pill.

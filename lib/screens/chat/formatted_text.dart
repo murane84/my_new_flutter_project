@@ -883,5 +883,54 @@ List<InlineSpan> previewSpans(
       .join('  ')
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
+  // A leading type emoji (📞 Missed call, 🎵 Song, 📷 Photo…) becomes a real
+  // icon: emoji glyphs take the preview's faded colour and some (🎵 is near
+  // black on Windows) vanish on a dark theme. Icons stay crisp in both.
+  for (final e in _previewIcons.entries) {
+    if (!oneLine.startsWith(e.key)) continue;
+    final rest = oneLine.substring(e.key.length).trimLeft();
+    final low = rest.toLowerCase();
+    final bad = e.key == '📞' &&
+        const ['missed', 'declined', 'no answer', 'unreachable', 'failed',
+               'busy', 'cancelled']
+            .any(low.contains);
+    final c = base.color ?? const Color(0xFF8A8A8A);
+    final iconColor = bad
+        ? const Color(0xFFE5484D) // readable red on light and dark
+        : c.withValues(alpha: c.a < 0.78 ? 0.78 : c.a);
+    final size = (base.fontSize ?? 12.5) + 1.5;
+    return [
+      WidgetSpan(
+        alignment: PlaceholderAlignment.middle,
+        child: Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: Icon(
+            bad && e.key == '📞' ? Icons.call_missed_rounded : e.value,
+            size: size,
+            color: iconColor,
+          ),
+        ),
+      ),
+      ..._previewInline(rest, base, codeBg: codeBg, highlightBg: highlightBg),
+    ];
+  }
   return _previewInline(oneLine, base, codeBg: codeBg, highlightBg: highlightBg);
 }
+
+/// Preview type-emoji → icon (see [previewSpans]). ❤️ stays an emoji: it's
+/// already a bright red glyph everywhere.
+const Map<String, IconData> _previewIcons = {
+  '📞': Icons.call_rounded,
+  '🎵': Icons.music_note_rounded,
+  '🎶': Icons.music_note_rounded,
+  '🎧': Icons.headphones_rounded,
+  '🎤': Icons.mic_rounded,
+  '📷': Icons.photo_camera_rounded,
+  '🎬': Icons.videocam_rounded,
+  '🎞️': Icons.gif_box_rounded,
+  '🎞': Icons.gif_box_rounded,
+  '📎': Icons.attach_file_rounded,
+  '📍': Icons.place_rounded,
+  '📊': Icons.poll_rounded,
+  '👤': Icons.person_rounded,
+};

@@ -1517,6 +1517,164 @@ extension _HomePageHelpers1 on HomePageState {
     );
   }
 
+  /// The quick peek from long-pressing a friend's photo in the Circle list:
+  /// their photo + ring, what they're playing (live progress), and one-tap
+  /// Tune in / send a ❤️ for the song / open the chat.
+  void _showPhotoPeek(Map<String, dynamic> f, String name, bool isOnline) {
+    final id = (f['id'] as num?)?.toInt() ?? -1;
+    HapticFeedback.selectionClick();
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.35),
+      builder: (ctx) {
+        final scheme = Theme.of(ctx).colorScheme;
+        return Dialog(
+          backgroundColor: scheme.surface,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 36),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: ListenableBuilder(
+              listenable: NowPlayingPresence.instance,
+              builder: (ctx, _) {
+                final presence = NowPlayingPresence.instance;
+                final playing = presence.trackFor(id);
+                final paused = presence.pausedTrackFor(id);
+                final t = playing ?? paused;
+                final c = presence.colorFor(id);
+                final color = c != null ? Color(c) : scheme.primary;
+                final title = (t?['title'] ?? '').toString().trim();
+                final artist = (t?['artist'] ?? '').toString().trim();
+                final song = artist.isEmpty ? title : '$title — $artist';
+                final same = _onSameSong(id);
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 24, 22, 16),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    PresenceRingAvatar(
+                      face: 76,
+                      mode: t == null
+                          ? RingMode.none
+                          : (same ? RingMode.sameSong : RingMode.listening),
+                      paused: playing == null && paused != null,
+                      color: color,
+                      progress: t == null ? null : () => presence.progressFor(id),
+                      gapColor: scheme.surface,
+                      child: InitialsAvatar(
+                        name: name,
+                        radius: 38,
+                        isOnline: isOnline && t == null,
+                        imageUrl: _avatarFull(f['avatar_url']),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 4),
+                    if (t == null)
+                      Text(isOnline ? 'Online' : 'Quiet right now',
+                          style: TextStyle(
+                              fontSize: 13, color: scheme.onSurfaceVariant))
+                    else ...[
+                      Text(
+                        same
+                            ? 'You’re both on this song'
+                            : (playing != null ? 'Listening now' : 'Paused'),
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.4,
+                            color: color),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(song,
+                          maxLines: 2,
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 10),
+                      // Live progress (ticks every second while open).
+                      StreamBuilder<int>(
+                        stream: Stream<int>.periodic(
+                            const Duration(seconds: 1), (i) => i),
+                        builder: (_, _) {
+                          final v = presence.progressFor(id);
+                          if (v == null) return const SizedBox.shrink();
+                          return ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: v,
+                              minHeight: 4,
+                              color: color,
+                              backgroundColor:
+                                  scheme.onSurface.withValues(alpha: 0.10),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (playing != null)
+                          FilledButton.icon(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              _tuneInto(id, name);
+                            },
+                            icon: const Icon(Icons.headphones_rounded,
+                                size: 18),
+                            label: const Text('Tune in'),
+                          ),
+                        FilledButton.tonalIcon(
+                          onPressed: () async {
+                            Navigator.pop(ctx);
+                            final text = title.isEmpty
+                                ? '❤️'
+                                : '❤️ for “$song”';
+                            final sent =
+                                await ApiService().sendMessage(id, text);
+                            if (!mounted) return;
+                            showToast(
+                                context,
+                                sent != null
+                                    ? 'Sent to $name 💞'
+                                    : 'Could not send it right now',
+                                type: sent != null
+                                    ? ToastType.success
+                                    : ToastType.error);
+                          },
+                          icon: const Icon(Icons.favorite_rounded, size: 18),
+                          label: Text(title.isEmpty ? 'Send ❤️' : '❤️ this song'),
+                        ),
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            openChat(f);
+                          },
+                          icon: const Icon(Icons.chat_bubble_rounded,
+                              size: 18),
+                          label: const Text('Chat'),
+                        ),
+                      ],
+                    ),
+                  ]),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   /// True when friend [id] is playing the very song I'm playing right now.
   bool _onSameSong(int id) {
     final presence = NowPlayingPresence.instance;
@@ -1641,6 +1799,9 @@ extension _HomePageHelpers1 on HomePageState {
     }
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
+      // Long-press the photo → a quick peek (song, progress, Tune in, ❤️)
+      // without leaving the list.
+      onLongPress: _isSharing ? null : () => _showPhotoPeek(f, name, isOnline),
       onTap: () {
         if (story != null) {
           _openFriendStory(story);

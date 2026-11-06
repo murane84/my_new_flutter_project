@@ -298,6 +298,8 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   // Who's dropped in (from the server roster) and a live feed of reactions with
   // the sender attached — the "People" + "Chat" regions of the hub.
   final List<_Participant> _participants = [];
+  // GROUP room: members who haven't dropped in yet (from the roster).
+  final List<_Participant> _waiting = [];
   final List<_ReactionLog> _reactionFeed = [];
   // The group-chat composer for the reactions column, and whether the "In the
   // room" avatar strip is collapsed to give the feed more vertical room.
@@ -393,6 +395,8 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       _c.onEnded = _onEnded;
       _c.onError = (e) => _snack('Connection error: $e');
       _c.onQueueChanged = _syncFromQueue;
+      // Roster updates while minimised went nowhere — ask for it afresh.
+      _c.requestRoster();
       _ready = true;
       _status = _isHost
           ? 'Sharing with ${widget.peerName}'
@@ -487,6 +491,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               : 'Waiting for ${widget.peerName} to join…';
         });
         _watchPeerPresence();
+        _c.requestRoster();
       } else {
         setState(() => _status = 'Joining ${widget.peerName}’s session…');
         await _c.joinAsListener(
@@ -498,6 +503,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
           _ready = true;
           _status = 'Buffering the song…';
         });
+        _c.requestRoster();
       }
     } catch (e) {
       _snack('Could not start session: $e');
@@ -591,8 +597,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         if (txt.trim().isNotEmpty) _logComment(txt, cFrom);
         break;
       case 'session_roster':
-        final people = ((e['data'] as Map?)?['people'] as List?) ?? const [];
-        _setRoster(people);
+        final data = (e['data'] as Map?) ?? const {};
+        final people = (data['people'] as List?) ?? const [];
+        _setRoster(people, (data['waiting'] as List?) ?? const []);
         break;
       case 'play':
         setState(() => _status = 'Playing');
@@ -749,21 +756,28 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     _logReaction(emoji, mine ? widget.myUserId : fromId, mine: mine);
   }
 
-  void _setRoster(List people) {
-    final list = <_Participant>[];
-    for (final p in people) {
-      if (p is! Map) continue;
-      list.add(_Participant(
-        id: (p['id'] as num?)?.toInt() ?? 0,
-        // As I saved them in my phone book, else their registered name.
-        name: ContactNames.instance.displayName(
-            of: p, registered: (p['username'] ?? 'Someone').toString()),
-        avatar: (p['avatar_url'] as String?),
-        isHost: p['is_host'] == true,
-      ));
-    }
+  void _setRoster(List people, [List waiting = const []]) {
+    _Participant toP(Map p) => _Participant(
+          id: (p['id'] as num?)?.toInt() ?? 0,
+          // As I saved them in my phone book, else their registered name.
+          name: ContactNames.instance.displayName(
+              of: p, registered: (p['username'] ?? 'Someone').toString()),
+          avatar: (p['avatar_url'] as String?),
+          isHost: p['is_host'] == true,
+        );
+    final list = <_Participant>[
+      for (final p in people)
+        if (p is Map) toP(p),
+    ];
+    final notYet = <_Participant>[
+      for (final p in waiting)
+        if (p is Map) toP(p),
+    ];
     if (!mounted) return;
     setState(() {
+      _waiting
+        ..clear()
+        ..addAll(notYet);
       // Carry each person's last reaction across a roster refresh.
       final prev = {for (final x in _participants) x.id: x.lastReaction};
       for (final x in list) {
@@ -1782,6 +1796,41 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                         ),
                 ),
         ),
+        // ── GROUP room: who hasn't joined yet (dimmed) ──
+        if (_waiting.isNotEmpty && !_peopleCollapsed) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 6, 10, 2),
+            child: Row(children: [
+              Icon(Icons.schedule_rounded,
+                  size: 14, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Text('Not joined yet',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurfaceVariant)),
+              const SizedBox(width: 6),
+              Text('${_waiting.length}',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurfaceVariant)),
+            ]),
+          ),
+          SizedBox(
+            height: 70,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: _waiting.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
+              itemBuilder: (_, i) => Opacity(
+                opacity: 0.45,
+                child: _personChip(scheme, _waiting[i]),
+              ),
+            ),
+          ),
+        ],
         Divider(height: 12, color: scheme.outlineVariant.withAlpha(80)),
         // ── Chat & reactions header ──
         Padding(

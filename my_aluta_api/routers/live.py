@@ -273,11 +273,16 @@ def _roster_payload(session) -> dict:
     so every client can render the 'people dropped in' panel. Looks names up in
     its own short-lived DB session."""
     ids = list(session.connections.keys())
+    # GROUP room: the members who haven't dropped in yet ("not here yet").
+    group_ids = getattr(session, "group_ids", set()) or set()
+    waiting_ids = [u for u in group_ids if u not in session.connections]
     people = []
-    if ids:
+    waiting = []
+    if ids or waiting_ids:
         db = SessionLocal()
         try:
-            rows = db.query(User).filter(User.id.in_(ids)).all()
+            rows = db.query(User).filter(
+                User.id.in_(list(ids) + list(waiting_ids))).all()
             umap = {u.id: u for u in rows}
             for uid in ids:
                 u = umap.get(uid)
@@ -287,12 +292,20 @@ def _roster_payload(session) -> dict:
                     "avatar_url": (u.avatar_url if u else None),
                     "is_host": uid == session.host_id,
                 })
+            for uid in waiting_ids:
+                u = umap.get(uid)
+                waiting.append({
+                    "id": uid,
+                    "username": (u.username if u else None) or "Someone",
+                    "avatar_url": (u.avatar_url if u else None),
+                })
         finally:
             db.close()
     return {
         "type": "session_roster",
         "data": {"people": people, "host_id": session.host_id,
-                 "count": len(people)},
+                 "count": len(people), "waiting": waiting,
+                 "conversation_id": getattr(session, "conversation_id", None)},
     }
 
 
@@ -419,6 +432,14 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
             data = message.get("bytes")
 
             if text is not None:
+                # A screen (re)opening asks who's here — answer just them.
+                if '"roster_request"' in text:
+                    try:
+                        await websocket.send_text(
+                            json.dumps(_roster_payload(session)))
+                    except Exception:
+                        pass
+                    continue
                 # Track last known playback state for late joiners.
                 _update_state_from_control(session, text)
                 # Per-peer routing: WebRTC signaling (rtc_offer/answer/ice) is

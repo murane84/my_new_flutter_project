@@ -2304,6 +2304,11 @@ class LiveSessionController {
     }
   }
 
+  /// Ask the server for the current room roster (who's here + for a group
+  /// room, who hasn't joined yet). Sent when a session screen (re)binds, so
+  /// a roster broadcast missed while minimised never leaves it at "0".
+  void requestRoster() => _sendControl({'type': 'roster_request'});
+
   /// Listener → host: announce an intentional leave just before tearing down,
   /// so the host can tell "left on purpose" apart from a silent connection drop
   /// (the server still relays this like any control message). Best-effort.

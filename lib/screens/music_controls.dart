@@ -279,6 +279,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   // embedded art exists): derived from the current track's artwork; null → fall
   // back to the theme accent. Cached per-id so we don't re-derive each build.
   final ValueNotifier<Color?> _artAccentVN = ValueNotifier<Color?>(null);
+  void _shareArtAccent() =>
+      NowPlayingPresence.instance.setCoverColor(_artAccentVN.value);
   int? _artAccentForId;
   // Cached parsed LRC lines for the now-playing synced-lyric ticker.
   String? _lrcCachePath;
@@ -406,6 +408,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   @override
   void initState() {
     super.initState();
+    // The song's cover colour also tints the ring friends see around my
+    // photo in their Circle list.
+    _artAccentVN.addListener(_shareArtAccent);
     // On Android, build the player with an equalizer + loudness pipeline so
     // the Equalizer screen can actually shape the sound. Elsewhere it's plain.
     if (Platform.isAndroid) {
@@ -583,6 +588,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _discCtrl.dispose();
     _queueCtrl.dispose();
     _queueScrollCtrl.dispose();
+    _artAccentVN.removeListener(_shareArtAccent);
     _artAccentVN.dispose();
     _playlistCtrl.dispose();
     _speedCtrl.dispose();

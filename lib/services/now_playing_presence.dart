@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show Color;
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -113,8 +114,22 @@ class NowPlayingPresence extends ChangeNotifier {
   bool sharesWith(int friendId) =>
       _shareEnabled && (!shareToSelected || _allowedFriends.contains(friendId));
 
-  /// The track a friend is playing right now, or null.
-  Map<String, dynamic>? trackFor(int id) => _friends[id];
+  /// The track a friend is PLAYING right now, or null (a paused track
+  /// doesn't count as listening — see [pausedTrackFor]).
+  Map<String, dynamic>? trackFor(int id) {
+    final t = _friends[id];
+    return (t == null || t['paused'] == true) ? null : t;
+  }
+
+  /// The track a friend has PAUSED (shown for a few minutes as a frozen,
+  /// dimmed ring), or null.
+  Map<String, dynamic>? pausedTrackFor(int id) {
+    final t = _friends[id];
+    return (t != null && t['paused'] == true) ? t : null;
+  }
+
+  /// The song's cover colour a friend sent with their track (ARGB), if any.
+  int? colorFor(int id) => (_friends[id]?['color'] as num?)?.toInt();
 
   /// How far into their song a friend is right now (0..1), extrapolated from
   /// the position they last sent; null when they didn't send one.
@@ -125,6 +140,7 @@ class NowPlayingPresence extends ChangeNotifier {
     final pos = (t['pos'] as num?)?.toDouble();
     final at = (t['at'] as num?)?.toInt();
     if (dur == null || dur <= 0 || pos == null) return null;
+    if (t['paused'] == true) return (pos / dur).clamp(0.0, 1.0); // frozen
     // A live event reaches me within moments, so count from when it
     // ARRIVED (immune to their phone's clock being off). Only a snapshot
     // (loaded later, no arrival stamp) uses their send time — and only if
@@ -135,8 +151,10 @@ class NowPlayingPresence extends ChangeNotifier {
     final cur = pos + (now - sent).clamp(0, dur.toInt() * 2);
     return (cur / dur).clamp(0.0, 1.0);
   }
-  bool get anyListening => _friends.isNotEmpty;
-  int get listeningCount => _friends.length;
+
+  bool get anyListening => _friends.values.any((t) => t['paused'] != true);
+  int get listeningCount =>
+      _friends.values.where((t) => t['paused'] != true).length;
 
   // ── consume: friends' presence ─────────────────────────────────────────────
   void applyEvent(Map<String, dynamic> e) {
@@ -206,6 +224,24 @@ class NowPlayingPresence extends ChangeNotifier {
   bool _lastPlaying = false;
   String _lastKey = '';
 
+  // Paused: friends keep seeing the song (a frozen, dimmed ring) for a short
+  // grace instead of it vanishing on every pause — then it's dropped.
+  static const Duration _pauseGrace = Duration(minutes: 5);
+  DateTime? _pausedSince;
+  bool _lastPausedShown = false;
+  Timer? _pauseTimer;
+
+  // The current song's cover colour (ARGB), sent so friends' rings take it.
+  int? _coverColor;
+
+  /// The Now Playing page found the cover's accent colour (null = none).
+  void setCoverColor(Color? c) {
+    final v = c?.toARGB32();
+    if (v == _coverColor) return;
+    _coverColor = v;
+    if (_lastPlaying || _lastPausedShown) _emit(force: true);
+  }
+
   /// Begin watching local playback and emitting presence. Safe to call more
   /// than once (idempotent). When there is an audio handler (mobile/desktop) it
   /// is observed directly; on web there is none, so presence is driven by
@@ -223,7 +259,7 @@ class NowPlayingPresence extends ChangeNotifier {
     _heartbeat ??= Timer.periodic(
       const Duration(seconds: 60),
       (_) {
-        if (_lastPlaying) _emit(force: true);
+        if (_lastPlaying || _lastPausedShown) _emit(force: true);
       },
     );
     _emit();
@@ -264,8 +300,12 @@ class NowPlayingPresence extends ChangeNotifier {
     _psSub = null;
     _heartbeat?.cancel();
     _heartbeat = null;
-    if (_lastPlaying) {
+    _pauseTimer?.cancel();
+    _pauseTimer = null;
+    _pausedSince = null;
+    if (_lastPlaying || _lastPausedShown) {
       _lastPlaying = false;
+      _lastPausedShown = false;
       _lastKey = '';
       emitSink?.call({'type': 'now_playing', 'playing': false, 'track': null});
     }
@@ -304,24 +344,51 @@ class NowPlayingPresence extends ChangeNotifier {
     // track) the moment the session ends and the local player takes over.
     final inLiveSession = activeLiveSession != null;
     // 'Aluta' is the handler's placeholder when nothing real is loaded.
-    final playing = _shareEnabled &&
+    final hasTrack = _shareEnabled &&
         !inLiveSession &&
-        localPlaying &&
         title.isNotEmpty &&
         title != 'Aluta';
-    final key = playing ? '$title|$artist' : '';
-    if (!force && playing == _lastPlaying && key == _lastKey) return;
+    final playing = hasTrack && localPlaying;
+    // Paused (track still loaded): keep showing it for [_pauseGrace].
+    if (hasTrack && !localPlaying) {
+      _pausedSince ??= DateTime.now();
+    } else {
+      _pausedSince = null;
+    }
+    final since = _pausedSince;
+    final pausedShown =
+        since != null && DateTime.now().difference(since) < _pauseGrace;
+    _pauseTimer?.cancel();
+    if (since != null && pausedShown) {
+      // Re-check when the grace ends so the song is dropped on time.
+      _pauseTimer = Timer(
+          _pauseGrace -
+              DateTime.now().difference(since) +
+              const Duration(seconds: 1),
+          () => _emit(force: true));
+    }
+    final key = (playing || pausedShown) ? '$title|$artist' : '';
+    if (!force &&
+        playing == _lastPlaying &&
+        pausedShown == _lastPausedShown &&
+        key == _lastKey) {
+      return;
+    }
     final changed = playing != _lastPlaying || key != _lastKey;
     _lastPlaying = playing;
+    _lastPausedShown = pausedShown;
     _lastKey = key;
     if (changed) notifyListeners(); // lets home spot "you're both listening"
+    final shown = playing || pausedShown;
     sink({
       'type': 'now_playing',
-      'playing': playing,
-      'track': playing
+      'playing': shown,
+      'track': shown
           ? {
               'title': title,
               'artist': artist == 'Aluta' ? '' : artist,
+              if (pausedShown) 'paused': true,
+              'color': ?_coverColor,
               // Where the song was when this went out — friends' lists fill
               // the ring around my photo with the song's progress.
               if (durMs != null && durMs > 0) 'dur': durMs,
@@ -331,7 +398,7 @@ class NowPlayingPresence extends ChangeNotifier {
             }
           : null,
       // null = every friend; a list = only these friend ids may see it.
-      'audience': (playing && _shareMode == 'selected')
+      'audience': (shown && _shareMode == 'selected')
           ? _allowedFriends.toList()
           : null,
     });

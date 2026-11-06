@@ -1760,7 +1760,7 @@ extension _HomePageHelpers1 on HomePageState {
     // The online dot also says how good their connection is for Listen
     // Together (was a separate signal icon by the name).
     final grade = isOnline ? f['net_grade'] : null;
-    final (Color? dotColor, String? dotTip) = switch (grade) {
+    final (Color? dotColor, String dotTip) = switch (grade) {
       'good' => (const Color(0xFF2BB673), 'Online · strong connection'),
       'fair' => (const Color(0xFFFFA000), 'Online · okay connection'),
       'weak' || 'offline' =>

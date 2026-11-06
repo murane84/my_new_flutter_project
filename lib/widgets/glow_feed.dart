@@ -242,46 +242,67 @@ class _GlowFeedState extends State<GlowFeed> {
         ? scheme.surfaceContainerHighest.withValues(alpha: 0.6)
         : Color.alphaBlend(scheme.primary.withValues(alpha: 0.06),
             scheme.surfaceContainerHighest.withValues(alpha: 0.7));
+    // Balanced at every width — the tabs always span the whole track:
+    //  • roomy (desktop / tablet): six equal tabs, icon + label each;
+    //  • compact (phone): the chosen tab opens to icon + label, the others
+    //    fold to icons (with a tooltip) — all six fit, no sideways scroll.
     return Container(
-      height: 42,
+      height: 46,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: track,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
             color: scheme.outlineVariant.withValues(alpha: isDark ? 0.4 : 0.6)),
       ),
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          for (final f in _Filter.values)
-            _segment(scheme, isDark, tabs[f]!.$1, tabs[f]!.$2, _filter == f,
-                () => setState(() => _filter = f)),
-        ],
-      ),
+      child: LayoutBuilder(builder: (context, box) {
+        final compact = box.maxWidth < 560;
+        return Row(
+          children: [
+            for (final f in _Filter.values)
+              Expanded(
+                flex: compact ? (_filter == f ? 7 : 3) : 1,
+                child: _segment(
+                    scheme,
+                    isDark,
+                    tabs[f]!.$1,
+                    tabs[f]!.$2,
+                    _filter == f,
+                    () => setState(() => _filter = f),
+                    showLabel: !compact || _filter == f),
+              ),
+          ],
+        );
+      }),
     );
   }
 
   Widget _segment(ColorScheme scheme, bool isDark, IconData icon, String label,
-      bool on, VoidCallback onTap) {
+      bool on, VoidCallback onTap, {bool showLabel = true}) {
     final fg = on ? scheme.primary : scheme.onSurfaceVariant;
-    return Padding(
-      padding: const EdgeInsets.only(right: 2),
+    return Tooltip(
+      message: showLabel ? '' : label,
+      child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 1),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           onTap: onTap,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: on
                   ? (isDark ? scheme.surface : Colors.white)
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
+              border: on
+                  ? Border.all(
+                      color: scheme.primary.withValues(alpha: 0.28))
+                  : null,
               boxShadow: on
                   ? [
                       BoxShadow(
@@ -293,21 +314,32 @@ class _GlowFeedState extends State<GlowFeed> {
                     ]
                   : null,
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 15, color: fg),
-                const SizedBox(width: 6),
-                Text(label,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: on ? FontWeight.w800 : FontWeight.w600,
-                      color: on ? scheme.onSurface : scheme.onSurfaceVariant,
-                    )),
-              ],
+            // Never wraps or clips: the label scales down a touch if the
+            // tab is tight (e.g. "Healthy love" on a narrow panel).
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: showLabel ? 16 : 18, color: fg),
+                  if (showLabel) ...[
+                    const SizedBox(width: 6),
+                    Text(label,
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+                          color:
+                              on ? scheme.onSurface : scheme.onSurfaceVariant,
+                        )),
+                  ],
+                ],
+              ),
             ),
           ),
         ),
+      ),
       ),
     );
   }

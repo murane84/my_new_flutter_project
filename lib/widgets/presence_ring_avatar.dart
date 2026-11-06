@@ -141,9 +141,7 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
     return SizedBox(
       width: slot,
       height: slot,
-      child: Opacity(
-        opacity: widget.paused ? 0.55 : 1,
-        child: AnimatedBuilder(
+      child: AnimatedBuilder(
         animation: _c,
         builder: (context, child) {
           final t = _c.value;
@@ -173,7 +171,10 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
                 ),
               if (widget.mode != RingMode.none)
                 Positioned.fill(
-                  child: CustomPaint(
+                  // Paused: only the RING dims — the photo stays full.
+                  child: Opacity(
+                    opacity: widget.paused ? 0.5 : 1,
+                    child: CustomPaint(
                     painter: _RingPainter(
                       mode: widget.mode,
                       t: t,
@@ -182,6 +183,7 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
                       color2: widget.color2,
                       track: track,
                     ),
+                  ),
                   ),
                 ),
               SizedBox(width: widget.face, height: widget.face, child: child),
@@ -223,7 +225,9 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
                 Positioned(
                   right: -3,
                   bottom: -3,
-                  child: Transform.rotate(
+                  child: Opacity(
+                    opacity: widget.paused ? 0.6 : 1,
+                    child: Transform.rotate(
                     angle: t * math.pi * 2 * 2, // ~3 s a turn
                     child: Container(
                       width: 20,
@@ -251,12 +255,12 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
                       ),
                     ),
                   ),
+                  ),
                 ),
             ],
           );
         },
         child: widget.child,
-      ),
       ),
     );
   }

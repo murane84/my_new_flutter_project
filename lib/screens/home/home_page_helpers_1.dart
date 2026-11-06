@@ -1584,7 +1584,9 @@ extension _HomePageHelpers1 on HomePageState {
         ]),
       );
     } else if (mode == RingMode.none) {
-      // Quiet: the grey plate, the card's own surface and edge.
+      // Quiet: the grey plate, the card's own surface and edge — and for a
+      // bonded friend a thin theme ring inside it, hugging the photo.
+      // Priority overall: together › listening › unseen story › bond.
       final plate = PresenceRingAvatar(
         key: ValueKey('ring-$id'),
         face: face,
@@ -1602,7 +1604,6 @@ extension _HomePageHelpers1 on HomePageState {
         color: scheme.primary,
         color2: const Color(0xFFF2A541),
         progress: listening ? () => presence.progressFor(id) : null,
-        glow: _isBondedFriend(id),
         gapColor: scheme.surface,
         child: avatar,
       );

@@ -45,7 +45,8 @@ class PresenceRingAvatar extends StatefulWidget {
   /// 0..1 song progress, read every frame; null = unknown (slow sweep).
   final double? Function()? progress;
 
-  /// Bonded partner: a soft breathing glow behind the photo.
+  /// Bonded + quiet: a thin breathing theme ring just around the photo,
+  /// inside the rim (ignored while a music ring shows).
   final bool glow;
 
   /// Page colour behind the mini vinyl's edge.
@@ -104,24 +105,22 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
             clipBehavior: Clip.none,
             alignment: Alignment.center,
             children: [
-              if (widget.glow)
-                Positioned(
-                  left: -5,
-                  top: -5,
-                  right: -5,
-                  bottom: -5,
-                  child: Opacity(
-                    // 0.35 → 0.85 → 0.35, a breath every 3 s.
-                    opacity: 0.35 +
-                        0.5 * (0.5 - 0.5 * math.cos(t * math.pi * 2 * 2)),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(colors: [
-                          widget.color.withValues(alpha: 0.40),
-                          widget.color.withValues(alpha: 0.40),
-                          widget.color.withValues(alpha: 0.0),
-                        ], stops: const [0.0, 0.62, 1.0]),
+              // Bonded + quiet: a thin theme ring hugging the photo, INSIDE
+              // the grey plate's rim (plate outer, bond inner) — breathing
+              // gently. Stays within the slot: nothing grows.
+              if (widget.glow && widget.mode == RingMode.none)
+                Positioned.fill(
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: Opacity(
+                      // 0.55 → 1 → 0.55, a breath every 3 s.
+                      opacity: 0.55 +
+                          0.45 * (0.5 - 0.5 * math.cos(t * math.pi * 2 * 2)),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: widget.color, width: 2),
+                        ),
                       ),
                     ),
                   ),

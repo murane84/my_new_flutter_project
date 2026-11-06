@@ -1543,14 +1543,57 @@ extension _HomePageHelpers1 on HomePageState {
       isOnline: isOnline && mode == RingMode.none,
       imageUrl: _avatarFull(f['avatar_url']),
     );
+    // ONE fixed geometry: photo [face] inside a [slot] whose 4 px rim is
+    // either the quiet grey plate (matching the card) or — when there's
+    // something to say — the live ring itself, in the very same space. The
+    // photo never grows or shrinks as rings come and go.
     final slot = face + 8;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     Widget core;
     if (mode == RingMode.none && story != null) {
       core = SizedBox(
         width: slot,
         height: slot,
-        child: Center(child: _statusRing(avatar, story)),
+        child: Stack(alignment: Alignment.center, children: [
+          // Story ring on the rim (gradient = unseen, grey = seen).
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: story.hasUnseen
+                    ? const SweepGradient(colors: [
+                        Color(0xFFF9A825),
+                        Color(0xFFE91E63),
+                        Color(0xFF7B1FA2),
+                        Color(0xFFF9A825),
+                      ])
+                    : null,
+                color: story.hasUnseen
+                    ? null
+                    : scheme.onSurface.withValues(alpha: 0.28),
+              ),
+            ),
+          ),
+          Container(
+            width: slot - 6,
+            height: slot - 6,
+            decoration:
+                BoxDecoration(shape: BoxShape.circle, color: scheme.surface),
+          ),
+          SizedBox(width: face, height: face, child: avatar),
+        ]),
       );
+    } else if (mode == RingMode.none) {
+      // Quiet: the grey plate, the card's own surface and edge.
+      final plate = PresenceRingAvatar(
+        key: ValueKey('ring-$id'),
+        face: face,
+        glow: _isBondedFriend(id),
+        color: scheme.primary,
+        gapColor: scheme.surface,
+        child: avatar,
+      );
+      core = _circlePlate(scheme, isDark, plate);
     } else {
       core = PresenceRingAvatar(
         key: ValueKey('ring-$id'),

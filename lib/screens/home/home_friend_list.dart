@@ -1474,8 +1474,7 @@ extension _HomeFriendListView on HomePageState {
       final narrow = box.maxWidth < 330;
       final face = narrow ? 40.0 : 44.0;
       return Row(children: [
-      _circlePlate(scheme, isDark,
-          _storyRingAvatar(f, name, isOnline, face: face)),
+      _storyRingAvatar(f, name, isOnline, face: face),
       SizedBox(width: narrow ? 4 : 6),
       Expanded(
       child: Container(

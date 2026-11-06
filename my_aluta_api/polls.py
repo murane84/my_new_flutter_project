@@ -56,7 +56,22 @@ def clean_poll(raw) -> dict:
         # A sudden-death decider between tied songs.
         if data.get("decider"):
             out["decider"] = True
+        # When the jam is decided without a clock: more than half ('half',
+        # default) or only once EVERY member has voted ('all').
+        if data.get("until") == "all":
+            out["until"] = "all"
     return out
+
+
+def start_countdown(msg, minutes: int) -> str:
+    """The jam's starter sets (or resets) its countdown from NOW."""
+    poll = load(msg)
+    if poll.get("kind") != "jam":
+        raise ValueError("Only a jam has a countdown")
+    m = max(1, min(int(minutes), 60))
+    poll["closes_at"] = int(time.time()) + m * 60
+    msg.poll = json.dumps(poll, separators=(",", ":"))
+    return msg.poll
 
 
 def load(msg) -> dict:

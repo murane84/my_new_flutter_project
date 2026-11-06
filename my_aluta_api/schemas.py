@@ -211,6 +211,11 @@ class PollVote(BaseModel):
     options: List[int] = []
 
 
+class PollCountdown(BaseModel):
+    # Minutes from now until voting closes (1–60).
+    minutes: int = 2
+
+
 class ReadUpTo(BaseModel):
     # Mark read up to a message id; omit to mark the whole conversation read.
     message_id: Optional[int] = None

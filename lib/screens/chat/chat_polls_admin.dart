@@ -216,7 +216,10 @@ extension _ChatPollsAdmin on _ChatPageState {
     if (seeds.length == 2) opts.add(TextEditingController());
     var multi = false;
     var jam = startJam;
-    var closeMin = 0; // jam countdown (0 = until more than half vote)
+    // Jam decides: 'half' (more than half vote), 'all' (everyone votes), or
+    // a countdown in minutes ('1' / '2' / '5'). The starter can also start
+    // a countdown later from the poll itself.
+    var closeMode = 'half';
     var showWhy = false; // tapped the button before it was ready
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
@@ -425,15 +428,21 @@ extension _ChatPollsAdmin on _ChatPageState {
                         runSpacing: 6,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Text('Voting closes',
+                          Text('Decide',
                               style: TextStyle(
                                   fontSize: 13,
                                   color: scheme.onSurfaceVariant)),
-                          for (final m in const [0, 1, 2, 5])
+                          for (final m in const [
+                            ('half', 'when half vote'),
+                            ('all', 'when everyone votes'),
+                            ('1', 'in 1 min'),
+                            ('2', 'in 2 min'),
+                            ('5', 'in 5 min'),
+                          ])
                             ChoiceChip(
-                              label: Text(m == 0 ? 'when half vote' : 'in $m min'),
-                              selected: closeMin == m,
-                              onSelected: (_) => setS(() => closeMin = m),
+                              label: Text(m.$2),
+                              selected: closeMode == m.$1,
+                              onSelected: (_) => setS(() => closeMode = m.$1),
                             ),
                         ],
                       ),
@@ -469,10 +478,11 @@ extension _ChatPollsAdmin on _ChatPageState {
                         'options': clean,
                         'multi': jam ? false : multi,
                         if (jam) 'kind': 'jam',
-                        if (jam && closeMin > 0)
+                        if (jam && closeMode == 'all') 'until': 'all',
+                        if (jam && int.tryParse(closeMode) != null)
                           'closes_at':
                               DateTime.now().millisecondsSinceEpoch ~/ 1000 +
-                                  closeMin * 60,
+                                  int.parse(closeMode) * 60,
                       });
                     },
                     icon: const Icon(Icons.send_rounded, size: 18),
@@ -943,7 +953,10 @@ extension _ChatPollsAdmin on _ChatPageState {
     final members = _groupMembers.isNotEmpty
         ? _groupMembers.length
         : (widget.memberCount > 0 ? widget.memberCount : 0);
-    final need = members <= 0 ? 1 : members ~/ 2 + 1;
+    final waitAll = poll['until'] == 'all';
+    final need = members <= 0
+        ? 1
+        : (waitAll ? members : members ~/ 2 + 1);
     final decided = isJam && top > 0 && (voters >= need || jamClosed);
     final tied = isJam && top > 0 && counts.where((c) => c == top).length > 1;
     final sorted = [...counts]..sort((a, b) => b.compareTo(a));
@@ -995,7 +1008,13 @@ extension _ChatPollsAdmin on _ChatPageState {
             ),
           if (isJam)
             _jamRace(voters, need, closesAt, jamClosed, decided, textColor,
-                accent)
+                accent,
+                waitAll: waitAll,
+                // The starter can kick off a clock any time before it's
+                // decided (e.g. the rest of the group is offline).
+                onStartClock: (isMe && !decided && closesAt == null)
+                    ? () => _jamStartClock(msg)
+                    : null)
           else
             Text(
               voters == 0
@@ -1054,8 +1073,49 @@ extension _ChatPollsAdmin on _ChatPageState {
 
   /// The race to a decision: a bar filling toward "more than half", and the
   /// countdown when the jam has one.
+  /// The jam's starter picks a countdown (from now) — server-checked.
+  Future<void> _jamStartClock(Map<String, dynamic> msg) async {
+    final mid = int.tryParse(msg['id'].toString());
+    if (mid == null) return;
+    final minutes = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Text('Close the vote in…',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          ),
+          for (final m in const [1, 2, 5, 10])
+            ListTile(
+              leading: const Icon(Icons.timer_rounded),
+              title: Text('$m minute${m == 1 ? '' : 's'}'),
+              onTap: () => Navigator.pop(ctx, m),
+            ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+    if (minutes == null || !mounted) return;
+    final res = await ApiService().startPollCountdown(_cid, mid, minutes);
+    if (!mounted) return;
+    if (res == null) {
+      _showErrorSnack('Couldn’t start the countdown — try again.');
+      return;
+    }
+    final i = _messages.indexWhere((m) => m['id'].toString() == '$mid');
+    if (i != -1) {
+      rebuildWith(() {
+        _messages[i] = Map<String, dynamic>.from(_messages[i])..['poll'] = res;
+      });
+      _saveMessagesCache();
+    }
+  }
+
   Widget _jamRace(int voters, int need, int? closesAt, bool closed,
-      bool decided, Color textColor, Color accent) {
+      bool decided, Color textColor, Color accent,
+      {bool waitAll = false, VoidCallback? onStartClock}) {
     Widget build() {
       final nowS = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final left = closesAt == null ? null : (closesAt - nowS);
@@ -1069,7 +1129,9 @@ extension _ChatPollsAdmin on _ChatPageState {
         final mm = left == null
             ? ''
             : ' · ⏳ ${left ~/ 60}:${(left % 60).toString().padLeft(2, '0')}';
-        label = '$voters of $need votes to decide$mm';
+        label = waitAll && left == null
+            ? '$voters of $need · waiting for everyone'
+            : '$voters of $need votes to decide$mm';
       }
       return Padding(
         padding: const EdgeInsets.only(top: 2),
@@ -1091,13 +1153,33 @@ extension _ChatPollsAdmin on _ChatPageState {
               ),
             ),
             const SizedBox(height: 4),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: decided ? FontWeight.w700 : FontWeight.w500,
-                    color: decided
-                        ? accent
-                        : textColor.withValues(alpha: 0.65))),
+            Row(children: [
+              Expanded(
+                child: Text(label,
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight:
+                            decided ? FontWeight.w700 : FontWeight.w500,
+                        color: decided
+                            ? accent
+                            : textColor.withValues(alpha: 0.65))),
+              ),
+              if (onStartClock != null)
+                TextButton.icon(
+                  onPressed: onStartClock,
+                  icon: Icon(Icons.timer_rounded, size: 15, color: accent),
+                  label: Text('Start countdown',
+                      style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: accent)),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    minimumSize: const Size(0, 30),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+            ]),
           ],
         ),
       );

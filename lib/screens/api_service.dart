@@ -3393,6 +3393,27 @@ class ApiService {
     }
   }
 
+  /// The jam's starter starts its countdown [minutes] from now.
+  Future<String?> startPollCountdown(
+      int cid, int messageId, int minutes) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/conversations/$cid/messages/'
+            '$messageId/countdown'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'minutes': minutes}),
+      );
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
+      final d = jsonDecode(resp.body);
+      return d is Map ? d['poll']?.toString() : null;
+    } catch (e) {
+      _logger.e('startPollCountdown exception: $e');
+      return null;
+    }
+  }
+
   Future<bool> _convAction(String method, String path,
       {Map<String, dynamic>? body}) async {
     try {

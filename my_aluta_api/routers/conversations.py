@@ -486,6 +486,42 @@ def set_member_role(
     return _conversation_out(db, conv, current_user.id)
 
 
+@router.post("/{cid}/messages/{mid}/countdown")
+def start_poll_countdown(
+    cid: int,
+    mid: int,
+    payload: schemas.PollCountdown,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The member who started a jam starts (or restarts) its countdown — e.g.
+    when it's been sitting and the rest of the group is offline."""
+    from polls import start_countdown
+    _require_member(db, cid, current_user.id)
+    msg = (
+        db.query(Message)
+        .filter(Message.id == mid, Message.conversation_id == cid)
+        .with_for_update()
+        .first()
+    )
+    if not msg or msg.is_deleted or (msg.message_type or "") != "poll":
+        raise HTTPException(status_code=404, detail="Poll not found")
+    if int(msg.sender_id or 0) != int(current_user.id):
+        raise HTTPException(status_code=403,
+                            detail="Only who started the jam can set its timer")
+    try:
+        poll = start_countdown(msg, payload.minutes)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    db.commit()
+    safe_broadcast_users(
+        cc.member_ids(db, cid),
+        {"type": "poll_updated", "conversation_id": cid,
+         "message_id": mid, "poll": poll},
+    )
+    return {"message_id": mid, "poll": poll}
+
+
 @router.post("/{cid}/messages/{mid}/vote")
 def vote_poll(
     cid: int,

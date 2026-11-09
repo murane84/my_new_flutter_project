@@ -204,6 +204,9 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         personName: host,
       );
     } else if (type == 'tune_in_request') {
+      // App open in front: the live socket already shows the "let them in?"
+      // card — no second banner.
+      if (foreground) return;
       // A friend asks to listen along to MY song while Aluta was closed.
       // 'from_id' (FCM reserves 'from'); 'from' kept for older servers.
       final from = (data['from_id'] ?? data['from'] ?? '').toString();

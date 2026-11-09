@@ -544,6 +544,24 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                         if not is_friend:
                             raise ValueError("not friends")
                         online = bool(connected_users.get(target))
+                        # Their socket can look "online" while the app sleeps
+                        # in the background (or the link silently died) — a
+                        # socket-only ask was then never seen. Always push a
+                        # tune-in ask too; an app in front shows the in-app
+                        # card and ignores the push.
+                        if etype == "tune_in_request" and online:
+                            try:
+                                if len(_tokens_for(target)) > 0:
+                                    await asyncio.to_thread(
+                                        send_push_to_user, target, {
+                                            "type": "tune_in_request",
+                                            "from_id": str(me_id),
+                                            "from_name": name,
+                                            "sender_phone": phone,
+                                            "title": str(data.get("title") or "")[:120],
+                                        })
+                            except Exception:
+                                pass
                         if etype == "tune_in_request" and not online:
                             # App closed → ask by push (with Let them in /
                             # Not now buttons); tell the asker it went out.

@@ -783,6 +783,34 @@ extension _HomePageHelpers1 on HomePageState {
         : (event['name'] ?? 'Your friend').toString();
     switch (type) {
       case 'tune_in_request':
+        // Aluta in the background: a dialog nobody sees is a lost ask. Phones
+        // get it as a push (the server always sends one now — its socket can
+        // look "online" while the app sleeps); desktop/web, which have no
+        // push, raise the same notification here. Its "Let them in" / "Not
+        // now" buttons take the normal path.
+        if (!_appForeground) {
+          if (!fcmSupported) {
+            final song = (event['title'] ?? '').toString().trim();
+            await showAlutaNotification(
+              channel: alutaListenChannel,
+              title: '🎧 $name wants to tune in',
+              body: song.isEmpty
+                  ? 'Listen along to your song — they join right where you are'
+                  : 'Listen along to "$song" — they join right where you are',
+              id: alutaNotifId('tune', '$from'),
+              payload: {
+                'kind': 'tune_in',
+                'from': '$from',
+                'from_name': name,
+                'title': song,
+              },
+              actions: const [(kTuneLet, 'Let them in'), (kTuneNo, 'Not now')],
+              personKey: 's$from',
+              personName: name,
+            );
+          }
+          return;
+        }
         await _answerTuneIn(from, name, event['title']?.toString());
         return;
       case 'tune_in_accept':
@@ -815,7 +843,9 @@ extension _HomePageHelpers1 on HomePageState {
             type: ToastType.info);
         return;
       case 'tune_in_cancel':
-        // Close an open "let them in?" prompt for this friend.
+        // Close an open "let them in?" prompt for this friend — and its
+        // notification, if the ask came while Aluta was in the background.
+        cancelAlutaNotification(alutaNotifId('tune', '$from'));
         svc.cancelledBy.value = null;
         svc.cancelledBy.value = from;
         return;

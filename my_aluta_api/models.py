@@ -1131,6 +1131,23 @@ class ListenIntent(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class PlayWatch(Base):
+    """"Tell me when they play music": {watcher_id} gets ONE heads-up (WS +
+    push, offering Tune in) the next time {target_id} starts a song the
+    watcher is allowed to see, then the row is deleted. Stale after 7 days.
+    Auto-created by create_all; no ALTER."""
+    __tablename__ = "play_watches"
+    __table_args__ = (
+        UniqueConstraint("watcher_id", "target_id", name="uq_play_watch"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    watcher_id = Column(Integer, index=True, nullable=False)
+    target_id = Column(Integer, index=True, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class UserDevice(Base):
     """What each install of Aluta runs on — reported by the app on start-up
     (POST /devices/report). Powers the admin panel's device split (Android /

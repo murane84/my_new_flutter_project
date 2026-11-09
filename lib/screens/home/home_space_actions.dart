@@ -489,6 +489,24 @@ extension _HomeSpaceActions on HomePageState {
     }
   }
 
+  Future<void> _togglePlayWatch(int fid, String first) async {
+    final res = await OnlineWatchList.instance.togglePlay(fid);
+    if (!mounted) return;
+    switch (res) {
+      case 'watching':
+        showToast(context, "We'll tell you when $first plays music 🎶",
+            type: ToastType.success);
+      case 'playing':
+        showToast(context, '$first is playing right now — tune in 🎧',
+            type: ToastType.info);
+      case 'stopped':
+        showToast(context, "Okay — not waiting for $first's music anymore");
+      default:
+        showToast(context, "Couldn't set that up — try again",
+            type: ToastType.error);
+    }
+  }
+
   void _showFriendQuickSheet(Map<String, dynamic> f, String name) {
     final scheme = Theme.of(context).colorScheme;
     final fid = int.tryParse(f['id'].toString()) ?? -1;
@@ -601,6 +619,29 @@ extension _HomeSpaceActions on HomePageState {
                   onTap: () {
                     Navigator.pop(ctx);
                     _toggleOnlineWatch(fid, first);
+                  },
+                );
+              }),
+            // One heads-up (with Tune in) the next time they play a song.
+            if (fid > 0 &&
+                (OnlineWatchList.instance.isWatchingPlay(fid) ||
+                    NowPlayingPresence.instance.trackFor(fid) == null))
+              Builder(builder: (_) {
+                final first = name.trim().split(RegExp(r'\s+')).first;
+                final on = OnlineWatchList.instance.isWatchingPlay(fid);
+                return ListTile(
+                  leading: Icon(
+                      on ? Icons.music_off_rounded : Icons.music_note_rounded,
+                      color: accentInk(scheme)),
+                  title: Text(on
+                      ? "Stop waiting for $first's music"
+                      : 'Let me know when $first plays music'),
+                  subtitle: on
+                      ? null
+                      : const Text('Just once, with a Tune in button'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _togglePlayWatch(fid, first);
                   },
                 );
               }),

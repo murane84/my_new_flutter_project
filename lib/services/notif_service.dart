@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../screens/api_service.dart';
 import 'group_meta.dart' show GroupMeta;
+import 'quiet_hours.dart';
 
 /// Native bridge (see android MainActivity) for OS state the notification
 /// plugin can't report — currently the full-screen-intent grant.
@@ -108,6 +109,12 @@ const String kMsgVoice = 'msg_voice';
 /// notification action, or the in-app reply banner's mic). The chat clears it.
 final ValueNotifier<String?> pendingVoiceReply = ValueNotifier<String?>(null);
 
+/// Set to a thread key (`s<friendId>`) when that chat should start Listen
+/// Together as soon as it's open (the "Listen together" button on a "they
+/// wanted to listen along" note). The chat clears it.
+final ValueNotifier<String?> pendingListenTogether =
+    ValueNotifier<String?>(null);
+
 // ── Aluta notifications (everything that isn't a chat message or a call) ────
 // Listen Together invites, tune-in requests, Our Space moments, reactions and
 // Aluta-team replies. Each lives on its own channel (so it can be muted on
@@ -120,6 +127,8 @@ const String kTuneLet = 'tune_let';
 const String kTuneNo = 'tune_no';
 const String kSongSend = 'song_send';
 const String kSongNo = 'song_no';
+const String kTuneAsk = 'tune_ask';
+const String kListenBack = 'listen_back';
 const String kOpen = 'open';
 
 const String alutaListenChannel = 'aluta_listen';
@@ -199,6 +208,10 @@ Future<void> showAlutaNotification({
     final p = {'type': 'aluta', ...payload};
     final group =
         personKey == null ? _msgGroupKey : personGroupKey(personKey);
+    // Quiet hours: music + Our Space alerts land silently in the shade.
+    final hush = silent ||
+        ((channel == alutaListenChannel || channel == alutaSpaceChannel) &&
+            await QuietHours.isNow());
     await _fln.show(
       id: id,
       title: title,
@@ -208,8 +221,9 @@ Future<void> showAlutaNotification({
         android: AndroidNotificationDetails(
           channel,
           _channelNames[channel] ?? 'Aluta',
-          importance: silent ? Importance.low : Importance.high,
-          priority: silent ? Priority.low : Priority.high,
+          importance: hush ? Importance.low : Importance.high,
+          priority: hush ? Priority.low : Priority.high,
+          silent: hush,
           icon: '@mipmap/launcher_icon',
           groupKey: group,
           styleInformation: picture != null
@@ -289,6 +303,11 @@ Future<void> _tidyPersonSummaries() async {
 /// Stable slots: one per (kind, person) so a newer one replaces the older.
 int alutaNotifId(String kind, String key) =>
     4000000 + ('$kind:$key'.hashCode.abs() % 900000);
+
+/// One slot per friend for their music moments — a tune-in ask, the "wanted
+/// to listen along" note it turns into, "they're playing now", a song ask.
+/// The newest replaces the older one instead of stacking a pile of banners.
+int musicNotifId(String friendId) => alutaNotifId('music', friendId);
 
 /// Cold start from an Aluta notification (or one of its buttons).
 Future<({String? actionId, Map<String, dynamic> payload})?>
@@ -771,6 +790,8 @@ Future<void> showMessageNotification({
   String? messageId,
   // A personal @-mention: shown even when the group is muted.
   bool bypassMute = false,
+  // Not a message (a heartbeat, "they're online"): quiet hours hush it.
+  bool hushable = false,
 }) async {
   if (kIsWeb) return;
   // A group the user muted stays quiet (except a mention of me).
@@ -802,6 +823,7 @@ Future<void> showMessageNotification({
     final personKey = hasGroup
         ? 'c$conversationId'
         : (hasSender ? 's$senderId' : null);
+    final hush = hushable && await QuietHours.isNow();
     await _fln.show(
       id: notifId,
       title: title,
@@ -811,8 +833,9 @@ Future<void> showMessageNotification({
         android: AndroidNotificationDetails(
           _channelId,
           _channelName,
-          importance: Importance.high,
-          priority: Priority.high,
+          importance: hush ? Importance.low : Importance.high,
+          priority: hush ? Priority.low : Priority.high,
+          silent: hush,
           icon: '@mipmap/launcher_icon',
           // Bundled per person (see personKey); the per-conversation id keeps
           // one banner per sender.

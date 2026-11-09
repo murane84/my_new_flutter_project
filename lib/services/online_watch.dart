@@ -43,7 +43,29 @@ class OnlineWatchList extends ChangeNotifier {
     _listenIntent
       ..clear()
       ..addAll(st.listen);
+    _play
+      ..clear()
+      ..addAll(st.play);
     notifyListeners();
+  }
+
+  // "Tell me when they play music" — friends whose next song I'm waiting for.
+  final Set<int> _play = {};
+  bool isWatchingPlay(int id) => _play.contains(id);
+
+  /// Start / stop. Returns 'watching', 'playing', 'stopped' or null (failed).
+  Future<String?> togglePlay(int id) async {
+    final on = !_play.contains(id);
+    final res = await ApiService().setPlayWatch(id, on);
+    if (res == 'watching') _play.add(id);
+    if (res == 'stopped' || res == 'playing') _play.remove(id);
+    notifyListeners();
+    return res;
+  }
+
+  /// The play watch fired (they started a song) — it's over.
+  void playFired(int id) {
+    if (_play.remove(id)) notifyListeners();
   }
 
   /// Start / stop. Returns 'watching', 'online', 'stopped' or null (failed).

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../services/heart_lock.dart';
 import '../services/moment_prefs.dart';
+import '../services/quiet_hours.dart';
 import '../services/song_insights.dart';
 import '../utils/popup_shell.dart';
 import '../widgets/welcome_tour.dart';
@@ -27,6 +28,7 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
       MomentPrefs.instance.load(),
       SongInsights.instance.load(),
       HeartLock.instance.init(),
+      QuietHours.instance.load(),
     ]).then((_) {
       if (mounted) {
         setState(() => _receipts = HeartLock.instance.sendReceipts);
@@ -76,6 +78,63 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
     );
   }
 
+  String _hm(int m) => TimeOfDay(hour: m ~/ 60, minute: m % 60).format(context);
+
+  Future<void> _pickTime(int current, Future<void> Function(int) save) async {
+    final t = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: current ~/ 60, minute: current % 60),
+    );
+    if (t != null) await save(t.hour * 60 + t.minute);
+  }
+
+  /// Quiet hours: the switch, then From / Until when it's on.
+  Widget _quietHours() {
+    final q = QuietHours.instance;
+    final scheme = Theme.of(context).colorScheme;
+    return ListenableBuilder(
+      listenable: Listenable.merge([q.on, q.from, q.to]),
+      builder: (context, _) => Column(
+        children: [
+          _row(
+            Icons.bedtime_rounded,
+            'Quiet hours',
+            q.on.value
+                ? 'Music & Our Space alerts arrive silently '
+                    '${_hm(q.from.value)}–${_hm(q.to.value)} · calls, '
+                    'messages and mentions still ring'
+                : 'Hush music & Our Space alerts at night',
+            q.on.value,
+            q.setOn,
+          ),
+          if (q.on.value)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Row(children: [
+                for (final (label, value, save) in [
+                  ('From', q.from.value, q.setFrom),
+                  ('Until', q.to.value, q.setTo),
+                ])
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: OutlinedButton(
+                        onPressed: () => _pickTime(value, save),
+                        style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(44),
+                            shape: const StadiumBorder()),
+                        child: Text('$label  ${_hm(value)}',
+                            style: TextStyle(color: accentInk(scheme))),
+                      ),
+                    ),
+                  ),
+              ]),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _section(String t) => Padding(
         padding: const EdgeInsets.fromLTRB(4, 14, 4, 6),
         child: Text(t.toUpperCase(),
@@ -115,6 +174,8 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
             value: mp.glowDaily,
             onChanged: mp.setGlowDaily,
           ),
+          _section('Notifications'),
+          _quietHours(),
           _section('Music'),
           _tile(
             icon: Icons.graphic_eq_rounded,

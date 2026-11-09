@@ -6,7 +6,10 @@ import 'package:flutter/physics.dart' show SpringSimulation, SpringDescription;
 
 import '../services/fcm_service.dart' show ActiveChat;
 import '../services/notif_service.dart'
-    show cancelConversationNotifications, pendingVoiceReply;
+    show
+        cancelConversationNotifications,
+        pendingListenTogether,
+        pendingVoiceReply;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, compute, kIsWeb;
 import 'package:flutter/services.dart';
@@ -669,6 +672,9 @@ class _ChatPageState extends State<ChatPage>
     // start recording once the chat is up.
     pendingVoiceReply.addListener(_onPendingVoice);
     WidgetsBinding.instance.addPostFrameCallback((_) => _onPendingVoice());
+    // "Listen together" from a "they wanted to listen along" note.
+    pendingListenTogether.addListener(_onPendingListen);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onPendingListen());
     // Web: files pasted (Ctrl/Cmd+V) arrive through the browser paste event.
     if (kIsWeb) webpaste.registerClipboardPaste(_onWebPaste);
     // Seed the friend's avatar from the caller (which already knows it, e.g.
@@ -807,6 +813,7 @@ class _ChatPageState extends State<ChatPage>
   @override
   void dispose() {
     pendingVoiceReply.removeListener(_onPendingVoice);
+    pendingListenTogether.removeListener(_onPendingListen);
     _emojiPanelFocus.dispose();
     _pillTimer?.cancel();
     if (_isAtBottom) _markSeenUpToNewest();
@@ -2691,6 +2698,17 @@ class _ChatPageState extends State<ChatPage>
 
   // ── Voice notes ─────────────────────────────────────────────────────────
   String get _voiceKey => _isGroup ? 'c$_cid' : 's${widget.friendId}';
+
+  void _onPendingListen() {
+    if (!mounted || _isGroup || pendingListenTogether.value != _voiceKey) {
+      return;
+    }
+    pendingListenTogether.value = null;
+    // Let the thread settle first (the song picker opens over it).
+    Future.delayed(const Duration(milliseconds: 450), () {
+      if (mounted) _startListenTogether();
+    });
+  }
 
   void _onPendingVoice() {
     if (!mounted || pendingVoiceReply.value != _voiceKey) return;

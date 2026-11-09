@@ -290,6 +290,13 @@ async def _now_playing_update(uid: int, track, playing: bool, username: str,
     valid = bool(playing) and isinstance(track, dict) and bool(track.get("title"))
     if valid:
         set_now_playing(uid, track, audience)
+        # One-shot "tell me when they play music" watches.
+        try:
+            from online_watch import fire_play_watches
+            asyncio.get_running_loop().run_in_executor(
+                None, fire_play_watches, uid, dict(track), audience)
+        except Exception:
+            pass
     else:
         clear_now_playing(uid)
     allowed = None if audience is None else set(int(x) for x in audience)
@@ -558,6 +565,25 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                                             "from_id": str(me_id),
                                             "from_name": name,
                                             "sender_phone": phone,
+                                            "title": str(data.get("title") or "")[:120],
+                                        })
+                            except Exception:
+                                pass
+                        if etype == "tune_in_cancel":
+                            # The asker stopped waiting. Push it too, so a
+                            # backgrounded / closed phone drops the stale
+                            # "wants to tune in" banner — and, when the ask
+                            # simply went unanswered, leaves a gentle "they
+                            # wanted to listen along" note in its place.
+                            try:
+                                if len(_tokens_for(target)) > 0:
+                                    await asyncio.to_thread(
+                                        send_push_to_user, target, {
+                                            "type": "tune_in_cancel",
+                                            "from_id": str(me_id),
+                                            "from_name": name,
+                                            "sender_phone": phone,
+                                            "missed": "1" if data.get("missed") else "",
                                             "title": str(data.get("title") or "")[:120],
                                         })
                             except Exception:

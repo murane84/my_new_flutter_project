@@ -528,6 +528,37 @@ extension _HomePageHelpers1 on HomePageState {
         final from = int.tryParse('${p['from']}');
         final space = from == null ? null : _spaceWithFriend(from);
         if (space != null) _openSpace(space);
+      case 'listen_back':
+        // "They wanted to listen along" → their chat, Listen Together starting.
+        final from = int.tryParse('${p['from']}');
+        if (from == null) return;
+        if (action == kListenBack) pendingListenTogether.value = 's$from';
+        _handleMessageTap({
+          'type': 'message',
+          'friend_id': '$from',
+          'sender_name': (p['from_name'] ?? '').toString(),
+        });
+      case 'play_watch':
+        final from = int.tryParse('${p['from']}');
+        if (from == null) return;
+        final who = (p['from_name'] ?? 'Your friend').toString();
+        if (action == kTuneAsk) {
+          final title = (p['title'] ?? '').toString();
+          askToTuneIn(context,
+              friendId: from,
+              name: who,
+              avatar: _allFriends.firstWhere(
+                  (f) => (f['id'] as num?)?.toInt() == from,
+                  orElse: () => const <String, dynamic>{})['avatar_url']
+                  as String?,
+              title: title.isEmpty ? null : title);
+        } else {
+          _handleMessageTap({
+            'type': 'message',
+            'friend_id': '$from',
+            'sender_name': who,
+          });
+        }
       case 'chat':
         final from = int.tryParse('${p['from']}');
         if (from == null) return;
@@ -815,7 +846,7 @@ extension _HomePageHelpers1 on HomePageState {
         channel: alutaListenChannel,
         title: '🎵 $who loved “$title”',
         body: 'Send it to them to keep? It goes only to them.',
-        id: alutaNotifId('songask', '$from'),
+        id: musicNotifId('$from'),
         payload: {
           'kind': 'song_ask',
           'from': '$from',
@@ -888,7 +919,7 @@ extension _HomePageHelpers1 on HomePageState {
               body: song.isEmpty
                   ? 'Listen along to your song — they join right where you are'
                   : 'Listen along to "$song" — they join right where you are',
-              id: alutaNotifId('tune', '$from'),
+              id: musicNotifId('$from'),
               payload: {
                 'kind': 'tune_in',
                 'from': '$from',
@@ -936,7 +967,33 @@ extension _HomePageHelpers1 on HomePageState {
       case 'tune_in_cancel':
         // Close an open "let them in?" prompt for this friend — and its
         // notification, if the ask came while Aluta was in the background.
-        cancelAlutaNotification(alutaNotifId('tune', '$from'));
+        // Unanswered while I was away → the gentle "wanted to listen along"
+        // note takes its place: by push on phones (so don't cancel it here),
+        // drawn here on desktop.
+        if (event['missed'] == true && !_appForeground) {
+          if (!fcmSupported) {
+            final song = (event['title'] ?? '').toString().trim();
+            showAlutaNotification(
+              channel: alutaListenChannel,
+              title: '🎧 $name wanted to listen along',
+              body: song.isEmpty
+                  ? 'You were busy — invite them back to listen together?'
+                  : 'to "$song" — invite them back to listen together?',
+              id: musicNotifId('$from'),
+              payload: {
+                'kind': 'listen_back',
+                'from': '$from',
+                'from_name': name,
+              },
+              actions: const [(kListenBack, 'Listen together')],
+              personKey: 's$from',
+              personName: name,
+              silent: true,
+            );
+          }
+        } else {
+          cancelAlutaNotification(musicNotifId('$from'));
+        }
         svc.cancelledBy.value = null;
         svc.cancelledBy.value = from;
         return;
@@ -948,7 +1005,7 @@ extension _HomePageHelpers1 on HomePageState {
   Future<void> _answerTuneIn(int from, String name, String? askedTitle,
       {bool preApproved = false}) async {
     final svc = TuneInService.instance;
-    cancelAlutaNotification(alutaNotifId('tune', '$from'));
+    cancelAlutaNotification(musicNotifId('$from'));
     // Opened from the notification: the socket may still be connecting.
     for (var i = 0; i < 40 && !svc.canSend; i++) {
       await Future.delayed(const Duration(milliseconds: 250));

@@ -232,7 +232,7 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         body: song.isEmpty
             ? 'Listen along to your song — they join right where you are'
             : 'Listen along to "$song" — they join right where you are',
-        id: alutaNotifId('tune', from),
+        id: musicNotifId(from),
         payload: {
           'kind': 'tune_in',
           'from': from,
@@ -241,6 +241,58 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         },
         actions: const [(kTuneLet, 'Let them in'), (kTuneNo, 'Not now')],
         personKey: from.isEmpty ? null : 's$from',
+        personName: who,
+      );
+    } else if (type == 'tune_in_cancel') {
+      // The asker stopped waiting. App in front: the socket closes the card.
+      if (foreground) return;
+      final from = (data['from_id'] ?? data['from'] ?? '').toString();
+      if (from.isEmpty) return;
+      if (data['missed'] != '1') {
+        await cancelAlutaNotification(musicNotifId(from));
+        return;
+      }
+      // Unanswered → the stale ask becomes a gentle note to answer later.
+      final who = mine((data['from_name'] ?? 'Your friend').toString());
+      final song = (data['title'] ?? '').toString().trim();
+      await showAlutaNotification(
+        channel: alutaListenChannel,
+        title: '🎧 $who wanted to listen along',
+        body: song.isEmpty
+            ? 'You were busy — invite them back to listen together?'
+            : 'to "$song" — invite them back to listen together?',
+        id: musicNotifId(from),
+        payload: {'kind': 'listen_back', 'from': from, 'from_name': who},
+        actions: const [(kListenBack, 'Listen together')],
+        personKey: 's$from',
+        personName: who,
+        silent: true, // a note, not an alarm
+      );
+    } else if (type == 'friend_playing') {
+      // "Tell me when they play music" fired (server online_watch.py). In
+      // front, the socket shows it in-app.
+      if (foreground) return;
+      final fid = (data['friend_id'] ?? '').toString();
+      final who = mine((data['friend_name'] ?? 'Your friend').toString());
+      final song = (data['title'] ?? '').toString().trim();
+      final artist = (data['artist'] ?? '').toString().trim();
+      await showAlutaNotification(
+        channel: alutaListenChannel,
+        title: song.isEmpty
+            ? '🎶 $who is playing music'
+            : '🎶 $who is playing "$song"',
+        body: artist.isEmpty
+            ? 'Tune in — you join right where they are'
+            : '$artist · tune in, you join right where they are',
+        id: musicNotifId(fid),
+        payload: {
+          'kind': 'play_watch',
+          'from': fid,
+          'from_name': who,
+          'title': song,
+        },
+        actions: const [(kTuneAsk, 'Tune in')],
+        personKey: fid.isEmpty ? null : 's$fid',
         personName: who,
       );
     } else if (type == 'feedback_update') {
@@ -311,6 +363,7 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         id: 7300 + (int.tryParse(from) ?? 0) % 1000,
         senderId: from.isEmpty ? null : from,
         senderName: mine((data['from_name'] ?? '').toString()),
+        hushable: true,
       );
     } else if (type == 'friend_online') {
       // "Tell me when they're online" fired (server online_watch.py). In the
@@ -327,6 +380,7 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         id: 7400 + (int.tryParse(fid) ?? 0) % 1000,
         senderId: fid.isEmpty ? null : fid,
         senderName: who,
+        hushable: true,
       );
     } else if (type == 'reaction') {
       // Someone reacted to MY message (server messages.py). Open chat → the

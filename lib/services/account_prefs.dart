@@ -47,6 +47,8 @@ class AccountPrefs {
     'muted_groups_v1',
     // Music nudges (services/song_insights)
     'music_nudges_on',
+    // Quiet hours (services/quiet_hours)
+    'quiet_hours_on', 'quiet_from_min', 'quiet_to_min',
     // Equalizer (screens/equalizer_screen + music controls)
     'eq_enabled', 'eq_preset', 'eq_bass', 'eq_loud', 'eq_gains',
     // Playlist view (sort · smart · favourites · group)

@@ -1688,17 +1688,41 @@ class ApiService {
     }
   }
 
-  /// Friend ids I'm waiting on, and which of those are to listen together.
-  Future<({Set<int> watching, Set<int> listen})> onlineWatchState() async {
+  /// "Tell me when they play music": start (POST) or stop (DELETE) a
+  /// one-shot watch on [friendId]. Returns 'watching', 'playing' (they're
+  /// playing right now, so nothing stored), 'stopped', or null on failure.
+  Future<String?> setPlayWatch(int friendId, bool on) async {
     try {
       final token = await _getToken();
-      if (token == null) return (watching: <int>{}, listen: <int>{});
+      if (token == null) return null;
+      final uri = Uri.parse('${await _baseUrl}/users/$friendId/play-watch');
+      final resp = on
+          ? await http.post(uri, headers: _authHeaders(token))
+          : await http.delete(uri, headers: _authHeaders(token));
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
+      if (!on) return 'stopped';
+      final data = jsonDecode(resp.body);
+      return (data is Map && data['playing'] == true) ? 'playing' : 'watching';
+    } catch (e) {
+      _logger.w('setPlayWatch failed: $e');
+      return null;
+    }
+  }
+
+  /// Friend ids I'm waiting on: to come online, which of those are to listen
+  /// together, and whose next song I'm waiting for.
+  Future<({Set<int> watching, Set<int> listen, Set<int> play})>
+      onlineWatchState() async {
+    const none = (watching: <int>{}, listen: <int>{}, play: <int>{});
+    try {
+      final token = await _getToken();
+      if (token == null) return none;
       final resp = await http.get(
         Uri.parse('${await _baseUrl}/users/me/online-watches'),
         headers: _authHeaders(token),
       );
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
-        return (watching: <int>{}, listen: <int>{});
+        return none;
       }
       final data = jsonDecode(resp.body);
       Set<int> ids(Object? l) => l is List
@@ -1707,10 +1731,11 @@ class ApiService {
       return (
         watching: ids(data is Map ? data['watching'] : null),
         listen: ids(data is Map ? data['listen'] : null),
+        play: ids(data is Map ? data['play'] : null),
       );
     } catch (e) {
       _logger.w('onlineWatchState failed: $e');
-      return (watching: <int>{}, listen: <int>{});
+      return none;
     }
   }
 

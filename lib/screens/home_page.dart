@@ -2357,6 +2357,32 @@ class HomePageState extends rp.ConsumerState<HomePage>
       QuickStatus.instance.applyEvent(d);
       return;
     }
+    // "Tell me when they play music" fired — offer Tune in right here.
+    if (type == 'friend_started_playing') {
+      final d = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final fid = (d['user_id'] as num?)?.toInt();
+      if (fid == null) return;
+      OnlineWatchList.instance.playFired(fid);
+      if (!_appForeground || !mounted) return; // push / desktop note has it
+      final known = _allFriends.any((f) => (f['id'] as num?)?.toInt() == fid);
+      final who =
+          known ? _nameForUser(fid) : (d['username'] ?? 'Your friend').toString();
+      final song = (d['title'] ?? '').toString().trim();
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 8),
+          content: Text(song.isEmpty
+              ? '🎶 $who is playing music'
+              : '🎶 $who is playing “$song”'),
+          action: SnackBarAction(
+            label: 'Tune in',
+            onPressed: () => _tuneInto(fid, who),
+          ),
+        ));
+      return;
+    }
     if (type == 'friend_came_online') {
       final d = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
       final fid = (d['user_id'] as num?)?.toInt();

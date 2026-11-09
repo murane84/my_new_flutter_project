@@ -898,6 +898,24 @@ extension _HomePageHelpers2 on HomePageState {
             payload: {'kind': 'chat', 'from': fromId, 'from_name': name},
             person: fromId.isEmpty ? null : 's$fromId',
             personName: name);
+      case 'friend_started_playing':
+        final id = '${d['user_id'] ?? ''}';
+        final name = who('username', 'Your friend');
+        final song = (d['title'] ?? '').toString().trim();
+        show(song.isEmpty ? '🎶 $name is playing music'
+                : '🎶 $name is playing "$song"',
+            'Tune in — you join right where they are',
+            slot: 'play$id',
+            channel: alutaListenChannel,
+            payload: {
+              'kind': 'play_watch',
+              'from': id,
+              'from_name': name,
+              'title': song,
+            },
+            actions: const [(kTuneAsk, 'Tune in')],
+            person: id.isEmpty ? null : 's$id',
+            personName: name);
       case 'friend_came_online':
         final id = '${d['user_id'] ?? ''}';
         final name = who('username', 'Your friend');

@@ -640,8 +640,49 @@ def my_online_watches(db: Session = Depends(get_db),
         OnlineWatch.watcher_id == current_user.id).all()
     listen = db.query(ListenIntent).filter(
         ListenIntent.watcher_id == current_user.id).all()
+    from models import PlayWatch
+    play = db.query(PlayWatch).filter(
+        PlayWatch.watcher_id == current_user.id).all()
     return {"watching": [int(r.target_id) for r in rows],
-            "listen": [int(r.target_id) for r in listen]}
+            "listen": [int(r.target_id) for r in listen],
+            "play": [int(r.target_id) for r in play]}
+
+
+@router.post("/users/{friend_id}/play-watch", tags=["Users"])
+def watch_play(friend_id: int, db: Session = Depends(get_db),
+               current_user: User = Depends(get_current_user)):
+    """One heads-up the next time {friend_id} plays music I'm allowed to see
+    (offers Tune in), then it ends. Already playing → nothing is stored
+    ({"playing": true})."""
+    from models import PlayWatch
+    from websocket_manager import get_now_playing_for
+    from online_watch import note_play_watch
+    if friend_id == current_user.id or not _are_friends(
+            db, current_user.id, friend_id):
+        raise HTTPException(status_code=404, detail="Not in your circle")
+    if get_now_playing_for(int(friend_id), current_user.id):
+        return {"watching": False, "playing": True}
+    row = db.query(PlayWatch).filter(
+        PlayWatch.watcher_id == current_user.id,
+        PlayWatch.target_id == friend_id).first()
+    if row is None:
+        db.add(PlayWatch(watcher_id=current_user.id, target_id=friend_id))
+    else:
+        row.created_at = datetime.now(timezone.utc)  # refresh the 7 days
+    db.commit()
+    note_play_watch(friend_id)
+    return {"watching": True, "playing": False}
+
+
+@router.delete("/users/{friend_id}/play-watch", tags=["Users"])
+def unwatch_play(friend_id: int, db: Session = Depends(get_db),
+                 current_user: User = Depends(get_current_user)):
+    from models import PlayWatch
+    db.query(PlayWatch).filter(
+        PlayWatch.watcher_id == current_user.id,
+        PlayWatch.target_id == friend_id).delete()
+    db.commit()
+    return {"watching": False}
 
 
 @router.post("/users/{friend_id}/online-watch", tags=["Users"])

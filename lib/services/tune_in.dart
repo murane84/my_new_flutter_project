@@ -46,7 +46,7 @@ class TuneInService {
     _timer?.cancel();
     _timer = Timer(const Duration(minutes: 2), () {
       if (pending.value != friendId) return;
-      cancel();
+      cancel(missed: true);
       onTimeout?.call(friendId);
     });
   }
@@ -70,20 +70,33 @@ class TuneInService {
     });
     pending.value = friendId;
     _pendingAt = DateTime.now();
+    _pendingTitle = title;
     _timer?.cancel();
     _timer = Timer(_wait, () {
       if (pending.value != friendId) return;
-      cancel();
+      cancel(missed: true);
       onTimeout?.call(friendId);
     });
     return true;
   }
 
-  /// Stop waiting (tells the friend so their prompt disappears).
-  void cancel() {
+  String? _pendingTitle;
+
+  /// Stop waiting (tells the friend so their prompt disappears). [missed]:
+  /// the ask simply went unanswered — their phone swaps the stale ask for a
+  /// gentle "they wanted to listen along" note they can answer later.
+  void cancel({bool missed = false}) {
     final id = pending.value;
+    final title = _pendingTitle;
     _clear();
-    if (id != null) sendSignal?.call({'type': 'tune_in_cancel', 'to': id});
+    if (id != null) {
+      sendSignal?.call({
+        'type': 'tune_in_cancel',
+        'to': id,
+        if (missed) 'missed': true,
+        if (missed && title != null && title.isNotEmpty) 'title': title,
+      });
+    }
   }
 
   /// The invite from [hostId] is the one I asked for → join without a prompt.
@@ -123,6 +136,7 @@ class TuneInService {
     _timer?.cancel();
     _timer = null;
     _pendingAt = null;
+    _pendingTitle = null;
     pending.value = null;
   }
 }

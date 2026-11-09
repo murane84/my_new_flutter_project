@@ -487,6 +487,13 @@ extension _HomePageHelpers1 on HomePageState {
         final host = (p['host_name'] ?? 'Your friend').toString();
         if (action == kLiveJoin && sid.isNotEmpty) {
           _joinLive(sid, {'title': (p['track_title'] ?? '').toString()}, host);
+        } else if ((p['conversation_id'] ?? '').toString().isNotEmpty) {
+          // A group jam → that group, whose Join bar shows while it's live.
+          _handleMessageTap({
+            'type': 'message',
+            'conversation_id': p['conversation_id'],
+            'group_title': p['group_title'] ?? '',
+          });
         } else {
           // Their chat; the invite prompt re-appears there if still open.
           _handleMessageTap({
@@ -501,12 +508,34 @@ extension _HomePageHelpers1 on HomePageState {
         _answerTuneIn(from, (p['from_name'] ?? 'Your friend').toString(),
             p['title']?.toString(),
             preApproved: action == kTuneLet);
+      case 'song_ask':
+        final from = int.tryParse('${p['from']}');
+        final c = activeLiveSession?.controller;
+        final hash = (p['hash'] ?? '').toString();
+        final title = (p['title'] ?? 'this song').toString();
+        if (from == null || c == null || hash.isEmpty) return;
+        final who = (p['from_name'] ?? 'A listener').toString();
+        if (action == kSongSend) {
+          c.answerSongRequest(from, hash, title, true);
+          showToast(context, 'Sending “$title” to $who 🎵',
+              type: ToastType.info);
+        } else {
+          _askToSendSong(from, who, hash, title);
+        }
       case 'feedback':
         showAppPopup(context, const FeedbackScreen(), avatarFlight: true);
       case 'space':
         final from = int.tryParse('${p['from']}');
         final space = from == null ? null : _spaceWithFriend(from);
         if (space != null) _openSpace(space);
+      case 'chat':
+        final from = int.tryParse('${p['from']}');
+        if (from == null) return;
+        _handleMessageTap({
+          'type': 'message',
+          'friend_id': '$from',
+          'sender_name': (p['from_name'] ?? '').toString(),
+        });
       case 'reaction' || 'live_missed':
         _handleMessageTap({...p, 'type': 'message'});
     }
@@ -769,6 +798,68 @@ extension _HomePageHelpers1 on HomePageState {
         orElse: () => const <String, dynamic>{});
     return _contactDisplayName(
         _friendPhoneById(id), (f['username'] ?? 'Your friend').toString());
+  }
+
+  /// HOST: a listener's "Ask for this song" the jam screen can't show (it's
+  /// minimised, or Aluta is in the background). Away → a notification with
+  /// Send it; here with the jam minimised → the same question in-app.
+  Future<void> _onUnseenSongAsk(Map<String, dynamic> e) async {
+    final from = (e['from_id'] as num?)?.toInt();
+    final hash = (e['hash'] ?? '').toString();
+    final title = (e['title'] ?? 'this song').toString();
+    if (from == null || hash.isEmpty || !mounted) return;
+    final known = _allFriends.any((f) => (f['id'] as num?)?.toInt() == from);
+    final who = known ? _nameForUser(from) : 'A listener';
+    if (!_appForeground) {
+      await showAlutaNotification(
+        channel: alutaListenChannel,
+        title: '🎵 $who loved “$title”',
+        body: 'Send it to them to keep? It goes only to them.',
+        id: alutaNotifId('songask', '$from'),
+        payload: {
+          'kind': 'song_ask',
+          'from': '$from',
+          'from_name': who,
+          'hash': hash,
+          'title': title,
+        },
+        actions: const [(kSongSend, 'Send it'), (kSongNo, 'Not now')],
+        personKey: 's$from',
+        personName: who,
+      );
+      return;
+    }
+    await _askToSendSong(from, who, hash, title);
+  }
+
+  Future<void> _askToSendSong(
+      int from, String who, String hash, String title) async {
+    final c = activeLiveSession?.controller;
+    if (c == null || !mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.music_note_rounded),
+        title: Text('$who loved this song'),
+        content: Text('Send them “$title” to keep?\n'
+            'It goes only to them, over this session.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Not now')),
+          FilledButton.icon(
+              onPressed: () => Navigator.pop(ctx, true),
+              icon: const Icon(Icons.send_rounded, size: 18),
+              label: const Text('Send it')),
+        ],
+      ),
+    );
+    // The jam may have ended while the question was up.
+    if (activeLiveSession?.controller != c) return;
+    c.answerSongRequest(from, hash, title, ok == true);
+    if (ok == true && mounted) {
+      showToast(context, 'Sending “$title” to $who 🎵', type: ToastType.info);
+    }
   }
 
   /// "Tune in" signaling — see TuneInService for the message flow.

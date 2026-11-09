@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'contact_names.dart';
+import 'group_meta.dart';
 import 'notif_service.dart';
 import '../widgets/reply_banner.dart';
 import '../screens/api_service.dart';
@@ -184,11 +185,22 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       final host = mine((data['host_username'] ?? 'Someone').toString());
       final song = (data['track_title'] ?? '').toString().trim();
       final hostId = (data['host_id'] ?? '').toString();
+      // A GROUP jam (server live.py /rooms): only its members get this, and a
+      // group I muted stays quiet.
+      final convId = (data['conversation_id'] ?? '').toString();
+      final gTitle = (data['group_title'] ?? '').toString().trim();
+      final gid = int.tryParse(convId);
+      if (gid != null && await GroupMeta.isMutedStored(gid)) return;
+      final isGroup = gid != null;
       await showAlutaNotification(
         channel: alutaListenChannel,
-        title: '🎧 $host wants to listen with you',
+        title: isGroup
+            ? '🎧 $host started a jam${gTitle.isEmpty ? '' : ' in $gTitle'}'
+            : '🎧 $host wants to listen with you',
         body: song.isEmpty
-            ? 'You\'ll hear the same song, in sync'
+            ? (isGroup
+                ? 'Drop in — everyone hears the same song, in sync'
+                : 'You\'ll hear the same song, in sync')
             : '$song · you\'ll hear it in sync',
         // One slot per host: a newer invite (or the "missed" note) replaces it.
         id: alutaNotifId('live', hostId),
@@ -198,10 +210,12 @@ Future<void> handleFcmData(Map<String, dynamic> data,
           'host_id': hostId,
           'host_name': host,
           'track_title': song,
+          if (isGroup) 'conversation_id': convId,
+          if (isGroup) 'group_title': gTitle,
         },
         actions: const [(kLiveJoin, 'Join'), (kLiveLater, 'Not now')],
-        personKey: hostId.isEmpty ? null : 's$hostId',
-        personName: host,
+        personKey: isGroup ? 'c$convId' : (hostId.isEmpty ? null : 's$hostId'),
+        personName: isGroup && gTitle.isNotEmpty ? gTitle : host,
       );
     } else if (type == 'tune_in_request') {
       // App open in front: the live socket already shows the "let them in?"

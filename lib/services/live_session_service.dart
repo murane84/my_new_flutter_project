@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform, debugPrint, ValueNotifier;
+import 'package:flutter/widgets.dart' show WidgetsBinding, AppLifecycleState;
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../utils/net.dart' as http;
 import 'package:just_audio/just_audio.dart';
@@ -120,6 +121,11 @@ class LiveTrack {
 }
 
 class LiveSessionController {
+  /// Set by Home: a listener's "Ask for this song" that the jam screen can't
+  /// show — it's minimised, or Aluta is in the background (its dialog would
+  /// open where nobody sees it and the ask would quietly expire).
+  static void Function(Map<String, dynamic> ask)? onUnseenSongAsk;
+
   LiveSessionController({this.onEvent, this.onEnded, this.onError}) {
     // On Android, give the live player the same EQ + loudness pipeline the
     // music player uses, so the host's equalizer settings can be applied here
@@ -2129,6 +2135,15 @@ class LiveSessionController {
         _rosterOpen = d['open'] == true;
         _rosterConv = (d['conversation_id'] as num?)?.toInt();
         rosterCount = (d['count'] as num?)?.toInt() ?? rosterCount;
+      }
+    }
+    if (type == 'song_request' && role == LiveRole.host) {
+      final unseen = onEvent == null ||
+          WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed;
+      final hook = onUnseenSongAsk;
+      if (unseen && hook != null) {
+        hook(msg);
+        return;
       }
     }
     onEvent?.call(msg);

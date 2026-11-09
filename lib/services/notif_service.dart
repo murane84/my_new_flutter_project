@@ -118,6 +118,8 @@ const String kLiveJoin = 'live_join';
 const String kLiveLater = 'live_later';
 const String kTuneLet = 'tune_let';
 const String kTuneNo = 'tune_no';
+const String kSongSend = 'song_send';
+const String kSongNo = 'song_no';
 const String kOpen = 'open';
 
 const String alutaListenChannel = 'aluta_listen';
@@ -229,7 +231,8 @@ Future<void> showAlutaNotification({
                 a.$1,
                 a.$2,
                 // "Not now" style answers don't need the app open.
-                showsUserInterface: a.$1 != kLiveLater && a.$1 != kTuneNo,
+                showsUserInterface:
+                    a.$1 != kLiveLater && a.$1 != kTuneNo && a.$1 != kSongNo,
                 cancelNotification: true,
               ),
           ],
@@ -344,7 +347,8 @@ void _onNotifResponse(NotificationResponse r) {
       _declineLiveFromShade(p);
       return;
     }
-    if (a == kTuneNo) return; // the asker's wait simply times out
+    // The asker's wait simply times out (they can ask again).
+    if (a == kTuneNo || a == kSongNo) return;
     final fn = _onAlutaTap;
     if (fn != null) {
       fn(a, p);
@@ -433,6 +437,9 @@ Future<void> _sendInlineReply(Map<String, dynamic> p, String? input) async {
 Future<void> _declineLiveFromShade(Map<String, dynamic> p) async {
   final sid = (p['session_id'] ?? '').toString();
   if (sid.isEmpty) return;
+  // A group jam is an open room, not a personal invite — "Not now" just
+  // dismisses; the host isn't told anyone declined.
+  if ((p['conversation_id'] ?? '').toString().isNotEmpty) return;
   try {
     await ApiService().declineLiveSession(sid);
   } catch (_) {}

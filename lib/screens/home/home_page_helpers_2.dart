@@ -774,4 +774,155 @@ extension _HomePageHelpers2 on HomePageState {
       },
     );
   }
+
+  /// Desktop has no push service, so while its window is in the background a
+  /// socket event a phone would get as a push showed only an in-app toast —
+  /// playing to an empty room. Mirror those as local notifications, with the
+  /// same words and taps as the phone's. (Phones: FCM does it; web: none.)
+  void _mirrorForDesktop(String? type, Map<String, dynamic> event) {
+    if (fcmSupported || _appForeground || type == null) return;
+    final d = (event['data'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
+    String who(String key, String fallback) {
+      final reg = (d[key] ?? '').toString();
+      final id = int.tryParse('${d['from_id'] ?? d['user_id'] ?? d['by_id']}');
+      if (id != null &&
+          _allFriends.any((f) => (f['id'] as num?)?.toInt() == id)) {
+        return _nameForUser(id);
+      }
+      return reg.isEmpty ? fallback : reg;
+    }
+
+    void show(String title, String body,
+        {required String slot,
+        required Map<String, dynamic> payload,
+        String channel = alutaSpaceChannel,
+        List<(String, String)> actions = const [(kOpen, 'Open')],
+        String? person,
+        String? personName}) {
+      unawaited(showAlutaNotification(
+        channel: channel,
+        title: title,
+        body: body,
+        id: alutaNotifId('desk', slot),
+        payload: payload,
+        actions: actions,
+        personKey: person,
+        personName: personName,
+      ));
+    }
+
+    final fromId = '${d['from_id'] ?? ''}';
+    switch (type) {
+      case 'live_invite':
+        final sid = (d['session_id'] ?? '').toString();
+        final hostId = '${d['host_id'] ?? ''}';
+        final host = who('host_username', 'Your friend');
+        final song = ((d['track'] as Map?)?['title'] ?? '').toString().trim();
+        if (sid.isEmpty) return;
+        show('🎧 $host wants to listen with you',
+            song.isEmpty ? "You'll hear the same song, in sync"
+                : '$song · you\'ll hear it in sync',
+            slot: 'live$hostId',
+            channel: alutaListenChannel,
+            payload: {
+              'kind': 'live_invite',
+              'session_id': sid,
+              'host_id': hostId,
+              'host_name': host,
+              'track_title': song,
+            },
+            actions: const [(kLiveJoin, 'Join'), (kLiveLater, 'Not now')],
+            person: 's$hostId',
+            personName: host);
+      case 'live_room_available':
+        // Only a GROUP jam is announced to phones by push; a circle room
+        // stays a quiet card. A muted group stays quiet.
+        final cid = (d['conversation_id'] as num?)?.toInt();
+        final hostId = (d['host_id'] as num?)?.toInt();
+        if (cid == null || hostId == _myUserId) return;
+        if (GroupMeta.instance.isMuted(cid)) return;
+        final g = _groups.firstWhere(
+            (x) => (x['id'] as num?)?.toInt() == cid,
+            orElse: () => const <String, dynamic>{});
+        final gTitle = (g['title'] ?? '').toString();
+        final host = hostId != null &&
+                _allFriends.any((f) => (f['id'] as num?)?.toInt() == hostId)
+            ? _nameForUser(hostId)
+            : (d['host_username'] ?? 'Someone').toString();
+        final song = ((d['track'] as Map?)?['title'] ?? '').toString().trim();
+        show('🎧 $host started a jam${gTitle.isEmpty ? '' : ' in $gTitle'}',
+            song.isEmpty ? 'Drop in — everyone hears the same song, in sync'
+                : '$song · you\'ll hear it in sync',
+            slot: 'jam$cid',
+            channel: alutaListenChannel,
+            payload: {
+              'kind': 'live_invite',
+              'session_id': '${d['session_id'] ?? ''}',
+              'host_id': '$hostId',
+              'host_name': host,
+              'track_title': song,
+              'conversation_id': '$cid',
+              'group_title': gTitle,
+            },
+            actions: const [(kLiveJoin, 'Join'), (kLiveLater, 'Not now')],
+            person: 'c$cid',
+            personName: gTitle.isEmpty ? host : gTitle);
+      case 'space_moment' ||
+            'space_playlist_add' ||
+            'dedication_received' ||
+            'space_diary' ||
+            'space_diary_comment' ||
+            'space_moment_comment' ||
+            'space_capsule' ||
+            'capsule_unlocked' ||
+            'space_nudge' ||
+            'prompt_answered':
+        final line = (d['line'] ?? '').toString();
+        if (line.isEmpty) return;
+        final name = who('from_username', 'Your partner');
+        show(_inMyNames(d, line), 'Our Space 💞',
+            slot: '$type$fromId',
+            payload: {'kind': 'space', 'from': fromId},
+            person: fromId.isEmpty ? null : 's$fromId',
+            personName: name);
+      case 'bond_request' || 'bond_request_accepted':
+        final line = (d['line'] ?? '').toString();
+        if (line.isEmpty) return;
+        show(_inMyNames(d, line), 'Our Space 💞',
+            slot: '$type$fromId', payload: {'kind': 'open'});
+      case 'heartbeat_tap':
+        final name = who('from_name', 'Your partner');
+        show('💓 $name', '$name is thinking of you',
+            slot: 'beat$fromId',
+            payload: {'kind': 'chat', 'from': fromId, 'from_name': name},
+            person: fromId.isEmpty ? null : 's$fromId',
+            personName: name);
+      case 'friend_came_online':
+        final id = '${d['user_id'] ?? ''}';
+        final name = who('username', 'Your friend');
+        show('$name is online now 🟢',
+            d['purpose'] == 'listen'
+                ? 'Ready to listen together? 🎧'
+                : "Say hi while they're here 👋",
+            slot: 'online$id',
+            channel: alutaListenChannel,
+            payload: {'kind': 'chat', 'from': id, 'from_name': name},
+            person: id.isEmpty ? null : 's$id',
+            personName: name);
+      case 'heart_opened':
+        final id = '${d['by_id'] ?? ''}';
+        final phone = (d['by_phone'] ?? '').toString();
+        final saved =
+            phone.isNotEmpty ? ContactNames.instance.nameFor(phone) : null;
+        final name = (saved != null && saved.isNotEmpty)
+            ? saved
+            : (d['by_name'] ?? 'Someone').toString();
+        show(name, 'opened your secret heart 💗',
+            slot: 'heart$id',
+            payload: {'kind': 'chat', 'from': id, 'from_name': name},
+            person: id.isEmpty ? null : 's$id',
+            personName: name);
+    }
+  }
 }

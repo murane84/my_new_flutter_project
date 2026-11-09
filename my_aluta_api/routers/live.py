@@ -221,16 +221,19 @@ def create_room(
     for fid in audience:
         safe_notify_user(fid, payload)
 
-    # GROUP jam room: members whose app is closed still hear about it — the
-    # same push a 1:1 Listen Together invite uses (tapping it joins).
+    # GROUP jam room: every member also gets the push a 1:1 Listen Together
+    # invite uses (tapping it joins). Not only the "offline" ones — a phone
+    # with Aluta in the background often still holds a socket, so the in-group
+    # Join bar was all it got and nobody saw it. An app in front ignores the
+    # push (the Join bar shows); a member who muted the group stays quiet.
     if cid is not None:
         try:
-            from websocket_manager import connected_users
+            from models import Conversation
+            conv = db.query(Conversation).filter(Conversation.id == cid).first()
+            gtitle = (conv.title or "") if conv else ""
         except Exception:
-            connected_users = {}
+            gtitle = ""
         for fid in audience:
-            if connected_users.get(fid):
-                continue  # app open — the in-group Join bar already shows
             try:
                 send_push_to_user(fid, {
                     "type": "live_invite",
@@ -239,6 +242,7 @@ def create_room(
                     "session_id": session_id,
                     "track_title": str((track or {}).get("title") or "")[:120],
                     "conversation_id": str(cid),
+                    "group_title": gtitle[:80],
                 })
             except Exception:
                 pass

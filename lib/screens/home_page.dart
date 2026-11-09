@@ -55,7 +55,12 @@ import 'appearance_screen.dart';
 import 'backup_screen.dart';
 import 'together_screen.dart';
 import '../services/live_session_service.dart'
-    show activeLiveSession, endActiveLiveSession, ActiveLiveSession, LiveTrack;
+    show
+        activeLiveSession,
+        endActiveLiveSession,
+        ActiveLiveSession,
+        LiveSessionController,
+        LiveTrack;
 import '../services/notif_service.dart';
 import '../services/fcm_service.dart';
 import '../widgets/reply_banner.dart';
@@ -409,6 +414,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // App open: incoming chat messages show Aluta's reply banner.
     ReplyBanner.onIncoming = _showReplyBanner;
     LiveRoomsRegistry.instance.joinRoom = _dropIntoRoom;
+    LiveSessionController.onUnseenSongAsk = _onUnseenSongAsk;
     GroupMeta.instance.addListener(_onGroupMeta);
     // Replied from a notification while the app is alive → refresh that card
     // (its preview becomes "✓ You: …" and the unread clears).
@@ -589,6 +595,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     if (ReplyBanner.onIncoming == _showReplyBanner) {
       ReplyBanner.onIncoming = null;
       LiveRoomsRegistry.instance.joinRoom = null;
+      LiveSessionController.onUnseenSongAsk = null;
       GroupMeta.instance.removeListener(_onGroupMeta);
       onInlineReplySent = null;
     }
@@ -2158,6 +2165,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void _handleNotification(Map<String, dynamic> event) {
     if (!mounted) return;
     final type = event['type']?.toString();
+    // Desktop window in the background → what a phone would get by push.
+    _mirrorForDesktop(type, event);
     // Group (mesh) call signaling — group_call_*, group_offer/answer/ice.
     if (type != null &&
         (type.startsWith('group_call') ||

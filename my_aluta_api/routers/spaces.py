@@ -1305,6 +1305,7 @@ def react_moment(
         MomentReaction.user_id == current_user.id,
         MomentReaction.emoji == emoji,
     ).first()
+    added = existing is None
     if existing:
         db.delete(existing)
     else:
@@ -1327,6 +1328,21 @@ def react_moment(
             })
         except Exception:
             pass
+        # …and a gentle push when they're away: "Ana ❤️ your moment" —
+        # only for a new reaction, and only on an accepted, live bond.
+        if added:
+            try:
+                sp = db.query(RelationshipSpace).filter(
+                    RelationshipSpace.id == moment.space_id).first()
+                if sp is not None and \
+                        _active_partner(db, sp, current_user.id) is not None:
+                    who = current_user.username or "Your partner"
+                    _push(int(moment.author_id), "Our Space 💞",
+                          f"{who} reacted {emoji} to your moment",
+                          "space_moment_react",
+                          actor_id=current_user.id, actor_name=who)
+            except Exception:
+                pass
     db.refresh(moment)
     return _moment_dict(db, moment, current_user.id)
 
@@ -2937,12 +2953,26 @@ def react_diary_entry(
         DiaryReaction.user_id == current_user.id,
         DiaryReaction.emoji == emoji,
     ).first()
+    added = existing is None
     if existing:
         db.delete(existing)
     else:
         db.add(DiaryReaction(
             entry_id=entry.id, user_id=current_user.id, emoji=emoji))
     db.commit()
+    # A gentle push to the AUTHOR when they're away (new reactions only).
+    if added and entry.author_id and int(entry.author_id) != current_user.id \
+            and _active_partner(db, space, current_user.id):
+        try:
+            who = current_user.username or "Your partner"
+            title = (entry.title or "").strip()
+            _push(int(entry.author_id), "Our Diary 💞",
+                  f"{who} reacted {emoji} to “{title}”" if title
+                  else f"{who} reacted {emoji} to your memory",
+                  "space_diary_react", actor_id=current_user.id,
+                  actor_name=who)
+        except Exception:
+            pass
     # Live-nudge the partner so an open Our Space page / memory updates without
     # a manual refresh (no push — reactions are lightweight). Accepted bonds
     # only.

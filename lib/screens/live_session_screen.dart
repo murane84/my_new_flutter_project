@@ -398,6 +398,14 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       _c.onQueueChanged = _syncFromQueue;
       // Roster updates while minimised went nowhere — ask for it afresh.
       _c.requestRoster();
+      // The host said yes to my song while this was minimised → save it now.
+      final share = _c.pendingSongShare;
+      if (share != null) {
+        _c.pendingSongShare = null;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _onSongShare(share);
+        });
+      }
       _ready = true;
       _status = _isHost
           ? 'Sharing with ${widget.peerName}'

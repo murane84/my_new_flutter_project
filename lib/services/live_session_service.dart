@@ -126,6 +126,13 @@ class LiveSessionController {
   /// open where nobody sees it and the ask would quietly expire).
   static void Function(Map<String, dynamic> ask)? onUnseenSongAsk;
 
+  /// Set by Home: the host's answer to MY "Ask for this song" arrived while
+  /// the jam screen was minimised / Aluta in the background. The answer is
+  /// kept in [pendingSongShare] so the jam screen finishes the save when
+  /// it's reopened; Home just lets me know.
+  static void Function(Map<String, dynamic> share)? onUnseenSongShare;
+  Map<String, dynamic>? pendingSongShare;
+
   LiveSessionController({this.onEvent, this.onEnded, this.onError}) {
     // On Android, give the live player the same EQ + loudness pipeline the
     // music player uses, so the host's equalizer settings can be applied here
@@ -2135,6 +2142,17 @@ class LiveSessionController {
         _rosterOpen = d['open'] == true;
         _rosterConv = (d['conversation_id'] as num?)?.toInt();
         rosterCount = (d['count'] as num?)?.toInt() ?? rosterCount;
+      }
+    }
+    if (type == 'song_share' && role == LiveRole.listener) {
+      final unseen = onEvent == null ||
+          WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed;
+      if (unseen) {
+        // A yes needs the screen to save the file — keep it for when it's
+        // back; a "not now" is just news.
+        if (msg['ok'] == true && onEvent == null) pendingSongShare = msg;
+        onUnseenSongShare?.call(msg);
+        if (onEvent == null) return;
       }
     }
     if (type == 'song_request' && role == LiveRole.host) {

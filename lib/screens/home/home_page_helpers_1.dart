@@ -559,6 +559,9 @@ extension _HomePageHelpers1 on HomePageState {
             'sender_name': who,
           });
         }
+      case 'song_ready':
+        // The jam screen saves the song the host agreed to share.
+        if (activeLiveSession != null) _reopenLiveSession();
       case 'chat':
         final from = int.tryParse('${p['from']}');
         if (from == null) return;
@@ -861,6 +864,39 @@ extension _HomePageHelpers1 on HomePageState {
       return;
     }
     await _askToSendSong(from, who, hash, title);
+  }
+
+  /// LISTENER: the host answered my "Ask for this song" while the jam was
+  /// minimised / Aluta in the background. Yes → reopening the jam saves it
+  /// (the controller kept the answer); here I'm just told.
+  Future<void> _onUnseenSongShare(Map<String, dynamic> e) async {
+    final title = (e['title'] ?? 'the song').toString();
+    final ok = e['ok'] == true;
+    if (!_appForeground) {
+      if (!ok) return; // a "not now" isn't worth a buzz
+      await showAlutaNotification(
+        channel: alutaListenChannel,
+        title: '🎶 The host said yes to “$title”',
+        body: 'Tap to open the jam and keep it',
+        id: alutaNotifId('songshare', title),
+        payload: {'kind': 'song_ready'},
+        actions: const [(kOpen, 'Keep it')],
+      );
+      return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 6),
+        content: Text(ok
+            ? '🎶 The host said yes to “$title”'
+            : 'The host said not now for “$title”'),
+        action: ok
+            ? SnackBarAction(label: 'Keep it', onPressed: _reopenLiveSession)
+            : null,
+      ));
   }
 
   Future<void> _askToSendSong(

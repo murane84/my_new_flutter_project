@@ -541,6 +541,32 @@ def start_poll_countdown(
         {"type": "poll_updated", "conversation_id": cid,
          "message_id": mid, "poll": poll},
     )
+    # Members whose Aluta is in the background hear it too: "🗳️ Vote closes
+    # in 2 min" — so the jam feels alive off-screen. (An app in front ignores
+    # the push; a member who muted the group stays quiet.)
+    try:
+        conv = db.query(Conversation).filter(Conversation.id == cid).first()
+        gtitle = ((conv.title if conv else None) or "Your group")[:80]
+        q = str((poll or {}).get("question") or "")[:120]
+        mins = int(payload.minutes or 2)
+        for uid in cc.member_ids(db, cid):
+            if int(uid) == int(current_user.id):
+                continue
+            try:
+                send_push_to_user(int(uid), {
+                    "type": "jam_countdown",
+                    "conversation_id": str(cid),
+                    "group_title": gtitle,
+                    "message_id": str(mid),
+                    "minutes": str(mins),
+                    "question": q,
+                    "from_id": str(current_user.id),
+                    "from_name": current_user.username or "Someone",
+                })
+            except Exception:
+                pass
+    except Exception:
+        pass
     return {"message_id": mid, "poll": poll}
 
 

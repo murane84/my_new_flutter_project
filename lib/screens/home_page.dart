@@ -451,6 +451,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     ReplyBanner.onIncoming = _showReplyBanner;
     LiveRoomsRegistry.instance.joinRoom = _dropIntoRoom;
     LiveSessionController.onUnseenSongAsk = _onUnseenSongAsk;
+    LiveSessionController.onUnseenSongShare = _onUnseenSongShare;
     GroupMeta.instance.addListener(_onGroupMeta);
     // Changing who sees my last seen also changes whose I see (both ways):
     // once the choice has reached the server, refetch the list.
@@ -662,6 +663,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       ReplyBanner.onIncoming = null;
       LiveRoomsRegistry.instance.joinRoom = null;
       LiveSessionController.onUnseenSongAsk = null;
+      LiveSessionController.onUnseenSongShare = null;
       GroupMeta.instance.removeListener(_onGroupMeta);
       onInlineReplySent = null;
     }

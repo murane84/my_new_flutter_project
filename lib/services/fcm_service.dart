@@ -296,6 +296,26 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         personKey: fid.isEmpty ? null : 's$fid',
         personName: who,
       );
+    } else if (type == 'jam_countdown') {
+      // A group jam's vote timer just started (server conversations.py).
+      // App in front: the poll in the chat shows it live.
+      if (foreground) return;
+      final convId = (data['conversation_id'] ?? '').toString();
+      final gid = int.tryParse(convId);
+      if (gid != null && await GroupMeta.isMutedStored(gid)) return;
+      final gTitle = (data['group_title'] ?? 'Your group').toString();
+      final mins = (data['minutes'] ?? '2').toString();
+      final q = (data['question'] ?? '').toString().trim();
+      await showMessageNotification(
+        title: '🗳️ $gTitle · vote closes in $mins min',
+        body: q.isEmpty ? 'Pick the next song before the jam decides' : q,
+        conversationId: convId.isEmpty ? null : convId,
+        groupTitle: gTitle,
+        messageId: (data['message_id'] ?? '').toString().isEmpty
+            ? null
+            : data['message_id'].toString(),
+        hushable: true,
+      );
     } else if (type == 'feedback_update') {
       final fid = (data['feedback_id'] ?? '').toString();
       await showAlutaNotification(
@@ -466,6 +486,8 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       await showMessageNotification(
         title: mine(data['title'].toString()),
         body: mine((data['body'] ?? '').toString()),
+        // Our Space alerts hush during quiet hours, like the rest.
+        hushable: true,
       );
     } else if ((data['msg_kind'] ?? data['message_type']) == 'live') {
       // A Listen Together log: the invite banner becomes "You missed…" (or

@@ -147,6 +147,33 @@ extension _HomeHub on HomePageState {
         unread: _circleBadge(),
         newStatuses: storiesUnseen,
         live: listening.length);
+    final k = wide ? 'wide-' : '';
+    return [
+      // A maximised section: the 3D switcher (the shared view keeps its own
+      // per-section headers).
+      if (view != 'all')
+        _circleSwitcher(scheme, storiesUnseen, listening, circle, textColor),
+      // Every change of section turns like a cube face (← forward, → back).
+      Expanded(
+        child: _CircleFlip(
+          child: KeyedSubtree(
+            key: ValueKey('${k}sec-$view'),
+            child: _sectionBody(
+                view, listening, circle, scheme, textColor, wide: wide),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  /// The body of one Circle view, filling the height below the switcher.
+  Widget _sectionBody(
+      String view,
+      List<Map<String, dynamic>> listening,
+      List<Map<String, dynamic>> circle,
+      ColorScheme scheme,
+      Color textColor,
+      {required bool wide}) {
     final pad = wide
         ? const EdgeInsets.fromLTRB(6, 0, 6, 12)
         : const EdgeInsets.only(bottom: 12);
@@ -165,58 +192,84 @@ extension _HomeHub on HomePageState {
               return g.username.toLowerCase().contains(q) ||
                   saved.toLowerCase().contains(q);
             }).toList();
-      return [
-        _maxHeader(scheme, 'Status & Stories', 'Status',
-            storiesUnseen > 0 ? storiesUnseen : null, storiesUnseen,
-            listening, circle, textColor),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _fetchStories,
-            child: StoriesTray(
-              apiBase: _apiBase,
-              myUserId: _myUserId,
-              myName: _username.isNotEmpty ? _username : 'You',
-              myAvatarUrl: _myAvatar,
-              groups: groups,
-              onReload: _fetchStories,
-              grid: true,
-              searching: q.isNotEmpty,
-              controller: _circleMaxScroll,
-            ),
-          ),
+      return RefreshIndicator(
+        onRefresh: _fetchStories,
+        child: StoriesTray(
+          apiBase: _apiBase,
+          myUserId: _myUserId,
+          myName: _username.isNotEmpty ? _username : 'You',
+          myAvatarUrl: _myAvatar,
+          groups: groups,
+          onReload: _fetchStories,
+          grid: true,
+          searching: q.isNotEmpty,
+          controller: _circleMaxScroll,
         ),
-      ];
+      );
     }
 
     if (view == 'listening') {
-      return [
-        _maxHeader(scheme, 'Listening now', 'Listening', listening.length,
-            storiesUnseen, listening, circle, textColor),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _onPullToRefresh,
-            child: listening.isEmpty
-                ? _emptyListening(scheme, _searchQuery.trim().isNotEmpty)
-                : ListView.builder(
-                    key: PageStorageKey<String>('${k}listening-full'),
-                    controller: _circleMaxScroll,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: pad,
-                    itemCount: listening.length,
-                    itemBuilder: (_, i) =>
-                        _friendEntry(listening, i, scheme, textColor),
-                  ),
-          ),
-        ),
-      ];
+      return RefreshIndicator(
+        onRefresh: _onPullToRefresh,
+        child: listening.isEmpty
+            ? _emptyListening(scheme, _searchQuery.trim().isNotEmpty)
+            : ListView.builder(
+                key: PageStorageKey<String>('${k}listening-full'),
+                controller: _circleMaxScroll,
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: pad,
+                itemCount: listening.length,
+                itemBuilder: (_, i) =>
+                    _friendEntry(listening, i, scheme, textColor),
+              ),
+      );
     }
 
     // 'chats' maximised = EVERY conversation in one full list (the live ones
     // first, as everywhere); 'all' keeps the listeners in their own zone.
     final chats = view == 'chats' ? [...listening, ...circle] : circle;
     final showListening = view == 'all' && listening.isNotEmpty;
-    return [
-      if (view == 'all' && _myUserId != null) _collapsibleStories(scheme),
+    final list = Stack(children: [
+      NotificationListener<UserScrollNotification>(
+        // My own scrolling → don't yank the list for a new message now.
+        onNotification: (_) {
+          _lastUserScroll = DateTime.now();
+          return false;
+        },
+        child: RefreshIndicator(
+          onRefresh: _onPullToRefresh,
+          child: chats.isNotEmpty
+              ? ListView.builder(
+                  // Back from a chat → right where I left the list.
+                  key: PageStorageKey<String>(
+                      view == 'chats' ? '${k}circle-full' : '${k}circle-list'),
+                  controller: _circleScroll,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: pad,
+                  itemCount: chats.length,
+                  itemBuilder: (_, i) =>
+                      _friendEntry(chats, i, scheme, textColor),
+                )
+              : (!showListening
+                  ? _emptyConversations(scheme)
+                  : ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: const [SizedBox(height: 220)],
+                    )),
+        ),
+      ),
+      // "↑ Top" once well down; "↑ 3 new" when chats got new messages
+      // above me.
+      if (chats.isNotEmpty)
+        Positioned(
+          right: 8,
+          bottom: 14,
+          child: _listTopChip(_circleScroll, scheme, countsNew: true),
+        ),
+    ]);
+    if (view == 'chats') return list;
+    return Column(children: [
+      if (_myUserId != null) _collapsibleStories(scheme),
       if (showListening) ...[
         _listHeader(scheme, 'Listening now', listening.length, 'listening'),
         // Capped so a growing listener count scrolls WITHIN this zone instead
@@ -237,53 +290,9 @@ extension _HomeHub on HomePageState {
         ),
       ],
       // Pinned "Your circle" header (fixed above the scrolling list).
-      if (view == 'chats')
-        _maxHeader(scheme, 'Your circle', 'Circle', chats.length,
-            storiesUnseen, listening, circle, textColor)
-      else if (chats.isNotEmpty)
-        _listHeader(scheme, 'Your circle', null, 'chats'),
-      Expanded(
-        child: Stack(children: [
-          NotificationListener<UserScrollNotification>(
-            // My own scrolling → don't yank the list for a new message now.
-            onNotification: (_) {
-              _lastUserScroll = DateTime.now();
-              return false;
-            },
-            child: RefreshIndicator(
-              onRefresh: _onPullToRefresh,
-              child: chats.isNotEmpty
-                  ? ListView.builder(
-                      // Back from a chat → right where I left the list.
-                      key: PageStorageKey<String>(view == 'chats'
-                          ? '${k}circle-full'
-                          : '${k}circle-list'),
-                      controller: _circleScroll,
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: pad,
-                      itemCount: chats.length,
-                      itemBuilder: (_, i) =>
-                          _friendEntry(chats, i, scheme, textColor),
-                    )
-                  : (!showListening
-                      ? _emptyConversations(scheme)
-                      : ListView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          children: const [SizedBox(height: 220)],
-                        )),
-            ),
-          ),
-          // "↑ Top" once well down; "↑ 3 new" when chats got new messages
-          // above me.
-          if (chats.isNotEmpty)
-            Positioned(
-              right: 8,
-              bottom: 14,
-              child: _listTopChip(_circleScroll, scheme, countsNew: true),
-            ),
-        ]),
-      ),
-    ];
+      if (chats.isNotEmpty) _listHeader(scheme, 'Your circle', null, 'chats'),
+      Expanded(child: list),
+    ]);
   }
 
   /// The Circle search hint follows the maximised section, so the box says
@@ -330,152 +339,230 @@ extension _HomeHub on HomePageState {
     );
   }
 
-  /// Under a MAXIMISED section: the other two as small live chips (with
-  /// what's waiting there — unseen statuses, people listening, unread chats)
-  /// so nothing is out of mind while one section has the height. A tap
-  /// maximises that one instead; "All" goes back to the shared view.
-  /// The ONE compact row above a maximised section: its name + count, the
-  /// other sections as small live pills (with what's waiting there), and
-  /// Minimise — where the old header + a separate chip row spent two rows
-  /// (and a hairline) of height. Narrow → pills and Minimise go icon-only.
-  Widget _maxHeader(
+  /// The 3D section switcher above a maximised Circle section — one row:
+  /// a sunken track with All · Status · Listening · Circle, the current one
+  /// on a raised, lit "key" that SLIDES between segments (springy), each
+  /// other segment showing what's waiting there (and breathing once when it
+  /// grows). Tap → switch; tap the lit one or All → back to all; hold →
+  /// peek; a compact ⤡ at the end minimises too. Narrow → icons + counts.
+  Widget _circleSwitcher(
       ColorScheme scheme,
-      String label,
-      String shortLabel,
-      int? count,
       int storiesUnseen,
       List<Map<String, dynamic>> listening,
       List<Map<String, dynamic>> circle,
       Color textColor) {
-    final live = listening.length;
     final view = _circleView;
     final unread = _circleBadge();
-    final ink = accentInk(scheme);
-    return LayoutBuilder(builder: (context, cons) {
-      // Three widths, so it never crowds: wide → full names everywhere;
-      // medium → short title + labelled pills + Minimise icon; narrow →
-      // short title + icon pills (+ counts) + Minimise icon.
-      final wide = cons.maxWidth >= 560;
-      final roomy = cons.maxWidth >= 400;
-      // Pills say the SAME names as the shared view's headers; their
-      // counts mean "waiting there" (new statuses, people live, unread),
-      // which the tooltip spells out.
-      Widget pill(String key, IconData icon, String text, int n,
-          [String? what]) {
-        final hot = n > 0;
-        return Padding(
-          padding: const EdgeInsets.only(right: 6),
-          child: Tooltip(
-            // Desktop (wide): the keyboard shortcut rides along.
-            message: (key == view
-                    ? 'Back to all'
-                    : (n > 0 && what != null ? '$text · $n $what' : text)) +
-                (wide
-                    ? '   Alt+${HomePageState.kCircleViews.indexOf(key) + 1}'
-                    : ''),
-            // Hold a pill → that section peeks over this one; let go → gone.
-            child: GestureDetector(
-              onLongPressStart: key == view
-                  ? null
-                  : (_) => _CirclePeek.show(
-                      context,
-                      _peekContent(key, listening, circle, scheme, textColor),
-                      text),
-              onLongPressEnd: (_) => _CirclePeek.hide(),
-              onLongPressCancel: _CirclePeek.hide,
-              // Something new arrived there → the pill breathes once.
-              child: _PulseOnRise(
-              value: n,
-              color: scheme.primary,
-              child: Material(
-              color: hot
-                  ? scheme.primary.withValues(alpha: 0.10)
-                  : Colors.transparent,
-              shape: StadiumBorder(
-                  side: BorderSide(
-                      color: hot
-                          ? scheme.primary.withValues(alpha: 0.45)
-                          : scheme.outlineVariant.withValues(alpha: 0.5))),
-              child: InkWell(
-                customBorder: const StadiumBorder(),
-                onTap: () => _setCircleView(key),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                      horizontal: roomy ? 9 : 7, vertical: 4),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(icon, size: 14, color: ink),
-                    if (roomy) ...[
-                      const SizedBox(width: 4),
-                      Text(text,
-                          style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight:
-                                  hot ? FontWeight.w800 : FontWeight.w600)),
-                    ],
-                    if (hot) ...[
-                      const SizedBox(width: 4),
-                      Text('$n',
-                          style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: ink)),
-                    ],
-                  ]),
+    final isDark = scheme.brightness == Brightness.dark;
+    final segs = <(String, IconData, String, int, String)>[
+      ('all', Icons.dashboard_rounded, 'All', 0, ''),
+      if (_myUserId != null)
+        ('stories', Icons.auto_stories_rounded, 'Status', storiesUnseen,
+            'new'),
+      ('listening', Icons.headphones_rounded, 'Listening', listening.length,
+          'live now'),
+      ('chats', Icons.forum_rounded, 'Circle', unread, 'unread'),
+    ];
+    final sel = segs.indexWhere((s) => s.$1 == view).clamp(0, segs.length - 1);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 0, 8),
+      child: LayoutBuilder(builder: (context, cons) {
+        const minW = 34.0;
+        final trackW = cons.maxWidth - minW - 4;
+        final segW = trackW / segs.length;
+        final labelled = segW >= 74;
+        final wideKeys = cons.maxWidth >= 560;
+        final thumbTop = Color.lerp(scheme.primary, Colors.white, 0.22)!;
+        final thumbBot = Color.lerp(scheme.primary, Colors.black, 0.22)!;
+        final onThumb = readableOn(scheme.primary);
+        return Row(children: [
+          SizedBox(
+            width: trackW,
+            height: 38,
+            child: DecoratedBox(
+              // The sunken track: darker at the top (an inset shadow).
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(19),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: isDark
+                      ? [
+                          Color.lerp(scheme.surface, Colors.black, 0.45)!,
+                          scheme.surfaceContainerHigh,
+                        ]
+                      : [
+                          Color.lerp(scheme.surfaceContainerHighest,
+                              Colors.black, 0.10)!,
+                          scheme.surfaceContainerHighest,
+                        ],
                 ),
+                border: Border.all(
+                    color: scheme.outlineVariant.withValues(alpha: 0.45)),
               ),
-            ),
-            ),
-            ),
-          ),
-        );
-      }
-
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(6, 6, 0, 6),
-        child: Row(children: [
-          Text((wide ? label : shortLabel).toUpperCase(),
-              style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.2,
-                  color: scheme.onSurfaceVariant)),
-          if (count != null) ...[
-            const SizedBox(width: 5),
-            Text('· $count',
-                style: TextStyle(
-                    fontSize: 10.5, fontWeight: FontWeight.w800, color: ink)),
-          ],
-          const SizedBox(width: 10),
-          // The other sections, scrolling sideways if they ever overflow.
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(children: [
-                pill(view, Icons.dashboard_rounded, 'All', 0),
-                if (view != 'stories' && _myUserId != null)
-                  pill('stories', Icons.auto_stories_rounded, 'Status',
-                      storiesUnseen, 'new'),
-                if (view != 'listening')
-                  pill('listening', Icons.headphones_rounded, 'Listening',
-                      live, 'live now'),
-                if (view != 'chats')
-                  pill('chats', Icons.forum_rounded, 'Your circle', unread,
-                      'unread'),
+              child: Stack(children: [
+                // The raised, lit key — slides (with a little spring).
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 360),
+                  curve: Curves.easeOutBack,
+                  left: sel * segW + 3,
+                  top: 3,
+                  bottom: 3,
+                  width: segW - 6,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [thumbTop, scheme.primary, thumbBot],
+                        stops: const [0.0, 0.55, 1.0],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: scheme.primary.withValues(alpha: 0.45),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.30),
+                          blurRadius: 3,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    // A glassy highlight along its top edge.
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Container(
+                        height: 1.2,
+                        margin: const EdgeInsets.symmetric(horizontal: 10),
+                        color: Colors.white.withValues(alpha: 0.35),
+                      ),
+                    ),
+                  ),
+                ),
+                Row(children: [
+                  for (var i = 0; i < segs.length; i++)
+                    SizedBox(
+                      width: segW,
+                      child: _switchSeg(
+                        scheme,
+                        segs[i],
+                        selected: i == sel,
+                        labelled: labelled,
+                        onThumb: onThumb,
+                        tip: wideKeys
+                            ? '   Alt+${HomePageState.kCircleViews.indexOf(segs[i].$1) + 1}'
+                            : '',
+                        peek: () => _peekContent(
+                            segs[i].$1, listening, circle, scheme, textColor),
+                      ),
+                    ),
+                ]),
               ]),
             ),
           ),
-          wide
-              ? _maxControl(scheme, view)
-              : IconButton(
-                  tooltip: 'Minimise',
-                  visualDensity: VisualDensity.compact,
-                  icon: Icon(Icons.close_fullscreen_rounded,
-                      size: 16, color: ink),
-                  onPressed: () => _setCircleView(view),
+          const SizedBox(width: 4),
+          // ⤡ — minimise, for those who learned it (All does the same).
+          SizedBox(
+            width: minW,
+            child: IconButton(
+              tooltip: 'Minimise',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              icon: Icon(Icons.close_fullscreen_rounded,
+                  size: 17, color: accentInk(scheme)),
+              onPressed: () => _goCircleView('all'),
+            ),
+          ),
+        ]);
+      }),
+    );
+  }
+
+  Widget _switchSeg(
+    ColorScheme scheme,
+    (String, IconData, String, int, String) s, {
+    required bool selected,
+    required bool labelled,
+    required Color onThumb,
+    required String tip,
+    required Widget Function() peek,
+  }) {
+    final (key, icon, text, n, what) = s;
+    final hot = n > 0 && !selected;
+    final fg = selected
+        ? onThumb
+        : hot
+            ? accentInk(scheme)
+            : scheme.onSurfaceVariant;
+    final message = (selected && key != 'all')
+        ? 'Back to all'
+        : (n > 0 && what.isNotEmpty ? '$text · $n $what' : text);
+    return Tooltip(
+      message: message + tip,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => selected ? _goCircleView('all') : _goCircleView(key),
+        // Hold → that section peeks over this one; let go → gone.
+        onLongPressStart: selected
+            ? null
+            : (_) => _CirclePeek.show(context, peek(), text),
+        onLongPressEnd: (_) => _CirclePeek.hide(),
+        onLongPressCancel: _CirclePeek.hide,
+        child: _PulseOnRise(
+          value: n,
+          color: scheme.primary,
+          child: SizedBox(
+            height: 38,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AnimatedScale(
+                  duration: const Duration(milliseconds: 260),
+                  curve: Curves.easeOutBack,
+                  scale: selected ? 1.12 : 1,
+                  child: Icon(icon, size: 15, color: fg),
                 ),
-        ]),
-      );
-    });
+                if (labelled) ...[
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 200),
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight:
+                              selected ? FontWeight.w800 : FontWeight.w600,
+                          color: fg),
+                      child: Text(text,
+                          maxLines: 1, overflow: TextOverflow.fade,
+                          softWrap: false),
+                    ),
+                  ),
+                ],
+                if (hot) ...[
+                  const SizedBox(width: 4),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: scheme.primary,
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Text(n > 99 ? '99+' : '$n',
+                        style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: readableOn(scheme.primary))),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   /// What a held pill peeks: that section, read-only, in a floating card.
@@ -909,5 +996,56 @@ class _CirclePeek {
   static void hide() {
     _entry?.remove();
     _entry = null;
+  }
+}
+
+/// Turns a Circle section change like a cube face: the new view swings in
+/// from the side it lives on (← forward: All → Status → Listening →
+/// Circle; → back), with depth and a soft fade, while the old one swings
+/// away. [forward] is set by HomePageState._goCircleView.
+class _CircleFlip extends StatelessWidget {
+  const _CircleFlip({required this.child});
+  final Widget child;
+  static bool forward = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 420),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      layoutBuilder: (cur, prev) =>
+          Stack(fit: StackFit.expand, children: [...prev, ?cur]),
+      transitionBuilder: (c, anim) {
+        final incoming = c.key == child.key;
+        return AnimatedBuilder(
+          animation: anim,
+          child: c,
+          builder: (_, w) {
+            final t = anim.value; // 0 → 1 coming in; 1 → 0 going out
+            final dir = forward ? 1.0 : -1.0;
+            // In: hinged on the near edge, swinging flat. Out: away.
+            final angle = (1 - t) * 0.55 * (incoming ? dir : -dir);
+            final hinge = incoming
+                ? (dir > 0 ? Alignment.centerLeft : Alignment.centerRight)
+                : (dir > 0 ? Alignment.centerRight : Alignment.centerLeft);
+            return IgnorePointer(
+              ignoring: !incoming,
+              child: Opacity(
+                opacity: t.clamp(0.0, 1.0),
+                child: Transform(
+                  alignment: hinge,
+                  transform: Matrix4.identity()
+                    ..setEntry(3, 2, 0.0014)
+                    ..rotateY(angle),
+                  child: w,
+                ),
+              ),
+            );
+          },
+        );
+      },
+      child: child,
+    );
   }
 }

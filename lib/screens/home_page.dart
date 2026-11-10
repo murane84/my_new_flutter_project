@@ -379,6 +379,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void _goCircleView(String next, {bool remember = true}) {
     if (next == _circleView) return;
     _smartLandingDone = true; // any move of mine beats the smart landing
+    // Which way the cube turns: further along the order → forward.
+    _CircleFlip.forward = kCircleViews.indexOf(next) >
+        kCircleViews.indexOf(_circleView);
     HapticFeedback.selectionClick();
     setState(() {
       _circleView = next;

@@ -419,6 +419,13 @@ class CallService {
     // relying on the push: in the app the offer arrives over the socket, and
     // the push may be late, deduplicated or blocked. Same id as the push's
     // notification, so the two never double up.
+    if (kIsWeb) {
+      // Web: the ringing screen is in the tab; if the tab is in the
+      // background, a browser notification brings me back to answer.
+      unawaited(showCallNotification(
+          caller: peerName.isEmpty ? 'Someone' : peerName,
+          callerId: '$from'));
+    }
     if (_androidApp) {
       final who = peerName.isEmpty ? 'Someone' : peerName;
       final since = DateTime.now().millisecondsSinceEpoch;

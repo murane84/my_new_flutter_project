@@ -12,6 +12,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../screens/api_service.dart';
 import 'group_meta.dart' show GroupMeta;
 import 'quiet_hours.dart';
+import 'web_notify_stub.dart'
+    if (dart.library.js_interop) 'web_notify_web.dart';
 
 /// Native bridge (see android MainActivity) for OS state the notification
 /// plugin can't report — currently the full-screen-intent grant.
@@ -202,7 +204,12 @@ Future<void> showAlutaNotification({
   String? personName,
   bool silent = false,
 }) async {
-  if (kIsWeb) return;
+  if (kIsWeb) {
+    _webNotify(title, body,
+        payload: jsonEncode({'type': 'aluta', ...payload}),
+        tag: personKey ?? 'aluta-$id');
+    return;
+  }
   try {
     if (!_ready) await initNotifications();
     final p = {'type': 'aluta', ...payload};
@@ -337,6 +344,33 @@ Map<String, dynamic> _decodePayload(String? raw) {
 
 /// Foreground / app-alive tap handler. A tapped Accept/Decline action (or the
 /// notification body) lands here; we hand call actions to [onCallAction].
+/// Web: the browser's own notification, only while the Aluta tab is in the
+/// background (an open tab shows its in-app banners). A click focuses the
+/// tab and routes exactly like tapping a phone notification.
+void _webNotify(String title, String body,
+    {String? payload, String? tag}) {
+  if (!webTabHidden) return;
+  webNotifyShow(
+    title: title,
+    body: body,
+    tag: tag,
+    onClick: payload == null
+        ? null
+        : () => _onNotifResponse(NotificationResponse(
+              notificationResponseType:
+                  NotificationResponseType.selectedNotification,
+              payload: payload,
+            )),
+  );
+}
+
+/// Ask the browser for notification permission (web only; a no-op elsewhere).
+/// Returns 'granted' / 'denied' / 'default' / 'unsupported'.
+Future<String> requestWebNotifications() => webNotifyRequest();
+
+/// The browser's current notification permission (web only).
+String get webNotificationsPermission => webNotifyPermission;
+
 void _onNotifResponse(NotificationResponse r) {
   final a = r.actionId;
   if (a == kCallAccept || a == kCallDecline) {
@@ -793,10 +827,28 @@ Future<void> showMessageNotification({
   // Not a message (a heartbeat, "they're online"): quiet hours hush it.
   bool hushable = false,
 }) async {
-  if (kIsWeb) return;
   // A group the user muted stays quiet (except a mention of me).
   final gid = int.tryParse(conversationId ?? '');
   if (!bypassMute && gid != null && await GroupMeta.isMutedStored(gid)) {
+    return;
+  }
+  if (kIsWeb) {
+    final hasGroup = conversationId != null && conversationId.isNotEmpty;
+    final hasSender = senderId != null && senderId.isNotEmpty;
+    _webNotify(title, body,
+        payload: (hasGroup || hasSender)
+            ? jsonEncode({
+                'type': 'message',
+                if (hasSender) 'friend_id': senderId,
+                'sender_name': senderName ?? title,
+                if (hasGroup) 'conversation_id': conversationId,
+                if (hasGroup && groupTitle != null && groupTitle.isNotEmpty)
+                  'group_title': groupTitle,
+                if (messageId != null && messageId.isNotEmpty)
+                  'message_id': messageId,
+              })
+            : null,
+        tag: hasGroup ? 'c$conversationId' : (hasSender ? 's$senderId' : null));
     return;
   }
   try {
@@ -906,7 +958,17 @@ Future<void> showCallNotification({
   int? room,
   int id = _callNotifId,
 }) async {
-  if (kIsWeb) return;
+  if (kIsWeb) {
+    // The in-app ringing screen is already up — this just pulls me back to
+    // the Aluta tab.
+    _webNotify(
+        isGroup ? '📞 $caller' : '📞 $caller is calling',
+        isGroup
+            ? 'Group call on Aluta — tap to answer'
+            : 'Aluta call — tap to answer',
+        tag: 'aluta-call');
+    return;
+  }
   try {
     if (!_ready) await initNotifications();
     // Attach who's calling so the Accept/Decline actions (and a cold-start

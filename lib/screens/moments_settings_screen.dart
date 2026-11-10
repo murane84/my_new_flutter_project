@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show ValueListenable, kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../services/heart_lock.dart';
@@ -6,6 +6,8 @@ import '../services/moment_prefs.dart';
 import '../services/quiet_hours.dart';
 import '../services/last_seen_privacy.dart';
 import '../services/status_privacy.dart';
+import '../services/notif_service.dart'
+    show requestWebNotifications, webNotificationsPermission;
 import 'stories/status_audience_sheet.dart';
 import '../services/song_insights.dart';
 import '../utils/popup_shell.dart';
@@ -262,6 +264,31 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
             onChanged: mp.setGlowDaily,
           ),
           _section('Notifications'),
+          // Web: the browser asks once; then Aluta can notify while its tab
+          // is in the background (messages, calls, invites, Our Space…).
+          if (kIsWeb)
+            Builder(builder: (context) {
+              final perm = webNotificationsPermission;
+              final on = perm == 'granted';
+              return _row(
+                Icons.notifications_active_rounded,
+                'Browser notifications',
+                switch (perm) {
+                  'granted' =>
+                    'On — Aluta notifies you while its tab is in the background',
+                  'denied' =>
+                    'Blocked in your browser — allow notifications for this site in its settings',
+                  'unsupported' => 'This browser can’t show notifications',
+                  _ => 'Get messages, calls and invites when Aluta isn’t on screen',
+                },
+                on,
+                (v) async {
+                  if (!v || on) return;
+                  await requestWebNotifications();
+                  if (mounted) setState(() {});
+                },
+              );
+            }),
           _quietHours(),
           _section('Privacy'),
           _lastSeenPrivacy(),

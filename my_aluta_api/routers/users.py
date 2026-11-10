@@ -515,7 +515,7 @@ def have_i_blocked(user_id: int, db: Session = Depends(get_db),
 
 
 @router.post("/block/{blocked_user_id}", response_model=bool)
-def toggle_block_user(
+async def toggle_block_user(
     blocked_user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -535,6 +535,22 @@ def toggle_block_user(
         new_block = BlockStatus(user_id=current_user.id, blocked_user_id=blocked_user_id)
         db.add(new_block)
         db.commit()
+        # Whatever is live between the two stops now, not at the next join:
+        # their 1:1 Listen Together / circle room, and a call in progress
+        # (each side gets the other's hang-up; an idle phone ignores it).
+        try:
+            from routers.live import cut_pair
+            await cut_pair(current_user.id, blocked_user_id)
+        except Exception:
+            pass
+        try:
+            from websocket_manager import safe_notify_user
+            safe_notify_user(blocked_user_id,
+                             {"type": "call_end", "from": current_user.id})
+            safe_notify_user(current_user.id,
+                             {"type": "call_end", "from": blocked_user_id})
+        except Exception:
+            pass
         return True  # Blocked
 
 

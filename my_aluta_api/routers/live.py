@@ -299,6 +299,32 @@ def decline_session(
     return {"detail": "ok"}
 
 
+async def cut_pair(a: int, b: int) -> None:
+    """A block was just made between [a] and [b]: their 1:1 Listen Together
+    ends, the other one is taken out of a circle room hosted by either of
+    them (and can't rejoin — see the ws re-check). A GROUP jam follows the
+    group's rules, so it's left alone."""
+    pair = {int(a), int(b)}
+    for sid, s in list(MANAGER.sessions.items()):
+        if s.conversation_id is not None:
+            continue
+        try:
+            if not s.open:
+                if pair <= set(s.allowed_ids):
+                    await MANAGER.broadcast_text(
+                        sid, json.dumps({"type": "end", "reason": "host_ended"}))
+                    MANAGER.announce_room_ended(s)
+                    MANAGER.remove(sid)
+            elif s.host_id in pair:
+                other = next(iter(pair - {s.host_id}))
+                s.allowed_ids.discard(other)
+                await MANAGER.send_to_user(
+                    sid, other,
+                    json.dumps({"type": "end", "reason": "host_ended"}))
+        except Exception:
+            pass
+
+
 @router.post("/sessions/{session_id}/end")
 async def end_session(
     session_id: str,

@@ -65,7 +65,9 @@ def bond_ids(db, uid: int) -> set:
     """uid's live bonds: an accepted bond whose Our Space BOTH still keep.
     If either un-pins it, it's over for both — the same rule the app uses
     (status 'partner_left' / no Space) and spaces._active_partner."""
-    return _accepted(db, uid) & _i_keep(db, uid) & _keep_me(db, uid)
+    import crud
+    return (_accepted(db, uid) & _i_keep(db, uid) & _keep_me(db, uid)) \
+        - crud._blocked_with(db, uid)
 
 
 def bonded_to(db, uid: int) -> set:

@@ -289,6 +289,9 @@ def _active_partner(db: Session, space: RelationshipSpace,
     partner = _partner_id(space, current_user_id)
     if partner is None:
         return None
+    # A block (either way) silences the bond too.
+    if crud.blocked_either(db, current_user_id, partner):
+        return None
     return partner if _space_status(db, space, current_user_id) == "active" \
         else None
 
@@ -443,6 +446,10 @@ def _maybe_backfill_bond_request(db: Session, space: RelationshipSpace,
     if partner is None:
         return
     if _sibling_space(db, space, current_user.id) is not None:
+        return
+    # Same rule as a fresh request: only to a mutual friend, never across a
+    # block (are_mutual covers both).
+    if not crud.are_mutual(db, current_user.id, partner):
         return
     already = (
         db.query(BondRequest)

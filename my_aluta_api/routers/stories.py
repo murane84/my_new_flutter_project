@@ -379,6 +379,9 @@ def story_viewers(
     # WHEN someone watched is activity, so it follows their last-seen choice
     # (privacy.py, both ways): hidden → they're listed, without a time.
     seen_ok = privacy.visible_to(db, current_user.id, [u.id for _, u in rows])
+    # visible_to assumes friends: someone who has since unfriended / blocked
+    # keeps their time hidden, like their last seen.
+    mutual = _story_circle(db, current_user.id)
     reacts = {
         int(r.user_id): r.emoji
         for r in db.query(StoryReaction).filter(
@@ -390,7 +393,9 @@ def story_viewers(
             username=u.username,
             avatar_url=u.avatar_url,
             phone=u.phone,
-            viewed_at=v.viewed_at if seen_ok.get(u.id, False) else None,
+            viewed_at=(v.viewed_at
+                       if (u.id in mutual and seen_ok.get(u.id, False))
+                       else None),
             reaction=reacts.get(int(u.id)),
         )
         for v, u in rows

@@ -189,6 +189,9 @@ class _GlowFeedState extends State<GlowFeed> {
         const SizedBox(height: 10),
         Expanded(
           child: ListView(
+      // Like the Circle / Harmony lists: back from a chat (or another
+      // layer) lands where I'd scrolled.
+      key: const PageStorageKey<String>('glow-list'),
       padding: const EdgeInsets.fromLTRB(2, 0, 2, 20),
       children: [
         if (showToday) ...[

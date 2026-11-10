@@ -2892,6 +2892,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   }
 
   String _searchQuery = '';
+  // The circle search I had typed when I opened a chat from its results —
+  // restored when I come back, so "back" returns to exactly what I left.
+  String _searchBeforeChat = '';
+  bool _wasInChat = false;
 
   void _filterFriends(String query) {
     setState(() {
@@ -3465,6 +3469,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   void openChat(Map<String, dynamic> friend, {String? jumpToMessageId}) {
     var leftFull = false;
+    if (_searchQuery.isNotEmpty) _searchBeforeChat = _searchQuery;
     setState(() {
       _pendingJumpMessageId = jumpToMessageId;
       _clearSearchState();
@@ -3518,6 +3523,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final mentionMid = gid == null ? null : _groupMentions.remove(gid);
     jumpToMessageId ??=
         (mentionMid != null && mentionMid.isNotEmpty) ? mentionMid : null;
+    if (_searchQuery.isNotEmpty) _searchBeforeChat = _searchQuery;
     setState(() {
       _pendingJumpMessageId = jumpToMessageId;
       _clearSearchState();
@@ -5269,6 +5275,23 @@ class HomePageState extends rp.ConsumerState<HomePage>
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final scheme = Theme.of(context).colorScheme;
+
+    // Back from a chat (any route: header back, system back, a closed
+    // panel) → the list returns as I left it: same scroll position (the
+    // lists' PageStorageKeys) and the same search, if I'd searched.
+    final inChat = _activeFriendId != null || _activeGroup != null;
+    if (_wasInChat && !inChat && _searchBeforeChat.isNotEmpty) {
+      final q = _searchBeforeChat;
+      _searchBeforeChat = '';
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _activeFriendId != null || _activeGroup != null) {
+          return;
+        }
+        _searchCtrl.text = q;
+        _filterFriends(q);
+      });
+    }
+    _wasInChat = inChat;
 
     // Back / swipe-back should step DOWN the view stack (close an open chat →
     // collapse a full-screen panel → then exit), not jump off the app.

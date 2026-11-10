@@ -2,6 +2,12 @@ import 'package:flutter/material.dart';
 import '../screens/token_helper.dart' show mediaAuthHeaders;
 import 'net_image.dart';
 
+/// How the online dot reads (Circle list, by Listen-Together readiness):
+/// [plain] online · [ready] online with a good-enough connection to listen
+/// together (a tiny 🎧 inside the green) · [weak] online but the connection
+/// is too weak right now (a hollow green ring — still online, not "away").
+enum OnlineDot { plain, ready, weak }
+
 class InitialsAvatar extends StatelessWidget {
   final String name;
   final double radius;
@@ -11,11 +17,12 @@ class InitialsAvatar extends StatelessWidget {
   /// to load) the coloured initials are shown instead.
   final String? imageUrl;
 
-  /// The online dot's colour (default green). The Circle list tints it by
-  /// Listen-Together connection quality (green strong · amber okay · grey
-  /// weak) instead of a separate signal icon by the name.
+  /// The online dot's colour (default Aluta green). Readiness for Listen
+  /// Together is shown by [onlineDot]'s SHAPE, never by an amber / grey
+  /// colour that reads as "away".
   final Color? onlineColor;
   final String? onlineTip;
+  final OnlineDot onlineDot;
 
   const InitialsAvatar({
     super.key,
@@ -25,7 +32,52 @@ class InitialsAvatar extends StatelessWidget {
     this.imageUrl,
     this.onlineColor,
     this.onlineTip,
+    this.onlineDot = OnlineDot.plain,
   });
+
+  Widget _dot(BuildContext context) {
+    final green = onlineColor ?? const Color(0xFF2BB673);
+    final surface = Theme.of(context).colorScheme.surface;
+    // Ready to listen together: a touch larger, with a little headphones
+    // glyph — so "green" alone never has to mean two things.
+    final size = radius * (onlineDot == OnlineDot.ready ? 0.66 : 0.55);
+    switch (onlineDot) {
+      case OnlineDot.weak:
+        return Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: surface,
+            shape: BoxShape.circle,
+            border: Border.all(color: green, width: 2.2),
+            boxShadow: [BoxShadow(color: surface, spreadRadius: 1.5)],
+          ),
+        );
+      case OnlineDot.ready:
+        return Container(
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: green,
+            shape: BoxShape.circle,
+            border: Border.all(color: surface, width: 2),
+          ),
+          child: Icon(Icons.headphones_rounded,
+              size: size * 0.52, color: Colors.white),
+        );
+      case OnlineDot.plain:
+        return Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: green,
+            shape: BoxShape.circle,
+            border: Border.all(color: surface, width: 2),
+          ),
+        );
+    }
+  }
 
   Color _colorFromName(String name) {
     final colors = [
@@ -94,18 +146,7 @@ class InitialsAvatar extends StatelessWidget {
             bottom: -1,
             child: Tooltip(
               message: onlineTip ?? '',
-              child: Container(
-                width: radius * 0.55,
-                height: radius * 0.55,
-                decoration: BoxDecoration(
-                  color: onlineColor ?? Colors.green,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.surface,
-                    width: 2,
-                  ),
-                ),
-              ),
+              child: _dot(context),
             ),
           ),
       ],

@@ -1950,15 +1950,18 @@ extension _HomePageHelpers1 on HomePageState {
     final songColor = presence.colorFor(id);
     final ringColor = songColor != null ? Color(songColor) : scheme.primary;
     final story = _friendStory(f['id']);
-    // The online dot also says how good their connection is for Listen
-    // Together (was a separate signal icon by the name).
+    // The online dot also says whether they're good to Listen Together —
+    // always GREEN when online (never amber, which read as "away"): a tiny
+    // 🎧 inside = ready (strong or okay connection); a hollow green ring =
+    // online but too weak right now; plain green = online, not measured.
     final grade = isOnline ? f['net_grade'] : null;
-    final (Color? dotColor, String dotTip) = switch (grade) {
-      'good' => (const Color(0xFF2BB673), 'Online · strong connection'),
-      'fair' => (const Color(0xFFFFA000), 'Online · okay connection'),
-      'weak' || 'offline' =>
-        (const Color(0xFF9E9E9E), 'Online · weak connection right now'),
-      _ => (null, 'Online'),
+    final (OnlineDot dotStyle, String dotTip) = switch (grade) {
+      'good' => (OnlineDot.ready, 'Online · ready to listen together'),
+      'fair' => (OnlineDot.ready,
+          'Online · ready to listen together (okay connection)'),
+      'weak' || 'offline' => (OnlineDot.weak,
+          'Online · weak connection — listening together may stutter'),
+      _ => (OnlineDot.plain, 'Online'),
     };
     final avatar = InitialsAvatar(
       name: name,
@@ -1966,7 +1969,7 @@ extension _HomePageHelpers1 on HomePageState {
       // A music ring already says "here now" — the dot would crowd it.
       isOnline: isOnline && mode == RingMode.none,
       imageUrl: _avatarFull(f['avatar_url']),
-      onlineColor: dotColor,
+      onlineDot: dotStyle,
       onlineTip: dotTip,
     );
     // ONE fixed geometry: photo [face] inside a [slot] whose 4 px rim is

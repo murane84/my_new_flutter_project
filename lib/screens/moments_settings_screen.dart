@@ -125,8 +125,14 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
                         style: OutlinedButton.styleFrom(
                             minimumSize: const Size.fromHeight(44),
                             shape: const StadiumBorder()),
-                        child: Text('$label  ${_hm(value)}',
-                            style: TextStyle(color: accentInk(scheme))),
+                        // Narrow phones: the time scales down, never wraps.
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('$label  ${_hm(value)}',
+                              maxLines: 1,
+                              softWrap: false,
+                              style: TextStyle(color: accentInk(scheme))),
+                        ),
                       ),
                     ),
                   ),
@@ -163,19 +169,36 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
                   ),
                 ]),
                 const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: SegmentedButton<String>(
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(value: 'circle', label: Text('My circle')),
-                      ButtonSegment(value: 'bonds', label: Text('Bonds')),
-                      ButtonSegment(value: 'nobody', label: Text('Nobody')),
-                    ],
-                    selected: {m},
-                    onSelectionChanged: (s) => lp.set(s.first),
-                  ),
-                ),
+                // Narrow phones: shorter labels so the three choices fit
+                // on one line without wrapping or clipping.
+                LayoutBuilder(builder: (context, box) {
+                  final narrow = box.maxWidth < 300;
+                  Widget label(String t) => FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(t, maxLines: 1, softWrap: false));
+                  return SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<String>(
+                      showSelectedIcon: false,
+                      style: narrow
+                          ? const ButtonStyle(
+                              visualDensity: VisualDensity.compact,
+                              padding: WidgetStatePropertyAll(
+                                  EdgeInsets.symmetric(horizontal: 6)),
+                            )
+                          : null,
+                      segments: [
+                        ButtonSegment(
+                            value: 'circle',
+                            label: label(narrow ? 'Circle' : 'My circle')),
+                        ButtonSegment(value: 'bonds', label: label('Bonds')),
+                        ButtonSegment(value: 'nobody', label: label('Nobody')),
+                      ],
+                      selected: {m},
+                      onSelectionChanged: (s) => lp.set(s.first),
+                    ),
+                  );
+                }),
                 const SizedBox(height: 8),
                 Text(
                   switch (m) {

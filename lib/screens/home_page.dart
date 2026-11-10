@@ -3925,7 +3925,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
                         );
                       },
                     )),
-                    const SizedBox(width: 10),
+                    SizedBox(
+                        width: MediaQuery.sizeOf(context).width < 360 ? 6 : 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4061,6 +4062,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
 
     if (_activeFriendId != null) {
+      // Tight phones (< 360 px): slimmer gaps so the name + status line keep
+      // room next to the action pill; the photo slot never shrinks.
+      final tight = MediaQuery.sizeOf(context).width < 360;
+      final gap = tight ? 6.0 : 10.0;
       return Row(
         children: [
           _PanelToggleBtn(
@@ -4077,7 +4082,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
               _avatarExpanded = false;
             }),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: gap),
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () {
@@ -4212,7 +4217,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
               ),
             )),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: gap),
           Expanded(
             // Tap the friend's name to open their profile details (phone, etc.).
             child: GestureDetector(
@@ -4231,11 +4236,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    // Our Space's "your song": ♪ — tap to play it.
+                    // Our Space's "your song": ♪ — tap to play it. Tight
+                    // phones keep the room for the name (it's in Our Space).
                     Builder(builder: (_) {
                       final ys = _yourSongWith(
                           int.tryParse(_activeFriendId ?? '') ?? -1);
-                      if (ys == null) return const SizedBox.shrink();
+                      if (ys == null || tight) return const SizedBox.shrink();
                       return Tooltip(
                         message: 'Your song · $ys',
                         child: GestureDetector(

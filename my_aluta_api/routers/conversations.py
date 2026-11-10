@@ -84,6 +84,26 @@ def _conversation_out(db: Session, conv: Conversation, me: int) -> schemas.Conve
     )
 
 
+def _addable(db: Session, me: int, ids) -> list:
+    """Who I may put in a group: only people in my own circle, and never
+    across a block (either way). Anyone else's id is quietly skipped — a
+    stranger can't be pulled into a group by guessing their id."""
+    import crud
+    friends = crud._get_friend_ids(db, me)
+    out = []
+    for raw in ids or []:
+        try:
+            uid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if uid == me or uid not in friends or uid in out:
+            continue
+        if crud.blocked_either(db, me, uid):
+            continue
+        out.append(uid)
+    return out
+
+
 def _require_member(db: Session, cid: int, me: int) -> Conversation:
     conv = cc.get_conversation(db, cid)
     if not conv or not cc.is_member(db, cid, me):
@@ -110,7 +130,8 @@ def create_group(
     if not (payload.title or "").strip():
         raise HTTPException(status_code=400, detail="Group needs a name")
     conv = cc.create_group(
-        db, current_user.id, payload.title, payload.member_ids, payload.avatar_url
+        db, current_user.id, payload.title,
+        _addable(db, current_user.id, payload.member_ids), payload.avatar_url
     )
     # Tell the other members they've been added to a new group.
     safe_broadcast_users(
@@ -374,7 +395,8 @@ def add_members(
         raise HTTPException(status_code=400, detail="Not a group")
     if not cc.is_admin(db, cid, current_user.id):
         raise HTTPException(status_code=403, detail="Only admins can add members")
-    added = cc.add_members(db, cid, payload.user_ids)
+    added = cc.add_members(
+        db, cid, _addable(db, current_user.id, payload.user_ids))
     if added:
         safe_broadcast_users(
             cc.member_ids(db, cid),

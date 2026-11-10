@@ -535,6 +535,21 @@ async def toggle_block_user(
         new_block = BlockStatus(user_id=current_user.id, blocked_user_id=blocked_user_id)
         db.add(new_block)
         db.commit()
+        # A bond request still pending between them is withdrawn.
+        try:
+            from models import BondRequest
+            from sqlalchemy import or_, and_
+            db.query(BondRequest).filter(
+                BondRequest.status == "pending",
+                or_(and_(BondRequest.from_user_id == current_user.id,
+                         BondRequest.to_user_id == blocked_user_id),
+                    and_(BondRequest.from_user_id == blocked_user_id,
+                         BondRequest.to_user_id == current_user.id)),
+            ).update({BondRequest.status: "cancelled"},
+                     synchronize_session=False)
+            db.commit()
+        except Exception:
+            db.rollback()
         # Whatever is live between the two stops now, not at the next join:
         # their 1:1 Listen Together / circle room, and a call in progress
         # (each side gets the other's hang-up; an idle phone ignores it).

@@ -372,8 +372,14 @@ def mark_read(
         else cc.latest_message_id(db, cid)
     )
     if up_to and cc.mark_read_up_to(db, cid, current_user.id, up_to):
+        members = cc.member_ids(db, cid)
+        conv = cc.get_conversation(db, cid)
+        if conv is not None and not conv.is_group:
+            # A 1:1 across a block: my reading is nothing they get told.
+            members = [u for u in members
+                       if not crud.blocked_either(db, current_user.id, int(u))]
         safe_broadcast_users(
-            cc.member_ids(db, cid),
+            members,
             {
                 "type": "conversation_receipts",
                 "conversation_id": cid,

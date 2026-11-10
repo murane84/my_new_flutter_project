@@ -1099,6 +1099,11 @@ def accept_bond(
         raise HTTPException(status_code=409,
                             detail="This request was already handled")
     requester = req.from_user_id
+    # Same rule as asking: only between mutual friends, never across a block
+    # (either may have happened since the request was sent).
+    if not crud.are_mutual(db, current_user.id, requester):
+        raise HTTPException(status_code=409,
+                            detail="This request is no longer available")
     # My (accepter's) mirror.
     my_space = _space_owned_with(db, current_user.id, requester)
     if my_space is None:

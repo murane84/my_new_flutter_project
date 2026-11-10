@@ -427,6 +427,10 @@ def message_info(db: Session, conversation_id: int, message_id: int, sender_id: 
     opens = {}
     msg = db.query(Message).filter(Message.id == message_id).first()
     is_heart = bool(msg) and (msg.message_type or "") == "heart"
+    # A DM held back from its receiver (sent while they had the sender
+    # blocked) quietly stays "sent" — never delivered / read / opened.
+    held = (bool(msg) and msg.receiver_id is not None
+            and msg.visible_to_receiver is False)
     if is_heart and msg.heart_opens:
         try:
             import json
@@ -441,9 +445,9 @@ def message_info(db: Session, conversation_id: int, message_id: int, sender_id: 
             "avatar_url": (u.avatar_url if u else None),
             "phone": (u.phone if u else None),
         }
-        lr = m.last_read_message_id or 0
-        ld = m.last_delivered_message_id or 0
-        if is_heart and str(m.user_id) in opens:
+        lr = 0 if held else (m.last_read_message_id or 0)
+        ld = 0 if held else (m.last_delivered_message_id or 0)
+        if is_heart and not held and str(m.user_id) in opens:
             opened.append({**base, "timestamp": opens[str(m.user_id)]})
         if lr >= message_id:
             read.append({**base, "timestamp": m.last_read_at})
@@ -458,6 +462,10 @@ def message_info(db: Session, conversation_id: int, message_id: int, sender_id: 
 
 
 def seen_by(db: Session, conversation_id: int, message_id: int, exclude_user: int | None = None) -> list[dict]:
+    msg = db.query(Message).filter(Message.id == message_id).first()
+    if msg is not None and msg.receiver_id is not None and \
+            msg.visible_to_receiver is False:
+        return []  # held back by a block: nobody "saw" it
     q = (
         db.query(ConversationMember)
         .filter(

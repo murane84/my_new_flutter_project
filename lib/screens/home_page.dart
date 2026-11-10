@@ -4889,7 +4889,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       }
                       // Away: tap the line for "tell me when they're
                       // online / play music" right where you're wondering.
-                      if (typingKind == null && offline && fid > 0) {
+                      if (typingKind == null &&
+                          offline &&
+                          fid > 0 &&
+                          _isMutual(fid)) {
                         return GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTap: () => _showAwayWatchSheet(fid, who),

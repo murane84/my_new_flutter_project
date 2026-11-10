@@ -1190,7 +1190,11 @@ extension _HomeFriendListView on HomePageState {
     }
     final candidates = _allFriends.where((f) {
       final id = (f['id'] as num?)?.toInt();
-      return id != null && !pinnedIds.contains(id);
+      // Bonds need both to have saved each other (mutual friends).
+      return id != null &&
+          !pinnedIds.contains(id) &&
+          f['added_by_me'] != false &&
+          f['added_me'] != false;
     }).toList();
 
     if (candidates.isEmpty) {

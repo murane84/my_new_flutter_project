@@ -110,6 +110,16 @@ extension _HomeSpaceActions on HomePageState {
   }
 
   /// The Space (if any) that pins this friend.
+  /// Have we BOTH saved each other? Only then do the "two friends"
+  /// features apply (bonds, watches, moments…) — a one-sided contact can
+  /// only message (the server enforces it; this keeps the UI honest).
+  bool _isMutual(int friendId) {
+    final f = _allFriends.firstWhere(
+        (x) => (x['id'] as num?)?.toInt() == friendId,
+        orElse: () => const <String, dynamic>{});
+    return f.isNotEmpty && f['added_by_me'] != false && f['added_me'] != false;
+  }
+
   /// My Space with [friendId] only once the bond is ACCEPTED (status
   /// 'active'). Every bond signal — the heart pin, heartbeat, rings, the
   /// row's heartbeat blink, header extras — waits for this; until then
@@ -639,6 +649,7 @@ extension _HomeSpaceActions on HomePageState {
                 },
               );
             }),
+            if (_isMutual(fid))
             ListTile(
               leading: Icon(Icons.favorite_rounded, color: accentInk(scheme)),
               title: const Text('Pin as Our Space'),
@@ -681,6 +692,7 @@ extension _HomeSpaceActions on HomePageState {
             ),
             // One heads-up the next time they come online, then it ends.
             if (fid > 0 &&
+                _isMutual(fid) &&
                 (OnlineWatchList.instance.isWatching(fid) ||
                     !ref.read(presenceProvider).isOnline(fid)))
               Builder(builder: (_) {
@@ -706,6 +718,7 @@ extension _HomeSpaceActions on HomePageState {
               }),
             // One heads-up (with Tune in) the next time they play a song.
             if (fid > 0 &&
+                _isMutual(fid) &&
                 (OnlineWatchList.instance.isWatchingPlay(fid) ||
                     NowPlayingPresence.instance.trackFor(fid) == null))
               Builder(builder: (_) {

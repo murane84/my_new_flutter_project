@@ -215,7 +215,11 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
       final list = await ApiService().getFriends();
       if (!mounted) return;
       setState(() {
-        _friends = list;
+        // Groups are a "two friends" thing: only people who saved me back
+        // (the server skips anyone else).
+        _friends = list
+            .where((f) => f['added_by_me'] != false && f['added_me'] != false)
+            .toList();
         _loading = false;
       });
     } catch (_) {
@@ -961,6 +965,8 @@ class _AddMembersPickerState extends State<_AddMembersPicker> {
     setState(() {
       _friends = list
           .where((f) => !widget.exclude.contains((f['id'] as num).toInt()))
+          // Mutual friends only (the server skips one-sided contacts).
+          .where((f) => f['added_by_me'] != false && f['added_me'] != false)
           .toList();
       _loading = false;
     });

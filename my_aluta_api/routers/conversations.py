@@ -204,6 +204,14 @@ def get_messages(
     # (inert until the /cached acks arrive). Best-effort.
     cc.purge_cached_conversation(db, cid)
     msgs = cc.get_messages(db, cid, skip, limit)
+    # Per-reader visibility: a message hidden from its receiver (sent across
+    # a block) or deleted-for-me never shows to me here either.
+    me = current_user.id
+    msgs = [
+        m for m in msgs
+        if not ((m.sender_id != me and m.visible_to_receiver is False)
+                or (m.sender_id == me and m.visible_to_sender is False))
+    ]
     # Fetching = delivered on this device; advance our delivered pointer and let
     # the other members' sent-message ticks catch up.
     top = cc.latest_message_id(db, cid)
@@ -237,10 +245,33 @@ def send_message(
                             detail="Only admins can send messages in this group")
     if (payload.message_type or "") == "poll" and not conv.is_group:
         raise HTTPException(status_code=400, detail="Polls are for groups")
+    # 🔒 A 1:1 conversation follows the same block rule as /messages/: I
+    # blocked them → unblock first; they blocked me → kept for me, never
+    # delivered (no socket, no push, hidden from them).
+    they_blocked = False
+    if not conv.is_group:
+        others = [u for u in cc.member_ids(db, cid) if int(u) != current_user.id]
+        if others:
+            i_blocked, they_blocked = crud.block_state(
+                db, current_user.id, int(others[0]))
+            if i_blocked:
+                raise HTTPException(status_code=403,
+                                    detail="Unblock them to send a message")
     try:
         msg = cc.add_message(db, cid, current_user.id, payload)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    if they_blocked:
+        try:
+            msg.visible_to_receiver = False
+            db.commit()
+            db.refresh(msg)
+        except Exception:
+            db.rollback()
+        validated = schemas.MessageWithSender.model_validate(msg)
+        safe_notify_user(current_user.id,
+                         {"type": "message_sent", "data": _serialize(msg)})
+        return validated
     validated = schemas.MessageWithSender.model_validate(msg)
     serialized = _serialize(msg)
     members = cc.member_ids(db, cid)

@@ -290,7 +290,10 @@ def search_messages(
     rows = (
         db.query(Message)
         .filter(Message.is_deleted == False)  # noqa: E712
-        .filter(Message.content.ilike(f"%{term}%"))
+        .filter(Message.content.icontains(term, autoescape=True))
+        # Only what I can see in the chat (not held back by a block, not
+        # "deleted for me").
+        .filter(crud_conversations._visible_to(me))
         # Secret hearts stay secret: never surface their notes in search.
         .filter((Message.message_type.is_(None)) | (Message.message_type != "heart"))
         .filter(cond)

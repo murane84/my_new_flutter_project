@@ -401,9 +401,13 @@ def lookup_user(
                     break
     if user is None:
         # Exact, case-insensitive username match (ilike with no wildcards).
+        # Escape % and _ so "a%" can't browse every username starting with a.
+        esc = (query.replace("\\", "\\\\").replace("%", "\\%")
+               .replace("_", "\\_"))
         user = (
             db.query(User)
-            .filter(User.username.ilike(query), User.id != current_user.id)
+            .filter(User.username.ilike(esc, escape="\\"),
+                    User.id != current_user.id)
             .first()
         )
     if user is None:

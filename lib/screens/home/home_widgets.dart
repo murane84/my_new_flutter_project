@@ -480,15 +480,27 @@ class _LiveInviteDialog extends StatelessWidget {
   }
 }
 
-/// A list row that blinks twice in the theme colour when [active] turns on —
-/// "here it is" (the chat I came back from, or one a new message just moved
-/// to the top). Costs nothing while idle.
+/// How close the person behind a blinking row is — the blink says it.
+enum FlashTier { circle, bond, partner }
+
+/// A list row that blinks when [active] turns on — "here it is" (the chat I
+/// came back from, or one a new message just moved to the top). The blink
+/// rises with closeness ([tier]):
+///  • circle  — two soft pulses in the theme colour;
+///  • bond    — a heartbeat (lub-dub, twice) in rose, with a soft glow;
+///  • partner — the heartbeat in a warm theme → rose → gold glow that
+///              sweeps round the card, and a small 💞 rising at its edge.
+/// Costs nothing while idle.
 class _RowFlash extends StatefulWidget {
   const _RowFlash(
-      {required this.active, required this.color, required this.child});
+      {required this.active,
+      required this.color,
+      required this.child,
+      this.tier = FlashTier.circle});
 
   final bool active;
   final Color color;
+  final FlashTier tier;
   final Widget child;
 
   @override
@@ -497,25 +509,55 @@ class _RowFlash extends StatefulWidget {
 
 class _RowFlashState extends State<_RowFlash>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1500));
+  static const _rose = Color(0xFFFF5C8A);
+  static const _gold = Color(0xFFF2A541);
+
+  late final AnimationController _c = AnimationController(vsync: this);
+
+  Duration get _len => switch (widget.tier) {
+        FlashTier.circle => const Duration(milliseconds: 1500),
+        FlashTier.bond => const Duration(milliseconds: 1800),
+        FlashTier.partner => const Duration(milliseconds: 2200),
+      };
+
+  void _play() {
+    _c.duration = _len;
+    _c.forward(from: 0);
+  }
 
   @override
   void initState() {
     super.initState();
-    if (widget.active) _c.forward(from: 0);
+    if (widget.active) _play();
   }
 
   @override
   void didUpdateWidget(covariant _RowFlash old) {
     super.didUpdateWidget(old);
-    if (widget.active && !old.active) _c.forward(from: 0);
+    if (widget.active && !old.active) _play();
   }
 
   @override
   void dispose() {
     _c.dispose();
     super.dispose();
+  }
+
+  /// Two soft pulses: 0 → 1 → 0 → 1 → 0.
+  static double _blink(double t) => 0.5 - 0.5 * cos(t * pi * 4);
+
+  /// A heartbeat, twice: a strong "lub", a softer "dub", a rest.
+  static double _beat(double t) {
+    final p = (t * 2) % 1.0; // two beats over the animation
+    double bump(double c, double w) {
+      final d = (p - c).abs() / w;
+      return d >= 1 ? 0 : 0.5 + 0.5 * cos(d * pi);
+    }
+
+    final v = bump(0.12, 0.12) + 0.7 * bump(0.38, 0.11);
+    // Fade the whole thing out over the last 15 %.
+    final tail = t > 0.85 ? (1 - t) / 0.15 : 1.0;
+    return (v.clamp(0.0, 1.0)) * tail;
   }
 
   @override
@@ -525,20 +567,139 @@ class _RowFlashState extends State<_RowFlash>
       child: widget.child,
       builder: (context, child) {
         final t = _c.value;
-        // Two soft pulses, then rest: 0 → 1 → 0 → 1 → 0.
-        final v = (t <= 0 || t >= 1) ? 0.0 : 0.5 - 0.5 * cos(t * pi * 4);
-        if (v == 0) return child!;
-        return DecoratedBox(
-          position: DecorationPosition.foreground,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            color: widget.color.withValues(alpha: 0.14 * v),
-            border: Border.all(
-                color: widget.color.withValues(alpha: 0.65 * v), width: 1.5),
-          ),
-          child: child,
-        );
+        if (t <= 0 || t >= 1) return child!;
+        final tier = widget.tier;
+        final v = tier == FlashTier.circle ? _blink(t) : _beat(t);
+        final radius = BorderRadius.circular(18);
+        final Widget glow;
+        switch (tier) {
+          case FlashTier.circle:
+            glow = DecoratedBox(
+              position: DecorationPosition.foreground,
+              decoration: BoxDecoration(
+                borderRadius: radius,
+                color: widget.color.withValues(alpha: 0.14 * v),
+                border: Border.all(
+                    color: widget.color.withValues(alpha: 0.65 * v),
+                    width: 1.5),
+              ),
+              child: child,
+            );
+          case FlashTier.bond:
+            final c = Color.lerp(widget.color, _rose, 0.55)!;
+            glow = DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: radius,
+                boxShadow: [
+                  BoxShadow(
+                      color: c.withValues(alpha: 0.35 * v),
+                      blurRadius: 14 * v,
+                      spreadRadius: 1.5 * v),
+                ],
+              ),
+              position: DecorationPosition.background,
+              child: DecoratedBox(
+                position: DecorationPosition.foreground,
+                decoration: BoxDecoration(
+                  borderRadius: radius,
+                  color: c.withValues(alpha: 0.12 * v),
+                  border: Border.all(
+                      color: c.withValues(alpha: 0.8 * v), width: 1.6),
+                ),
+                child: child,
+              ),
+            );
+          case FlashTier.partner:
+            // Warm sweep: the gradient turns round the card as it beats.
+            final sweep = SweepGradient(
+              transform: GradientRotation(t * pi * 2),
+              colors: [
+                widget.color.withValues(alpha: 0.95 * v),
+                _rose.withValues(alpha: 0.95 * v),
+                _gold.withValues(alpha: 0.95 * v),
+                widget.color.withValues(alpha: 0.95 * v),
+              ],
+            );
+            glow = DecoratedBox(
+              position: DecorationPosition.background,
+              decoration: BoxDecoration(
+                borderRadius: radius,
+                boxShadow: [
+                  BoxShadow(
+                      color: _rose.withValues(alpha: 0.45 * v),
+                      blurRadius: 20 * v,
+                      spreadRadius: 2.5 * v),
+                ],
+              ),
+              child: Stack(clipBehavior: Clip.none, children: [
+                child!,
+                // The gradient rim, drawn over the card's edge.
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _GradientRimPainter(sweep, 2.0, 18),
+                    ),
+                  ),
+                ),
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: radius,
+                        color: _rose.withValues(alpha: 0.08 * v),
+                      ),
+                    ),
+                  ),
+                ),
+                // A small 💞 rising at the card's right edge.
+                Positioned(
+                  right: 10,
+                  top: 4 - 14 * t,
+                  child: IgnorePointer(
+                    child: Opacity(
+                      opacity: (t < 0.15
+                              ? t / 0.15
+                              : t > 0.75
+                                  ? (1 - t) / 0.25
+                                  : 1.0)
+                          .clamp(0.0, 1.0),
+                      child: Transform.scale(
+                        scale: 0.85 + 0.25 * v,
+                        child: const Text('💞', style: TextStyle(fontSize: 15)),
+                      ),
+                    ),
+                  ),
+                ),
+              ]),
+            );
+        }
+        return glow;
       },
     );
   }
+}
+
+/// A rounded-rect rim stroked with a gradient (the partner flash).
+class _GradientRimPainter extends CustomPainter {
+  _GradientRimPainter(this.gradient, this.width, this.radius);
+
+  final Gradient gradient;
+  final double width;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final r = RRect.fromRectAndRadius(
+        rect.deflate(width / 2), Radius.circular(radius));
+    canvas.drawRRect(
+        r,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = width
+          ..shader = gradient.createShader(rect));
+  }
+
+  @override
+  bool shouldRepaint(_GradientRimPainter o) => true;
 }

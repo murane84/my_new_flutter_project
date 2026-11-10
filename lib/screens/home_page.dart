@@ -347,7 +347,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void _revealNewIfAtTop() {
     if (!mounted || _newWhileAway.isEmpty || !_circleListVisible) return;
     final c = _circleScroll;
-    if (c.hasClients && c.offset > 40) return; // the chip handles it
+    if (c.hasClients && _offsetOf(c) > 40) return; // the chip handles it
     final fresh = Set<String>.of(_newWhileAway);
     setState(_newWhileAway.clear);
     _flashRows(fresh);
@@ -496,7 +496,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _circleScroll.addListener(() {
       if (_newWhileAway.isNotEmpty &&
           _circleScroll.hasClients &&
-          _circleScroll.offset <= 40 &&
+          _offsetOf(_circleScroll) <= 40 &&
           mounted) {
         setState(_newWhileAway.clear);
       }
@@ -3777,7 +3777,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
     final key = isGroup ? 'g$cid' : 's$sid';
     final c = _circleScroll;
-    final atTop = c.hasClients && c.offset <= 40;
+    final atTop = c.hasClients && _offsetOf(c) <= 40;
     final busy = DateTime.now().difference(_lastUserScroll) <
         const Duration(seconds: 3);
     if (_circleListVisible && _searchQuery.isEmpty && (atTop || !busy)) {
@@ -3788,7 +3788,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         if (!mounted) return;
         final keys = Set<String>.of(_burst);
         _burst.clear();
-        if (c.hasClients && c.offset > 40) {
+        if (c.hasClients && _offsetOf(c) > 40) {
           c.animateTo(0,
               duration: const Duration(milliseconds: 520),
               curve: Curves.easeOutCubic);
@@ -3810,12 +3810,20 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   /// The floating "↑ Top" / "↑ 3 new" chip over a list: shows once you're
   /// well down the list, or when new chats are waiting above you.
+  /// A list's scroll offset that never throws. The Circle list is ONE
+  /// controller shared by the shared view and the maximised chats list (two
+  /// differently-keyed ListViews); for the frame they swap, both are
+  /// attached and `.offset` asserts — which painted the grey error veil over
+  /// the list. Read the newest position instead.
+  double _offsetOf(ScrollController c) =>
+      c.positions.isEmpty ? 0.0 : c.positions.last.pixels;
+
   Widget _listTopChip(ScrollController c, ColorScheme scheme,
       {bool countsNew = false}) {
     return ListenableBuilder(
       listenable: c,
       builder: (context, _) {
-        final off = c.hasClients ? c.offset : 0.0;
+        final off = c.hasClients ? _offsetOf(c) : 0.0;
         final n = countsNew ? _newWhileAway.length : 0;
         final show = off > 600 || (n > 0 && off > 40);
         return IgnorePointer(
@@ -5753,7 +5761,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         final c = _circleScroll;
         if (_newWhileAway.isNotEmpty &&
             _circleListVisible &&
-            (!c.hasClients || c.offset <= 40)) {
+            (!c.hasClients || _offsetOf(c) <= 40)) {
           final fresh = Set<String>.of(_newWhileAway);
           setState(_newWhileAway.clear);
           _flashRows({?came, ...fresh});

@@ -79,7 +79,9 @@ def _access_ids(db, msg) -> list:
     ids = []
     if msg.sender_id:
         ids.append(msg.sender_id)
-    if msg.receiver_id:
+    # A DM hidden from its receiver (sent while blocked, or deleted for
+    # them) is not theirs to see, react to or be told about.
+    if msg.receiver_id and getattr(msg, "visible_to_receiver", True) is not False:
         ids.append(msg.receiver_id)
     return ids
 
@@ -191,6 +193,10 @@ def hold_for_morning(body: dict, db: Session = Depends(get_db),
         raise HTTPException(status_code=400, detail="Nothing to hold")
     if len(content) > 8000:
         raise HTTPException(status_code=400, detail="Too long")
+    # Same block rule as sending now (release also checks at delivery time).
+    if crud.block_state(db, current_user.id, rid)[0]:
+        raise HTTPException(status_code=403,
+                            detail="Unblock them to send a message")
     off = morning.offset_for(db, rid)
     if morning.is_their_morning(off):
         # It's already morning there — no point waiting a whole day.

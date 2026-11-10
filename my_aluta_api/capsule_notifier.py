@@ -14,6 +14,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
+import crud
 from database import SessionLocal
 from models import LoveCapsule, User
 from websocket_manager import safe_notify_user
@@ -61,7 +62,17 @@ def _fire_due_once() -> int:
             )
             who = creator.username if creator else "Your partner"
             sync = (c.mode == "sync_listen")
+            # The other side only while the bond is still live (accepted and
+            # both keep the Space) — an un-pinned or blocked pair stays quiet.
+            try:
+                import privacy
+                live = privacy.bond_ids(db, int(c.created_by))
+            except Exception:
+                live = set()
             for uid in _partner_ids(c.pair_key):
+                if uid != c.created_by and (uid not in live or
+                        crud.blocked_either(db, int(c.created_by), uid)):
+                    continue
                 if uid == c.created_by:
                     line = "Your love capsule just unlocked \U0001F48C"
                 else:

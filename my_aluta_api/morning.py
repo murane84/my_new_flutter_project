@@ -68,6 +68,17 @@ def _deliver(db, row: HeldMessage) -> None:
     db.commit()
     msg = crud.create_message(db, sender_id=sid, message=schemas.MessageCreate(
         receiver_id=rid, content=content))
+    # A block made since it was held: same as a live send — kept for the
+    # sender, never delivered (no socket, no push, hidden from them).
+    if crud.blocked_either(db, sid, rid):
+        msg.visible_to_receiver = False
+        db.commit()
+        db.refresh(msg)
+        data = serialize_message(schemas.MessageWithSender.model_validate(msg))
+        safe_notify_user(sid, {"type": "message_sent", "data": data})
+        safe_notify_user(sid, {"type": "held_released",
+                               "data": {"id": held_id, "receiver_id": rid}})
+        return
     data = serialize_message(schemas.MessageWithSender.model_validate(msg))
     safe_notify_user(rid, {"type": "new_message", "data": data})
     safe_notify_user(sid, {"type": "message_sent", "data": data})

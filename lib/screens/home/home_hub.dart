@@ -39,6 +39,10 @@ extension _HomeHub on HomePageState {
             child: RefreshIndicator(
               onRefresh: _onPullToRefresh,
               child: ListView.builder(
+                // Remembers where I'd scrolled: opening a chat replaces this
+                // list, and coming back rebuilds it — the key restores the
+                // position instead of jumping to the top.
+                key: const PageStorageKey<String>('harmony-list'),
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.only(bottom: 12),
                 itemCount: harmonyEntries.length,
@@ -94,6 +98,7 @@ extension _HomeHub on HomePageState {
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 190),
             child: ListView.builder(
+              key: const PageStorageKey<String>('listening-list'),
               shrinkWrap: true,
               physics: const ClampingScrollPhysics(),
               padding: EdgeInsets.zero,
@@ -109,6 +114,8 @@ extension _HomeHub on HomePageState {
             onRefresh: _onPullToRefresh,
             child: circle.isNotEmpty
                 ? ListView.builder(
+                    // Back from a chat → right where I left the list.
+                    key: const PageStorageKey<String>('circle-list'),
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.only(bottom: 12),
                     itemCount: circle.length,

@@ -275,6 +275,8 @@ extension _HomeFriendListView on HomePageState {
               ),
               Expanded(
                 child: ListView.builder(
+                  // Back from a chat → right where I left the list.
+                  key: const PageStorageKey<String>('wide-harmony-list'),
                   physics: const AlwaysScrollableScrollPhysics(),
                   // Symmetric horizontal inset so the Our Space hero + Live Room
                   // cards float with EQUAL left/right margins on every platform
@@ -317,6 +319,7 @@ extension _HomeFriendListView on HomePageState {
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxHeight: 220),
                   child: ListView.builder(
+                    key: const PageStorageKey<String>('wide-listening-list'),
                     shrinkWrap: true,
                     physics: const ClampingScrollPhysics(),
                     padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -333,6 +336,8 @@ extension _HomeFriendListView on HomePageState {
                   onRefresh: _onPullToRefresh,
                   child: wideCircle.isNotEmpty
                       ? ListView.builder(
+                          // Back from a chat → right where I left the list.
+                          key: const PageStorageKey<String>('wide-circle-list'),
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.symmetric(horizontal: 6),
                           itemCount: wideCircle.length,

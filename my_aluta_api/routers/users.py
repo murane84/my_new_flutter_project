@@ -278,7 +278,7 @@ def delete_account(
     db.commit()
     return {"detail": "Account deleted"}
 
-@router.get("/users/", response_model=List[UserOut], tags=["Users"])
+@router.get("/users/", response_model=List[schemas.PublicUser], tags=["Users"])
 def get_all_users_except_current(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     # My own circle only — this used to list EVERY registered account with its
     # email and phone, against "you never see every user by default".
@@ -473,7 +473,7 @@ def add_friend(
     if not _is_friend(db, current_user.id, target_id):
         db.add(Friend(user_id=current_user.id, friend_id=target_id))
         db.commit()
-    return {"ok": True, "user": UserOut.model_validate(target)}
+    return {"ok": True, "user": schemas.PublicUser.model_validate(target).model_dump()}
 
 
 @router.delete("/users/friends/{friend_id}", tags=["Users"])
@@ -534,7 +534,7 @@ def is_user_muted(user_id: int, db: Session = Depends(get_db), current_user: Use
     mute = db.query(MuteStatus).filter_by(user_id=current_user.id, muted_user_id=user_id).first()
     return {"muted": mute is not None}
 
-@router.get("/users/{user_id}/friends", response_model=List[UserOut], tags=["Users"])
+@router.get("/users/{user_id}/friends", response_model=List[schemas.PublicUser], tags=["Users"])
 def get_friends(
     user_id: int,
     db: Session = Depends(get_db),
@@ -546,7 +546,7 @@ def get_friends(
     friends = crud.get_friends(db, user_id)
     return friends  
 
-@router.get("/users/{user_id}/friends/online", response_model=List[UserOut], tags=["Users"])
+@router.get("/users/{user_id}/friends/online", response_model=List[schemas.PublicUser], tags=["Users"])
 def get_online_friends(
     user_id: int,
     db: Session = Depends(get_db),
@@ -558,7 +558,7 @@ def get_online_friends(
     online_friends = crud.get_online_friends(db, user_id)
     return online_friends       
 
-@router.get("/users/{user_id}/friends/offline", response_model=List[UserOut], tags=["Users"])
+@router.get("/users/{user_id}/friends/offline", response_model=List[schemas.PublicUser], tags=["Users"])
 def get_offline_friends(    
     user_id: int,
     db: Session = Depends(get_db),
@@ -570,7 +570,7 @@ def get_offline_friends(
     offline_friends = crud.get_offline_friends(db, user_id)
     return offline_friends  
 
-@router.get("/users/{user_id}/friends/muted", response_model=List[UserOut], tags=["Users"])
+@router.get("/users/{user_id}/friends/muted", response_model=List[schemas.PublicUser], tags=["Users"])
 def get_muted_friends(                                  
     user_id: int,
     db: Session = Depends(get_db),
@@ -655,7 +655,7 @@ def get_friends_offline_status(
     return offline_status   
 
 
-@router.get("/users/{user_id}/friends/blocked", response_model=List[UserOut], tags=["Users"])
+@router.get("/users/{user_id}/friends/blocked", response_model=List[schemas.PublicUser], tags=["Users"])
 def get_blocked_friends(
     user_id: int,
     db: Session = Depends(get_db),

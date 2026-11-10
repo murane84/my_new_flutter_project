@@ -45,7 +45,7 @@ def ack_dm_cached(
 
 
 # 🔒 General: User and friend helper routes
-@router.get("/users/all", response_model=List[schemas.UserOut], operation_id="messages_get_all_users")
+@router.get("/users/all", response_model=List[schemas.PublicUser], operation_id="messages_get_all_users")
 def get_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return crud.get_all_users(db, current_user.id)
 

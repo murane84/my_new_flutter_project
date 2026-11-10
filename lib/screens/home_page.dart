@@ -5882,10 +5882,19 @@ class HomePageState extends rp.ConsumerState<HomePage>
         _activeFriendId == null &&
         !_playerExpanded &&
         !_isMusicFullScreen;
+    // On Harmony or Glow (with nothing open), Back first returns to Circle —
+    // the chat screen's home layer — before leaving the app.
+    final layerAway = _friendLayer != 'circle' &&
+        _activeGroup == null &&
+        _activeFriendId == null &&
+        !_playerExpanded &&
+        !_isMusicFullScreen &&
+        !circleMax;
     final canLeave = !(_isMusicFullScreen ||
         _isChatFullScreen ||
         _playerExpanded ||
         circleMax ||
+        layerAway ||
         _activeGroup != null ||
         _activeFriendId != null);
 
@@ -5897,6 +5906,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
         if (didPop) return;
         if (circleMax) {
           _setCircleView(_circleView); // same key again → back to all
+          return;
+        }
+        if (layerAway) {
+          _setFriendLayer('circle');
           return;
         }
         setState(() {

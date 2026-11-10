@@ -165,34 +165,27 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   late final AnimationController _pulseCtrl;
   final GlobalKey _nowKey = GlobalKey();
 
+  // Where the list was when it last closed — ONE position for every place
+  // the playlist opens (music player, DM drawer, full page), kept for the
+  // session and across restarts. Opening lands exactly there; it no longer
+  // jumps to the playing song (that's the ⌖ "Find the playing song" chip).
+  static double? _lastOffset;
+  static const _kPlOffsetKey = 'pl_offset_v1';
+
   @override
   void initState() {
     super.initState();
-    final offset = widget.currentIndex > 0
-        ? (widget.currentIndex * 56.0 - 100).clamp(0.0, double.infinity)
-        : 0.0;
+    final offset = _lastOffset ?? prefsNow?.getDouble(_kPlOffsetKey) ?? 0.0;
     _listCtrl = ScrollController(initialScrollOffset: offset);
+    _listCtrl.addListener(() {
+      // A search is never restored on reopen, so a position inside search
+      // results isn't one to come back to — keep the list's own.
+      if (_listCtrl.hasClients && _search.isEmpty) {
+        _lastOffset = _listCtrl.offset;
+      }
+    });
     _pulseCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 500));
-
-    if (widget.currentIndex >= 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        final ctx = _nowKey.currentContext;
-        if (ctx != null) {
-          await Scrollable.ensureVisible(
-            ctx,
-            alignment: 0.35,
-            duration: const Duration(milliseconds: 320),
-            curve: Curves.easeInOut,
-          );
-        }
-        for (int i = 0; i < 2 && mounted; i++) {
-          await _pulseCtrl.forward(from: 0);
-          if (!mounted) break;
-          await _pulseCtrl.reverse();
-        }
-      });
-    }
     _loadTrackMeta();
     _filtersRestored = _restoreFilters();
     _freshCtrl = AnimationController(
@@ -516,6 +509,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   void dispose() {
     widget.revealFresh?.removeListener(_onRevealFresh);
     widget.onFreshSeen?.call();
+    final last = _lastOffset;
+    if (last != null) prefsNow?.setDouble(_kPlOffsetKey, last);
     _listCtrl.dispose();
     _pulseCtrl.dispose();
     _freshCtrl.dispose();

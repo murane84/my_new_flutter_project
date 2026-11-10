@@ -57,11 +57,7 @@ def _related(db: Session, a: int, b: int) -> bool:
     import crud
     if crud.are_mutual(db, a, b):
         return True
-    mine = {r[0] for r in db.query(ConversationMember.conversation_id)
-            .filter(ConversationMember.user_id == a).all()}
-    if mine and db.query(ConversationMember).filter(
-            ConversationMember.user_id == b,
-            ConversationMember.conversation_id.in_(mine)).first():
+    if crud.share_a_group(db, a, b):
         return True
     spaces = {r[0] for r in db.query(SpaceMember.space_id)
               .filter(SpaceMember.user_id == a).all()}

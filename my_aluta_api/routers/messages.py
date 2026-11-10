@@ -37,7 +37,9 @@ def ack_dm_cached(
 ):
     """A device POSTs here after it persists this DM's history locally; the
     server records the cached pointer and purges what both devices now hold."""
-    conv = crud_conversations.get_or_create_dm_conversation(db, current_user.id, peer_id)
+    # Only an existing thread — acking never creates one (that would make a
+    # stranger "share a chat" with whoever's id was typed in).
+    conv = crud_conversations.find_dm_conversation(db, current_user.id, peer_id)
     if conv:
         crud_conversations.mark_cached_up_to(db, conv.id, current_user.id, up_to)
         crud_conversations.purge_cached_conversation(db, conv.id)
@@ -111,6 +113,11 @@ def send_message(message: schemas.MessageCreate, background: BackgroundTasks, db
     if i_blocked:
         raise HTTPException(status_code=403,
                             detail="Unblock them to send a message")
+    # Never a stranger: a contact either way, or someone in a group with me.
+    if message.receiver_id and not crud.may_reach(
+            db, current_user.id, int(message.receiver_id)):
+        raise HTTPException(status_code=403,
+                            detail="You can only message people you know")
     db_message = crud.create_message(db, sender_id=current_user.id, message=message)
     if they_blocked:
         db_message.visible_to_receiver = False
@@ -197,6 +204,9 @@ def hold_for_morning(body: dict, db: Session = Depends(get_db),
     if crud.block_state(db, current_user.id, rid)[0]:
         raise HTTPException(status_code=403,
                             detail="Unblock them to send a message")
+    if not crud.may_reach(db, current_user.id, rid):
+        raise HTTPException(status_code=403,
+                            detail="You can only message people you know")
     off = morning.offset_for(db, rid)
     if morning.is_their_morning(off):
         # It's already morning there — no point waiting a whole day.
@@ -829,7 +839,7 @@ def get_chat_history(
         raise HTTPException(status_code=403, detail="Not your conversation")
     # Store-and-forward: drop server copies of delivered messages in this pair
     # (devices keep their own). Best-effort; never blocks the fetch.
-    _conv = crud_conversations.get_or_create_dm_conversation(db, user1_id, user2_id)
+    _conv = crud_conversations.find_dm_conversation(db, user1_id, user2_id)
     if _conv:
         crud_conversations.purge_cached_conversation(db, _conv.id)
     if after:

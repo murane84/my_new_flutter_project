@@ -666,15 +666,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                             # A call needs SOME link: a contact (either
                             # side) or a shared chat — never a stranger
                             # ringing a guessed id.
-                            if not _blk and int(to) not in \
-                                    _crud._get_contact_ids(_bdb, int(user_id)):
-                                from models import ConversationMember as _CM
-                                _mine = {r[0] for r in _bdb.query(
-                                    _CM.conversation_id).filter(
-                                    _CM.user_id == int(user_id)).all()}
-                                _blk = not (_mine and _bdb.query(_CM).filter(
-                                    _CM.user_id == int(to),
-                                    _CM.conversation_id.in_(_mine)).first())
+                            if not _blk:
+                                _blk = not _crud.may_reach(
+                                    _bdb, int(user_id), int(to))
                         finally:
                             _bdb.close()
                     except Exception:
@@ -799,7 +793,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                     await _group_leave(room_id, uid)
             elif etype in _GROUP_RELAY:
                 # Per-peer mesh negotiation (offer/answer/ice) → relay to `to`.
-                to = data.get("to")
+                to = _to_int(data.get("to"))
+                # Only between two people in the same live group call (both
+                # joined) — never a free relay to any id.
+                if to is not None and not any(
+                        uid in r and to in r for r in _group_rooms.values()):
+                    to = None
                 if to is not None:
                     payload = {k: v for k, v in data.items() if k != "to"}
                     payload["from"] = uid

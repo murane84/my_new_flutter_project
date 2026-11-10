@@ -483,6 +483,27 @@ def are_mutual(db: Session, a: int, b: int) -> bool:
     return n >= 2 and not blocked_either(db, a, b)
 
 
+def share_a_group(db: Session, a: int, b: int) -> bool:
+    """Both are members of the same GROUP chat. (A 1:1 thread doesn't count:
+    that link is the contact itself, and a DM row must never be a back door
+    that turns a stranger into "someone you share a chat with".)"""
+    from models import Conversation, ConversationMember as CM
+    mine = {r[0] for r in db.query(CM.conversation_id)
+            .join(Conversation, Conversation.id == CM.conversation_id)
+            .filter(CM.user_id == a, Conversation.is_group == True)  # noqa: E712
+            .all()}
+    return bool(mine) and db.query(CM).filter(
+        CM.user_id == b, CM.conversation_id.in_(mine)).first() is not None
+
+
+def may_reach(db: Session, a: int, b: int) -> bool:
+    """May [a] message / call [b] at all? A contact either way (one saved the
+    other's number) or a fellow member of a group — never a stranger."""
+    if int(a) == int(b):
+        return False
+    return int(b) in _get_contact_ids(db, a) or share_a_group(db, a, b)
+
+
 # ------------------ Mute/Block ------------------
 def is_user_muted(db: Session, user_id: int, muted_user_id: int) -> bool:
     return db.query(MuteStatus).filter(

@@ -66,6 +66,21 @@ def member_ids(db: Session, conversation_id: int) -> list[int]:
 def get_or_create_dm_conversation(db: Session, u1: int, u2: int) -> Conversation:
     """Find (or create) the DM conversation between two users. Idempotent: the
     same pair always resolves to the same conversation."""
+    conv = find_dm_conversation(db, u1, u2)
+    if conv is not None:
+        return conv
+    a, b = sorted((int(u1), int(u2)))
+    conv = Conversation(is_group=False)
+    db.add(conv)
+    db.flush()
+    db.add(ConversationMember(conversation_id=conv.id, user_id=a, role="member"))
+    db.add(ConversationMember(conversation_id=conv.id, user_id=b, role="member"))
+    db.flush()
+    return conv
+
+
+def find_dm_conversation(db: Session, u1: int, u2: int):
+    """The existing DM between two users, or None — never creates one."""
     a, b = sorted((int(u1), int(u2)))
     row = (
         db.query(ConversationMember.conversation_id)
@@ -80,13 +95,7 @@ def get_or_create_dm_conversation(db: Session, u1: int, u2: int) -> Conversation
     )
     if row:
         return get_conversation(db, row[0])
-    conv = Conversation(is_group=False)
-    db.add(conv)
-    db.flush()
-    db.add(ConversationMember(conversation_id=conv.id, user_id=a, role="member"))
-    db.add(ConversationMember(conversation_id=conv.id, user_id=b, role="member"))
-    db.flush()
-    return conv
+    return None
 
 
 def create_group(

@@ -300,11 +300,8 @@ def set_user_online_status(is_online: bool, tz_offset: int | None = None, db: Se
     return {"message": f"User '{current_user.username}' online status updated to {is_online}"}
 
 def _share_a_chat(db: Session, a: int, b: int) -> bool:
-    from models import ConversationMember as CM
-    mine = {r[0] for r in db.query(CM.conversation_id)
-            .filter(CM.user_id == a).all()}
-    return bool(mine) and db.query(CM).filter(
-        CM.user_id == b, CM.conversation_id.in_(mine)).first() is not None
+    # A group together (a 1:1 thread is not a link of its own).
+    return crud.share_a_group(db, a, b)
 
 
 @router.get("/users/{user_id}/status", tags=["Users"])

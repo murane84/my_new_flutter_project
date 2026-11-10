@@ -497,9 +497,17 @@ extension _HomeHub on HomePageState {
         : hot
             ? accentInk(scheme)
             : scheme.onSurfaceVariant;
+    // Tooltips use the shared view's full names ("Your circle", "Status &
+    // Stories", "Listening now") — the segment shows the short one.
+    final full = switch (key) {
+      'stories' => 'Status & Stories',
+      'listening' => 'Listening now',
+      'chats' => 'Your circle',
+      _ => 'All',
+    };
     final message = (selected && key != 'all')
         ? 'Back to all'
-        : (n > 0 && what.isNotEmpty ? '$text · $n $what' : text);
+        : (n > 0 && what.isNotEmpty ? '$full · $n $what' : full);
     return Tooltip(
       message: message + tip,
       child: GestureDetector(

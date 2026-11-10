@@ -159,8 +159,9 @@ extension _HomeHub on HomePageState {
                   saved.toLowerCase().contains(q);
             }).toList();
       return [
-        _maxHeader(scheme, 'Status', storiesUnseen > 0 ? storiesUnseen : null,
-            storiesUnseen, listening.length),
+        _maxHeader(scheme, 'Status & Stories', 'Status',
+            storiesUnseen > 0 ? storiesUnseen : null, storiesUnseen,
+            listening.length),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _fetchStories,
@@ -182,8 +183,8 @@ extension _HomeHub on HomePageState {
 
     if (view == 'listening') {
       return [
-        _maxHeader(scheme, 'Listening', listening.length, storiesUnseen,
-            listening.length),
+        _maxHeader(scheme, 'Listening now', 'Listening', listening.length,
+            storiesUnseen, listening.length),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _onPullToRefresh,
@@ -230,8 +231,8 @@ extension _HomeHub on HomePageState {
       ],
       // Pinned "Your circle" header (fixed above the scrolling list).
       if (view == 'chats')
-        _maxHeader(scheme, 'Your circle', chats.length, storiesUnseen,
-            listening.length)
+        _maxHeader(scheme, 'Your circle', 'Circle', chats.length,
+            storiesUnseen, listening.length)
       else if (chats.isNotEmpty)
         _listHeader(scheme, 'Your circle', null, 'chats'),
       Expanded(
@@ -330,19 +331,29 @@ extension _HomeHub on HomePageState {
   /// other sections as small live pills (with what's waiting there), and
   /// Minimise — where the old header + a separate chip row spent two rows
   /// (and a hairline) of height. Narrow → pills and Minimise go icon-only.
-  Widget _maxHeader(ColorScheme scheme, String label, int? count,
-      int storiesUnseen, int live) {
+  Widget _maxHeader(ColorScheme scheme, String label, String shortLabel,
+      int? count, int storiesUnseen, int live) {
     final view = _circleView;
     final unread = _circleBadge();
     final ink = accentInk(scheme);
     return LayoutBuilder(builder: (context, cons) {
-      final roomy = cons.maxWidth >= 380;
-      Widget pill(String key, IconData icon, String text, int n) {
+      // Three widths, so it never crowds: wide → full names everywhere;
+      // medium → short title + labelled pills + Minimise icon; narrow →
+      // short title + icon pills (+ counts) + Minimise icon.
+      final wide = cons.maxWidth >= 560;
+      final roomy = cons.maxWidth >= 400;
+      // Pills say the SAME names as the shared view's headers; their
+      // counts mean "waiting there" (new statuses, people live, unread),
+      // which the tooltip spells out.
+      Widget pill(String key, IconData icon, String text, int n,
+          [String? what]) {
         final hot = n > 0;
         return Padding(
           padding: const EdgeInsets.only(right: 6),
           child: Tooltip(
-            message: key == view ? 'Back to all' : text,
+            message: key == view
+                ? 'Back to all'
+                : (n > 0 && what != null ? '$text · $n $what' : text),
             child: Material(
               color: hot
                   ? scheme.primary.withValues(alpha: 0.10)
@@ -387,7 +398,7 @@ extension _HomeHub on HomePageState {
       return Padding(
         padding: const EdgeInsets.fromLTRB(6, 6, 0, 6),
         child: Row(children: [
-          Text(label.toUpperCase(),
+          Text((wide ? label : shortLabel).toUpperCase(),
               style: TextStyle(
                   fontSize: 10.5,
                   fontWeight: FontWeight.w800,
@@ -408,16 +419,17 @@ extension _HomeHub on HomePageState {
                 pill(view, Icons.dashboard_rounded, 'All', 0),
                 if (view != 'stories' && _myUserId != null)
                   pill('stories', Icons.auto_stories_rounded, 'Status',
-                      storiesUnseen),
+                      storiesUnseen, 'new'),
                 if (view != 'listening')
                   pill('listening', Icons.headphones_rounded, 'Listening',
-                      live),
+                      live, 'live now'),
                 if (view != 'chats')
-                  pill('chats', Icons.forum_rounded, 'Chats', unread),
+                  pill('chats', Icons.forum_rounded, 'Your circle', unread,
+                      'unread'),
               ]),
             ),
           ),
-          roomy
+          wide
               ? _maxControl(scheme, view)
               : IconButton(
                   tooltip: 'Minimise',

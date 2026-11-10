@@ -110,6 +110,19 @@ extension _HomeSpaceActions on HomePageState {
   }
 
   /// The Space (if any) that pins this friend.
+  /// My Space with [friendId] only once the bond is ACCEPTED (status
+  /// 'active'). Every bond signal — the heart pin, heartbeat, rings, the
+  /// row's heartbeat blink, header extras — waits for this; until then
+  /// they look like any circle friend (the pinned Space itself still opens
+  /// via [_spaceWithFriend]). Matches the server, where only an accepted
+  /// bond counts (privacy.py).
+  Map<String, dynamic>? _bondWith(int friendId) {
+    final s = _spaceWithFriend(friendId);
+    if (s == null) return null;
+    final st = s['status'];
+    return (st == null || st == 'active') ? s : null;
+  }
+
   Map<String, dynamic>? _spaceWithFriend(int friendId) {
     for (final s in _spaces) {
       for (final m in ((s['members'] as List?) ?? const []).whereType<Map>()) {

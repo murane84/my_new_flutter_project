@@ -2019,14 +2019,7 @@ extension _HomeFriendListView on HomePageState {
   /// A group conversation row in the unified chat list. Tapping opens the group
   /// inside the chat panel (never a full-window route).
   /// True when [friendId] shares a Space (bond) with me.
-  bool _isBondedFriend(int friendId) {
-    for (final s in _spaces) {
-      for (final m in ((s['members'] as List?) ?? const []).whereType<Map>()) {
-        if ((m['id'] as num?)?.toInt() == friendId) return true;
-      }
-    }
-    return false;
-  }
+  bool _isBondedFriend(int friendId) => _bondWith(friendId) != null;
 
   /// True when [friendId] is my Harmony partner — the other member of my
   /// primary (hero) Space. Only they get the bond ring around their photo,
@@ -2034,6 +2027,9 @@ extension _HomeFriendListView on HomePageState {
   bool _isHarmonyPartner(int friendId) {
     final s = _primarySpace;
     if (s == null) return false;
+    // Not until they accept the bond.
+    final st = s['status'];
+    if (st != null && st != 'active') return false;
     for (final m in ((s['members'] as List?) ?? const []).whereType<Map>()) {
       if ((m['id'] as num?)?.toInt() == friendId) return true;
     }

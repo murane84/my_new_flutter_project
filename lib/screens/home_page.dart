@@ -1557,7 +1557,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   /// Double-tap a bonded partner's avatar → a wordless "thinking of you".
   Future<void> _sendHeartbeatTap(int friendId, String name) async {
-    final space = _spaceWithFriend(friendId);
+    final space = _bondWith(friendId);
+    if (space == null && _spaceWithFriend(friendId) != null) {
+      showToast(context,
+          'Heartbeats start once $name accepts your bond 💞',
+          type: ToastType.info);
+      return;
+    }
     if (space == null) {
       showToast(context, 'Pin a bond with $name to send heartbeats 💓',
           type: ToastType.info);
@@ -1618,7 +1624,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   /// The flame next to a bonded partner's name (fetched lazily, cached).
   int? _streakFor(int friendId) {
-    final space = _spaceWithFriend(friendId);
+    final space = _bondWith(friendId);
     final sid = (space?['id'] as num?)?.toInt();
     if (sid == null) return null;
     if (!_streakDays.containsKey(sid) && _streakFetching.add(sid)) {
@@ -3329,7 +3335,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final what = sameSong
           ? mine.title.trim()
           : (t['artist'] ?? mine.artist).toString().trim();
-      final bonded = _spaceWithFriend(fid) != null;
+      final bonded = _bondWith(fid) != null;
       _lastMomentAt = DateTime.now();
       HapticFeedback.lightImpact();
       showMomentCard(
@@ -3480,7 +3486,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   /// Our Space's "your song" for this partner (title), else null.
   String? _yourSongWith(int fid) {
-    final ys = (_spaceWithFriend(fid)?['stats'] as Map?)?['your_song'];
+    final ys = (_bondWith(fid)?['stats'] as Map?)?['your_song'];
     final t = ys is Map ? (ys['title'] ?? '').toString().trim() : '';
     return t.isEmpty ? null : t;
   }
@@ -3727,7 +3733,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final fid = friend['id'] as int;
     warmUserProfile(
         userId: fid,
-        spaceId: (_spaceWithFriend(fid)?['id'] as num?)?.toInt(),
+        spaceId: (_bondWith(fid)?['id'] as num?)?.toInt(),
         showHearts: true);
   }
 
@@ -3809,7 +3815,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
             // Unknown or kept private → nothing (never "Offline").
             : '');
     final fid = int.tryParse(_activeFriendId ?? '');
-    final space = fid == null ? null : _spaceWithFriend(fid);
+    final space = fid == null ? null : _bondWith(fid);
     final name = _contactDisplayName(_activeFriendPhone, _activeFriendName ?? '');
     showUserProfile(
       context,
@@ -4405,8 +4411,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
             // Only for a bonded partner — a double-tap handler delays every
             // single tap (~300ms), so others keep instant taps.
             onDoubleTap:
-                _spaceWithFriend(int.tryParse(_activeFriendId ?? '') ?? -1) ==
-                        null
+                _bondWith(int.tryParse(_activeFriendId ?? '') ?? -1) == null
                     ? null
                     : () => _sendHeartbeatTap(
                         int.tryParse(_activeFriendId ?? '') ?? -1,
@@ -4627,7 +4632,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                           .toString()
                           .trim();
                       // Bonded partner: heartbeat, milestone, dedication.
-                      final space = _spaceWithFriend(fid);
+                      final space = _bondWith(fid);
                       final hb = space == null
                           ? null
                           : HeartbeatLog.instance.recent(fid);

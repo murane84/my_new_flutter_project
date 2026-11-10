@@ -2014,7 +2014,7 @@ extension _HomePageHelpers1 on HomePageState {
           _openFriendStory(story);
           return;
         }
-        final space = _spaceWithFriend(id);
+        final space = _bondWith(id);
         showUserProfile(
           context,
           username: (f['username'] ?? '').toString(),

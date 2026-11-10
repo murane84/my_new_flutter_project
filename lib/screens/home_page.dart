@@ -3361,6 +3361,21 @@ class HomePageState extends rp.ConsumerState<HomePage>
     });
   }
 
+  /// The chat header's photo slot: a 34 px photo in a 42 px ring slot that
+  /// LAYS OUT 36 px tall — the rim overhangs into the header's padding — so
+  /// the header is the same height with or without a ring.
+  Widget _headerPhotoSlot(Widget ring) => SizedBox(
+        width: 42,
+        height: 36,
+        child: OverflowBox(
+          minWidth: 42,
+          maxWidth: 42,
+          minHeight: 42,
+          maxHeight: 42,
+          child: ring,
+        ),
+      );
+
   /// A bond milestone hit today ("🔥 30 days in tune today"), else null.
   String? _milestoneWhisper(Map<String, dynamic>? space) {
     final r = (space?['stats'] as Map?)?['milestone_reached'];
@@ -3864,18 +3879,52 @@ class HomePageState extends rp.ConsumerState<HomePage>
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                 child: Row(
                   children: [
-                    CircleAvatar(
-                      radius: 17,
-                      backgroundColor: scheme.primaryContainer,
-                      backgroundImage: groupAvatar != null
-                          ? authNetworkImageProvider(
-                              groupAvatar, mediaAuthHeaders(groupAvatar))
-                          : null,
-                      child: groupAvatar == null
-                          ? Icon(Icons.groups_rounded,
-                              color: scheme.onPrimaryContainer, size: 20)
-                          : null,
-                    ),
+                    // Same slot as a friend's header photo, and the same
+                    // live rings as the group's tile: a call beats, a group
+                    // Listen Together weaves.
+                    _headerPhotoSlot(ListenableBuilder(
+                      listenable: Listenable.merge([
+                        GroupCallService.instance.ongoingCalls,
+                        LiveRoomsRegistry.instance,
+                      ]),
+                      builder: (context, _) {
+                        final gid = (g['id'] as num?)?.toInt() ?? -1;
+                        final gcs = GroupCallService.instance;
+                        final inCall =
+                            gcs.ongoingCalls.value.containsKey(gid) ||
+                                (gcs.room == gid &&
+                                    gcs.phase != GroupCallPhase.idle);
+                        final jam = activeLiveSession
+                                    ?.controller.conversationId ==
+                                gid ||
+                            LiveRoomsRegistry.instance
+                                    .roomForConversation(gid) !=
+                                null;
+                        return PresenceRingAvatar(
+                          key: ValueKey('hdr-gring-$gid'),
+                          face: 34,
+                          mode: inCall
+                              ? RingMode.call
+                              : (jam ? RingMode.together : RingMode.none),
+                          color: scheme.primary,
+                          color2: const Color(0xFFF2A541),
+                          gapColor: scheme.surface,
+                          child: CircleAvatar(
+                            radius: 17,
+                            backgroundColor: scheme.primaryContainer,
+                            backgroundImage: groupAvatar != null
+                                ? authNetworkImageProvider(
+                                    groupAvatar, mediaAuthHeaders(groupAvatar))
+                                : null,
+                            child: groupAvatar == null
+                                ? Icon(Icons.groups_rounded,
+                                    color: scheme.onPrimaryContainer,
+                                    size: 20)
+                                : null,
+                          ),
+                        );
+                      },
+                    )),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
@@ -4054,7 +4103,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
                             _activeFriendPhone, _activeFriendName ?? '')),
             // Same status ring as the friend list (colourful=unseen, grey=seen).
             // Glows in the theme colour while a heartbeat passes between you.
-            child: AnimatedContainer(
+            // The 42 px ring slot lays out as 36 px tall (its rim overhangs
+            // 3 px into the header's padding), so the header row is exactly
+            // as tall as it was with a bare photo — no jump, no extra height.
+            child: _headerPhotoSlot(AnimatedContainer(
               duration: const Duration(milliseconds: 380),
               curve: Curves.easeOutCubic,
               decoration: BoxDecoration(
@@ -4158,7 +4210,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                   );
                 },
               ),
-            ),
+            )),
           ),
           const SizedBox(width: 10),
           Expanded(

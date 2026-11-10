@@ -1269,8 +1269,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                 if (when != null)
                   Text(
                     // My own status: how long it has left.
-                    _group.isMe && item.expiresAt != null
-                        ? '${_ago(when)} · ${_left(item.expiresAt!)}'
+                    _group.isMe && _story.expiresAt != null
+                        ? '${_ago(when)} · ${_left(_story.expiresAt!)}'
                         : _ago(when),
                     style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.75),

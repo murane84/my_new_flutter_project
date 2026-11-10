@@ -550,6 +550,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                             db.close()
                         if not is_friend:
                             raise ValueError("not friends")
+                        # A block (either way) stops tune-in asks too.
+                        import crud as _crud
+                        _bdb = SessionLocal()
+                        try:
+                            if _crud.blocked_either(_bdb, me_id, target):
+                                raise ValueError("blocked")
+                        finally:
+                            _bdb.close()
                         online = bool(connected_users.get(target))
                         # Their socket can look "online" while the app sleeps
                         # in the background (or the link silently died) — a
@@ -628,6 +636,27 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                 # peers can negotiate an internet call in real time. The server
                 # is a pure relay here — no media ever passes through it.
                 to = data.get("to")
+                if to is not None and etype == "call_offer":
+                    # A block (either way): the call never rings them. The
+                    # caller just hears "can't be reached", like a phone off.
+                    try:
+                        import crud as _crud
+                        from database import SessionLocal as _SL
+                        _bdb = _SL()
+                        try:
+                            _blk = _crud.blocked_either(
+                                _bdb, int(user_id), int(to))
+                        finally:
+                            _bdb.close()
+                    except Exception:
+                        _blk = False
+                    if _blk:
+                        try:
+                            await notify_user(int(user_id), {
+                                "type": "call_unreachable", "to": int(to)})
+                        except Exception:
+                            pass
+                        to = None
                 if to is not None:
                     payload = {k: v for k, v in data.items() if k != "to"}
                     payload["from"] = int(user_id)

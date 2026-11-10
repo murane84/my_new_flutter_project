@@ -453,6 +453,21 @@ def toggle_mute(db: Session, user_id: int, muted_user_id: int) -> bool:
         return True
 
 
+def block_state(db: Session, me: int, other: int) -> tuple[bool, bool]:
+    """(i_blocked_them, they_blocked_me) — one query."""
+    rows = db.query(BlockStatus.user_id).filter(
+        ((BlockStatus.user_id == me) & (BlockStatus.blocked_user_id == other))
+        | ((BlockStatus.user_id == other) & (BlockStatus.blocked_user_id == me))
+    ).all()
+    who = {int(r[0]) for r in rows}
+    return (int(me) in who, int(other) in who)
+
+
+def blocked_either(db: Session, a: int, b: int) -> bool:
+    i, they = block_state(db, a, b)
+    return i or they
+
+
 def toggle_block(db: Session, user_id: int, blocked_user_id: int) -> bool:
     block = db.query(BlockStatus).filter(
         BlockStatus.user_id == user_id,

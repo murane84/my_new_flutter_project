@@ -133,6 +133,9 @@ def create_session(
     if not receiver:
         raise HTTPException(status_code=404, detail="Receiver not found")
     # Private 1:1 (DM / tune-in / Our Space): only someone you already know.
+    import crud as _crud
+    if _crud.blocked_either(db, current_user.id, body.receiver_id):
+        raise HTTPException(status_code=404, detail="Not available")
     if not _related(db, current_user.id, body.receiver_id):
         raise HTTPException(status_code=403,
                             detail="You can only listen together with people you know")

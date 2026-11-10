@@ -98,9 +98,28 @@ def _fanout_others(db, msg, me: int, event: dict):
 # 1️⃣ SEND MESSAGE
 @router.post("/", response_model=schemas.MessageWithSender)
 def send_message(message: schemas.MessageCreate, background: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # 🔒 Blocks hold here too (they used to stop nothing): if I blocked them I
+    # must unblock first; if THEY blocked me the message is kept for me but
+    # never reaches them — no socket, no push, hidden from their chat — the
+    # quiet WhatsApp way (it simply stays "sent").
+    i_blocked, they_blocked = (False, False)
+    if message.receiver_id:
+        i_blocked, they_blocked = crud.block_state(
+            db, current_user.id, int(message.receiver_id))
+    if i_blocked:
+        raise HTTPException(status_code=403,
+                            detail="Unblock them to send a message")
     db_message = crud.create_message(db, sender_id=current_user.id, message=message)
+    if they_blocked:
+        db_message.visible_to_receiver = False
+        db.commit()
+        db.refresh(db_message)
     validated_message = schemas.MessageWithSender.model_validate(db_message)
     serialized = serialize_message(validated_message)
+    if they_blocked:
+        safe_notify_user(current_user.id,
+                         {"type": "message_sent", "data": serialized})
+        return validated_message
 
     # Notify receiver
     safe_notify_user(message.receiver_id, {"type": "new_message", "data": serialized})
@@ -796,6 +815,11 @@ def get_chat_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # 🔒 Only one of the two people in this chat may read it. Without this,
+    # any signed-in user could read ANY pair's DMs by changing the ids — and
+    # (below) trigger the purge of their server copies.
+    if current_user.id not in (user1_id, user2_id):
+        raise HTTPException(status_code=403, detail="Not your conversation")
     # Store-and-forward: drop server copies of delivered messages in this pair
     # (devices keep their own). Best-effort; never blocks the fetch.
     _conv = crud_conversations.get_or_create_dm_conversation(db, user1_id, user2_id)

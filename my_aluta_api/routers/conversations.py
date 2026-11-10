@@ -45,7 +45,7 @@ def _conversation_out(db: Session, conv: Conversation, me: int) -> schemas.Conve
         .all()
     )
     member_outs: List[schemas.ConversationMemberOut] = []
-    other_user: Optional[schemas.UserOut] = None
+    other_user: Optional[schemas.PublicUser] = None
     my_role: Optional[str] = None
     for m in members:
         u = db.query(User).filter(User.id == m.user_id).first()
@@ -64,7 +64,7 @@ def _conversation_out(db: Session, conv: Conversation, me: int) -> schemas.Conve
         if m.user_id == me:
             my_role = m.role
         elif not conv.is_group:
-            other_user = schemas.UserOut.model_validate(u)
+            other_user = schemas.PublicUser.model_validate(u)
     last = cc.last_message(db, conv.id)
     return schemas.ConversationOut(
         id=conv.id,

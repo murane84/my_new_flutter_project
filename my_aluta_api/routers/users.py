@@ -64,8 +64,11 @@ def sync_contacts(
             added += 1
     if added:
         db.commit()
+    # They're in my phone book, so name / photo / number — never their email.
     return {
-        "matched": [UserOut.model_validate(u) for u in matched],
+        "matched": [{"id": u.id, "username": u.username,
+                     "avatar_url": u.avatar_url, "phone": u.phone,
+                     "is_online": bool(u.is_online)} for u in matched],
         "added": added,
     }
 
@@ -389,9 +392,20 @@ def lookup_user(
         )
     if user is None:
         raise HTTPException(status_code=404, detail="No Aluta user with that username or number")
+    friend = _is_friend(db, current_user.id, user.id)
+    by_phone = bool(query.startswith("+") or len(digits) >= 8)
+    # 🔒 A stranger found by @username shows name + photo only — never their
+    # email, and their phone only if I searched by that very number (I
+    # already know it). Friends see what they'd see anyway.
     return {
-        "user": UserOut.model_validate(user),
-        "is_friend": _is_friend(db, current_user.id, user.id),
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "avatar_url": user.avatar_url,
+            "is_online": bool(user.is_online) if friend else False,
+            "phone": user.phone if (friend or by_phone) else None,
+        },
+        "is_friend": friend,
     }
 
 

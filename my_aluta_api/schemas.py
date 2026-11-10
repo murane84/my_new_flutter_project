@@ -37,6 +37,18 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PublicUser(BaseModel):
+    """Another person as shown to OTHERS (message senders, chat peers): never
+    their email or account flags — those are for the account owner only."""
+    id: int
+    username: str
+    is_online: Optional[bool] = False
+    phone: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class UserStatus(BaseModel):
     user_id: int
     is_online: bool
@@ -105,7 +117,9 @@ class Message(BaseModel):
 class MessageWithSender(BaseModel):
     id: int
     sender_id: int
-    sender: UserOut  # The sender is now a full UserOut object
+    # The sender as others see them (no email) — this goes to every reader,
+    # including group members who aren't their friends.
+    sender: PublicUser
     receiver_id: Optional[int] = None
     conversation_id: Optional[int] = None
     content: Optional[str] = ""

@@ -1292,15 +1292,7 @@ def react_moment(
     """React to a moment (a heart). Authorised by membership of the bond the
     moment belongs to — so the PARTNER can react to what you pinned, not just the
     owner. Sending the same emoji again clears it (toggle)."""
-    moment = db.query(PinnedMoment).filter(PinnedMoment.id == moment_id).first()
-    if not moment:
-        raise HTTPException(status_code=404, detail="Moment not found")
-    is_member = db.query(SpaceMember).filter(
-        SpaceMember.space_id == moment.space_id,
-        SpaceMember.user_id == current_user.id,
-    ).first()
-    if not is_member:
-        raise HTTPException(status_code=403, detail="Not part of this space")
+    moment = _moment_for_member_or_404(db, moment_id, current_user.id)
 
     emoji = (payload.emoji or "").strip()
     if not emoji or len(emoji) > 16:
@@ -1320,8 +1312,10 @@ def react_moment(
             moment_id=moment_id, user_id=current_user.id, emoji=emoji))
     db.commit()
 
-    # Tell the moment's author their partner reacted (unless reacting to my own).
-    if moment.author_id and moment.author_id != current_user.id:
+    # Tell the moment's author their partner reacted (unless reacting to my own)
+    # — over the socket too only across a live, unblocked pair.
+    if moment.author_id and moment.author_id != current_user.id and \
+            not crud.blocked_either(db, current_user.id, moment.author_id):
         try:
             safe_notify_user(moment.author_id, {
                 "type": "space_moment_react",
@@ -1366,6 +1360,17 @@ def _moment_for_member_or_404(db: Session, moment_id: int,
         SpaceMember.user_id == user_id,
     ).first()
     if not member:
+        raise HTTPException(status_code=403, detail="Not part of this space")
+    # The partner listed in MY Space only gets in while the bond is live:
+    # not before they've accepted, not after either un-pinned, not across a
+    # block. (The owner always; a group Space by membership.)
+    space = db.query(RelationshipSpace).filter(
+        RelationshipSpace.id == moment.space_id).first()
+    if space is None:
+        raise HTTPException(status_code=404, detail="Moment not found")
+    if space.owner_id != user_id and \
+            _partner_id(space, space.owner_id) is not None and \
+            _active_partner(db, space, space.owner_id) != user_id:
         raise HTTPException(status_code=403, detail="Not part of this space")
     return moment
 

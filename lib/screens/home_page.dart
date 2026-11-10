@@ -3458,6 +3458,38 @@ class HomePageState extends rp.ConsumerState<HomePage>
         ),
       );
 
+  /// The story rim on a friend's photo — the SAME language as the status
+  /// tray: my Harmony partner's new status glows warm theme → rose → gold,
+  /// their seen one a soft rose; everyone else the usual gradient / grey.
+  BoxDecoration _storyRim(int id, StoryGroup story, ColorScheme scheme) {
+    final partner = _isHarmonyPartner(id);
+    if (story.hasUnseen) {
+      return BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: SweepGradient(
+            colors: partner
+                ? [
+                    scheme.primary,
+                    const Color(0xFFFF5C8A),
+                    const Color(0xFFF2A541),
+                    scheme.primary,
+                  ]
+                : const [
+                    Color(0xFFF9A825),
+                    Color(0xFFE91E63),
+                    Color(0xFF7B1FA2),
+                    Color(0xFFF9A825),
+                  ]),
+      );
+    }
+    return BoxDecoration(
+      shape: BoxShape.circle,
+      color: partner
+          ? const Color(0xFFFF5C8A).withValues(alpha: 0.45)
+          : scheme.onSurface.withValues(alpha: 0.28),
+    );
+  }
+
   /// A bond milestone hit today ("🔥 30 days in tune today"), else null.
   String? _milestoneWhisper(Map<String, dynamic>? space) {
     final r = (space?['stats'] as Map?)?['milestone_reached'];
@@ -4491,20 +4523,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       child: Stack(alignment: Alignment.center, children: [
                         Positioned.fill(
                           child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: story.hasUnseen
-                                  ? const SweepGradient(colors: [
-                                      Color(0xFFF9A825),
-                                      Color(0xFFE91E63),
-                                      Color(0xFF7B1FA2),
-                                      Color(0xFFF9A825),
-                                    ])
-                                  : null,
-                              color: story.hasUnseen
-                                  ? null
-                                  : scheme.onSurface.withValues(alpha: 0.28),
-                            ),
+                            decoration: _storyRim(fid, story, scheme),
                           ),
                         ),
                         Container(
@@ -4570,7 +4589,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
                     Builder(builder: (_) {
                       final ys = _yourSongWith(
                           int.tryParse(_activeFriendId ?? '') ?? -1);
-                      if (ys == null || tight) return const SizedBox.shrink();
+                      // Web plays from its own queue (no file paths), so
+                      // "play your song" can't find it there.
+                      if (ys == null || tight || kIsWeb) {
+                        return const SizedBox.shrink();
+                      }
                       return Tooltip(
                         message: 'Your song · $ys',
                         child: GestureDetector(

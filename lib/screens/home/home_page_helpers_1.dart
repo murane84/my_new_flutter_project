@@ -1948,20 +1948,7 @@ extension _HomePageHelpers1 on HomePageState {
           // Story ring on the rim (gradient = unseen, grey = seen).
           Positioned.fill(
             child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: story.hasUnseen
-                    ? const SweepGradient(colors: [
-                        Color(0xFFF9A825),
-                        Color(0xFFE91E63),
-                        Color(0xFF7B1FA2),
-                        Color(0xFFF9A825),
-                      ])
-                    : null,
-                color: story.hasUnseen
-                    ? null
-                    : scheme.onSurface.withValues(alpha: 0.28),
-              ),
+              decoration: _storyRim(id, story, scheme),
             ),
           ),
           Container(

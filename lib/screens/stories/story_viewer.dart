@@ -1732,7 +1732,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           _pause();
           StoryHooks.tuneIn!(context, author, name, title);
         }),
-      if (music && StoryHooks.playOnMine != null)
+      // Not on web: its player has no loaded-file paths to match.
+      if (music && StoryHooks.playOnMine != null && !kIsWeb)
         _actionChip('▶', 'Play on mine', () {
           final ok = StoryHooks.playOnMine!(title);
           ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(

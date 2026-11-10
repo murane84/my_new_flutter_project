@@ -885,12 +885,11 @@ def put_user_setting(key: str, body: dict, db: Session = Depends(get_db),
 
 # ── Partner's week in music (for the shared recap) ───────────────────────────
 def _bonded(db: Session, a: int, b: int) -> bool:
-    from models import BondRequest
-    return db.query(BondRequest).filter(
-        BondRequest.status == "accepted",
-        ((BondRequest.from_user_id == a) & (BondRequest.to_user_id == b))
-        | ((BondRequest.from_user_id == b) & (BondRequest.to_user_id == a)),
-    ).first() is not None
+    """An accepted bond that BOTH still keep (neither un-pinned their Our
+    Space) — un-pinning ends what a partner can see, like it ends the
+    "Bonds only" last seen (privacy.py)."""
+    import privacy
+    return b in privacy.bond_ids(db, a) and b in privacy.bonded_to(db, a)
 
 
 def _shares_listening_with(db: Session, owner: int, viewer: int) -> bool:

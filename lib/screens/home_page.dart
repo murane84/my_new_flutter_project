@@ -103,6 +103,7 @@ import '../services/connected_contacts_service.dart';
 import '../services/now_playing_presence.dart';
 import '../services/online_watch.dart';
 import '../services/heartbeat_log.dart';
+import '../services/last_seen_privacy.dart';
 import '../services/quick_status.dart';
 import '../services/live_inbox.dart';
 import '../services/live_rooms_registry.dart';
@@ -425,6 +426,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
     LiveRoomsRegistry.instance.joinRoom = _dropIntoRoom;
     LiveSessionController.onUnseenSongAsk = _onUnseenSongAsk;
     GroupMeta.instance.addListener(_onGroupMeta);
+    // Changing who sees my last seen also changes whose I see (both ways):
+    // once the choice has reached the server, refetch the list.
+    LastSeenPrivacy.instance.load();
+    LastSeenPrivacy.instance.mode.addListener(_onLastSeenPrivacy);
     // Replied from a notification while the app is alive → refresh that card
     // (its preview becomes "✓ You: …" and the unread clears).
     onInlineReplySent = (fid, cid) {
@@ -604,6 +609,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   @override
   void dispose() {
+    LastSeenPrivacy.instance.mode.removeListener(_onLastSeenPrivacy);
     if (ReplyBanner.onIncoming == _showReplyBanner) {
       ReplyBanner.onIncoming = null;
       LiveRoomsRegistry.instance.joinRoom = null;
@@ -3334,6 +3340,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
   }
 
   // ── Chat open/close ───────────────────────────────────────────────────────
+
+  void _onLastSeenPrivacy() {
+    // The account sync uploads ~3 s after a change; refetch after that.
+    _lastSeenCache.clear();
+    Future<void>.delayed(const Duration(seconds: 5), () {
+      if (mounted) _fetchFriends(quiet: true);
+    });
+  }
 
   /// The later of two server "last seen" times (either may be missing).
   String? _freshestLastSeen(String? a, String? b) {

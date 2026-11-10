@@ -8,7 +8,8 @@ allow THEM — hide yours and you stop seeing theirs.
 """
 import json
 
-from models import UserSetting, BondRequest, Friend
+from models import (UserSetting, BondRequest, Friend, RelationshipSpace,
+                    SpaceMember)
 
 MODES = ("circle", "bonds", "nobody")
 
@@ -36,13 +37,33 @@ def modes_for(db, ids) -> dict:
     return out
 
 
-def bond_ids(db, uid: int) -> set:
-    """Everyone uid shares an accepted bond (Our Space) with."""
+def _accepted(db, uid: int) -> set:
     rows = db.query(BondRequest.from_user_id, BondRequest.to_user_id).filter(
         BondRequest.status == "accepted",
         (BondRequest.from_user_id == uid) | (BondRequest.to_user_id == uid),
     ).all()
     return {int(b if int(a) == uid else a) for a, b in rows} - {uid}
+
+
+def bond_ids(db, uid: int) -> set:
+    """uid's bonds AS uid SEES THEM: an accepted bond whose Our Space uid
+    still keeps. Un-pinning the Space ends it here too (the accepted
+    request stays on record), matching what uid's app shows."""
+    rows = db.query(SpaceMember.user_id).join(
+        RelationshipSpace, RelationshipSpace.id == SpaceMember.space_id,
+    ).filter(RelationshipSpace.owner_id == uid,
+             SpaceMember.user_id != uid).all()
+    return _accepted(db, uid) & {int(r[0]) for r in rows}
+
+
+def bonded_to(db, uid: int) -> set:
+    """Everyone who still keeps an Our Space with uid (accepted bond) — the
+    people whose "Bonds only" choice includes uid."""
+    rows = db.query(RelationshipSpace.owner_id).join(
+        SpaceMember, SpaceMember.space_id == RelationshipSpace.id,
+    ).filter(SpaceMember.user_id == uid,
+             RelationshipSpace.owner_id != uid).all()
+    return _accepted(db, uid) & {int(r[0]) for r in rows}
 
 
 def _allows(mode: str, is_friend: bool, is_bond: bool) -> bool:
@@ -59,10 +80,12 @@ def visible_to(db, viewer: int, owners) -> dict:
     owners = [int(o) for o in owners]
     modes = modes_for(db, owners + [viewer])
     mine = modes.get(int(viewer), "circle")
-    bonds = bond_ids(db, int(viewer))
+    my_bonds = bond_ids(db, int(viewer))       # whom I still keep a Space with
+    keeps_me = bonded_to(db, int(viewer))      # who still keeps one with me
     return {
-        o: _allows(modes.get(o, "circle"), True, o in bonds)
-        and _allows(mine, True, o in bonds)
+        # They allow me (I'm in THEIR bonds) and I'd allow them (mine).
+        o: _allows(modes.get(o, "circle"), True, o in keeps_me)
+        and _allows(mine, True, o in my_bonds)
         for o in owners
     }
 

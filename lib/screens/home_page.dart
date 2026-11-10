@@ -3443,6 +3443,67 @@ class HomePageState extends rp.ConsumerState<HomePage>
     });
   }
 
+  /// A one-sided chat says so, kindly, above the messages: until BOTH have
+  /// saved each other we can only message — statuses, music, last seen and
+  /// the rest wait. If they saved me, one tap adds them back.
+  Widget _withCircleBanner(Widget chat) {
+    final fid = int.tryParse(_activeFriendId ?? '');
+    final f = fid == null
+        ? null
+        : _allFriends.firstWhere((x) => (x['id'] as num?)?.toInt() == fid,
+            orElse: () => <String, dynamic>{});
+    if (f == null || f.isEmpty) return chat;
+    final byMe = f['added_by_me'] != false;
+    final me = f['added_me'] != false;
+    if (byMe && me) return chat;
+    final scheme = Theme.of(context).colorScheme;
+    final first = _contactDisplayName(_activeFriendPhone, _activeFriendName ?? '')
+        .trim()
+        .split(RegExp(r'\s+'))
+        .first;
+    final banner = Material(
+      color: scheme.surfaceContainerHighest.withValues(alpha: 0.7),
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+        child: Row(children: [
+          Icon(Icons.person_add_alt_1_rounded,
+              size: 18, color: accentInk(scheme)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              !byMe
+                  ? '$first saved your number. Add them to your circle to '
+                      'share statuses, music and more.'
+                  : 'Waiting for $first to save your number — until then '
+                      'you can message each other.',
+              style: TextStyle(fontSize: 12.5, color: scheme.onSurface),
+            ),
+          ),
+          if (!byMe)
+            TextButton(
+              onPressed: () async {
+                final ok = await ApiService().addFriend(fid!);
+                if (!mounted) return;
+                showToast(
+                    context,
+                    ok
+                        ? 'Added — you and $first are in each other’s circle 💛'
+                        : 'Couldn’t add them — try again',
+                    type: ok ? ToastType.success : ToastType.error);
+                if (ok) _fetchFriends(quiet: true);
+              },
+              child: const Text('Add'),
+            ),
+        ]),
+      ),
+    );
+    return Column(children: [
+      Padding(padding: const EdgeInsets.fromLTRB(8, 6, 8, 2), child: banner),
+      Expanded(child: chat),
+    ]);
+  }
+
   /// The chat header's photo slot: a 34 px photo in a 42 px ring slot that
   /// LAYS OUT 36 px tall — the rim overhangs into the header's padding — so
   /// the header is the same height with or without a ring.
@@ -5026,7 +5087,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       initialJumpMessageId: _pendingJumpMessageId,
                     )
                   : _activeFriendId != null
-                  ? ChatPage(
+                  ? _withCircleBanner(ChatPage(
                       key: ValueKey(_activeFriendId),
                       friendId: int.parse(_activeFriendId!),
                       friendName: _contactDisplayName(
@@ -5074,7 +5135,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       initialSharePaths: _shareToSend,
                       onShareConsumed: () => _shareToSend = null,
                       initialJumpMessageId: _pendingJumpMessageId,
-                    )
+                    ))
                   : _buildFriendList(context),
                 ),
                 ),

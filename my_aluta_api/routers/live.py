@@ -31,15 +31,10 @@ router = APIRouter(prefix="/live", tags=["Live Session"])
 
 
 def _friend_ids(db: Session, uid: int) -> list:
-    """The user's circle (symmetric Friend rows)."""
-    rows = db.query(Friend).filter(
-        (Friend.user_id == uid) | (Friend.friend_id == uid)).all()
-    ids = set()
-    for r in rows:
-        other = r.friend_id if r.user_id == uid else r.user_id
-        if other != uid:
-            ids.add(int(other))
-    return list(ids)
+    """The user's MUTUAL friends (both saved each other) — a circle room is
+    announced only to them."""
+    import crud
+    return list(crud._get_friend_ids(db, int(uid)))
 
 
 def _in_group(uid: int, cid: int) -> bool:
@@ -59,9 +54,8 @@ def _in_group(uid: int, cid: int) -> bool:
 def _related(db: Session, a: int, b: int) -> bool:
     """May [a] invite [b] to a private 1:1 Listen Together? Friends, or people
     who already share a chat / group / Our Space — never a stranger."""
-    if db.query(Friend).filter(
-            ((Friend.user_id == a) & (Friend.friend_id == b))
-            | ((Friend.user_id == b) & (Friend.friend_id == a))).first():
+    import crud
+    if crud.are_mutual(db, a, b):
         return True
     mine = {r[0] for r in db.query(ConversationMember.conversation_id)
             .filter(ConversationMember.user_id == a).all()}
@@ -85,11 +79,8 @@ def _are_friends(a: int, b: int) -> bool:
         return True
     db = SessionLocal()
     try:
-        row = db.query(Friend).filter(
-            ((Friend.user_id == a) & (Friend.friend_id == b))
-            | ((Friend.user_id == b) & (Friend.friend_id == a))
-        ).first()
-        return row is not None
+        import crud
+        return crud.are_mutual(db, a, b)
     except Exception:
         return False
     finally:

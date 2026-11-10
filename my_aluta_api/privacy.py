@@ -168,10 +168,8 @@ def status_audience_of(db, author: int, candidates) -> set:
 def last_seen_visible(db, owner: int, viewer: int) -> bool:
     if int(owner) == int(viewer):
         return True
-    is_friend = db.query(Friend).filter(
-        ((Friend.user_id == owner) & (Friend.friend_id == viewer))
-        | ((Friend.user_id == viewer) & (Friend.friend_id == owner))
-    ).first() is not None
+    import crud
+    is_friend = crud.are_mutual(db, owner, viewer)
     if not is_friend:
         return False
     return visible_to(db, int(viewer), [int(owner)]).get(int(owner), False)

@@ -265,14 +265,10 @@ def _friend_ids(uid: int) -> list:
     fan-out. Mirrors crud._get_friend_ids but self-contained for the WS layer."""
     db = SessionLocal()
     try:
-        rows = db.query(Friend).filter(
-            (Friend.user_id == uid) | (Friend.friend_id == uid)).all()
-        ids = set()
-        for r in rows:
-            other = r.friend_id if r.user_id == uid else r.user_id
-            if other != uid:
-                ids.add(int(other))
-        return list(ids)
+        # MUTUAL friends only — presence (listening, open rooms) is a "two
+        # friends" thing; a one-sided contact can only message.
+        import crud
+        return list(crud._get_friend_ids(db, int(uid)))
     except Exception:
         return []
     finally:
@@ -538,10 +534,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                         try:
                             # Friends only — a stranger can't knock.
                             me_id = int(user_id)
-                            is_friend = db.query(Friend).filter(
-                                ((Friend.user_id == me_id) & (Friend.friend_id == target))
-                                | ((Friend.user_id == target) & (Friend.friend_id == me_id))
-                            ).first() is not None
+                            # Mutual friends only (both saved each other).
+                            import crud as _crud_m
+                            is_friend = _crud_m.are_mutual(db, me_id, target)
                             me = (db.query(User)
                                   .filter(User.id == me_id).first())
                             name = (me.username or "") if me else ""

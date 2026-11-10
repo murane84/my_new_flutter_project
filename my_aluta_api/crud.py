@@ -255,7 +255,9 @@ def get_all_users(db: Session, current_user_id: int):
     # circle via contacts sync (mobile phone-book match) or an explicit add
     # (by username/phone). This is what the chat list is built from, so a user
     # never sees every registered account by default.
-    friend_ids = _get_friend_ids(db, current_user_id)
+    # Contacts (either direction): someone who saved my number can message
+    # me and shows in my list, even before I've saved theirs.
+    friend_ids = _get_contact_ids(db, current_user_id)
     if not friend_ids:
         return []
     return db.query(User).filter(User.id.in_(friend_ids)).all()
@@ -361,10 +363,15 @@ def get_friends_with_unread_counts(db: Session, user_id: int):
     except Exception:
         seen_ok = {}
 
+    mine = _added_by(db, user_id)
+    theirs = _added_me(db, user_id)
     for friend in friends:
         last_message = get_last_message_with_friend(db, user_id, friend.id)
         unread_count = get_unread_messages_count_with_friend(db, user_id, friend.id)
-        online = bool(friend.is_online and is_recently_active(friend.last_seen))
+        mutual = friend.id in mine and friend.id in theirs
+        # Presence is a "two friends" thing: one-sided contacts never see it.
+        online = bool(mutual and friend.is_online
+                      and is_recently_active(friend.last_seen))
 
         friends_with_data.append(
             FriendWithUnread(
@@ -384,8 +391,11 @@ def get_friends_with_unread_counts(db: Session, user_id: int):
                 phone=friend.phone,
                 avatar_url=friend.avatar_url,
                 last_seen=(friend.last_seen.isoformat()
-                           if friend.last_seen and seen_ok.get(friend.id, False)
+                           if mutual and friend.last_seen
+                           and seen_ok.get(friend.id, False)
                            else None),
+                added_by_me=friend.id in mine,
+                added_me=friend.id in theirs,
             )
         )
 
@@ -420,14 +430,46 @@ def get_offline_friends_count(db: Session, user_id: int) -> int:
     return db.query(User).filter(User.id.in_(friend_ids), User.is_online == False).count()
 
 
+# ── Contacts vs friends ──────────────────────────────────────────────────────
+# A Friend row is ONE direction: user_id added friend_id (saved their number
+# in the phone book → contact sync, or added them in the app). Two levels:
+#   • CONTACTS — either direction: they're in my chat list and we can MESSAGE.
+#   • FRIENDS  — both directions (MUTUAL): only then do the "two friends"
+#     features open — statuses, last seen, online / listening presence,
+#     tune-in, watches, bonds, group adds, jams. Like WhatsApp: until they've
+#     saved me back, I can only message them.
+
+def _added_by(db: Session, user_id: int) -> set:
+    """People [user_id] has added (their side)."""
+    return {int(r[0]) for r in db.query(Friend.friend_id)
+            .filter(Friend.user_id == user_id).all()} - {int(user_id)}
+
+
+def _added_me(db: Session, user_id: int) -> set:
+    """People who have added [user_id] (the other side)."""
+    return {int(r[0]) for r in db.query(Friend.user_id)
+            .filter(Friend.friend_id == user_id).all()} - {int(user_id)}
+
+
+def _get_contact_ids(db: Session, user_id: int) -> set:
+    """Either direction — chat list + messaging."""
+    return _added_by(db, user_id) | _added_me(db, user_id)
+
+
 def _get_friend_ids(db: Session, user_id: int) -> set:
-    friend_ids = set()
-    for rel in db.query(Friend).filter((Friend.user_id == user_id) | (Friend.friend_id == user_id)).all():
-        if rel.user_id != user_id:
-            friend_ids.add(rel.user_id)
-        if rel.friend_id != user_id:
-            friend_ids.add(rel.friend_id)
-    return friend_ids
+    """MUTUAL friends — both have added each other. Every "two friends"
+    feature uses this (stories, presence, last seen, tune-in, bonds…)."""
+    return _added_by(db, user_id) & _added_me(db, user_id)
+
+
+def are_mutual(db: Session, a: int, b: int) -> bool:
+    if int(a) == int(b):
+        return True
+    n = db.query(Friend).filter(
+        ((Friend.user_id == a) & (Friend.friend_id == b))
+        | ((Friend.user_id == b) & (Friend.friend_id == a))
+    ).count()
+    return n >= 2
 
 
 # ------------------ Mute/Block ------------------

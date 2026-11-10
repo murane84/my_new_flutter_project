@@ -165,6 +165,10 @@ class FriendWithUnread(BaseModel):
     # When they were last active (ISO) — the chat header's "Last seen" can
     # show the right time the moment a DM opens, not the last message's time.
     last_seen: Optional[str] = None
+    # One-sided vs mutual: I added them / they added me. Both → friends
+    # (statuses, presence…); one side only → we can just message.
+    added_by_me: bool = True
+    added_me: bool = True
 
     model_config = ConfigDict(from_attributes=True)  # For Pydantic v2
 

@@ -85,6 +85,16 @@ async def lifespan(app: FastAPI):
                 pass
             await asyncio.sleep(3600)
     _media_task = asyncio.create_task(_media_loop())
+    # Directional friendships (mutual rule): give real two-way pairs their
+    # missing side once per deploy (mutual.py). Off the event loop.
+    async def _mutual_once():
+        await asyncio.sleep(15)
+        try:
+            from mutual import backfill_mutual_once
+            await asyncio.to_thread(backfill_mutual_once)
+        except Exception:
+            pass
+    _mutual_task = asyncio.create_task(_mutual_once())
     try:
         yield
     finally:
@@ -92,6 +102,7 @@ async def lifespan(app: FastAPI):
         _heart_task.cancel()
         _morning_task.cancel()
         _media_task.cancel()
+        _mutual_task.cancel()
 
 
 # ✅ Create FastAPI app ONCE

@@ -51,12 +51,11 @@ def sync_contacts(
     matched = [u for u in candidates if _phone_keys(u.phone) & contact_keys]
     added = 0
     for u in matched:
+        # MY side only: they're in my phone book. They become a full friend
+        # when they've saved me too (their own sync / add adds their side).
         exists = (
             db.query(Friend)
-            .filter(
-                ((Friend.user_id == current_user.id) & (Friend.friend_id == u.id))
-                | ((Friend.user_id == u.id) & (Friend.friend_id == current_user.id))
-            )
+            .filter(Friend.user_id == current_user.id, Friend.friend_id == u.id)
             .first()
         )
         if not exists:
@@ -350,10 +349,10 @@ def get_friends_with_unread_counts(
 
 
 def _is_friend(db: Session, a: int, b: int) -> bool:
+    """Has [a] added [b] (a's side)? — "Add" vs "Message" in lookup, and
+    idempotent adds. Mutual friendship is crud.are_mutual."""
     return db.query(Friend).filter(
-        ((Friend.user_id == a) & (Friend.friend_id == b))
-        | ((Friend.user_id == b) & (Friend.friend_id == a))
-    ).first() is not None
+        Friend.user_id == a, Friend.friend_id == b).first() is not None
 
 
 @router.get("/users/lookup", tags=["Users"])
@@ -392,7 +391,8 @@ def lookup_user(
         )
     if user is None:
         raise HTTPException(status_code=404, detail="No Aluta user with that username or number")
-    friend = _is_friend(db, current_user.id, user.id)
+    friend = crud.are_mutual(db, current_user.id, user.id)
+    added = _is_friend(db, current_user.id, user.id)
     by_phone = bool(query.startswith("+") or len(digits) >= 8)
     # 🔒 A stranger found by @username shows name + photo only — never their
     # email, and their phone only if I searched by that very number (I
@@ -405,7 +405,9 @@ def lookup_user(
             "is_online": bool(user.is_online) if friend else False,
             "phone": user.phone if (friend or by_phone) else None,
         },
-        "is_friend": friend,
+        # "Message" once I've added them; mutual = full friends.
+        "is_friend": added,
+        "mutual": friend,
     }
 
 
@@ -673,10 +675,8 @@ def get_blocked_friends_status(
 
 # ── "Tell me when they're online" (one-shot watch) ───────────────────────────
 def _are_friends(db: Session, a: int, b: int) -> bool:
-    return db.query(Friend).filter(
-        ((Friend.user_id == a) & (Friend.friend_id == b))
-        | ((Friend.user_id == b) & (Friend.friend_id == a))
-    ).first() is not None
+    """MUTUAL friends (both saved each other) — watches, music week…"""
+    return crud.are_mutual(db, a, b)
 
 
 @router.get("/users/me/online-watches", tags=["Users"])
@@ -783,10 +783,8 @@ QUICK_STATUSES = {"free": 60, "busy": 60, "driving": 60, "sleeping": 8 * 60}
 
 
 def _friend_id_list(db: Session, uid: int) -> list:
-    rows = db.query(Friend).filter(
-        (Friend.user_id == uid) | (Friend.friend_id == uid)).all()
-    return list({int(r.friend_id if r.user_id == uid else r.user_id)
-                 for r in rows} - {uid})
+    """Mutual friends — a quick status is for people who saved me back."""
+    return list(crud._get_friend_ids(db, int(uid)))
 
 
 def _status_out(row) -> dict | None:

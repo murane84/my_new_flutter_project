@@ -45,25 +45,32 @@ def _accepted(db, uid: int) -> set:
     return {int(b if int(a) == uid else a) for a, b in rows} - {uid}
 
 
-def bond_ids(db, uid: int) -> set:
-    """uid's bonds AS uid SEES THEM: an accepted bond whose Our Space uid
-    still keeps. Un-pinning the Space ends it here too (the accepted
-    request stays on record), matching what uid's app shows."""
+def _i_keep(db, uid: int) -> set:
     rows = db.query(SpaceMember.user_id).join(
         RelationshipSpace, RelationshipSpace.id == SpaceMember.space_id,
     ).filter(RelationshipSpace.owner_id == uid,
              SpaceMember.user_id != uid).all()
-    return _accepted(db, uid) & {int(r[0]) for r in rows}
+    return {int(r[0]) for r in rows}
 
 
-def bonded_to(db, uid: int) -> set:
-    """Everyone who still keeps an Our Space with uid (accepted bond) — the
-    people whose "Bonds only" choice includes uid."""
+def _keep_me(db, uid: int) -> set:
     rows = db.query(RelationshipSpace.owner_id).join(
         SpaceMember, SpaceMember.space_id == RelationshipSpace.id,
     ).filter(SpaceMember.user_id == uid,
              RelationshipSpace.owner_id != uid).all()
-    return _accepted(db, uid) & {int(r[0]) for r in rows}
+    return {int(r[0]) for r in rows}
+
+
+def bond_ids(db, uid: int) -> set:
+    """uid's live bonds: an accepted bond whose Our Space BOTH still keep.
+    If either un-pins it, it's over for both — the same rule the app uses
+    (status 'partner_left' / no Space) and spaces._active_partner."""
+    return _accepted(db, uid) & _i_keep(db, uid) & _keep_me(db, uid)
+
+
+def bonded_to(db, uid: int) -> set:
+    """Same set seen from the other side (kept for callers' readability)."""
+    return bond_ids(db, uid)
 
 
 def _allows(mode: str, is_friend: bool, is_bond: bool) -> bool:

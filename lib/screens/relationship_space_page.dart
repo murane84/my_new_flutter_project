@@ -1191,8 +1191,13 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       return;
     }
     // A bond they haven't accepted yet never buzzes them (server agrees).
-    if ((_space['status'] ?? 'active').toString() == 'pending_partner') {
-      showToast(context, 'Nudges start once they accept your bond 💞',
+    final st = (_space['status'] ?? 'active').toString();
+    if (st == 'pending_partner' || st == 'partner_left') {
+      showToast(
+          context,
+          st == 'partner_left'
+              ? 'They’ve unpinned this Space — nudges are paused'
+              : 'Nudges start once they accept your bond 💞',
           type: ToastType.info);
       return;
     }

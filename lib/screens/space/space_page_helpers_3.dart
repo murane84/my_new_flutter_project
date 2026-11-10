@@ -8,9 +8,11 @@ part of '../relationship_space_page.dart';
 extension _SpacePageHelpers3 on _RelationshipSpacePageState {
   // ── pending partner (bond not yet mutual) ────────────────────────────────
   Widget _pendingPartnerBanner(ColorScheme scheme) {
-    if ((_space['status'] ?? 'active').toString() != 'pending_partner') {
+    final status = (_space['status'] ?? 'active').toString();
+    if (status != 'pending_partner' && status != 'partner_left') {
       return const SizedBox.shrink();
     }
+    final left = status == 'partner_left';
     final name =
         _others.isNotEmpty ? ContactNames.instance.displayName(of: _others.first, registered: (_others.first['username'] ?? 'them').toString()) : 'them';
     return Padding(
@@ -24,12 +26,16 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
         ),
         child: Row(
           children: [
-            Icon(Icons.hourglass_top_rounded, size: 18, color: _accent),
+            Icon(left ? Icons.link_off_rounded : Icons.hourglass_top_rounded,
+                size: 18, color: _accent),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Waiting for $name to accept — this becomes a two-way Space once '
-                'they join.',
+                left
+                    ? '$name unpinned this Space. Your memories stay here; '
+                        'it becomes two-way again if you both pin it.'
+                    : 'Waiting for $name to accept — this becomes a two-way '
+                        'Space once they join.',
                 style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
               ),
             ),

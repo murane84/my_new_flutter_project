@@ -261,6 +261,9 @@ def _space_status(db: Session, space: RelationshipSpace,
         return "active"
     if _sibling_space(db, space, current_user_id) is not None:
         return "active"
+    # Accepting creates BOTH partners' Spaces, so an accepted bond with no
+    # mirror means they've since un-pinned it: not a live bond any more —
+    # nothing I do here should keep buzzing them (and my app shows it).
     acc = (
         db.query(BondRequest)
         .filter(
@@ -274,7 +277,7 @@ def _space_status(db: Session, space: RelationshipSpace,
         )
         .first()
     )
-    return "active" if acc is not None else "pending_partner"
+    return "partner_left" if acc is not None else "pending_partner"
 
 
 def _active_partner(db: Session, space: RelationshipSpace,

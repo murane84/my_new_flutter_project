@@ -9,6 +9,7 @@ import '../services/aluta_mood.dart';
 import '../services/song_insights.dart';
 import '../services/account_prefs.dart';
 import 'heart_burst.dart';
+import '../screens/api_service.dart';
 
 int _glowDaySeed() {
   final d = DateTime.now();
@@ -157,6 +158,29 @@ class _GlowFeedState extends State<GlowFeed> {
   }
 
   String _shareText(GlowCard c) => glowShareText(c);
+
+  /// A Glow card → my text status, on Glow's own warm rose → gold, so my
+  /// circle gets the words that moved me today. One tap; "Your story" shows
+  /// Posting… → Posted ✓ like every post.
+  Future<void> _shareAsStatus(GlowCard c) async {
+    HapticFeedback.selectionClick();
+    final m = ScaffoldMessenger.maybeOf(context);
+    m?.showSnackBar(const SnackBar(
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
+        content: Text('Posting as your status…')));
+    final res = await ApiService().createStory(
+        kind: 'text',
+        caption: _shareText(c),
+        background: '#ffe8436b,#fff5a524');
+    if (!mounted) return;
+    m?.hideCurrentSnackBar();
+    m?.showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(res != null
+            ? 'Posted ✓ — it’s on “Your story” in Circle'
+            : 'Couldn’t post it — check your connection and try again')));
+  }
 
   void _send(GlowCard c) {
     final b = SongBridge.instance;
@@ -420,6 +444,8 @@ class _GlowFeedState extends State<GlowFeed> {
                 'Save',
                 Colors.white,
                 () => _toggleSave(c)),
+            _iconBtn(Icons.amp_stories_rounded, 'Share as status',
+                Colors.white, () => _shareAsStatus(c)),
           ]),
           const SizedBox(height: 8),
           if (c.title.isNotEmpty) ...[
@@ -507,6 +533,8 @@ class _GlowFeedState extends State<GlowFeed> {
                 'Save',
                 _saved.contains(c.id) ? a : scheme.onSurfaceVariant,
                 () => _toggleSave(c)),
+            _iconBtn(Icons.amp_stories_rounded, 'Share as status',
+                scheme.onSurfaceVariant, () => _shareAsStatus(c)),
           ]),
           if (c.title.isNotEmpty)
             Text(c.title,
@@ -592,6 +620,8 @@ class _GlowFeedState extends State<GlowFeed> {
                 'Save',
                 _saved.contains(c.id) ? scheme.primary : scheme.onSurfaceVariant,
                 () => _toggleSave(c)),
+            _iconBtn(Icons.amp_stories_rounded, 'Share as status',
+                scheme.onSurfaceVariant, () => _shareAsStatus(c)),
           ]),
           if (c.title.isNotEmpty) ...[
             Text(c.title,

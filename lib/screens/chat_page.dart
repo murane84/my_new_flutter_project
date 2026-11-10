@@ -101,6 +101,7 @@ import '../utils/app_config.dart';
 import '../utils/loose_url_linkifier.dart';
 import '../services/app_busy.dart';
 import '../services/block_list.dart';
+import '../services/track_title.dart' show splitTitleArtist;
 import '../services/aluta_mood.dart';
 import '../services/moment_prefs.dart';
 import '../data/glow_cards.dart';
@@ -3752,6 +3753,13 @@ class _ChatPageState extends State<ChatPage>
             Navigator.pop(ctx);
             _showForwardPicker(msg);
           }),
+        // Make it my status (text, photo/video/GIF, song — never a heart).
+        if (_canShareAsStatus(msg))
+          _MenuAction('status', Icons.amp_stories_rounded, 'Share as status',
+              () {
+            Navigator.pop(ctx);
+            _shareMsgAsStatus(msg);
+          }, short: 'Status'),
         // React with the song playing right now (a vinyl chip).
         if (!deleted && !isHeart && _nowPlayingTitle().isNotEmpty)
           _MenuAction('songreact', Icons.album_rounded,

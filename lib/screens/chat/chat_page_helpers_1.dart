@@ -127,6 +127,98 @@ extension _ChatPageHelpers1 on _ChatPageState {
     }
   }
 
+  /// Can this bubble become my status? Text, a photo / video / GIF, or a
+  /// song — never a secret heart (personal by design), a deleted or unsent
+  /// message, a call / live log, a voice note or a file.
+  bool _canShareAsStatus(Map<String, dynamic> msg) {
+    if ((msg['message_type'] ?? 'text') == 'heart') return false;
+    if (msg['is_deleted'] == true) return false;
+    if ((msg['id']?.toString() ?? 'tmp-').startsWith('tmp-')) return false;
+    final t = (msg['message_type'] ?? 'text').toString();
+    if (t == 'text') {
+      return _stripQuote((msg['content'] as String?) ?? '').trim().isNotEmpty;
+    }
+    if (t == 'image' || t == 'video') {
+      return ((msg['media_url'] as String?) ?? '').isNotEmpty;
+    }
+    return t == 'song';
+  }
+
+  /// Message ⋮ → "Share as status". Someone else's photo / words go to MY
+  /// circle for 24 h, so that asks once first; my own goes straight up.
+  /// The bytes are re-uploaded as mine (the server only lets me post my own
+  /// media), and the usual "Posting… → Posted ✓" shows on Your story.
+  Future<void> _shareMsgAsStatus(Map<String, dynamic> msg) async {
+    final isMe = msg['sender_id'].toString() == _myId;
+    final t = (msg['message_type'] ?? 'text').toString();
+    final rel = (msg['media_url'] as String?) ?? '';
+    final words = _stripQuote((msg['content'] as String?) ?? '').trim();
+    if (!isMe) {
+      final what = t == 'text'
+          ? 'this message'
+          : t == 'song'
+              ? 'this song'
+              : t == 'video'
+                  ? 'this video'
+                  : 'this photo';
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (d) => AlertDialog(
+          title: const Text('Share as your status?'),
+          content: Text('Your circle will see $what on your status for 24 '
+              'hours. It came from someone else — make sure they’d be happy '
+              'with that.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(d, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(d, true),
+                child: const Text('Share')),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+    showToast(context, 'Posting as your status…', type: ToastType.info);
+    Map<String, dynamic>? res;
+    if (t == 'text') {
+      res = await ApiService().createStory(
+          kind: 'text',
+          caption: words,
+          // Aluta's own gradient (purple night) — edit-free, one tap.
+          background: '#ff5b2c83,#ff1d1040');
+    } else if (t == 'song') {
+      final ta = splitTitleArtist(_songTitleOf(msg));
+      res = await ApiService().createStory(
+          kind: 'music', musicTitle: ta.$1, musicArtist: ta.$2);
+    } else if (rel.startsWith('http')) {
+      // A GIF from the picker (an outside link) → a sticker status.
+      res = await ApiService().createStory(
+          kind: 'sticker', musicArtUrl: rel, background: '#ff5b2c83,#ff1d1040');
+    } else {
+      final mime = (msg['media_mime'] as String?) ??
+          (t == 'video' ? 'video/mp4' : 'image/jpeg');
+      final mine = await _durableMediaRef(rel, mime);
+      final assetId =
+          (mine.isNotEmpty && mine != rel) ? mine.split('/').last : null;
+      if (assetId != null) {
+        res = await ApiService().createStory(
+            kind: t == 'video' ? 'video' : 'photo',
+            mediaAssetId: assetId,
+            mediaMime: mime,
+            caption: words.isEmpty ? null : words);
+      }
+    }
+    if (!mounted) return;
+    showToast(
+        context,
+        res != null
+            ? 'Posted ✓ — it’s on “Your story” in Circle'
+            : 'Couldn’t post it — check your connection and try again',
+        type: res != null ? ToastType.success : ToastType.error);
+  }
+
   // A friendly song title for a 'song' bubble (its spoken title lives in
   // `content`, falling back to the file name).
   String _songTitleOf(Map<String, dynamic> msg) {

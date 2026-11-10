@@ -102,6 +102,7 @@ import '../widgets/presence_ring_avatar.dart';
 import '../services/connected_contacts_service.dart';
 import '../services/now_playing_presence.dart';
 import '../services/online_watch.dart';
+import '../services/heartbeat_log.dart';
 import '../services/quick_status.dart';
 import '../services/live_inbox.dart';
 import '../services/live_rooms_registry.dart';
@@ -398,6 +399,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
   String? _activeFriendLastSeen;
   // Freshest "last seen" per friend this session (from /status in the chat).
   final Map<String, String> _lastSeenCache = {};
+  // Their last song while offline ({title, artist}), when they let me see it.
+  Map<String, dynamic>? _activeFriendLastTrack;
+  // Ticks every 30 s so "Last seen 3 min ago" ages by itself.
+  final ValueNotifier<int> _minuteTick = ValueNotifier<int>(0);
+  Timer? _minuteTimer;
   String? _activeFriendPhone;
   String? _activeFriendAvatar;
   // Chat header: tap the friend's avatar to expand their photo above the thread.
@@ -545,6 +551,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     NowPlayingPresence.instance.startReceiving(poll: kIsWeb);
     // "Tell me when they're online" watches I'm still waiting on.
     OnlineWatchList.instance.load();
+    HeartbeatLog.instance.load();
+    _minuteTimer = Timer.periodic(
+        const Duration(seconds: 30), (_) => _minuteTick.value++);
     GalleryAutoSave.instance.load();
     // Quick statuses ("Free to talk" …): mine + my circle's.
     QuickStatus.instance.addListener(_onPresenceChanged);
@@ -635,6 +644,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _spaceSearchCtrl.dispose();
     _refreshTimer?.cancel();
     _heartbeatTimer?.cancel();
+    _minuteTimer?.cancel();
+    _minuteTick.dispose();
     _connectivitySub?.cancel();
     _notifyWs?.close();
     super.dispose();
@@ -1526,6 +1537,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final name = _contactDisplayName(f['phone']?.toString(),
         (f['username'] ?? d['from_name'] ?? 'Someone').toString());
     final first = name.trim().split(RegExp(r'\s+')).first;
+    HeartbeatLog.record(fromId, d['at']?.toString());
     _lubDub();
     _glow(fromId);
     if (!_appForeground) return;
@@ -3345,6 +3357,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       _activeFriendLastSeen = _freshestLastSeen(
           _lastSeenCache[friend['id'].toString()],
           friend['last_seen'] as String?);
+      _activeFriendLastTrack = null;
       _activeFriendPhone = friend['phone'] as String?;
       _activeFriendAvatar = friend['avatar_url'] as String?;
       _avatarExpanded = false;
@@ -3389,6 +3402,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       _activeFriendName = null;
       _activeFriendOnline = null;
       _activeFriendLastSeen = null;
+      _activeFriendLastTrack = null;
       _avatarExpanded = false;
       _playerExpanded = false; // make sure the chat panel is the front surface
     });
@@ -3441,7 +3455,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
         ? 'Online'
         : (_activeFriendLastSeen?.isNotEmpty == true
             ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
-            : 'Offline');
+            // Unknown or kept private → nothing (never "Offline").
+            : '');
     final fid = int.tryParse(_activeFriendId ?? '');
     final space = fid == null ? null : _spaceWithFriend(fid);
     final name = _contactDisplayName(_activeFriendPhone, _activeFriendName ?? '');
@@ -3904,6 +3919,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
               _activeFriendName = null;
               _activeFriendOnline = null;
               _activeFriendLastSeen = null;
+              _activeFriendLastTrack = null;
               _avatarExpanded = false;
             }),
           ),
@@ -4002,8 +4018,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
                   // When they're playing music right now, that's the status:
                   // "🎧 Listening to …" in the theme colour — tap to tune in.
                   ListenableBuilder(
-                    listenable: Listenable.merge(
-                        [NowPlayingPresence.instance, QuickStatus.instance]),
+                    listenable: Listenable.merge([
+                      NowPlayingPresence.instance,
+                      QuickStatus.instance,
+                      HeartbeatLog.instance,
+                      _minuteTick,
+                    ]),
                     builder: (context, _) {
                       final fid = int.tryParse(_activeFriendId ?? '') ?? -1;
                       final np = NowPlayingPresence.instance.trackFor(fid);
@@ -4012,50 +4032,89 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       final listening = np != null && t.isNotEmpty;
                       // Their quick status leads ("📞 Free to talk · Online").
                       final qs = QuickStatus.instance.lineFor(fid);
-                      final base = _activeFriendOnline == true
+                      final offline = _activeFriendOnline != true;
+                      // No last seen (not known yet, or they keep it
+                      // private): say nothing — never "Offline", which would
+                      // tell you it's hidden.
+                      final seen = _activeFriendLastSeen?.isNotEmpty == true
+                          ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
+                          : '';
+                      // What they last played, when they let me see it.
+                      final lt = (_activeFriendLastTrack?['title'] ?? '')
+                          .toString()
+                          .trim();
+                      // A bonded partner's heartbeat in the last day.
+                      final hb = _spaceWithFriend(fid) == null
+                          ? null
+                          : HeartbeatLog.instance.recent(fid);
+                      final base = !offline
                           ? 'Online'
-                          : _activeFriendLastSeen?.isNotEmpty == true
-                              ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
-                              // Not known yet: stay quiet rather than say
-                              // "Offline" and then change.
-                              : _activeFriendLastSeen == null
-                                  ? ''
-                                  : 'Offline';
+                          : [
+                              if (seen.isNotEmpty) seen,
+                              if (seen.isNotEmpty && lt.isNotEmpty)
+                                'was listening to “$lt”',
+                              // Only alongside a visible last seen, so a
+                              // private one stays private.
+                              if (hb != null && seen.isNotEmpty)
+                                '💓 thought of you '
+                                    '${formatLastSeen(hb.toUtc().toIso8601String())}',
+                            ].join(' · ');
                       const lead = '🎧 Listening to ';
                       final text = listening
                           ? '$lead$t${a.isEmpty ? '' : ' — $a'}'
                           : qs.isEmpty
                               ? base
-                              : '$qs · $base';
+                              : base.isEmpty
+                                  ? qs
+                                  : '$qs · $base';
                       final line = SizedBox(
                         height: 15,
-                        child: _ScrollingText(
-                          key: ValueKey(text),
-                          text: text,
-                          // The song title stands out from "Listening to".
-                          bold: listening
-                              ? (lead.length, lead.length + t.length)
-                              : null,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.normal,
-                            color: listening
-                                ? scheme.primary
-                                : _activeFriendOnline == true
-                                    ? Colors.green
-                                    : textColor.withAlpha(130),
+                        // Changes (online → last seen, typing, listening,
+                        // a minute older) fade instead of snapping.
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 280),
+                          layoutBuilder: (cur, prev) => Stack(
+                            alignment: Alignment.centerLeft,
+                            children: [...prev, ?cur],
+                          ),
+                          child: _ScrollingText(
+                            key: ValueKey(text),
+                            text: text,
+                            // The song title stands out from "Listening to".
+                            bold: listening
+                                ? (lead.length, lead.length + t.length)
+                                : null,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.normal,
+                              color: listening
+                                  ? scheme.primary
+                                  : _activeFriendOnline == true
+                                      ? Colors.green
+                                      : textColor.withAlpha(130),
+                            ),
                           ),
                         ),
                       );
-                      if (!listening) return line;
-                      return GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => _tuneInto(
-                            fid,
-                            _contactDisplayName(_activeFriendPhone,
-                                _activeFriendName ?? '')),
-                        child: line,
-                      );
+                      final who = _contactDisplayName(
+                          _activeFriendPhone, _activeFriendName ?? '');
+                      if (listening) {
+                        return GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _tuneInto(fid, who),
+                          child: line,
+                        );
+                      }
+                      // Away: tap the line for "tell me when they're
+                      // online / play music" right where you're wondering.
+                      if (offline && fid > 0) {
+                        return GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _showAwayWatchSheet(fid, who),
+                          child: line,
+                        );
+                      }
+                      return line;
                     },
                   ),
                 ],
@@ -4285,6 +4344,15 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       friendAvatar: _activeFriendAvatar ?? '',
                       textColor: textColor,
                       showAppBar: false,
+                      onFriendLastTrack: (t) {
+                        if (!mounted) return;
+                        final was = _activeFriendLastTrack;
+                        if ((was?['title'] ?? '') == (t?['title'] ?? '') &&
+                            (was?['artist'] ?? '') == (t?['artist'] ?? '')) {
+                          return;
+                        }
+                        setState(() => _activeFriendLastTrack = t);
+                      },
                       onFriendOnlineStatusChanged: (online, lastSeen) {
                         if (mounted) {
                           final key = _activeFriendId;
@@ -4803,6 +4871,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
             _activeFriendName = null;
             _activeFriendOnline = null;
             _activeFriendLastSeen = null;
+            _activeFriendLastTrack = null;
           } else {
             // Collapse a full-screen panel back to the split view.
             _isMusicFullScreen = false;

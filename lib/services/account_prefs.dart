@@ -49,6 +49,8 @@ class AccountPrefs {
     'music_nudges_on',
     // Quiet hours (services/quiet_hours)
     'quiet_hours_on', 'quiet_from_min', 'quiet_to_min',
+    // Who can see my last seen (services/last_seen_privacy)
+    'last_seen_mode',
     // Equalizer (screens/equalizer_screen + music controls)
     'eq_enabled', 'eq_preset', 'eq_bass', 'eq_loud', 'eq_gains',
     // Playlist view (sort · smart · favourites · group)

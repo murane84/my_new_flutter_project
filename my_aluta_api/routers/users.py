@@ -297,11 +297,32 @@ def set_user_online_status(is_online: bool, tz_offset: int | None = None, db: Se
     return {"message": f"User '{current_user.username}' online status updated to {is_online}"}
 
 @router.get("/users/{user_id}/status", tags=["Users"])
-def get_user_status(user_id: int, db: Session = Depends(get_db)):
+def get_user_status(user_id: int, db: Session = Depends(get_db),
+                    current_user: User = Depends(get_current_user)):
+    """Online / last seen for the chat header. Signed-in only, and "last
+    seen" follows both people's privacy choice (privacy.py) — hidden comes
+    back as null, so nothing tells the viewer it was hidden. When visible
+    and they're offline, also the last song they played (within a day, if
+    the viewer was allowed to see it)."""
+    import privacy
+    from websocket_manager import get_last_played_for
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"user_id": user.id, "is_online": user.is_online and crud.is_recently_active(user.last_seen), "last_seen": user.last_seen.isoformat() if user.last_seen else None, "phone": user.phone, "avatar_url": user.avatar_url}
+    online = bool(user.is_online and crud.is_recently_active(user.last_seen))
+    seen = privacy.last_seen_visible(db, user.id, current_user.id)
+    last_track = None
+    if seen and not online:
+        try:
+            if _shares_listening_with(db, user.id, current_user.id):
+                last_track = get_last_played_for(user.id, current_user.id)
+        except Exception:
+            last_track = None
+    return {"user_id": user.id, "is_online": online,
+            "last_seen": (user.last_seen.isoformat()
+                          if (seen and user.last_seen) else None),
+            "last_track": last_track,
+            "phone": user.phone, "avatar_url": user.avatar_url}
 
 @router.get("/users/friends/unread_counts", response_model=List[schemas.FriendWithUnread], tags=["Users"])
 def get_friends_with_unread_counts(

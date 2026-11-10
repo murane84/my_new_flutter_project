@@ -29,8 +29,35 @@ def set_now_playing(user_id: int, track: dict, audience=None) -> None:
     }
 
 
+# The last song each user played (kept when they stop / go offline), so a
+# friend's chat header can say "Last seen 2h ago · was listening to …".
+# In memory like now_playing; it simply resets on a deploy.
+last_played: Dict[int, dict] = {}
+LAST_PLAYED_TTL = 24 * 3600
+
+
 def clear_now_playing(user_id: int) -> None:
-    now_playing.pop(int(user_id), None)
+    entry = now_playing.pop(int(user_id), None)
+    if entry and isinstance(entry.get("track"), dict):
+        last_played[int(user_id)] = {
+            "track": entry["track"],
+            "audience": entry.get("audience"),
+            "ts": time.time(),
+        }
+
+
+def get_last_played_for(owner_id: int, viewer_id: int) -> Optional[dict]:
+    """The owner's last song (within a day), only if VIEWER was allowed to see
+    it while it played (their audience setting)."""
+    entry = last_played.get(int(owner_id))
+    if not entry or time.time() - entry["ts"] > LAST_PLAYED_TTL:
+        return None
+    aud = entry.get("audience")
+    if aud is not None and int(viewer_id) not in aud:
+        return None
+    t = entry["track"]
+    return {"title": str(t.get("title") or "")[:120],
+            "artist": str(t.get("artist") or "")[:80]}
 
 
 def get_now_playing(user_id: int) -> Optional[dict]:

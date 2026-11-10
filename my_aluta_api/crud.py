@@ -354,6 +354,12 @@ def list_preview(msg) -> str:
 def get_friends_with_unread_counts(db: Session, user_id: int):
     friends = get_all_users(db, user_id)
     friends_with_data = []
+    # Last seen follows both people's privacy choice (privacy.py).
+    try:
+        import privacy
+        seen_ok = privacy.visible_to(db, user_id, [f.id for f in friends])
+    except Exception:
+        seen_ok = {}
 
     for friend in friends:
         last_message = get_last_message_with_friend(db, user_id, friend.id)
@@ -377,7 +383,9 @@ def get_friends_with_unread_counts(db: Session, user_id: int):
                 last_message_read=last_message.is_read if last_message else None,
                 phone=friend.phone,
                 avatar_url=friend.avatar_url,
-                last_seen=friend.last_seen.isoformat() if friend.last_seen else None,
+                last_seen=(friend.last_seen.isoformat()
+                           if friend.last_seen and seen_ok.get(friend.id, False)
+                           else None),
             )
         )
 

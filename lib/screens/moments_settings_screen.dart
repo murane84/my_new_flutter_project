@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../services/heart_lock.dart';
 import '../services/moment_prefs.dart';
 import '../services/quiet_hours.dart';
+import '../services/last_seen_privacy.dart';
 import '../services/song_insights.dart';
 import '../utils/popup_shell.dart';
 import '../widgets/welcome_tour.dart';
@@ -29,6 +30,7 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
       SongInsights.instance.load(),
       HeartLock.instance.init(),
       QuietHours.instance.load(),
+      LastSeenPrivacy.instance.load(),
     ]).then((_) {
       if (mounted) {
         setState(() => _receipts = HeartLock.instance.sendReceipts);
@@ -135,6 +137,65 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
     );
   }
 
+  /// Who can see my last seen — and, the same way back, whose I can see.
+  Widget _lastSeenPrivacy() {
+    final lp = LastSeenPrivacy.instance;
+    final scheme = Theme.of(context).colorScheme;
+    return ValueListenableBuilder<String>(
+      valueListenable: lp.mode,
+      builder: (context, m, _) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Material(
+          color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Icon(Icons.visibility_rounded,
+                      size: 20, color: accentInk(scheme)),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text('Who can see my last seen',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                ]),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<String>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment(value: 'circle', label: Text('My circle')),
+                      ButtonSegment(value: 'bonds', label: Text('Bonds')),
+                      ButtonSegment(value: 'nobody', label: Text('Nobody')),
+                    ],
+                    selected: {m},
+                    onSelectionChanged: (s) => lp.set(s.first),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  switch (m) {
+                    'bonds' =>
+                      'Only your Our Space partners — and you see only theirs.',
+                    'nobody' =>
+                      "Nobody sees yours — and you won't see anyone's.",
+                    _ => 'All your friends — and you see theirs.',
+                  },
+                  style: TextStyle(
+                      fontSize: 12.5, color: scheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _section(String t) => Padding(
         padding: const EdgeInsets.fromLTRB(4, 14, 4, 6),
         child: Text(t.toUpperCase(),
@@ -176,6 +237,8 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
           ),
           _section('Notifications'),
           _quietHours(),
+          _section('Privacy'),
+          _lastSeenPrivacy(),
           _section('Music'),
           _tile(
             icon: Icons.graphic_eq_rounded,

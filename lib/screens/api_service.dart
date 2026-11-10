@@ -3716,6 +3716,8 @@ class ApiService {
           'is_online': isOnline,
           'last_seen': lastSeen,
           'phone': data['phone'],
+          // Their last song, when offline and they let me see it.
+          'last_track': data['last_track'],
         };
       }
       return {};

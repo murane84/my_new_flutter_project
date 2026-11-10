@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'contact_names.dart';
 import 'group_meta.dart';
+import 'heartbeat_log.dart';
 import 'notif_service.dart';
 import '../widgets/reply_banner.dart';
 import '../screens/api_service.dart';
@@ -354,8 +355,10 @@ Future<void> handleFcmData(Map<String, dynamic> data,
     } else if (type == 'heartbeat_tap') {
       // Partner's wordless "thinking of you" (server spaces.py). In the
       // foreground the live socket already pulses the app — no banner.
-      if (foreground) return;
       final from = (data['from_id'] ?? '').toString();
+      final fromId = int.tryParse(from);
+      if (fromId != null) await HeartbeatLog.record(fromId);
+      if (foreground) return;
       await showMessageNotification(
         title: mine((data['title'] ?? '💓').toString()),
         body: mine((data['body'] ?? 'is thinking of you').toString()),

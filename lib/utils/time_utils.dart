@@ -31,6 +31,10 @@ String formatLastSeen(String raw) {
   if (raw.trim().isEmpty) return '';
   final dt = parseServerTime(raw);
   final now = DateTime.now();
+  // The first hour reads as a moment, not a clock time.
+  final ago = now.difference(dt);
+  if (ago.inMinutes < 1) return 'just now';
+  if (ago.inMinutes < 60) return '${ago.inMinutes} min ago';
   final today = DateTime(now.year, now.month, now.day);
   final day = DateTime(dt.year, dt.month, dt.day);
   final diff = today.difference(day).inDays;

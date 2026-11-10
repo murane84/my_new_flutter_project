@@ -507,6 +507,75 @@ extension _HomeSpaceActions on HomePageState {
     }
   }
 
+  /// Tapped the "Last seen …" line in their chat: the two one-shot heads-ups,
+  /// right where you're wondering when they'll be back.
+  void _showAwayWatchSheet(int fid, String name) {
+    final scheme = Theme.of(context).colorScheme;
+    final first = name.trim().split(RegExp(r'\s+')).first;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: ListenableBuilder(
+          listenable: OnlineWatchList.instance,
+          builder: (ctx, _) {
+            final online = OnlineWatchList.instance.isWatching(fid);
+            final play = OnlineWatchList.instance.isWatchingPlay(fid);
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: scheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                ListTile(
+                  leading: Icon(
+                      online
+                          ? Icons.notifications_off_outlined
+                          : Icons.notifications_active_outlined,
+                      color: accentInk(scheme)),
+                  title: Text(online
+                      ? 'Stop waiting for $first'
+                      : 'Let me know when $first is online'),
+                  subtitle:
+                      online ? null : const Text('Just once — then it switches off'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _toggleOnlineWatch(fid, first);
+                  },
+                ),
+                ListTile(
+                  leading: Icon(
+                      play ? Icons.music_off_rounded : Icons.music_note_rounded,
+                      color: accentInk(scheme)),
+                  title: Text(play
+                      ? "Stop waiting for $first's music"
+                      : 'Let me know when $first plays music'),
+                  subtitle:
+                      play ? null : const Text('Just once, with a Tune in button'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _togglePlayWatch(fid, first);
+                  },
+                ),
+                const SizedBox(height: 8),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   void _showFriendQuickSheet(Map<String, dynamic> f, String name) {
     final scheme = Theme.of(context).colorScheme;
     final fid = int.tryParse(f['id'].toString()) ?? -1;

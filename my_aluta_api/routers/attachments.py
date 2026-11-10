@@ -234,6 +234,8 @@ def _can_access(
                 Message.media_url.contains(fragment, autoescape=True),
                 Message.sender_id == owner_id,
                 Message.receiver_id == user_id,
+                # Not a DM held back from them (sent while blocked).
+                Message.visible_to_receiver.isnot(False),
             )
             .first()
             is not None
@@ -247,7 +249,8 @@ def _can_access(
     # covers them — this does, for every member.
     conv_row = (
         db.query(Message.conversation_id, Message.message_type,
-                 Message.heart_for, Message.sender_id)
+                 Message.heart_for, Message.sender_id,
+                 Message.receiver_id, Message.visible_to_receiver)
         .filter(
             Message.media_url.contains(fragment, autoescape=True),
             Message.conversation_id.isnot(None),
@@ -259,6 +262,10 @@ def _can_access(
     # (and the sender, who is the owner above) — not the rest of the group.
     if (conv_row and (conv_row[1] or "") == "heart" and conv_row[2] is not None
             and int(user_id) not in (int(conv_row[2]), int(conv_row[3] or 0))):
+        conv_row = None
+    # A DM held back from its receiver (sent while blocked): not theirs.
+    if (conv_row and conv_row[4] is not None and conv_row[5] is False
+            and int(user_id) == int(conv_row[4])):
         conv_row = None
     if conv_row and conv_row[0]:
         is_member = (

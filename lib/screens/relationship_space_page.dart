@@ -442,6 +442,11 @@ Widget diaryReactionRow({
 /// "something in a bond changed, re-fetch if you're showing one".
 final ValueNotifier<int> spaceEventBus = ValueNotifier<int>(0);
 
+/// Bumped when something on an Our Space page changes what Home's spaces
+/// list shows (e.g. a dedication opened → the chat header's "💝 left you a
+/// song" goes away). Home reloads its list.
+final ValueNotifier<int> spacesListStale = ValueNotifier<int>(0);
+
 /// Set by home to a partner's user id when "she's online now — Listen
 /// together" was tapped: the Space opening for that partner starts the
 /// session straight away (then clears it).

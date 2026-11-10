@@ -319,10 +319,23 @@ def get_user_status(user_id: int, db: Session = Depends(get_db),
                 last_track = get_last_played_for(user.id, current_user.id)
         except Exception:
             last_track = None
+    # Their clock (UTC offset, minutes) so a long-distance friend's header can
+    # say "🌙 2:14 AM there" — under the same privacy as last seen, and only
+    # when their app has actually reported it.
+    tz = None
+    if seen:
+        try:
+            from models import UserClock
+            row = db.query(UserClock).filter(
+                UserClock.user_id == user.id).first()
+            tz = int(row.tz_offset_min) if row is not None else None
+        except Exception:
+            tz = None
     return {"user_id": user.id, "is_online": online,
             "last_seen": (user.last_seen.isoformat()
                           if (seen and user.last_seen) else None),
             "last_track": last_track,
+            "tz_offset": tz,
             "phone": user.phone, "avatar_url": user.avatar_url}
 
 @router.get("/users/friends/unread_counts", response_model=List[schemas.FriendWithUnread], tags=["Users"])

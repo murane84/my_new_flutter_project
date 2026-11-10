@@ -185,6 +185,14 @@ def _space_brief(db: Session, space: RelationshipSpace,
             st = bonding.bond_stats(
                 db, current_user_id, partner, close_since_date)
             data["stats"] = {"close_since": data["close_since"], **st}
+            # Dedications from my partner I haven't opened yet — the chat
+            # header says "💝 left you a song" while one waits.
+            try:
+                data["dedication_unopened"] = sum(
+                    1 for x in _dedications_for(db, space, current_user_id)
+                    if not x["mine"] and not x["opened"])
+            except Exception:
+                data["dedication_unopened"] = 0
     return data
 
 

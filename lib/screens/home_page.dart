@@ -402,8 +402,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
   final Map<String, String> _lastSeenCache = {};
   // Their last song while offline ({title, artist}), when they let me see it.
   Map<String, dynamic>? _activeFriendLastTrack;
-  // Ticks every 30 s so "Last seen 3 min ago" ages by itself.
+  // Ticks every 5 s so "Last seen 3 min ago" ages by itself and "ending
+  // soon" shows on time.
   final ValueNotifier<int> _minuteTick = ValueNotifier<int>(0);
+  // Their clock (UTC offset, minutes) when they let me see it.
+  int? _activeFriendTz;
+  // DM typers' kind: 'typing' or 'recording' (a voice note).
+  final Map<int, String> _typingKind = {};
   Timer? _minuteTimer;
   String? _activeFriendPhone;
   String? _activeFriendAvatar;
@@ -430,6 +435,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // once the choice has reached the server, refetch the list.
     LastSeenPrivacy.instance.load();
     LastSeenPrivacy.instance.mode.addListener(_onLastSeenPrivacy);
+    spacesListStale.addListener(_loadSpaces);
     // Replied from a notification while the app is alive → refresh that card
     // (its preview becomes "✓ You: …" and the unread clears).
     onInlineReplySent = (fid, cid) {
@@ -558,7 +564,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     OnlineWatchList.instance.load();
     HeartbeatLog.instance.load();
     _minuteTimer = Timer.periodic(
-        const Duration(seconds: 30), (_) => _minuteTick.value++);
+        const Duration(seconds: 5), (_) => _minuteTick.value++);
     GalleryAutoSave.instance.load();
     // Quick statuses ("Free to talk" …): mine + my circle's.
     QuickStatus.instance.addListener(_onPresenceChanged);
@@ -610,6 +616,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   @override
   void dispose() {
     LastSeenPrivacy.instance.mode.removeListener(_onLastSeenPrivacy);
+    spacesListStale.removeListener(_loadSpaces);
     if (ReplyBanner.onIncoming == _showReplyBanner) {
       ReplyBanner.onIncoming = null;
       LiveRoomsRegistry.instance.joinRoom = null;
@@ -2539,7 +2546,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
         _setGroupTyping(convId, first);
       } else {
         final uid = (event['user_id'] as num?)?.toInt();
-        if (uid != null) _setFriendTyping(uid);
+        if (uid != null) {
+          _setFriendTyping(uid, (event['kind'] ?? 'typing').toString());
+        }
       }
       return;
     }
@@ -3292,14 +3301,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// Mark [id] as typing to me and auto-clear after 5s (each typing event
   /// refreshes the timer). No periodic polling — the timer's presence IS the
   /// state, and it only exists while someone is actively typing.
-  void _setFriendTyping(int id) {
+  void _setFriendTyping(int id, [String kind = 'typing']) {
     final was = _typingTimers.containsKey(id);
+    final kindChanged = _typingKind[id] != kind;
+    _typingKind[id] = kind;
     _typingTimers[id]?.cancel();
     _typingTimers[id] = Timer(const Duration(seconds: 5), () {
       _typingTimers.remove(id);
+      _typingKind.remove(id);
       if (mounted) setState(() {});
     });
-    if (!was && mounted) setState(() {});
+    if ((!was || kindChanged) && mounted) setState(() {});
   }
 
   /// Mark group [convId] as having a live typer and auto-clear after 5s. Keyed
@@ -3349,6 +3361,75 @@ class HomePageState extends rp.ConsumerState<HomePage>
     });
   }
 
+  /// A bond milestone hit today ("🔥 30 days in tune today"), else null.
+  String? _milestoneWhisper(Map<String, dynamic>? space) {
+    final r = (space?['stats'] as Map?)?['milestone_reached'];
+    if (r is! Map) return null;
+    final label = (r['label'] ?? '').toString();
+    if (r['kind'] == 'streak') {
+      final v = (r['value'] as num?)?.toInt();
+      return v == null ? null : '🔥 $v days in tune today';
+    }
+    return label.isEmpty ? null : '💞 $label close today';
+  }
+
+  /// "🌙 2:14 AM there" when their clock differs from mine by an hour+.
+  String? _theirLocalTime() {
+    final tz = _activeFriendTz;
+    if (tz == null) return null;
+    final mine = DateTime.now().timeZoneOffset.inMinutes;
+    if ((tz - mine).abs() < 60) return null;
+    final at = DateTime.now().toUtc().add(Duration(minutes: tz));
+    final night = at.hour >= 21 || at.hour < 6;
+    return '${night ? '🌙' : '☀️'} ${DateFormat('h:mm a').format(at)} there';
+  }
+
+  /// A song's colour, nudged toward the text colour until it reads well on
+  /// the page (album colours can be very dark or very light).
+  Color _readableInk(Color c, ColorScheme s) {
+    double contrast(Color x, Color y) {
+      final a = x.computeLuminance(), b = y.computeLuminance();
+      return a > b ? (a + 0.05) / (b + 0.05) : (b + 0.05) / (a + 0.05);
+    }
+
+    var out = c;
+    for (var i = 1; i <= 10 && contrast(out, s.surface) < 4.5; i++) {
+      out = Color.lerp(c, s.onSurface, i / 10)!;
+    }
+    return out;
+  }
+
+  /// Our Space's "your song" for this partner (title), else null.
+  String? _yourSongWith(int fid) {
+    final ys = (_spaceWithFriend(fid)?['stats'] as Map?)?['your_song'];
+    final t = ys is Map ? (ys['title'] ?? '').toString().trim() : '';
+    return t.isEmpty ? null : t;
+  }
+
+  /// Play "your song" from my loaded songs (matched loosely by title).
+  void _playYourSong(String title) {
+    String norm(String s) =>
+        s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
+    final want = norm(title);
+    String? exact, starts, contains;
+    for (final p in playlistNotifier.value) {
+      var name = p.split(RegExp(r'[\\/]')).last;
+      name = name.replaceAll(RegExp(r'\.[A-Za-z0-9]{2,4}$'), '');
+      final n = norm(name);
+      if (n == want) exact ??= p;
+      if (want.length >= 4 && n.startsWith(want)) starts ??= p;
+      if (want.length >= 4 && n.contains(want)) contains ??= p;
+    }
+    final path = exact ?? starts ?? contains;
+    final ok = path != null && (playbackBus.playPath?.call(path) ?? false);
+    showToast(
+        context,
+        ok
+            ? 'Playing your song — “$title” 💞'
+            : '“$title” isn’t in your loaded songs yet',
+        type: ToastType.info);
+  }
+
   /// The later of two server "last seen" times (either may be missing).
   String? _freshestLastSeen(String? a, String? b) {
     if (a == null || a.isEmpty) return (b == null || b.isEmpty) ? null : b;
@@ -3379,6 +3460,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           : _freshestLastSeen(
               _lastSeenCache[friend['id'].toString()], listSeen);
       _activeFriendLastTrack = null;
+      _activeFriendTz = null;
       _activeFriendPhone = friend['phone'] as String?;
       _activeFriendAvatar = friend['avatar_url'] as String?;
       _avatarExpanded = false;
@@ -3424,6 +3506,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       _activeFriendOnline = null;
       _activeFriendLastSeen = null;
       _activeFriendLastTrack = null;
+      _activeFriendTz = null;
       _avatarExpanded = false;
       _playerExpanded = false; // make sure the chat panel is the front surface
     });
@@ -3941,6 +4024,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
               _activeFriendOnline = null;
               _activeFriendLastSeen = null;
               _activeFriendLastTrack = null;
+              _activeFriendTz = null;
               _avatarExpanded = false;
             }),
           ),
@@ -3985,15 +4069,43 @@ class HomePageState extends rp.ConsumerState<HomePage>
                     ),
                 ],
               ),
-              child: _statusRing(
-                InitialsAvatar(
-                  name: _contactDisplayName(
-                      _activeFriendPhone, _activeFriendName ?? ''),
-                  radius: 17,
-                  isOnline: _activeFriendOnline == true,
-                  imageUrl: _avatarFull(_activeFriendAvatar),
-                ),
-                _friendStory(_activeFriendId),
+              // Playing music → the song's progress traced round their
+              // photo (the header has no progress line of its own), in the
+              // song's colour; ❤️ when it's the same song as mine. Else the
+              // story ring as before.
+              child: ListenableBuilder(
+                listenable: NowPlayingPresence.instance,
+                builder: (context, _) {
+                  final fid = int.tryParse(_activeFriendId ?? '') ?? -1;
+                  final presence = NowPlayingPresence.instance;
+                  final playing = presence.trackFor(fid) != null;
+                  final paused =
+                      !playing && presence.pausedTrackFor(fid) != null;
+                  final photo = InitialsAvatar(
+                    name: _contactDisplayName(
+                        _activeFriendPhone, _activeFriendName ?? ''),
+                    radius: 17,
+                    isOnline: _activeFriendOnline == true && !playing && !paused,
+                    imageUrl: _avatarFull(_activeFriendAvatar),
+                  );
+                  if (!playing && !paused) {
+                    return _statusRing(photo, _friendStory(_activeFriendId));
+                  }
+                  final c = presence.colorFor(fid);
+                  return PresenceRingAvatar(
+                    key: ValueKey('hdr-ring-$fid'),
+                    face: 34,
+                    mode: playing && _onSameSong(fid)
+                        ? RingMode.sameSong
+                        : RingMode.listening,
+                    color: c != null ? Color(c) : scheme.primary,
+                    paused: paused,
+                    showProgress: true,
+                    progress: () => presence.progressFor(fid),
+                    gapColor: scheme.surface,
+                    child: photo,
+                  );
+                },
               ),
             ),
           ),
@@ -4016,6 +4128,27 @@ class HomePageState extends rp.ConsumerState<HomePage>
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    // Our Space's "your song": ♪ — tap to play it.
+                    Builder(builder: (_) {
+                      final ys = _yourSongWith(
+                          int.tryParse(_activeFriendId ?? '') ?? -1);
+                      if (ys == null) return const SizedBox.shrink();
+                      return Tooltip(
+                        message: 'Your song · $ys',
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _playYourSong(ys),
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 6),
+                            child: Text('♪',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                    color: accentInk(scheme))),
+                          ),
+                        ),
+                      );
+                    }),
                     // "In tune" streak with a bonded partner: 🔥 N.
                     Builder(builder: (_) {
                       final n =
@@ -4051,6 +4184,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       final t = (np?['title'] ?? '').toString().trim();
                       final a = (np?['artist'] ?? '').toString().trim();
                       final listening = np != null && t.isNotEmpty;
+                      final who = _contactDisplayName(
+                          _activeFriendPhone, _activeFriendName ?? '');
+                      // Typing or recording a voice note to me leads.
+                      final typingKind = _typingTimers.containsKey(fid)
+                          ? (_typingKind[fid] ?? 'typing')
+                          : null;
                       // Their quick status leads ("📞 Free to talk · Online").
                       final qs = QuickStatus.instance.lineFor(fid);
                       final offline = _activeFriendOnline != true;
@@ -4064,10 +4203,18 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       final lt = (_activeFriendLastTrack?['title'] ?? '')
                           .toString()
                           .trim();
-                      // A bonded partner's heartbeat in the last day.
-                      final hb = _spaceWithFriend(fid) == null
+                      // Bonded partner: heartbeat, milestone, dedication.
+                      final space = _spaceWithFriend(fid);
+                      final hb = space == null
                           ? null
                           : HeartbeatLog.instance.recent(fid);
+                      final milestone = _milestoneWhisper(space);
+                      final dedWaiting =
+                          ((space?['dedication_unopened'] as num?)?.toInt() ??
+                                  0) >
+                              0;
+                      // Their local time, when it's not mine.
+                      final there = _theirLocalTime();
                       final base = !offline
                           ? 'Online'
                           : [
@@ -4080,14 +4227,51 @@ class HomePageState extends rp.ConsumerState<HomePage>
                                 '💓 thought of you '
                                     '${formatLastSeen(hb.toUtc().toIso8601String())}',
                             ].join(' · ');
+                      // Music states.
+                      final same = listening && _onSameSong(fid);
+                      final remain = listening
+                          ? NowPlayingPresence.instance.remainingMsFor(fid)
+                          : null;
+                      final ending =
+                          remain != null && remain > 0 && remain <= 20000;
+                      final songC = NowPlayingPresence.instance.colorFor(fid);
+                      final songInk = songC == null
+                          ? accentInk(scheme)
+                          : _readableInk(Color(songC), scheme);
                       const lead = '🎧 Listening to ';
-                      final text = listening
-                          ? '$lead$t${a.isEmpty ? '' : ' — $a'}'
-                          : qs.isEmpty
-                              ? base
-                              : base.isEmpty
-                                  ? qs
-                                  : '$qs · $base';
+                      const bothLead = '🎶 You’re both listening to “';
+                      final String text;
+                      (int, int)? bold;
+                      final Color color;
+                      if (typingKind != null) {
+                        text = typingKind == 'recording'
+                            ? '🎤 recording a voice note…'
+                            : 'typing…';
+                        color = accentInk(scheme);
+                      } else if (same) {
+                        text = '$bothLead$t” ❤️';
+                        bold = (bothLead.length, bothLead.length + t.length);
+                        color = songInk;
+                      } else if (ending) {
+                        // Only the last ~20 s speak up: the moment to act.
+                        text = '🎧 “$t” is ending — tune in for the next one';
+                        color = songInk;
+                      } else if (listening) {
+                        text = '$lead$t${a.isEmpty ? '' : ' — $a'}';
+                        bold = (lead.length, lead.length + t.length);
+                        color = songInk;
+                      } else {
+                        text = [
+                          if (qs.isNotEmpty) qs,
+                          if (base.isNotEmpty) base,
+                          if (dedWaiting) '💝 left you a song',
+                          ?milestone,
+                          ?there,
+                        ].join(' · ');
+                        color = _activeFriendOnline == true
+                            ? Colors.green
+                            : textColor.withAlpha(130);
+                      }
                       final line = SizedBox(
                         height: 15,
                         // Changes (online → last seen, typing, listening,
@@ -4101,34 +4285,34 @@ class HomePageState extends rp.ConsumerState<HomePage>
                           child: _ScrollingText(
                             key: ValueKey(text),
                             text: text,
-                            // The song title stands out from "Listening to".
-                            bold: listening
-                                ? (lead.length, lead.length + t.length)
-                                : null,
+                            // The song title stands out.
+                            bold: bold,
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.normal,
-                              color: listening
-                                  ? scheme.primary
-                                  : _activeFriendOnline == true
-                                      ? Colors.green
-                                      : textColor.withAlpha(130),
+                              color: color,
                             ),
                           ),
                         ),
                       );
-                      final who = _contactDisplayName(
-                          _activeFriendPhone, _activeFriendName ?? '');
-                      if (listening) {
+                      if (typingKind == null && listening) {
+                        // Tap: tune in (same song → sync up together).
+                        // Long-press: where they are in the song.
+                        final f = _allFriends.firstWhere(
+                            (x) => (x['id'] as num?)?.toInt() == fid,
+                            orElse: () => <String, dynamic>{});
                         return GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTap: () => _tuneInto(fid, who),
+                          onLongPress: f.isEmpty
+                              ? null
+                              : () => _showPhotoPeek(f, who, !offline),
                           child: line,
                         );
                       }
                       // Away: tap the line for "tell me when they're
                       // online / play music" right where you're wondering.
-                      if (offline && fid > 0) {
+                      if (typingKind == null && offline && fid > 0) {
                         return GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTap: () => _showAwayWatchSheet(fid, who),
@@ -4365,6 +4549,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       friendAvatar: _activeFriendAvatar ?? '',
                       textColor: textColor,
                       showAppBar: false,
+                      onFriendTz: (tz) {
+                        if (mounted && tz != _activeFriendTz) {
+                          setState(() => _activeFriendTz = tz);
+                        }
+                      },
                       onFriendLastTrack: (t) {
                         if (!mounted) return;
                         final was = _activeFriendLastTrack;
@@ -4895,6 +5084,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
             _activeFriendOnline = null;
             _activeFriendLastSeen = null;
             _activeFriendLastTrack = null;
+            _activeFriendTz = null;
           } else {
             // Collapse a full-screen panel back to the split view.
             _isMusicFullScreen = false;

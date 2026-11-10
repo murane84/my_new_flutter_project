@@ -152,6 +152,16 @@ class NowPlayingPresence extends ChangeNotifier {
     return (cur / dur).clamp(0.0, 1.0);
   }
 
+  /// Milliseconds left in their song right now (null = unknown / paused).
+  int? remainingMsFor(int id) {
+    final t = _friends[id];
+    if (t == null || t['paused'] == true) return null;
+    final dur = (t['dur'] as num?)?.toDouble();
+    final pr = progressFor(id);
+    if (dur == null || dur <= 0 || pr == null) return null;
+    return (dur * (1 - pr)).round();
+  }
+
   bool get anyListening => _friends.values.any((t) => t['paused'] != true);
   int get listeningCount =>
       _friends.values.where((t) => t['paused'] != true).length;

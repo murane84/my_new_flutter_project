@@ -38,6 +38,7 @@ class PresenceRingAvatar extends StatefulWidget {
     this.color = const Color(0xFFE8505B),
     this.color2 = const Color(0xFFF2A541),
     this.progress,
+    this.showProgress = false,
     this.glow = false,
     this.paused = false,
     this.gapColor,
@@ -59,6 +60,11 @@ class PresenceRingAvatar extends StatefulWidget {
 
   /// 0..1 song progress, read every frame; null = unknown (slow sweep).
   final double? Function()? progress;
+
+  /// Listening: trace the song's PROGRESS round the rim (with a bright head)
+  /// instead of the orbiting comet — for places with no progress line of
+  /// their own, like the chat header photo. Unknown progress → the comet.
+  final bool showProgress;
 
   /// Bonded + quiet: a thin breathing theme ring just around the photo,
   /// inside the rim (ignored while a music ring shows).
@@ -178,6 +184,7 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
                     painter: _RingPainter(
                       mode: widget.mode,
                       t: t,
+                      arc: widget.showProgress,
                       progress: widget.progress?.call(),
                       color: widget.color,
                       color2: widget.color2,
@@ -291,6 +298,7 @@ class _RingPainter extends CustomPainter {
   _RingPainter({
     required this.mode,
     required this.t,
+    this.arc = false,
     required this.progress,
     required this.color,
     required this.color2,
@@ -299,6 +307,7 @@ class _RingPainter extends CustomPainter {
 
   final RingMode mode;
   final double t;
+  final bool arc;
   final double? progress;
   final Color color, color2, track;
 
@@ -321,11 +330,11 @@ class _RingPainter extends CustomPainter {
         // the rim with a bright head — "music is playing here". (The song's
         // PROGRESS lives on the card's bottom line now, so the ring doesn't
         // repeat it.) Paused: the comet holds still and dims.
-        _comet(canvas, rect, r, w, p);
+        _cometOrArc(canvas, rect, r, w, p);
       case RingMode.sameSong:
         // Same motion as listening (they ARE just listening) — the ❤️ badge
         // says "the same song as you".
-        _comet(canvas, rect, r, w, p);
+        _cometOrArc(canvas, rect, r, w, p);
       case RingMode.typing:
         // Twelve dots round the rim; a soft wave of brightness travels.
         const n = 12;
@@ -362,6 +371,31 @@ class _RingPainter extends CustomPainter {
 
   /// The play key's orbiting comet: faint track + a sweep of light with a
   /// bright head, lapping every 3 s.
+  /// [arc] with a known position → the song's progress as an arc from the
+  /// top, a bright head where they are now; else the orbiting comet.
+  void _cometOrArc(Canvas canvas, Rect rect, double r, double w, Paint p) {
+    final pr = progress;
+    if (!arc || pr == null) {
+      _comet(canvas, rect, r, w, p);
+      return;
+    }
+    const full = math.pi * 2;
+    const top = -math.pi / 2;
+    canvas.drawCircle(rect.center, r, p..color = track);
+    final sweep = full * pr.clamp(0.0, 1.0);
+    if (sweep > 0.01) {
+      canvas.drawArc(rect, top, sweep, false, p..color = color);
+    }
+    final head = rect.center +
+        Offset(math.cos(top + sweep), math.sin(top + sweep)) * r;
+    canvas.drawCircle(
+        head,
+        w * 0.95,
+        Paint()
+          ..color = Color.lerp(color, Colors.white, 0.45)!
+          ..style = PaintingStyle.fill);
+  }
+
   void _comet(Canvas canvas, Rect rect, double r, double w, Paint p) {
     const full = math.pi * 2;
     canvas.drawCircle(rect.center, r, p..color = track);
@@ -392,6 +426,7 @@ class _RingPainter extends CustomPainter {
   @override
   bool shouldRepaint(_RingPainter o) =>
       o.t != t ||
+      o.arc != arc ||
       o.progress != progress ||
       o.mode != mode ||
       o.color != color ||

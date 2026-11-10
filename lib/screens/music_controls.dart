@@ -500,6 +500,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     playbackBus.isPlaying = () => _player.playing;
     playbackBus.onToggleFavorite = _toggleCurrentFavorite;
     playbackBus.onShareToChat = _shareCurrentSong;
+    playbackBus.playPath = (path) {
+      final i = _playlist.indexOf(path);
+      if (i < 0) return false;
+      _play(i);
+      return true;
+    };
     playbackBus.nextTitle = () {
       if (_liveActive || _effShuffle) return null;
       final n = _peekNextIndex();
@@ -564,6 +570,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       playbackBus.isPlaying = null;
       playbackBus.onToggleFavorite = null;
       playbackBus.onShareToChat = null;
+      playbackBus.playPath = null;
       playbackBus.nextTitle = null;
     }
     // Relinquish the playlist drawer if we own it.

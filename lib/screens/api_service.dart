@@ -3718,6 +3718,8 @@ class ApiService {
           'phone': data['phone'],
           // Their last song, when offline and they let me see it.
           'last_track': data['last_track'],
+          // Their clock (UTC offset, minutes), when they let me see it.
+          'tz_offset': data['tz_offset'],
         };
       }
       return {};

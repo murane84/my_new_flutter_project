@@ -880,6 +880,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
     final mine = d['mine'] == true;
     if (id != null && !mine && d['opened'] != true) {
       await ApiService().openDedication(_id, id);
+      spacesListStale.value++;
     }
     if (!mounted) return;
     final scheme = Theme.of(context).colorScheme;

@@ -207,6 +207,8 @@ class ChatPage extends StatefulWidget {
   final Function(bool, String?)? onFriendOnlineStatusChanged;
   /// The friend's last song (when offline and they let me see it), or null.
   final void Function(Map<String, dynamic>? track)? onFriendLastTrack;
+  /// Their clock as a UTC offset in minutes (null = unknown / private).
+  final void Function(int? tzOffsetMin)? onFriendTz;
 
   // ── Group mode ──────────────────────────────────────────────────────────
   // When [conversationId] is set and [isGroup] is true this same screen runs as
@@ -242,6 +244,7 @@ class ChatPage extends StatefulWidget {
     this.showAppBar = true,
     this.onFriendOnlineStatusChanged,
     this.onFriendLastTrack,
+    this.onFriendTz,
     this.conversationId,
     this.isGroup = false,
     this.groupTitle = '',
@@ -1621,6 +1624,7 @@ class _ChatPageState extends State<ChatPage>
     final lt = status['last_track'];
     widget.onFriendLastTrack
         ?.call(lt is Map ? Map<String, dynamic>.from(lt) : null);
+    widget.onFriendTz?.call((status['tz_offset'] as num?)?.toInt());
     if (online != _isFriendOnline || lastSeen != _lastSeen) {
       setState(() {
         _isFriendOnline = online;

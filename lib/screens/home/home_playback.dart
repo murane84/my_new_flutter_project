@@ -71,6 +71,9 @@ class PlaybackBus {
   // Share the currently-playing track to a chat (the quick action that used to
   // live in the drawer's transport strip; now surfaced on the in-chat bar).
   VoidCallback? onShareToChat;
+  // Play one of MY loaded songs by its file path (e.g. "your song" from a
+  // partner's chat header). false = not in my loaded songs.
+  bool Function(String path)? playPath;
 }
 
 final playbackBus = PlaybackBus();

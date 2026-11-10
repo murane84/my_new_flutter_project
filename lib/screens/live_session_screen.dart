@@ -28,6 +28,7 @@ import 'relationship_space_page.dart'
 import '../utils/marquee_text.dart';
 import '../widgets/animated_reaction.dart';
 import '../widgets/tap_chip.dart';
+import '../widgets/now_glow.dart';
 import '../widgets/person_avatar.dart';
 import '../widgets/aluta_composer_field.dart';
 import '../services/track_title.dart' show displayTitleForPath;
@@ -242,6 +243,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   // guest browsing to add a song is never yanked away). ⌖ always jumps.
   DateTime _queueTouched = DateTime.fromMillisecondsSinceEpoch(0);
   int _followedIdx = -1;
+  final NowGlowController _queueGlow = NowGlowController();
   // Song-picker hints: a track's content fingerprint cached by file path (so we
   // only ever read+hash a given file once per session), and whether the partner
   // can already play it instantly. Populated by a bounded background pass when
@@ -1308,6 +1310,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     _progSub?.cancel();
     _liveProgress.dispose();
     _queueCtrl.dispose();
+    _queueGlow.dispose();
     _awayTimer?.cancel();
     _discSpin.dispose();
     _stagePlaying.dispose();
@@ -2752,7 +2755,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         final isCurrent = i == _c.remoteIndex;
         final by = (i < _c.remoteQueueBy.length) ? _c.remoteQueueBy[i] : null;
         final hasBy = by != null && by.isNotEmpty;
-        return ListTile(
+        return _glowIf(isCurrent, ListTile(
           dense: true,
           tileColor:
               isCurrent ? scheme.primary.withValues(alpha: 0.07) : null,
@@ -2786,7 +2789,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
           onTap: isCurrent
               ? null
               : () => _c.requestControl('play_index', index: i),
-        );
+        ));
       },
     ));
   }
@@ -2862,7 +2865,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               icon: Icons.my_location_rounded,
               tooltip: 'Find the playing song',
               size: 32,
-              onTap: _locateQueueNow,
+              onTap: () => _locateQueueNow(glow: true),
             ),
           // Only the host can add to their own queue directly.
           if (_isHost)
@@ -2887,7 +2890,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   }
 
   /// Scroll the Up next list so the playing song sits mid-view.
-  void _locateQueueNow({bool animate = true}) {
+  void _locateQueueNow({bool animate = true, bool glow = false}) {
     if (!mounted) return;
     final count = _isHost ? _c.queue.length : _c.remoteQueueTitles.length;
     final idx = _isHost ? _c.currentIndex : _c.remoteIndex;
@@ -2900,10 +2903,20 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       _queueCtrl.jumpTo(target);
       return;
     }
-    _queueCtrl.animateTo(target,
-        duration: const Duration(milliseconds: 420),
-        curve: Curves.easeOutCubic);
+    // ⌖ with the song already on screen → a small nudge, else the full glow.
+    final soft = (target - pos.pixels).abs() < per * 2;
+    _queueCtrl
+        .animateTo(target,
+            duration: const Duration(milliseconds: 420),
+            curve: Curves.easeOutCubic)
+        .then((_) {
+      if (glow && mounted) _queueGlow.ping(soft: soft);
+    });
   }
+
+  /// The playing row answers ⌖ by breathing once (see NowGlow).
+  Widget _glowIf(bool current, Widget tile) =>
+      current ? NowGlow(controller: _queueGlow, radius: 10, child: tile) : tile;
 
   /// My own drag / wheel on the queue: follow-along pauses for a few seconds.
   Widget _queueTouchWatch(Widget list) =>
@@ -2954,7 +2967,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         final t = q[i];
         final isCurrent = i == _c.currentIndex;
         final upcoming = i > _c.currentIndex;
-        return ListTile(
+        return _glowIf(isCurrent, ListTile(
           dense: true,
           tileColor:
               isCurrent ? scheme.primary.withValues(alpha: 0.07) : null,
@@ -3008,7 +3021,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
             ],
           ),
           onTap: isCurrent ? null : () => _c.playIndex(i),
-        );
+        ));
       },
     ));
   }

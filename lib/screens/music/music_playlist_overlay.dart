@@ -164,6 +164,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   late final ScrollController _listCtrl;
   late final AnimationController _pulseCtrl;
   final GlobalKey _nowKey = GlobalKey();
+  final NowGlowController _nowGlow = NowGlowController();
 
   // Where the list was when it last closed — ONE position for every place
   // the playlist opens (music player, DM drawer, full page), kept for the
@@ -513,6 +514,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     if (last != null) prefsNow?.setDouble(_kPlOffsetKey, last);
     _listCtrl.dispose();
     _pulseCtrl.dispose();
+    _nowGlow.dispose();
     _freshCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -1832,17 +1834,16 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     final per = d.isEmpty ? 0.0 : total / d.length;
     final target = (per * i - pos.viewportDimension / 2 + per / 2)
         .clamp(0.0, pos.maxScrollExtent);
+    // Already on screen → just a small nudge; otherwise the full breath.
+    final soft = (target - pos.pixels).abs() < per * 2;
     _listCtrl
         .animateTo(target,
             duration: const Duration(milliseconds: 420),
             curve: Curves.easeOutCubic)
-        .then((_) async {
-      // …then blink the row so the eye lands on it.
-      for (var k = 0; k < 3 && mounted; k++) {
-        await _pulseCtrl.forward(from: 0);
-        if (!mounted) return;
-        await _pulseCtrl.reverse();
-      }
+        .then((_) {
+      // …then the row breathes once (and a ♪ floats off it) so the eye
+      // lands on it — gently, never a flashing blink.
+      if (mounted) _nowGlow.ping(soft: soft);
     });
   }
 
@@ -2352,9 +2353,12 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     if (!isNow) return buildRow();
     return KeyedSubtree(
       key: _nowKey,
-      child: AnimatedBuilder(
-        animation: Listenable.merge([_pulseCtrl, _freshCtrl]),
-        builder: (_, _) => buildRow(),
+      child: NowGlow(
+        controller: _nowGlow,
+        child: AnimatedBuilder(
+          animation: Listenable.merge([_pulseCtrl, _freshCtrl]),
+          builder: (_, _) => buildRow(),
+        ),
       ),
     );
   }

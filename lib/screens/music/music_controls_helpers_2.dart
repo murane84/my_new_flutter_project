@@ -51,7 +51,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
   // Jump the queue list so the currently-playing track is in view (a little
   // context above it) instead of resting at the top. Row heights vary slightly,
   // so this estimates — close enough to land the highlighted track on screen.
-  void _scrollQueueToCurrent([int tries = 0]) {
+  void _scrollQueueToCurrent([int tries = 0, bool glow = false]) {
     if (_currentIndex < 0) return;
     final attached =
         _queueScrollCtrl.hasClients && _queueScrollCtrl.positions.isNotEmpty;
@@ -61,7 +61,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
     final ready = attached && _queueCtrl.value >= 0.995;
     if (!ready && tries < 28) {
       WidgetsBinding.instance
-          .addPostFrameCallback((_) => _scrollQueueToCurrent(tries + 1));
+          .addPostFrameCallback((_) => _scrollQueueToCurrent(tries + 1, glow));
       return;
     }
     if (!attached) return;
@@ -71,6 +71,8 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
     final rough =
         (_currentIndex * estRow + estRow / 2 - pos.viewportDimension / 2)
             .clamp(0.0, pos.maxScrollExtent);
+    // ⌖ with the song already on screen → a small nudge, not the full glow.
+    final soft = (rough - pos.pixels).abs() < estRow * 2;
     _queueScrollCtrl.jumpTo(rough);
     // …then centre it precisely once it's laid out (alignment 0.5 = middle).
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -81,7 +83,10 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
         alignment: 0.5,
         duration: const Duration(milliseconds: 280),
         curve: Curves.easeOut,
-      );
+      ).then((_) {
+        // Asked for (⌖) → the row breathes once so the eye lands on it.
+        if (glow) _queueGlow.ping(soft: soft);
+      });
     });
   }
 

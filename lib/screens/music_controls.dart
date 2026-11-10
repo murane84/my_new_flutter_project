@@ -27,6 +27,7 @@ import '../state/playback_state.dart';
 import '../services/live_session_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/prefs_now.dart';
+import '../widgets/now_glow.dart';
 import '../utils/file_bytes.dart';
 import '../utils/on_accent.dart';
 import '../services/vocal_map.dart';
@@ -408,6 +409,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   final ScrollController _queueScrollCtrl = ScrollController();
   // Identifies the playing row so the queue can centre it on open.
   final GlobalKey _nowQueueRowKey = GlobalKey();
+  final NowGlowController _queueGlow = NowGlowController(); // ⌖ in Up next
   late AnimationController _playlistCtrl;
   late AnimationController _speedCtrl;
   late AnimationController _volumeCtrl;
@@ -602,6 +604,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _discCtrl.dispose();
     _queueCtrl.dispose();
     _queueScrollCtrl.dispose();
+    _queueGlow.dispose();
     _artAccentVN.removeListener(_shareArtAccent);
     _artAccentVN.dispose();
     _playlistCtrl.dispose();

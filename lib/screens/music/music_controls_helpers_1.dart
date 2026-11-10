@@ -1031,7 +1031,9 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                   icon: Icons.my_location_rounded,
                   tooltip: 'Find the playing song',
                   size: 34,
-                  onTap: total == 0 ? null : () => _scrollQueueToCurrent(),
+                  onTap: total == 0
+                      ? null
+                      : () => _scrollQueueToCurrent(0, true),
                 ),
                 AlutaTapChip(
                   icon: Icons.shuffle_rounded,
@@ -1306,7 +1308,11 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
     // ReorderableListView needs a stable key on each item.
     return KeyedSubtree(
       key: ValueKey('q_$path'),
-      child: isNow ? KeyedSubtree(key: _nowQueueRowKey, child: row) : dealt,
+      child: isNow
+          ? KeyedSubtree(
+              key: _nowQueueRowKey,
+              child: NowGlow(controller: _queueGlow, child: row))
+          : dealt,
     );
   }
 

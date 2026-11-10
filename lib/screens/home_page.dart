@@ -394,7 +394,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   Map<String, dynamic>? _activeGroup;
   String? _activeFriendName;
   bool? _activeFriendOnline;
+  // null = not known yet (header stays blank until /status answers).
   String? _activeFriendLastSeen;
+  // Freshest "last seen" per friend this session (from /status in the chat).
+  final Map<String, String> _lastSeenCache = {};
   String? _activeFriendPhone;
   String? _activeFriendAvatar;
   // Chat header: tap the friend's avatar to expand their photo above the thread.
@@ -3318,6 +3321,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   // ── Chat open/close ───────────────────────────────────────────────────────
 
+  /// The later of two server "last seen" times (either may be missing).
+  String? _freshestLastSeen(String? a, String? b) {
+    if (a == null || a.isEmpty) return (b == null || b.isEmpty) ? null : b;
+    if (b == null || b.isEmpty) return a;
+    try {
+      return parseServerTime(a).isAfter(parseServerTime(b)) ? a : b;
+    } catch (_) {
+      return a;
+    }
+  }
+
   void openChat(Map<String, dynamic> friend, {String? jumpToMessageId}) {
     var leftFull = false;
     setState(() {
@@ -3326,7 +3340,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
       _activeFriendId = friend['id'].toString();
       _activeFriendName = friend['username'] ?? 'Friend';
       _activeFriendOnline = friend['is_online'] ?? false;
-      _activeFriendLastSeen = friend['last_timestamp'] ?? '';
+      // Their real last-seen — never the last MESSAGE's time (that showed a
+      // wrong "Last seen" that snapped to the right one a second later).
+      _activeFriendLastSeen = _freshestLastSeen(
+          _lastSeenCache[friend['id'].toString()],
+          friend['last_seen'] as String?);
       _activeFriendPhone = friend['phone'] as String?;
       _activeFriendAvatar = friend['avatar_url'] as String?;
       _avatarExpanded = false;
@@ -3998,7 +4016,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
                           ? 'Online'
                           : _activeFriendLastSeen?.isNotEmpty == true
                               ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
-                              : 'Offline';
+                              // Not known yet: stay quiet rather than say
+                              // "Offline" and then change.
+                              : _activeFriendLastSeen == null
+                                  ? ''
+                                  : 'Offline';
                       const lead = '🎧 Listening to ';
                       final text = listening
                           ? '$lead$t${a.isEmpty ? '' : ' — $a'}'
@@ -4265,6 +4287,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       showAppBar: false,
                       onFriendOnlineStatusChanged: (online, lastSeen) {
                         if (mounted) {
+                          final key = _activeFriendId;
+                          if (key != null &&
+                              lastSeen != null &&
+                              lastSeen.isNotEmpty) {
+                            _lastSeenCache[key] = lastSeen;
+                          }
                           setState(() {
                             _activeFriendOnline = online;
                             _activeFriendLastSeen = lastSeen;

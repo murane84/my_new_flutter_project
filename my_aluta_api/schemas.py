@@ -148,6 +148,9 @@ class FriendWithUnread(BaseModel):
     avatar_url: Optional[str] = None                 # profile picture
     # Their last Listen Together network check (good/fair/weak), when online.
     net_grade: Optional[str] = None
+    # When they were last active (ISO) — the chat header's "Last seen" can
+    # show the right time the moment a DM opens, not the last message's time.
+    last_seen: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)  # For Pydantic v2
 

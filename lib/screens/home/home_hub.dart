@@ -999,9 +999,18 @@ class _CirclePeek {
       ),
     );
     overlay.insert(_entry!);
+    // Safety net: whatever happens to the pill meanwhile (a rebuild, the
+    // section switching under the finger), lifting the finger closes it.
+    WidgetsBinding.instance.pointerRouter.addGlobalRoute(_onPointer);
+  }
+
+  static void _onPointer(PointerEvent e) {
+    if (e is PointerUpEvent || e is PointerCancelEvent) hide();
   }
 
   static void hide() {
+    if (_entry == null) return;
+    WidgetsBinding.instance.pointerRouter.removeGlobalRoute(_onPointer);
     _entry?.remove();
     _entry = null;
   }

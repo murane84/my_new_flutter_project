@@ -458,6 +458,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     ].indexOf(e.logicalKey);
     if (i < 0 || !mounted) return false;
     if (_friendLayer == 'glow') return false;
+    // Only while Home is the page in front (not under Appearance, a chat
+    // route, a sheet or a dialog).
+    if (ModalRoute.of(context)?.isCurrent != true) return false;
     _goCircleView(kCircleViews[i]);
     return true;
   }
@@ -3544,6 +3547,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     } catch (_) {}
     NowPlayingPresence.instance.stop();
     LiveInbox.instance.clearAll(); // no messages carried into another account
+    BlockList.instance.clear(); // …nor whom this account blocked
     await ConnectedContactsService.instance.clear();
     await ApiService().logoutUser();
     try {
@@ -4243,6 +4247,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     await FcmService.instance.unregisterToken();
     NowPlayingPresence.instance.stop();
     LiveInbox.instance.clearAll(); // no messages carried into another account
+    BlockList.instance.clear(); // …nor whom this account blocked
     // Remove Aluta's "Connected apps" contact rows for the account we're leaving.
     await ConnectedContactsService.instance.clear();
     await ApiService().logoutUser();

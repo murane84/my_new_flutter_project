@@ -38,6 +38,13 @@ class BlockList extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Signing out: nothing of this account's blocks carries into the next.
+  void clear() {
+    _blocked.clear();
+    _myId = null;
+    notifyListeners();
+  }
+
   Future<void> refresh() async {
     final me = _myId;
     if (me != null) await load(me);

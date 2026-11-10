@@ -362,6 +362,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
   bool _storiesExpanded = true;
   void _toggleStories() {
     setState(() => _storiesExpanded = !_storiesExpanded);
+    // Remembered (also across restarts) — maximising / minimising a section
+    // must never undo "Hide".
+    SharedPreferences.getInstance()
+        .then((p) => p.setBool('stories_strip_open_v1', _storiesExpanded))
+        .catchError((_) => false);
   }
 
   // Circle sections share the column's height by default ('all'). Any one of
@@ -385,8 +390,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     HapticFeedback.selectionClick();
     setState(() {
       _circleView = next;
-      // Maximising Status always shows it (it may have been folded away).
-      if (next == 'stories') _storiesExpanded = true;
+      // (Maximising Status shows its own full grid; the shared view's strip
+      // keeps whatever Hide / Show I chose.)
     });
     if (!remember) return;
     SharedPreferences.getInstance()
@@ -634,6 +639,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Know who "me" is from the last session at once (the profile call can be
     // slow or offline) — the partner lookup (Glow, Our Space) depends on it.
     SharedPreferences.getInstance().then((p) {
+      final open = p.getBool('stories_strip_open_v1');
+      if (open != null && open != _storiesExpanded && mounted) {
+        setState(() => _storiesExpanded = open);
+      }
       final view = p.getString('circle_view_v1');
       if (view != null &&
           const {'stories', 'listening', 'chats'}.contains(view) &&

@@ -1018,7 +1018,9 @@ class _CircleFlip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedSwitcher(
+    // Clipped to the Circle area: a turning face must never draw over the
+    // Harmony column (or the search box above).
+    return ClipRect(child: AnimatedSwitcher(
       duration: const Duration(milliseconds: 420),
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
@@ -1054,6 +1056,6 @@ class _CircleFlip extends StatelessWidget {
         );
       },
       child: child,
-    );
+    ));
   }
 }

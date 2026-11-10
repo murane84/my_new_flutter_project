@@ -100,6 +100,7 @@ import 'package:flutter_contacts/flutter_contacts.dart';
 import '../utils/app_config.dart';
 import '../utils/loose_url_linkifier.dart';
 import '../services/app_busy.dart';
+import '../services/block_list.dart';
 import '../services/aluta_mood.dart';
 import '../services/moment_prefs.dart';
 import '../data/glow_cards.dart';
@@ -1973,7 +1974,12 @@ class _ChatPageState extends State<ChatPage>
         }
         _replaceOptimistic(tempId, sent);
         if (sent == null && mounted) {
-          _showErrorSnack('Message failed — tap the ! to retry.');
+          // Refused for good (I blocked them / not someone I know): say why
+          // instead of promising a retry that can't work.
+          final why = ApiService.lastSendRefusal;
+          _showErrorSnack(why != null
+              ? '$why.'
+              : 'Message failed — tap the ! to retry.');
         }
       } catch (_) {
         _replaceOptimistic(tempId, null);
@@ -7563,9 +7569,16 @@ class _ChatPageState extends State<ChatPage>
                     // band): the watermark / photo shows right through behind
                     // it. Bubbles only soften as they scroll into the edge
                     // (the list's own fade), so nothing sits there at rest.
-                    _postingLocked
-                        ? _buildAdminsOnlyBar(scheme, isDark)
-                        : _buildInput(isDark),
+                    // I blocked them → no composer, just "Unblock".
+                    ListenableBuilder(
+                      listenable: BlockList.instance,
+                      builder: (context, _) => (!_isGroup &&
+                              BlockList.instance.isBlocked(widget.friendId))
+                          ? _buildBlockedBar(scheme, isDark)
+                          : _postingLocked
+                              ? _buildAdminsOnlyBar(scheme, isDark)
+                              : _buildInput(isDark),
+                    ),
                   ],
                 ),
               ],

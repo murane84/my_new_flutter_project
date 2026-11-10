@@ -248,6 +248,20 @@ extension _HomePageHelpers2 on HomePageState {
     // actions stay in the pill (Playlist — the Aluta one — and Call); Search
     // and Wallpaper fold into a ⋯ genie menu. Wider screens show them all.
     final compact = MediaQuery.sizeOf(context).width < 600;
+    final fid = int.tryParse(_activeFriendId ?? '') ?? -1;
+    final blocked = BlockList.instance.isBlocked(fid);
+    void toggleBlock() => BlockList.instance.toggle(
+        context,
+        fid,
+        _contactDisplayName(_activeFriendPhone, _activeFriendName ?? name),
+        person: {
+          'id': fid,
+          'username': _activeFriendName ?? name,
+          'phone': _activeFriendPhone,
+          'avatar_url': _activeFriendAvatar,
+        });
+    // Phones fold everything into ⋯; wider screens keep their segments and
+    // the ⋯ carries just Block / Unblock.
     Widget more() => Builder(
           builder: (bctx) => seg(Icons.more_horiz_rounded, 'More', () {
             final box = bctx.findRenderObject() as RenderBox?;
@@ -258,18 +272,28 @@ extension _HomePageHelpers2 on HomePageState {
               anchor: o & box.size,
               width: 220,
               entries: [
-                GenieMenuEntry(
-                    icon: Icons.search_rounded,
-                    label: 'Search in chat',
-                    onTap: search),
-                GenieMenuEntry(
-                    icon: Icons.library_music_rounded,
-                    label: 'Songs, media & docs',
-                    onTap: () => chatMediaRequest.value++),
-                GenieMenuEntry(
-                    icon: Icons.wallpaper_rounded,
-                    label: 'Wallpaper',
-                    onTap: openWallpaper),
+                if (compact) ...[
+                  GenieMenuEntry(
+                      icon: Icons.search_rounded,
+                      label: 'Search in chat',
+                      onTap: search),
+                  GenieMenuEntry(
+                      icon: Icons.library_music_rounded,
+                      label: 'Songs, media & docs',
+                      onTap: () => chatMediaRequest.value++),
+                  GenieMenuEntry(
+                      icon: Icons.wallpaper_rounded,
+                      label: 'Wallpaper',
+                      onTap: openWallpaper),
+                ],
+                if (fid > 0)
+                  GenieMenuEntry(
+                      icon: blocked
+                          ? Icons.lock_open_rounded
+                          : Icons.block_rounded,
+                      label: blocked ? 'Unblock' : 'Block',
+                      destructive: !blocked,
+                      onTap: toggleBlock),
               ],
             );
           }),
@@ -333,7 +357,8 @@ extension _HomePageHelpers2 on HomePageState {
                 phone: _activeFriendPhone,
               );
             }),
-            if (compact) ...[divider(), more()],
+            divider(),
+            more(),
           ],
         ),
       ),

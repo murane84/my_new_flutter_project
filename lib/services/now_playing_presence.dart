@@ -181,6 +181,11 @@ class NowPlayingPresence extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Drop someone's track at once (I just blocked them).
+  void forget(int id) {
+    if (_friends.remove(id) != null) notifyListeners();
+  }
+
   Future<void> loadSnapshot() async {
     final list = await ApiService().friendsListening();
     _friends.clear();

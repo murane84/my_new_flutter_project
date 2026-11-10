@@ -6,6 +6,9 @@ import '../services/moment_prefs.dart';
 import '../services/quiet_hours.dart';
 import '../services/last_seen_privacy.dart';
 import '../services/status_privacy.dart';
+import '../services/block_list.dart';
+import '../services/contact_names.dart';
+import '../widgets/person_avatar.dart';
 import '../services/notif_service.dart'
     show requestWebNotifications, webNotificationsPermission;
 import 'stories/status_audience_sheet.dart';
@@ -224,6 +227,79 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
     );
   }
 
+  /// The people I've blocked, each with Unblock.
+  void _openBlocked() {
+    BlockList.instance.refresh();
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(ctx).height * 0.7),
+          child: ListenableBuilder(
+            listenable: BlockList.instance,
+            builder: (ctx, _) {
+              final people = BlockList.instance.people;
+              final scheme = Theme.of(ctx).colorScheme;
+              return Column(mainAxisSize: MainAxisSize.min, children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 0, 20, 4),
+                  child: Text('Blocked',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                  child: Text(
+                      "They aren't told. No messages, calls, status or "
+                      'listening either way while blocked.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 12, color: scheme.onSurfaceVariant)),
+                ),
+                if (people.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text('Nobody blocked',
+                        style: TextStyle(color: scheme.onSurfaceVariant)),
+                  )
+                else
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: people.length,
+                      itemBuilder: (_, i) {
+                        final p = people[i];
+                        final id = (p['id'] as num).toInt();
+                        final name = ContactNames.instance.displayName(
+                            of: p,
+                            registered: (p['username'] ?? 'User').toString());
+                        return ListTile(
+                          leading: PersonAvatar(
+                              name: name,
+                              avatar: p['avatar_url']?.toString()),
+                          title: Text(name,
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          trailing: TextButton(
+                            onPressed: () =>
+                                BlockList.instance.toggle(ctx, id, name),
+                            child: const Text('Unblock'),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 8),
+              ]);
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _section(String t) => Padding(
         padding: const EdgeInsets.fromLTRB(4, 14, 4, 6),
         child: Text(t.toUpperCase(),
@@ -320,6 +396,35 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
                 );
               },
             ),
+          ),
+          // People I've blocked — see and unblock them here.
+          ListenableBuilder(
+            listenable: BlockList.instance,
+            builder: (context, _) {
+              final scheme = Theme.of(context).colorScheme;
+              final n = BlockList.instance.count;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Material(
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(16),
+                  child: ListTile(
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
+                    leading: Icon(Icons.block_rounded, color: accentInk(scheme)),
+                    title: const Text('Blocked',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: Text(n == 0
+                        ? 'Nobody — block from a chat or a profile'
+                        : n == 1
+                            ? '1 person'
+                            : '$n people'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: _openBlocked,
+                  ),
+                ),
+              );
+            },
           ),
           _section('Music'),
           _tile(

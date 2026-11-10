@@ -1347,6 +1347,10 @@ class ApiService {
   }
 
   // SEND MESSAGE
+  /// Why the last [sendMessage] was refused for good (e.g. "Unblock them to
+  /// send a message"), or null when it simply failed (network…).
+  static String? lastSendRefusal;
+
   Future<Map<String, dynamic>?> sendMessage(
     int receiverId,
     String content, {
@@ -1365,6 +1369,7 @@ class ApiService {
     bool? heartSave, // sender lets the receiver save the heart's media
     String? poll, // group poll spec JSON {q, options, multi}
   }) async {
+    lastSendRefusal = null;
     try {
       final token = await _getToken();
       if (token == null) throw Exception('No access token');
@@ -1403,6 +1408,15 @@ class ApiService {
         if (data is Map<String, dynamic>) return data;
       }
       _logger.w('Send message failed: ${response.statusCode}');
+      // A refusal (blocked / not someone you know) won't succeed on retry —
+      // keep the server's reason so the chat can say it.
+      if (response.statusCode == 403) {
+        try {
+          final d = jsonDecode(response.body);
+          final detail = d is Map ? d['detail']?.toString() : null;
+          if (detail != null && detail.isNotEmpty) lastSendRefusal = detail;
+        } catch (_) {}
+      }
       return null;
     } catch (e) {
       _logger.e('Send message exception: $e');
@@ -3863,6 +3877,26 @@ class ApiService {
       return jsonDecode(response.body) as bool;
     }
     throw Exception('Failed to toggle block');
+  }
+
+  /// The people I've blocked (id, username, phone, avatar_url). [] on error.
+  Future<List<Map<String, dynamic>>> getBlockedUsers(int myId) async {
+    try {
+      final token = await getToken();
+      if (token == null) return [];
+      final res = await http.get(
+        Uri.parse('${await _baseUrl}/users/$myId/friends/blocked'),
+        headers: _authHeaders(token),
+      );
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data is List) {
+          return data.whereType<Map>().map((m) => m.cast<String, dynamic>())
+              .toList();
+        }
+      }
+    } catch (_) {}
+    return [];
   }
 
   Future<bool> isUserMuted(int userId) async {

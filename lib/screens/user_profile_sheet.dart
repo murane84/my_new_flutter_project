@@ -7,6 +7,7 @@ import 'package:flutter_contacts/flutter_contacts.dart';
 
 import '../services/contact_names.dart';
 import '../services/now_playing_presence.dart';
+import '../services/block_list.dart';
 import '../utils/net_image.dart';
 import '../utils/time_utils.dart';
 import '../utils/toast_helper.dart';
@@ -657,6 +658,38 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
                 ],
               ],
             ),
+            // Block / Unblock — quiet, at the very bottom (never me).
+            if (widget.userId != null &&
+                widget.userId != BlockList.instance.myId)
+              ListenableBuilder(
+                listenable: BlockList.instance,
+                builder: (context, _) {
+                  final blocked =
+                      BlockList.instance.isBlocked(widget.userId!);
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: TextButton.icon(
+                      onPressed: () => BlockList.instance.toggle(
+                          context, widget.userId!, title,
+                          person: {
+                            'id': widget.userId,
+                            'username': widget.username,
+                            'phone': _phone,
+                            'avatar_url': widget.avatarUrl,
+                          }),
+                      icon: Icon(
+                          blocked
+                              ? Icons.lock_open_rounded
+                              : Icons.block_rounded,
+                          size: 18),
+                      label: Text(blocked ? 'Unblock $title' : 'Block $title'),
+                      style: TextButton.styleFrom(
+                          foregroundColor:
+                              blocked ? accentInk(scheme) : scheme.error),
+                    ),
+                  );
+                },
+              ),
           ],
         ),
         ),

@@ -46,6 +46,9 @@ class SectionSwitch extends StatelessWidget {
       return ClipRect(
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 150),
+          layoutBuilder: _layout,
+          transitionBuilder: (c, a) => KeyedSubtree(
+              key: c.key, child: FadeTransition(opacity: a, child: c)),
           child: child,
         ),
       );
@@ -60,11 +63,14 @@ class SectionSwitch extends StatelessWidget {
         duration: ms,
         switchInCurve: Curves.linear,
         switchOutCurve: Curves.linear,
-        layoutBuilder: (cur, prev) =>
-            Stack(fit: StackFit.expand, children: [...prev, ?cur]),
+        // Switching BACK to a section that is still animating out would put
+        // two copies of it in the tree (duplicate GlobalKeys inside, double
+        // scroll attachments) — so a leaving copy of the arriving section
+        // is simply dropped.
+        layoutBuilder: _layout,
         transitionBuilder: (c, anim) {
           final incoming = c.key == child.key;
-          return AnimatedBuilder(
+          return KeyedSubtree(key: c.key, child: AnimatedBuilder(
             animation: anim,
             child: c,
             builder: (context, w) {
@@ -73,7 +79,7 @@ class SectionSwitch extends StatelessWidget {
               final body = _frame(s, w!, t, incoming, dir, accent);
               return IgnorePointer(ignoring: !incoming, child: body);
             },
-          );
+          ));
         },
         child: child,
       ),
@@ -81,6 +87,17 @@ class SectionSwitch extends StatelessWidget {
   }
 
   static double _ease(double t) => Curves.easeOutCubic.transform(t);
+
+  static Widget _layout(Widget? cur, List<Widget> prev) {
+    final ck = cur == null ? null : _innerKey(cur);
+    return Stack(fit: StackFit.expand, children: [
+      ...prev.where((p) => ck == null || _innerKey(p) != ck),
+      ?cur,
+    ]);
+  }
+
+  /// Our section key, under AnimatedSwitcher's own entry wrapper.
+  static Key? _innerKey(Widget w) => (w is KeyedSubtree ? w.child : w).key;
 
   Widget _frame(SectionTransitionStyle s, Widget w, double t, bool incoming,
       double dir, Color accent) {

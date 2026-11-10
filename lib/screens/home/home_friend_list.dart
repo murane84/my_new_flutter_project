@@ -166,6 +166,39 @@ extension _HomeFriendListView on HomePageState {
                       // widths — or the panel narrowed by the music pane — use
                       // the single layer + header pills.
                       final wide = constraints.maxWidth >= 600;
+                      // Harmony · Circle · Glow switch with the SAME
+                      // transition as Circle's sections (Appearance →
+                      // Section transitions), coming from the side each
+                      // layer lives on — so every move inside the chat
+                      // screen feels alike, none snapping, none "special".
+                      final layerKey = _friendLayer == 'glow'
+                          ? 'glow'
+                          : (wide ? 'columns' : _friendLayer);
+                      return SectionSwitch(
+                        forward: _layerForward,
+                        child: KeyedSubtree(
+                          key: ValueKey('layer-$layerKey'),
+                          child: _layerBody(harmonyEntries, circleEntries,
+                              combined, scheme, textColor, wide),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _layerBody(
+      List<Map<String, dynamic>> harmonyEntries,
+      List<Map<String, dynamic>> circleEntries,
+      List<Map<String, dynamic>> combined,
+      ColorScheme scheme,
+      Color textColor,
+      bool wide) {
+    return Builder(
+                    builder: (context) {
                       // Glow (third layer) fills the panel on any width.
                       if (_friendLayer == 'glow') {
                         return Center(
@@ -188,10 +221,6 @@ extension _HomeFriendListView on HomePageState {
                       return _friendHubMobile(
                           harmonyEntries, circleEntries, scheme, textColor);
                     },
-                  ),
-          ),
-        ],
-      ),
     );
   }
 

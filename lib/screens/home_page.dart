@@ -326,8 +326,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
     setState(() => _spaceQuery = query.trim().toLowerCase());
   }
 
+  // Which way the Harmony · Circle · Glow switch moves (for the transition).
+  bool _layerForward = true;
+  static const List<String> _kLayers = ['harmony', 'circle', 'glow'];
+
   void _setFriendLayer(String layer) {
     if (_friendLayer == layer) return;
+    _layerForward = _kLayers.indexOf(layer) > _kLayers.indexOf(_friendLayer);
     // Drop any active search focus first, so switching layers never carries the
     // keyboard/focus onto the other layer's (separate) search box.
     FocusManager.instance.primaryFocus?.unfocus();

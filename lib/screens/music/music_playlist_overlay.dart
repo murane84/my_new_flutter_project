@@ -1802,6 +1802,25 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
 
   /// Scroll the list so the playing song sits mid-view (and flash it). If the
   /// current filter hides it, say so instead of jumping nowhere.
+  /// ⋮ → "Share as status": what I'm playing becomes my music status in
+  /// one tap (no composer). A new music status replaces my previous one.
+  Future<void> _shareAsStatus(String path) async {
+    final o = metadataStore.of(path);
+    final ta = _titleArtist(_name(path));
+    final title = (o?.title?.trim().isNotEmpty ?? false) ? o!.title! : ta.$1;
+    final artist =
+        (o?.artist?.trim().isNotEmpty ?? false) ? o!.artist : ta.$2;
+    final res = await ApiService().createStory(
+        kind: 'music', musicTitle: title, musicArtist: artist);
+    if (!mounted) return;
+    showToast(
+        context,
+        res != null
+            ? 'Shared as your status 🎶 — friends can tune in'
+            : 'Couldn’t share it — try again',
+        type: res != null ? ToastType.success : ToastType.error);
+  }
+
   void _locateNow() {
     final d = _displayed();
     final i = d.indexWhere((e) => e.key == widget.currentIndex);
@@ -2557,6 +2576,9 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                         padding: EdgeInsets.zero,
                         onSelected: (v) {
                           if (v == 'find') _locateNow();
+                          if (v == 'status' && path != null) {
+                            _shareAsStatus(path);
+                          }
                           if (v == 'like' && path != null) {
                             widget.onFavorite(path);
                           }
@@ -2567,6 +2589,12 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                             child: _miniMenuRow(Icons.my_location_rounded,
                                 'Find playing song', scheme),
                           ),
+                          if (path != null)
+                            PopupMenuItem<String>(
+                              value: 'status',
+                              child: _miniMenuRow(Icons.amp_stories_rounded,
+                                  'Share as status', scheme),
+                            ),
                           if (path != null && !roomy)
                             PopupMenuItem<String>(
                               value: 'like',

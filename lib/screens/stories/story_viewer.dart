@@ -25,6 +25,29 @@ import '../gif_picker.dart';
 /// bar tracks each story (a fixed 5s for photos/music, the clip length for
 /// video). Marks stories seen as they play; the author additionally sees a
 /// "viewed by" count + list and can delete.
+/// Bridges a status needs into the rest of Aluta — set by Home (which owns
+/// presence, bonds and the music player) and read by the viewer.
+class StoryHooks {
+  StoryHooks._();
+
+  /// An accepted bond with this author (Our Space partner)?
+  static bool Function(int authorId)? isBonded;
+
+  /// How close they are: 2 = my Harmony partner, 1 = a bond, 0 = circle.
+  static int Function(int authorId)? closeness;
+
+  /// Are they playing music right now (so "Tune in" can join it)?
+  static bool Function(int authorId)? isPlayingNow;
+
+  /// Ask to tune in to what they're playing.
+  static void Function(
+          BuildContext context, int authorId, String name, String? title)?
+      tuneIn;
+
+  /// Play this song from MY loaded songs. false = not in my songs.
+  static bool Function(String title)? playOnMine;
+}
+
 class StoryViewerScreen extends StatefulWidget {
   final List<StoryGroup> groups;
   final int startGroup;
@@ -199,6 +222,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     final to = _group.authorId;
     setState(() => _replySending = true);
     final content = '> ${_statusQuote(item)}\n\n$text';
+    // A quick reaction also shows beside my name in their "Viewed by".
+    if (quick != null) ApiService().reactToStory(item.id, quick);
     final sent = gifUrl != null
         ? await ApiService().sendMessage(to, content,
             messageType: 'image',
@@ -864,6 +889,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                   // content, so skip the bottom caption bar for them.
                   if (!item.isText && (item.caption ?? '').isNotEmpty)
                     _captionBar(item),
+                  if (!_group.isMe) _storyActions(item),
                   if (_group.isMe) _authorFooter(item) else _replyBar(),
                   const SizedBox(height: 12),
                 ],
@@ -1242,7 +1268,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                 ),
                 if (when != null)
                   Text(
-                    _ago(when),
+                    // My own status: how long it has left.
+                    _group.isMe && item.expiresAt != null
+                        ? '${_ago(when)} · ${_left(item.expiresAt!)}'
+                        : _ago(when),
                     style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.75),
                         fontSize: 11),
@@ -1497,7 +1526,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(name,
+                                    Text(
+                                        (v.reaction ?? '').isEmpty
+                                            ? name
+                                            : '$name  ${v.reaction}',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
@@ -1670,6 +1702,93 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       setState(() => _s = _s.clamp(0, _group.stories.length - 1));
       _startStory();
     }
+  }
+
+  /// "5h left" / "40m left" for my own status.
+  String _left(DateTime expires) {
+    final d = expires.difference(DateTime.now());
+    if (d.inMinutes < 1) return 'ending';
+    if (d.inMinutes < 60) return '${d.inMinutes}m left';
+    return '${d.inHours}h left';
+  }
+
+  /// A friend's status, made actionable (Aluta, not a picture):
+  ///  • music → 🎧 Tune in (they're playing now) and ▶ Play on mine;
+  ///  • my bonded partner → 💞 Keep (pins it in our Space before it fades).
+  Widget _storyActions(StoryItem item) {
+    final author = _group.authorId;
+    final name = _displayName();
+    final title = (item.musicTitle ?? '').trim();
+    final music = item.isMusic && title.isNotEmpty;
+    final live = music && (StoryHooks.isPlayingNow?.call(author) ?? false);
+    final bonded = StoryHooks.isBonded?.call(author) ?? false;
+    final keepable = item.isMusic ||
+        item.isSticker ||
+        ((item.isPhoto || item.isVideo) && item.mediaUrl != null) ||
+        (item.isText && (item.caption ?? '').trim().isNotEmpty);
+    final chips = <Widget>[
+      if (live && StoryHooks.tuneIn != null)
+        _actionChip('🎧', 'Tune in', () {
+          _pause();
+          StoryHooks.tuneIn!(context, author, name, title);
+        }),
+      if (music && StoryHooks.playOnMine != null)
+        _actionChip('▶', 'Play on mine', () {
+          final ok = StoryHooks.playOnMine!(title);
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+            content: Text(ok
+                ? 'Playing “$title” 🎶'
+                : '“$title” isn’t in your loaded songs yet'),
+            duration: const Duration(milliseconds: 1800),
+            behavior: SnackBarBehavior.floating,
+          ));
+        }),
+      if (bonded && keepable)
+        _actionChip('💞', 'Keep', () async {
+          _pause();
+          final err = await ApiService().keepStoryInSpace(item.id);
+          if (!mounted) return;
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+            content: Text(err ?? 'Kept in your Space 💞'),
+            duration: const Duration(milliseconds: 1800),
+            behavior: SnackBarBehavior.floating,
+          ));
+          _resume();
+        }),
+    ];
+    if (chips.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 8,
+        runSpacing: 6,
+        children: chips,
+      ),
+    );
+  }
+
+  Widget _actionChip(String emoji, String label, VoidCallback onTap) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.16),
+      shape: StadiumBorder(
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.28))),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Text('$emoji  $label',
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13.5)),
+        ),
+      ),
+    );
   }
 
   String _ago(DateTime t) {

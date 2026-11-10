@@ -21,7 +21,8 @@ from sqlalchemy.orm import Session
 
 import schemas
 from database import get_db
-from models import User, MediaAsset, Story, StoryView
+from models import User, MediaAsset, Story, StoryView, StoryReaction
+import privacy
 from crud import _get_friend_ids
 from .users import get_current_user
 from auth import get_current_user_flexible
@@ -51,6 +52,17 @@ def _story_circle(db: Session, user_id: int) -> set:
     ).all()
     blocked = {int(b if int(a) == user_id else a) for a, b in rows}
     return ids - blocked
+
+
+def _may_see(db: Session, viewer: int, author: int) -> bool:
+    """[viewer] may see [author]'s stories: the author themself, or a friend
+    in the shared story circle (no block) whom the author's "Who can see my
+    status" choice includes."""
+    if viewer == author:
+        return True
+    if viewer not in _story_circle(db, author):
+        return False
+    return author in privacy.status_authors_visible_to(db, viewer, [author])
 
 
 def _now() -> datetime:
@@ -176,7 +188,8 @@ def create_story(
     # without a manual refresh. The event carries no story data — clients fetch
     # the feed themselves on this signal (keeps access control server-side).
     try:
-        for fid in _story_circle(db, current_user.id):
+        for fid in privacy.status_audience_of(
+                db, current_user.id, _story_circle(db, current_user.id)):
             safe_notify_user(int(fid),
                              {"type": "story_posted", "author_id": current_user.id})
     except Exception:  # noqa: BLE001
@@ -198,7 +211,9 @@ def stories_feed(
     now = _now()
     purge_expired_stories(db)
 
-    author_ids = set(_story_circle(db, me))
+    # Friends (no block either way) whose status audience includes me.
+    author_ids = privacy.status_authors_visible_to(
+        db, me, _story_circle(db, me))
     author_ids.add(me)
 
     stories = (
@@ -294,9 +309,7 @@ def get_story_media(
     if not story:
         # Either no such story, or it has expired.
         raise HTTPException(status_code=404, detail="Story not found")
-    if story.author_id != current_user.id and current_user.id not in _story_circle(
-        db, story.author_id
-    ):
+    if not _may_see(db, current_user.id, story.author_id):
         raise HTTPException(status_code=403, detail="Not authorized to view this story")
 
     asset = db.query(MediaAsset).filter(MediaAsset.id == asset_id).first()
@@ -324,7 +337,7 @@ def mark_viewed(
     story = db.query(Story).filter(Story.id == story_id).first()
     if not story or story.expires_at <= now:
         raise HTTPException(status_code=404, detail="Story not found")
-    if story.author_id != me and me not in _story_circle(db, story.author_id):
+    if not _may_see(db, me, story.author_id):
         raise HTTPException(status_code=403, detail="Not authorized to view this story")
     if story.author_id == me:
         return {"ok": True}  # don't record self-views
@@ -365,8 +378,12 @@ def story_viewers(
     )
     # WHEN someone watched is activity, so it follows their last-seen choice
     # (privacy.py, both ways): hidden → they're listed, without a time.
-    import privacy
     seen_ok = privacy.visible_to(db, current_user.id, [u.id for _, u in rows])
+    reacts = {
+        int(r.user_id): r.emoji
+        for r in db.query(StoryReaction).filter(
+            StoryReaction.story_id == story_id).all()
+    }
     return [
         schemas.StoryViewerOut(
             user_id=u.id,
@@ -374,9 +391,106 @@ def story_viewers(
             avatar_url=u.avatar_url,
             phone=u.phone,
             viewed_at=v.viewed_at if seen_ok.get(u.id, False) else None,
+            reaction=reacts.get(int(u.id)),
         )
         for v, u in rows
     ]
+
+
+@router.post("/{story_id}/react")
+def react_to_story(
+    story_id: str,
+    payload: schemas.StoryReactIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Note my quick reaction on a story (latest wins) so the author's
+    "Viewed by" shows it. The app also sends it to their DM."""
+    emoji = (payload.emoji or "").strip()[:16]
+    if not emoji:
+        raise HTTPException(status_code=400, detail="Pick a reaction")
+    story = db.query(Story).filter(Story.id == story_id).first()
+    if not story or story.expires_at <= _now():
+        raise HTTPException(status_code=404, detail="Story not found")
+    if story.author_id == current_user.id or not _may_see(
+            db, current_user.id, story.author_id):
+        raise HTTPException(status_code=403, detail="Not your story to react to")
+    row = db.query(StoryReaction).filter(
+        StoryReaction.story_id == story_id,
+        StoryReaction.user_id == current_user.id).first()
+    if row is None:
+        db.add(StoryReaction(story_id=story_id, user_id=current_user.id,
+                             emoji=emoji))
+    else:
+        row.emoji = emoji
+    try:
+        db.commit()
+    except Exception:  # noqa: BLE001
+        db.rollback()
+    return {"ok": True, "emoji": emoji}
+
+
+@router.post("/{story_id}/keep")
+def keep_story_in_space(
+    story_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Keep a bonded partner's status in OUR Space before it expires: it
+    becomes a pinned moment (photo / video / song / note / GIF) in my Space
+    with them — so a lovely status turns into a lasting memory. Accepted
+    bonds only."""
+    import json as _json
+    from models import PinnedMoment, RelationshipSpace, SpaceMember
+    from . import spaces as sp
+    story = db.query(Story).filter(Story.id == story_id).first()
+    if not story or story.expires_at <= _now():
+        raise HTTPException(status_code=404, detail="This status has expired")
+    author = int(story.author_id)
+    me = current_user.id
+    if author == me or not _may_see(db, me, author):
+        raise HTTPException(status_code=403, detail="Not available")
+    # My Space with them, and only an accepted bond.
+    space = (
+        db.query(RelationshipSpace)
+        .join(SpaceMember, SpaceMember.space_id == RelationshipSpace.id)
+        .filter(RelationshipSpace.owner_id == me,
+                SpaceMember.user_id == author)
+        .first()
+    )
+    if space is None or sp._active_partner(db, space, me) != author:
+        raise HTTPException(status_code=409,
+                            detail="Keep works with your bonded partner")
+    kind, ref, caption = None, None, (story.caption or None)
+    if story.kind in ("photo", "video") and story.media_asset_id:
+        kind = story.kind
+        ref = f"/attachments/{story.media_asset_id}"
+    elif story.kind == "music":
+        kind = "song"
+        ref = _json.dumps({"title": story.music_title or "",
+                           "artist": story.music_artist or ""})
+    elif story.kind == "sticker" and story.music_art_url:
+        kind, ref = "gif", story.music_art_url
+    elif story.kind == "text" and (story.caption or "").strip():
+        kind = "note"
+    if kind is None:
+        raise HTTPException(status_code=400, detail="This status can't be kept")
+    # Already kept → don't pin it twice.
+    dup = db.query(PinnedMoment).filter(
+        PinnedMoment.space_id == space.id, PinnedMoment.kind == kind,
+        PinnedMoment.ref == ref, PinnedMoment.caption == caption).first()
+    if dup is not None:
+        return {"ok": True, "moment_id": dup.id, "already": True}
+    moment = PinnedMoment(space_id=space.id, author_id=me, kind=kind,
+                          ref=ref, caption=caption)
+    db.add(moment)
+    db.commit()
+    db.refresh(moment)
+    try:
+        sp._notify_partner_moment(db, space, current_user, moment)
+    except Exception:  # noqa: BLE001
+        pass
+    return {"ok": True, "moment_id": moment.id, "space_id": space.id}
 
 
 @router.delete("/{story_id}")

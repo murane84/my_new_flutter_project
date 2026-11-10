@@ -13,6 +13,8 @@ import '../../theme/aluta_palette.dart';
 import '../api_service.dart';
 import '../gif_picker.dart';
 import 'camera_capture.dart';
+import 'status_audience_sheet.dart';
+import '../../services/status_privacy.dart';
 
 /// Entry point: a bottom sheet offering the four ways to post a story
 /// (photo from gallery, camera photo, a short video clip, or a "now playing"
@@ -23,6 +25,8 @@ Future<void> showCreateStorySheet(
   required String apiBase,
   required VoidCallback onPosted,
 }) async {
+  await StatusPrivacy.instance.load();
+  if (!context.mounted) return;
   final choice = await showModalBottomSheet<String>(
     context: context,
     showDragHandle: true,
@@ -54,14 +58,30 @@ Future<void> showCreateStorySheet(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Add to your story',
-                      style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
+                child: Row(children: [
+                  const Expanded(
+                    child: Text('Add to your story',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                  // Who will see it — one tap to change.
+                  ValueListenableBuilder<String>(
+                    valueListenable: StatusPrivacy.instance.mode,
+                    builder: (_, _, _) => ValueListenableBuilder<Set<int>>(
+                      valueListenable: StatusPrivacy.instance.hidden,
+                      builder: (_, _, _) => ActionChip(
+                        avatar: Icon(Icons.visibility_rounded,
+                            size: 16, color: scheme.primary),
+                        label: Text(StatusPrivacy.instance.summary,
+                            style: const TextStyle(fontSize: 12)),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => showStatusAudienceSheet(ctx),
+                      ),
+                    ),
+                  ),
+                ]),
               ),
               // Now playing first — it's Aluta's signature status.
               tile(Icons.music_note_rounded, 'Now playing', 'music',

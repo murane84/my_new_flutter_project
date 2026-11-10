@@ -7,6 +7,7 @@ import 'create_story_sheet.dart';
 import 'story_models.dart';
 import 'story_viewer.dart';
 import '../../utils/readable.dart';
+import '../../services/story_mute.dart';
 
 /// Horizontal "stories" strip shown at the top of the Messages list. Owns its
 /// own data: it fetches the friends-only feed and reloads after posting or
@@ -46,8 +47,58 @@ class _StoriesTrayState extends State<StoriesTray> {
     return null;
   }
 
-  List<StoryGroup> get _friendGroups =>
-      widget.groups.where((g) => !g.isMe).toList();
+  /// Closest first, like everywhere in Aluta: my Harmony partner right
+  /// after me, then my bonds, then everyone else (newest first, as the
+  /// server sends them); muted friends wait at the end.
+  List<StoryGroup> get _friendGroups {
+    final list = widget.groups.where((g) => !g.isMe).toList();
+    int rank(StoryGroup g) {
+      if (StoryMute.instance.isMuted(g.authorId)) return 3;
+      final c = StoryHooks.closeness?.call(g.authorId) ?? 0;
+      return c == 2 ? 0 : (c == 1 ? 1 : 2);
+    }
+
+    final order = {for (var i = 0; i < list.length; i++) list[i]: i};
+    list.sort((a, b) {
+      final r = rank(a).compareTo(rank(b));
+      return r != 0 ? r : order[a]!.compareTo(order[b]!);
+    });
+    return list;
+  }
+
+  /// Long-press a friend's status → mute / unmute it.
+  Future<void> _muteSheet(StoryGroup g) async {
+    final name = _nameFor(g);
+    final muted = StoryMute.instance.isMuted(g.authorId);
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 8),
+          ListTile(
+            leading: Icon(muted
+                ? Icons.notifications_active_outlined
+                : Icons.notifications_off_outlined),
+            title: Text(muted
+                ? 'Unmute $name’s status'
+                : 'Mute $name’s status'),
+            subtitle: Text(muted
+                ? 'Their new statuses light up again'
+                : 'Moves to the end, never shows as new · still friends'),
+            onTap: () => Navigator.pop(ctx, true),
+          ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+    if (ok != true) return;
+    await StoryMute.instance.toggle(g.authorId);
+    await widget.onReload();
+    if (mounted) setState(() {});
+  }
 
   String _absUrl(String rel) =>
       rel.startsWith('http') ? rel : '${widget.apiBase}$rel';
@@ -114,7 +165,7 @@ class _StoriesTrayState extends State<StoriesTray> {
           final g = friends[i - 1];
           final idx = friends.indexOf(g);
           return _friendTile(g, () => _openViewer(friends, idx), ringSize,
-              avatarRadius, tileWidth, labelSize);
+              avatarRadius, tileWidth, labelSize, badgeSize);
         },
       ),
     );
@@ -162,20 +213,34 @@ class _StoriesTrayState extends State<StoriesTray> {
   }
 
   Widget _friendTile(StoryGroup g, VoidCallback onTap, double ringSize,
-      double avatarRadius, double tileWidth, double labelSize) {
+      double avatarRadius, double tileWidth, double labelSize,
+      double badgeSize) {
     final avatar =
         (g.avatarUrl ?? '').isNotEmpty ? _absUrl(g.avatarUrl!) : null;
-    return _TileScaffold(
+    final muted = StoryMute.instance.isMuted(g.authorId);
+    // My Harmony partner: the warm theme → rose → gold ring and a 💞.
+    final partner =
+        !muted && (StoryHooks.closeness?.call(g.authorId) ?? 0) == 2;
+    final tile = _TileScaffold(
       label: _nameFor(g),
       width: tileWidth,
       labelSize: labelSize,
       onTap: onTap,
+      onLongPress: () => _muteSheet(g),
       ring: _Ring(
         size: ringSize,
-        state: g.hasUnseen ? _RingState.unseen : _RingState.seen,
+        state: muted
+            ? _RingState.none
+            : partner
+                ? (g.hasUnseen ? _RingState.partner : _RingState.partnerSeen)
+                : (g.hasUnseen ? _RingState.unseen : _RingState.seen),
+        badge: partner
+            ? Text('💞', style: TextStyle(fontSize: badgeSize * 0.7))
+            : null,
         child: _avatarCircle(avatar, _nameFor(g), avatarRadius),
       ),
     );
+    return muted ? Opacity(opacity: 0.5, child: tile) : tile;
   }
 
   Widget _avatarCircle(String? avatar, String name, double radius) {
@@ -202,6 +267,7 @@ class _StoriesTrayState extends State<StoriesTray> {
 class _TileScaffold extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   final Widget ring;
   final double width;
   final double labelSize;
@@ -210,6 +276,7 @@ class _TileScaffold extends StatelessWidget {
     required this.label,
     required this.onTap,
     required this.ring,
+    this.onLongPress,
     this.width = 74,
     this.labelSize = 11,
   });
@@ -218,6 +285,7 @@ class _TileScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       borderRadius: BorderRadius.circular(12),
       child: SizedBox(
         width: width,
@@ -239,7 +307,7 @@ class _TileScaffold extends StatelessWidget {
   }
 }
 
-enum _RingState { unseen, seen, own, none }
+enum _RingState { unseen, seen, own, none, partner, partnerSeen }
 
 class _Ring extends StatelessWidget {
   final _RingState state;
@@ -271,6 +339,18 @@ class _Ring extends StatelessWidget {
         break;
       case _RingState.none:
         solid = Colors.grey.shade300;
+        break;
+      case _RingState.partner:
+        // My Harmony partner's new status: warm theme → rose → gold.
+        gradient = SweepGradient(colors: [
+          scheme.primary,
+          const Color(0xFFFF5C8A),
+          const Color(0xFFF2A541),
+          scheme.primary,
+        ]);
+        break;
+      case _RingState.partnerSeen:
+        solid = const Color(0xFFFF5C8A).withValues(alpha: 0.45);
         break;
     }
     return SizedBox(

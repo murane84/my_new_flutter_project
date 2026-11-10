@@ -51,6 +51,10 @@ class AccountPrefs {
     'quiet_hours_on', 'quiet_from_min', 'quiet_to_min',
     // Who can see my last seen (services/last_seen_privacy)
     'last_seen_mode',
+    // Who can see my status (services/status_privacy)
+    'status_audience_mode', 'status_hidden_ids',
+    // Muted statuses (services/story_mute)
+    'muted_story_authors_v1',
     // Equalizer (screens/equalizer_screen + music controls)
     'eq_enabled', 'eq_preset', 'eq_bass', 'eq_loud', 'eq_gains',
     // Playlist view (sort · smart · favourites · group)

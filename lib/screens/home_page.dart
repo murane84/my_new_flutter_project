@@ -95,6 +95,7 @@ import 'group_call_screen.dart';
 import 'stories/stories_tray.dart';
 import 'stories/story_models.dart';
 import 'stories/story_viewer.dart';
+import '../services/story_mute.dart';
 import 'policy_gate.dart';
 import 'add_friend_sheet.dart';
 import 'spinning_vinyl_ring.dart';
@@ -456,6 +457,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
     LastSeenPrivacy.instance.load();
     LastSeenPrivacy.instance.mode.addListener(_onLastSeenPrivacy);
     spacesListStale.addListener(_loadSpaces);
+    // A status is a way IN to Aluta, not just a picture: the viewer asks
+    // Home about bonds, live music and my songs through these.
+    StoryMute.instance.load();
+    StoryHooks.isBonded = (id) => _bondWith(id) != null;
+    StoryHooks.closeness = (id) =>
+        _isHarmonyPartner(id) ? 2 : (_bondWith(id) != null ? 1 : 0);
+    StoryHooks.isPlayingNow =
+        (id) => NowPlayingPresence.instance.trackFor(id) != null;
+    StoryHooks.tuneIn = (ctx, id, name, title) =>
+        askToTuneIn(ctx, friendId: id, name: name, title: title);
+    StoryHooks.playOnMine = _playLoadedSong;
     // Scrolled back up by hand → the "↑ N new" chip has done its job.
     _circleScroll.addListener(() {
       if (_newWhileAway.isNotEmpty &&
@@ -3493,6 +3505,18 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   /// Play "your song" from my loaded songs (matched loosely by title).
   void _playYourSong(String title) {
+    final ok = _playLoadedSong(title);
+    showToast(
+        context,
+        ok
+            ? 'Playing your song — “$title” 💞'
+            : '“$title” isn’t in your loaded songs yet',
+        type: ToastType.info);
+  }
+
+  /// Play a song from MY loaded songs, matched loosely by title (exact,
+  /// then "file starts with / contains it"). false = not loaded here.
+  bool _playLoadedSong(String title) {
     String norm(String s) =>
         s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
     final want = norm(title);
@@ -3506,13 +3530,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       if (want.length >= 4 && n.contains(want)) contains ??= p;
     }
     final path = exact ?? starts ?? contains;
-    final ok = path != null && (playbackBus.playPath?.call(path) ?? false);
-    showToast(
-        context,
-        ok
-            ? 'Playing your song — “$title” 💞'
-            : '“$title” isn’t in your loaded songs yet',
-        type: ToastType.info);
+    return path != null && (playbackBus.playPath?.call(path) ?? false);
   }
 
   // ── List navigation ─────────────────────────────────────────────────────

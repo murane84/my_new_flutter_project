@@ -377,6 +377,12 @@ class StoryViewerOut(BaseModel):
     avatar_url: Optional[str] = None
     phone: Optional[str] = None
     viewed_at: Optional[datetime] = None
+    # Their quick reaction to this story, if any (❤️ 😂 🔥 …).
+    reaction: Optional[str] = None
+
+
+class StoryReactIn(BaseModel):
+    emoji: str
 
 
 # ---------------------- LEGAL CONSENT SCHEMAS ----------------------

@@ -90,6 +90,74 @@ def visible_to(db, viewer: int, owners) -> dict:
     }
 
 
+# ── Who can see my status ────────────────────────────────────────────────────
+# Each user picks (synced in app_prefs): `status_audience_mode` 'circle' (every
+# friend — default) or 'bonds' (only Our Space partners), plus
+# `status_hidden_ids` — friends hidden from my status either way.
+
+def _status_prefs_from(data):
+    try:
+        d = json.loads(data or "{}") or {}
+    except Exception:
+        return "circle", set()
+
+    def val(k, default):
+        box = d.get(k)
+        return box.get("v", default) if isinstance(box, dict) else default
+
+    mode = val("status_audience_mode", "circle")
+    if mode not in ("circle", "bonds"):
+        mode = "circle"
+    hidden = set()
+    for x in (val("status_hidden_ids", []) or []):
+        try:
+            hidden.add(int(x))
+        except (TypeError, ValueError):
+            pass
+    return mode, hidden
+
+
+def status_prefs_for(db, ids) -> dict:
+    ids = {int(i) for i in ids}
+    out = {i: ("circle", set()) for i in ids}
+    if not ids:
+        return out
+    rows = db.query(UserSetting.user_id, UserSetting.data).filter(
+        UserSetting.user_id.in_(ids), UserSetting.key == "app_prefs").all()
+    for uid, data in rows:
+        out[int(uid)] = _status_prefs_from(data)
+    return out
+
+
+def status_authors_visible_to(db, viewer: int, authors) -> set:
+    """Of these [authors] (the viewer's friends), whose status may [viewer]
+    see? Their audience choice decides: hidden from them → no; 'bonds' →
+    only if they still keep an accepted Our Space with the viewer."""
+    authors = {int(a) for a in authors}
+    prefs = status_prefs_for(db, authors)
+    keeps_me = bonded_to(db, int(viewer))
+    out = set()
+    for a in authors:
+        mode, hidden = prefs.get(a, ("circle", set()))
+        if int(viewer) in hidden:
+            continue
+        if mode == "bonds" and a not in keeps_me:
+            continue
+        out.add(a)
+    return out
+
+
+def status_audience_of(db, author: int, candidates) -> set:
+    """Of these [candidates] (the author's friends), who may see [author]'s
+    status — for the live "posted" nudge."""
+    mode, hidden = status_prefs_for(db, [author]).get(
+        int(author), ("circle", set()))
+    cands = {int(c) for c in candidates} - hidden
+    if mode == "bonds":
+        cands &= bond_ids(db, int(author))
+    return cands
+
+
 def last_seen_visible(db, owner: int, viewer: int) -> bool:
     if int(owner) == int(viewer):
         return True

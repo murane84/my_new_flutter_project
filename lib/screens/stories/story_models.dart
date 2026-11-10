@@ -102,6 +102,8 @@ class StoryViewer {
   final String? avatarUrl;
   final String? phone;
   final DateTime? viewedAt;
+  // Their quick reaction (❤️ 😂 🔥 …), if they reacted.
+  final String? reaction;
 
   StoryViewer({
     required this.userId,
@@ -109,6 +111,7 @@ class StoryViewer {
     this.avatarUrl,
     this.phone,
     this.viewedAt,
+    this.reaction,
   });
 
   factory StoryViewer.fromJson(Map<String, dynamic> j) => StoryViewer(
@@ -117,5 +120,6 @@ class StoryViewer {
         avatarUrl: j['avatar_url'] as String?,
         phone: j['phone'] as String?,
         viewedAt: StoryItem._dt(j['viewed_at']),
+        reaction: j['reaction'] as String?,
       );
 }

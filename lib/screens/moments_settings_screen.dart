@@ -5,6 +5,8 @@ import '../services/heart_lock.dart';
 import '../services/moment_prefs.dart';
 import '../services/quiet_hours.dart';
 import '../services/last_seen_privacy.dart';
+import '../services/status_privacy.dart';
+import 'stories/status_audience_sheet.dart';
 import '../services/song_insights.dart';
 import '../utils/popup_shell.dart';
 import '../widgets/welcome_tour.dart';
@@ -31,6 +33,7 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
       HeartLock.instance.init(),
       QuietHours.instance.load(),
       LastSeenPrivacy.instance.load(),
+      StatusPrivacy.instance.load(),
     ]).then((_) {
       if (mounted) {
         setState(() => _receipts = HeartLock.instance.sendReceipts);
@@ -262,6 +265,35 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
           _quietHours(),
           _section('Privacy'),
           _lastSeenPrivacy(),
+          // Who can see my status — My circle / Bonds only, + hide from…
+          ValueListenableBuilder<String>(
+            valueListenable: StatusPrivacy.instance.mode,
+            builder: (context, _, _) => ValueListenableBuilder<Set<int>>(
+              valueListenable: StatusPrivacy.instance.hidden,
+              builder: (context, _, _) {
+                final scheme = Theme.of(context).colorScheme;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Material(
+                    color:
+                        scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(16),
+                    child: ListTile(
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                      leading: Icon(Icons.amp_stories_rounded,
+                          color: accentInk(scheme)),
+                      title: const Text('Who can see my status',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text(StatusPrivacy.instance.summary),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => showStatusAudienceSheet(context),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
           _section('Music'),
           _tile(
             icon: Icons.graphic_eq_rounded,

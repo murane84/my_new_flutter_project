@@ -1504,7 +1504,8 @@ extension _HomePageHelpers1 on HomePageState {
         avatarUrl: g.avatarUrl,
         phone: g.phone,
         isMe: g.isMe,
-        hasUnseen: g.hasUnseen,
+        // A muted friend's status is never lit as "new" (tray + tile).
+        hasUnseen: g.hasUnseen && !StoryMute.instance.isMuted(g.authorId),
         stories: live,
       ));
     }

@@ -519,6 +519,30 @@ class Story(Base):
         return f"<Story(id={self.id}, author_id={self.author_id}, kind='{self.kind}')>"
 
 
+class StoryReaction(Base):
+    """A viewer's quick reaction to a story (the ❤️ 😂 🔥 row) — one per
+    viewer, the latest wins — so the author's "Viewed by" list can show
+    feelings, not just names. The reaction ALSO goes to their DM as a
+    message. Cascades away with the story. Auto-created by create_all."""
+    __tablename__ = "story_reactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    story_id = Column(
+        String, ForeignKey("stories.id", ondelete="CASCADE"),
+        index=True, nullable=False,
+    )
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        index=True, nullable=False,
+    )
+    emoji = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('story_id', 'user_id', name='_story_reaction_uc'),
+    )
+
+
 class StoryView(Base):
     """One "seen" record: `viewer_id` watched `story_id`. Unique per pair so a
     repeat view is idempotent; drives the author's "who viewed" list and the

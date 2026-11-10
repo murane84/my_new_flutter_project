@@ -4064,6 +4064,41 @@ class ApiService {
     }
   }
 
+  /// Note my quick reaction on a story (shows in the author's "Viewed by").
+  Future<void> reactToStory(String storyId, String emoji) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return;
+      await http.post(
+        Uri.parse('${await _baseUrl}/stories/$storyId/react'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'emoji': emoji}),
+      );
+    } catch (_) {/* best-effort */}
+  }
+
+  /// Keep a bonded partner's status in our Space (a pinned moment).
+  /// Returns null on success, else a short reason to show.
+  Future<String?> keepStoryInSpace(String storyId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return 'Please sign in again';
+      final resp = await http.post(
+        Uri.parse('${await _baseUrl}/stories/$storyId/keep'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) return null;
+      try {
+        final d = jsonDecode(resp.body);
+        if (d is Map && d['detail'] is String) return d['detail'] as String;
+      } catch (_) {}
+      return 'Couldn\'t keep it — try again';
+    } catch (e) {
+      _logger.w('keepStoryInSpace failed: $e');
+      return 'Couldn\'t keep it — check your connection';
+    }
+  }
+
   /// Delete my own story.
   Future<bool> deleteStory(String storyId) async {
     try {

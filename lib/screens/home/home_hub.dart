@@ -1015,8 +1015,10 @@ class _CircleFlip extends StatelessWidget {
   const _CircleFlip({required this.child});
   final Widget child;
   static bool forward = true;
+  // Ripple starts at the switcher segment I picked (its centre, 0..1).
+  static double? rippleFrom;
 
   @override
-  Widget build(BuildContext context) =>
-      SectionSwitch(forward: forward, child: child);
+  Widget build(BuildContext context) => SectionSwitch(
+      forward: forward, rippleFrom: rippleFrom, child: child);
 }

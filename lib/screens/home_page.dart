@@ -388,6 +388,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Which way the cube turns: further along the order → forward.
     _CircleFlip.forward = kCircleViews.indexOf(next) >
         kCircleViews.indexOf(_circleView);
+    // …and the ripple grows from that section's segment in the switcher
+    // (All · Status · Listening · Circle; no Status segment before "me").
+    final segs = kCircleViews
+        .where((k) => k != 'stories' || _myUserId != null)
+        .toList();
+    final si = segs.indexOf(next);
+    _CircleFlip.rippleFrom = si < 0 ? null : (si + 0.5) / segs.length;
     HapticFeedback.selectionClick();
     setState(() {
       _circleView = next;

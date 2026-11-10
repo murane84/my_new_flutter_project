@@ -16,12 +16,16 @@ class SectionSwitch extends StatelessWidget {
     required this.forward,
     this.style,
     this.duration = const Duration(milliseconds: 420),
+    this.rippleFrom,
   });
 
   final Widget child;
   final bool forward;
   final SectionTransitionStyle? style; // null = the user's choice
   final Duration duration;
+  // Ripple: where it starts across the top, 0..1 (the tapped segment's
+  // centre); null = the side it comes from.
+  final double? rippleFrom;
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +40,16 @@ class SectionSwitch extends StatelessWidget {
   Widget _build(BuildContext context, SectionTransitionStyle s) {
     final accent = Theme.of(context).colorScheme.primary;
     final dir = forward ? 1.0 : -1.0;
+    // The device's "reduce motion" wins over any style: a plain, quick
+    // cross-fade.
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
+      return ClipRect(
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 150),
+          child: child,
+        ),
+      );
+    }
     final ms = s == SectionTransitionStyle.wave ||
             s == SectionTransitionStyle.ripple ||
             s == SectionTransitionStyle.equaliser
@@ -101,8 +115,8 @@ class SectionSwitch extends StatelessWidget {
       case SectionTransitionStyle.ripple:
         if (!incoming) return w; // revealed over, then removed
         return ClipPath(
-          clipper: _RippleClipper(
-              Curves.easeInOutCubic.transform(t), dir > 0 ? 0.75 : 0.25),
+          clipper: _RippleClipper(Curves.easeInOutCubic.transform(t),
+              rippleFrom ?? (dir > 0 ? 0.75 : 0.25)),
           child: w,
         );
       case SectionTransitionStyle.wave:

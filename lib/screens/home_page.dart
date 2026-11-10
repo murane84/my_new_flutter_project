@@ -5884,7 +5884,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
         !_isMusicFullScreen;
     // On Harmony or Glow (with nothing open), Back first returns to Circle —
     // the chat screen's home layer — before leaving the app.
+    // (Wide screens show Harmony and Circle together — only Glow is "away".)
     final layerAway = _friendLayer != 'circle' &&
+        (_friendLayer == 'glow' || MediaQuery.sizeOf(context).width < 600) &&
         _activeGroup == null &&
         _activeFriendId == null &&
         !_playerExpanded &&
